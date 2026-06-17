@@ -1,0 +1,142 @@
+{
+  "$schema": "https://www.designtokens.org/TR/drafts/format/",
+  "meta": {
+    "name": "FLIT Prototype Design Tokens",
+    "version": "1.0.0",
+    "source": "prototipo_flit_original.pdf",
+    "purpose": "Preservar la identidad visual del prototipo FLIT en diseño y desarrollo frontend. Los valores son aproximaciones visuales extraídas del prototipo y deben ajustarse únicamente mediante comparación visual contra el PDF."
+  },
+  "color": {
+    "background": {
+      "app": { "$type": "color", "$value": "#EAF2FF" },
+      "modal": { "$type": "color", "$value": "#EEF5FF" },
+      "card": { "$type": "color", "$value": "#FFFFFF" },
+      "tableHeader": { "$type": "color", "$value": "#F4F6FA" }
+    },
+    "brand": {
+      "cyan": { "$type": "color", "$value": "#4FD4CC" },
+      "blue": { "$type": "color", "$value": "#4F74C9" },
+      "blueDark": { "$type": "color", "$value": "#162744" },
+      "blueText": { "$type": "color", "$value": "#526FB8" },
+      "green": { "$type": "color", "$value": "#70CF3A" }
+    },
+    "state": {
+      "success": { "$type": "color", "$value": "#70CF3A" },
+      "active": { "$type": "color", "$value": "#4F74C9" },
+      "warning": { "$type": "color", "$value": "#F05A35" },
+      "danger": { "$type": "color", "$value": "#E43D30" },
+      "draft": { "$type": "color", "$value": "#59677D" },
+      "muted": { "$type": "color", "$value": "#7D8798" }
+    },
+    "border": {
+      "soft": { "$type": "color", "$value": "#DDE5F0" },
+      "input": { "$type": "color", "$value": "#D9DEE8" },
+      "focus": { "$type": "color", "$value": "#4F74C9" }
+    },
+    "text": {
+      "primary": { "$type": "color", "$value": "#162744" },
+      "secondary": { "$type": "color", "$value": "#59677D" },
+      "muted": { "$type": "color", "$value": "#7D8798" },
+      "inverse": { "$type": "color", "$value": "#FFFFFF" },
+      "brandTitle": { "$type": "color", "$value": "#526FB8" }
+    }
+  },
+  "gradient": {
+    "primary": {
+      "$type": "gradient",
+      "$value": "linear-gradient(90deg, #4FD4CC 0%, #4F74C9 100%)"
+    },
+    "success": {
+      "$type": "gradient",
+      "$value": "linear-gradient(90deg, #4FD4CC 0%, #70CF3A 100%)"
+    },
+    "sidebar": {
+      "$type": "gradient",
+      "$value": "linear-gradient(180deg, #4FD4CC 0%, #4F74C9 100%)"
+    },
+    "danger": {
+      "$type": "gradient",
+      "$value": "linear-gradient(90deg, #F05A35 0%, #E43D30 100%)"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": { "$type": "fontFamily", "$value": "Inter, Poppins, Montserrat, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }
+    },
+    "fontWeight": {
+      "regular": { "$type": "fontWeight", "$value": 400 },
+      "medium": { "$type": "fontWeight", "$value": 500 },
+      "semibold": { "$type": "fontWeight", "$value": 600 },
+      "bold": { "$type": "fontWeight", "$value": 700 }
+    },
+    "fontSize": {
+      "xs": { "$type": "dimension", "$value": "12px" },
+      "sm": { "$type": "dimension", "$value": "14px" },
+      "base": { "$type": "dimension", "$value": "16px" },
+      "lg": { "$type": "dimension", "$value": "18px" },
+      "xl": { "$type": "dimension", "$value": "24px" },
+      "2xl": { "$type": "dimension", "$value": "30px" },
+      "3xl": { "$type": "dimension", "$value": "36px" }
+    },
+    "lineHeight": {
+      "tight": { "$type": "number", "$value": 1.15 },
+      "normal": { "$type": "number", "$value": 1.35 },
+      "relaxed": { "$type": "number", "$value": 1.55 }
+    }
+  },
+  "spacing": {
+    "1": { "$type": "dimension", "$value": "4px" },
+    "2": { "$type": "dimension", "$value": "8px" },
+    "3": { "$type": "dimension", "$value": "12px" },
+    "4": { "$type": "dimension", "$value": "16px" },
+    "5": { "$type": "dimension", "$value": "20px" },
+    "6": { "$type": "dimension", "$value": "24px" },
+    "8": { "$type": "dimension", "$value": "32px" },
+    "10": { "$type": "dimension", "$value": "40px" },
+    "12": { "$type": "dimension", "$value": "48px" },
+    "16": { "$type": "dimension", "$value": "64px" }
+  },
+  "radius": {
+    "sm": { "$type": "dimension", "$value": "8px" },
+    "md": { "$type": "dimension", "$value": "12px" },
+    "lg": { "$type": "dimension", "$value": "18px" },
+    "xl": { "$type": "dimension", "$value": "24px" },
+    "2xl": { "$type": "dimension", "$value": "32px" },
+    "pill": { "$type": "dimension", "$value": "999px" },
+    "sidebar": { "$type": "dimension", "$value": "56px" }
+  },
+  "shadow": {
+    "card": { "$type": "shadow", "$value": "0 8px 24px rgba(22, 39, 68, 0.08)" },
+    "modal": { "$type": "shadow", "$value": "0 24px 60px rgba(22, 39, 68, 0.18)" },
+    "button": { "$type": "shadow", "$value": "0 10px 22px rgba(79, 116, 201, 0.22)" }
+  },
+  "component": {
+    "button": {
+      "height": { "$type": "dimension", "$value": "56px" },
+      "paddingInline": { "$type": "dimension", "$value": "32px" },
+      "radius": { "$type": "dimension", "$value": "999px" }
+    },
+    "input": {
+      "height": { "$type": "dimension", "$value": "48px" },
+      "radius": { "$type": "dimension", "$value": "10px" },
+      "paddingInline": { "$type": "dimension", "$value": "16px" }
+    },
+    "card": {
+      "radius": { "$type": "dimension", "$value": "18px" },
+      "padding": { "$type": "dimension", "$value": "24px" }
+    },
+    "modal": {
+      "radius": { "$type": "dimension", "$value": "24px" },
+      "padding": { "$type": "dimension", "$value": "40px" }
+    },
+    "sidebarCompact": {
+      "width": { "$type": "dimension", "$value": "138px" },
+      "radiusRight": { "$type": "dimension", "$value": "56px" }
+    }
+  },
+  "motion": {
+    "durationFast": { "$type": "duration", "$value": "120ms" },
+    "durationBase": { "$type": "duration", "$value": "180ms" },
+    "easing": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1] }
+  }
+}

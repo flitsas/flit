@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+*/node_modules
+*/dist
+*/.env
+*.env.local
+coverage
+.claude
+.ai
+.cursor
+docs
+agent-templates
+scripts
+infra

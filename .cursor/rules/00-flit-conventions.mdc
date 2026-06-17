@@ -1,0 +1,33 @@
+---
+description: "FLIT — 18 reglas innegociables aplicadas a todo cambio en este repo"
+globs: **/*
+alwaysApply: true
+---
+
+# FLIT — 18 reglas innegociables
+
+Lee las reglas siguientes (esta regla es la fuente canónica de convenciones). **Reescrituras post-refactor stack (2026-05-27):**
+
+- **Branches:** `feature/AB-1234-descripcion`
+- **Commits:** `HU1234: descripción breve`
+
+Las demás 15 reglas se conservan tal cual:
+
+1. Sprint: SIEMPRE el siguiente al activo, NUNCA el activo
+2. Tag `DOR` obligatorio antes de Active
+3. Story Points: Fibonacci (1, 2, 3, 5, 8) — NO 4, 6, 7
+4. AssignedTo: humano (NUNCA agente, NUNCA vacío)
+5. Sin datos sensibles en descripciones
+6. Sin placeholders (TODO, TBD, XXX) en items Active
+7. Bugs PDN: SIEMPRE al Líder Técnico
+8. PRs target: SIEMPRE `develop`, nunca `main`
+9. PRs ≤ 800 líneas
+10. Cero threads activos sin resolver
+11. Code Review + Security succeeded antes de mergear
+12. ≥1 reviewer humano
+13. Build pipeline succeeded
+14. Sin `git push --force` en branches compartidos
+15. ADRs en `Propuesto`; `Aceptado` exclusivo Líder Técnico humano
+16. Co-authored-by completo en commits de merge
+17. `Closed` de Feature: exclusivo del PO humano
+18. Skills externas: auditadas antes de instalar

@@ -1,0 +1,47 @@
+# FLIT monorepo — convenciones de editor compartidas
+# https://editorconfig.org/
+# Aplica a TODOS los lenguajes del monorepo (.NET, Go, Python, JS/TS).
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ----- .NET / C# (estándar 4 espacios) -----
+[*.{cs,csproj,sln,slnx,props,targets}]
+indent_size = 4
+
+# ----- Go (tabs, sin max line) -----
+[*.go]
+indent_style = tab
+indent_size = 4
+max_line_length = off
+
+[Makefile]
+indent_style = tab
+
+# ----- Python (PEP 8, 4 espacios) -----
+[*.py]
+indent_size = 4
+
+# ----- YAML / JSON (2 espacios) -----
+[*.{yml,yaml,json,jsonc}]
+indent_size = 2
+
+# ----- Markdown (mantener trailing whitespace por <br>) -----
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# ----- Lockfiles y generados (no formatear) -----
+[{pnpm-lock.yaml,package-lock.json,yarn.lock,*.tsbuildinfo,Gemfile.lock,uv.lock,go.sum}]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = unset

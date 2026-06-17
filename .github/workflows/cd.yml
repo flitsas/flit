@@ -1,0 +1,183 @@
+name: CD - Build & Deploy to VPS
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  CORE_API_IMAGE: ghcr.io/flitsas/flit-boilerplate/core-api
+  FRONTEND_IMAGE: ghcr.io/flitsas/flit-boilerplate/frontend
+
+jobs:
+  build-core-api:
+    name: Build & push core-api (.NET) image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata — core-api
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_API_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push core-api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/core-api
+          file: ./services/core-api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-api
+          cache-to: type=gha,mode=max,scope=core-api
+
+  build-frontend:
+    name: Build & push frontend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata — frontend
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_API_BASE_URL=https://api.orca.flitsas.com/api/v1
+            VITE_TRASPASOS_API_BASE_URL=https://api.orca.flitsas.com/api/v1/procedures
+            VITE_DEV_USER_ID=01900000-100b-7001-8001-000000000001
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  deploy-to-vps:
+    name: Deploy to VPS
+    needs: [build-core-api, build-frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_DOMAIN && format('https://{0}', vars.PUBLIC_DOMAIN) || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy compose file to VPS
+        run: |
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ secrets.HOSTINGER_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i /tmp/deploy_key ${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }} \
+            "mkdir -p ${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+          scp -i /tmp/deploy_key \
+            docker-compose.prod.yml \
+            ${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }}:${{ secrets.HOSTINGER_DEPLOY_PATH }}/docker-compose.prod.yml
+          rm -f /tmp/deploy_key
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+
+            # Authenticate to GHCR on the VPS to pull private images
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest images and restart services
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Remove dangling images to free space
+            docker image prune -f
+
+            # Health check: hit the container directly (bypass host nginx)
+            echo "Waiting for application to start..."
+            sleep 15
+            ok=0
+            for i in 1 2 3 4 5 6; do
+              # Front (4001) + API publica del gateway (4002) deben responder.
+              if curl -fsS http://127.0.0.1:4001/ > /dev/null \
+                 && curl -fsS http://127.0.0.1:4002/health > /dev/null; then
+                echo "Health check OK (attempt $i)"
+                ok=1
+                break
+              fi
+              echo "Attempt $i failed, retrying in 5s..."
+              sleep 5
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Health check FAILED"
+              docker compose -f docker-compose.prod.yml ps
+              docker compose -f docker-compose.prod.yml logs --tail=100
+              exit 1
+            fi
+            echo "Deploy OK."
+
+      - name: Notify success
+        if: success()
+        run: echo "Deploy to production succeeded."
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "Deploy FAILED. Check logs above."
+          echo "Manual rollback: ssh into VPS and run:"
+          echo "  cd <deploy-path> && docker compose down && docker compose up -d"

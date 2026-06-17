@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.Api/Flit.Api.csproj" />
+    <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
+    <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+  </Folder>
+</Solution>

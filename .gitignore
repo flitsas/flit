@@ -1,0 +1,107 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+**/bin/
+**/obj/
+.next/
+.turbo/
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Secrets — NUNCA commitear
+infra/secrets/
+**/secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# .NET appsettings con secretos reales (solo Development y *.example deben commitearse)
+**/appsettings.Production.json
+**/appsettings.Staging.json
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/appsettings.user.json
+**/secrets.json
+
+# Logs
+*.log
+logs/
+pino-logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*.suo
+*.user
+
+# Go binaries
+*.exe
+*.test
+go-gateway
+gateway
+
+# Runtime data
+*.pid
+*.seed
+storage/
+
+# Test artifacts
+playwright-report/
+test-results/
+.vitest-cache/
+backend/dotnet/tmp/
+
+# Docker
+postgres_data/
+
+# Misc
+*.bak
+.env.user-identity
+.env.verifik
+
+# Catálogos locales (importar desde Excel; no commitear binarios)
+backend/dotnet/data/*.xlsx
+backend/dotnet/data/vehicle_bodywork_master.json
+backend/dotnet/data/tramite-files/
+backend/dotnet/src/FLIT.Traspasos.Api/data/tramite-files/
+
+# Sistema agentes IA - snapshots automáticos y outputs intermedios
+.ai/_legacy/
+.ai/_generated/
+
+# JetBrains Junie — generado por sync-agents (symlink en Linux; ignorar drift)
+.junie/
+

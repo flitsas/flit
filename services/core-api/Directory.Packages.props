@@ -1,0 +1,91 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM). Las versiones se declaran una sola vez aqui.
+    Los .csproj usan <PackageReference Include="X" /> SIN Version=.
+    ADR-0002 §5 (stack tabla core-api) + §8.1 (agente core-dotnet).
+  -->
+
+  <PropertyGroup>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Web -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+
+    <!-- Observabilidad (ADR-0002 §2 Decision 9). 1.15.x es la actual estable sin CVEs (CVE en 1.10.x corregido en 1.11+). -->
+    <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0" />
+
+    <!-- Testing (ADR-0002 §5) -->
+    <PackageVersion Include="xunit.v3" Version="1.1.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageVersion Include="FluentAssertions" Version="7.0.0" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+
+    <!-- Arch tests. NetArchTest 1.3.2 es la ultima version publicada (ADR-0002 §8.1 pide 1.4+ pero no existe en NuGet). -->
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+
+    <!-- Identity (MVP Fase 2 - ADR-0006). JWT manual sin OpenIddict por R1 AOT spike pendiente. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.2.1" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.2.1" />
+    <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+
+    <!-- Recibos PDF (MVP Fase 11). QuestPDF 2024.10+ tiene mejor soporte
+         AOT pero requiere LICENSE: comunitario para revenue < USD 1M anual.
+         Si AOT falla, JIT escape documentado en .ai/agents/core-dotnet.md. -->
+    <PackageVersion Include="QuestPDF" Version="2024.12.3" />
+    <PackageVersion Include="PdfSharpCore" Version="1.3.65" />
+    <!-- Pin transitivo de PdfSharpCore/QuestPDF — corrige CVE en SixLabors.ImageSharp 1.0.4 -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+
+    <!-- AWS Cognito Identity Provider (ADR-0006 Provider Pattern +
+         ADR-0008 clarificacion 2026-05-21). AWSSDK 3.7+ es AOT-friendly
+         con trim warnings esperados. -->
+    <PackageVersion Include="AWSSDK.CognitoIdentityProvider" Version="3.7.405" />
+
+    <!-- EF Core 10 + Npgsql (ADR-0007 — JIT escape documentado en
+         Tramites.Infrastructure por reflexion de EF). -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.0" />
+
+    <!-- Pin transitivo para anular vulnerabilidades conocidas en dependencias indirectas.
+         System.Security.Cryptography.Xml 9.0.0 (via Npgsql) tiene CVE GHSA-37gx-xxp4-5rgx
+         y GHSA-w3x6-4m5h-cxqf. Se fija a 10.0.0 que no tiene el CVE. -->
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.0" />
+
+    <!-- API Gateway YARP (ADR-0017 Aceptado 2026-05-27). YARP 2.2+ es AOT-compatible. -->
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.2.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+
+    <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
+         AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->
+    <PackageVersion Include="AWSSDK.S3" Version="3.7.410" />
+
+    <!-- FluentValidation (validators por command en Flit.Modules.*). -->
+    <PackageVersion Include="FluentValidation" Version="11.10.0" />
+
+    <!-- DI abstractions para librerías que exponen AddXxx() sin depender de ASP.NET. -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+
+    <!-- SMTP (onboarding HU #9418 + IDSecure invitaciones). -->
+    <PackageVersion Include="MailKit" Version="4.16.0" />
+  </ItemGroup>
+
+</Project>

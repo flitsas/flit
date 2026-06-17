@@ -1,0 +1,130 @@
+{
+  "name": "flit-boilerplate",
+  "version": "1.0.0",
+  "description": "FLIT Boilerplate — Monorepo .NET 10 + Python ML + Next.js 16 (post ADR-0014 consolidación stack 2026-05-27)",
+  "private": true,
+  "packageManager": "pnpm@11.0.8",
+  "scripts": {
+
+    "_comment_install": "══════════════════════════════════════════════════",
+    "_comment_install_": "  INSTALACIÓN DE DEPENDENCIAS                    ",
+    "_comment_install__": "══════════════════════════════════════════════════",
+
+    "install:js":       "pnpm install",
+    "install:dotnet":   "dotnet restore services/core-api/Flit.slnx",
+    "restore:core-api": "dotnet restore services/core-api/Flit.slnx",
+    "install:python":   "uv --directory services/python-ml sync",
+    "install:all":      "pnpm run install:js && pnpm run install:dotnet",
+    "install:all:with-python": "pnpm run install:js && pnpm run install:dotnet && pnpm run install:python",
+
+    "_comment_build": "══════════════════════════════════════════════════",
+    "_comment_build_": "  BUILD / COMPILACIÓN                             ",
+    "_comment_build__": "══════════════════════════════════════════════════",
+
+    "build:frontend":   "pnpm --filter @flit/frontend build",
+    "build:core-api":   "dotnet build services/core-api/Flit.slnx --configuration Release",
+    "build:gateway":    "dotnet build services/core-api/src/Flit.Gateway --configuration Release",
+    "build:python":     "uv --directory services/python-ml run python -m compileall app -q",
+    "build:js":         "pnpm -r build",
+    "build":            "pnpm run build:js && pnpm run build:core-api",
+
+    "_comment_dev": "══════════════════════════════════════════════════",
+    "_comment_dev_": "  DEV — HOT RELOAD (desarrollo local)             ",
+    "_comment_dev__": "══════════════════════════════════════════════════",
+
+    "dev:frontend":     "pnpm --filter @flit/frontend dev",
+    "dev:core-api":     "dotnet watch --project services/core-api/src/Flit.Api run --launch-profile http --urls http://localhost:4003",
+    "dev:gateway":      "dotnet watch --project services/core-api/src/Flit.Gateway run --launch-profile http --urls http://localhost:4002",
+    "dev:python":       "uv --directory services/python-ml run uvicorn app.main:app --reload --port 4012 --log-level info",
+    "dev":              "concurrently --kill-others-on-fail -n frontend,core-api,gateway -c green,magenta,cyan \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\"",
+    "dev:with-python":  "concurrently --kill-others-on-fail -n frontend,core-api,gateway,python -c green,magenta,cyan,yellow \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\" \"pnpm run dev:python\"",
+
+    "_comment_start": "══════════════════════════════════════════════════",
+    "_comment_start_": "  START — MODO PRODUCCIÓN (dist compilado)        ",
+    "_comment_start__": "══════════════════════════════════════════════════",
+
+    "start:frontend":   "pnpm --filter @flit/frontend start",
+    "start:core-api":   "dotnet run --project services/core-api/src/Flit.Api --configuration Release --no-build --urls http://localhost:4003",
+    "start:gateway":    "dotnet run --project services/core-api/src/Flit.Gateway --configuration Release --no-build --urls http://localhost:4002",
+    "start:python":     "uv --directory services/python-ml run uvicorn app.main:app --port 4012",
+    "start":            "concurrently --kill-others-on-fail -n frontend,core-api,gateway -c green,magenta,cyan \"pnpm run start:frontend\" \"pnpm run start:core-api\" \"pnpm run start:gateway\"",
+    "start:with-python":"concurrently --kill-others-on-fail -n frontend,core-api,gateway,python -c green,magenta,cyan,yellow \"pnpm run start:frontend\" \"pnpm run start:core-api\" \"pnpm run start:gateway\" \"pnpm run start:python\"",
+
+    "_comment_test": "══════════════════════════════════════════════════",
+    "_comment_test_": "  TESTS                                           ",
+    "_comment_test__": "══════════════════════════════════════════════════",
+
+    "test:frontend":    "pnpm --filter @flit/frontend test",
+    "test:core-api":    "dotnet test services/core-api/Flit.slnx --no-build",
+    "test:python":      "uv --directory services/python-ml run pytest",
+    "test:e2e":         "pnpm --filter @flit/frontend test:e2e",
+    "test:js":          "pnpm -r test",
+    "test":             "pnpm run test:js && pnpm run test:core-api",
+    "test:with-python": "pnpm run test:js && pnpm run test:core-api && pnpm run test:python",
+    "test:coverage":    "concurrently -n frontend,core-api,python -c green,magenta,yellow \"pnpm --filter @flit/frontend test:coverage\" \"dotnet test services/core-api/Flit.slnx --collect:'XPlat Code Coverage'\" \"uv --directory services/python-ml run pytest --cov=app\"",
+
+    "_comment_lint": "══════════════════════════════════════════════════",
+    "_comment_lint_": "  LINT / CALIDAD DE CÓDIGO                        ",
+    "_comment_lint__": "══════════════════════════════════════════════════",
+
+    "lint:frontend":    "pnpm --filter @flit/frontend lint",
+    "lint:core-api":    "dotnet format services/core-api/Flit.slnx --severity error --verify-no-changes",
+    "lint:python":      "uv --directory services/python-ml run ruff check app tests",
+    "lint:js":          "pnpm -r lint",
+    "lint:fix:frontend":"pnpm --filter @flit/frontend lint:fix",
+    "lint":             "pnpm run lint:js",
+    "lint:with-python": "pnpm run lint:js && pnpm run lint:python",
+    "lint:fix":         "pnpm --filter @flit/frontend lint:fix && uv --directory services/python-ml run ruff check --fix app tests && dotnet format services/core-api/Flit.slnx",
+
+    "typecheck":        "pnpm -r typecheck",
+    "format:check":     "pnpm -r format:check",
+    "format:write:frontend": "pnpm --filter @flit/frontend format",
+    "fix:frontend":     "pnpm run lint:fix:frontend && pnpm run format:write:frontend",
+    "fix:all":          "pnpm run fix:frontend",
+    "fix:all:fullstack":"pnpm run lint:fix && pnpm run format",
+    "format":           "pnpm --filter @flit/frontend format && uv --directory services/python-ml run ruff format app tests && dotnet format services/core-api/Flit.slnx",
+
+    "_comment_migrate": "══════════════════════════════════════════════════",
+    "_comment_migrate_": "  MIGRACIONES DE BASE DE DATOS                   ",
+    "_comment_migrate__": "══════════════════════════════════════════════════",
+
+    "_comment_migrate_rule": "core-api es DUEÑO de TODAS las migraciones (ADR-0014).",
+    "migrate":              "pnpm migrate:core-api",
+    "migrate:core-api":     "dotnet ef database update --project services/core-api/src/Flit.Infrastructure --startup-project services/core-api/src/Flit.Api",
+    "migrate:core-api:add": "dotnet ef migrations add",
+
+    "_comment_docker": "══════════════════════════════════════════════════",
+    "_comment_docker_": "  DOCKER (entorno local completo)                 ",
+    "_comment_docker__": "══════════════════════════════════════════════════",
+
+    "_comment_docker_rule":     "Para dev local diario usa 'docker:up:infra' (solo dependencias) + 'pnpm dev'. El stack completo es para validar prod-like.",
+    "docker:up:infra":          "docker compose -f infra/docker-compose.yml up -d postgres redis rabbitmq minio minio-init mailhog",
+    "docker:up:obs":            "docker compose -f infra/docker-compose.yml up -d otel-collector prometheus loki tempo grafana",
+    "docker:up":                "docker compose -f infra/docker-compose.yml up --build",
+    "docker:up:detach":         "docker compose -f infra/docker-compose.yml up --build -d",
+    "docker:down":              "docker compose -f infra/docker-compose.yml down",
+    "docker:logs":              "docker compose -f infra/docker-compose.yml logs -f",
+    "docker:status":            "docker compose -f infra/docker-compose.yml ps",
+    "docker:reset:infra":       "docker compose -f infra/docker-compose.yml down -v postgres redis rabbitmq minio",
+
+    "_comment_utils": "══════════════════════════════════════════════════",
+    "_comment_utils_": "  UTILIDADES                                      ",
+    "_comment_utils__": "══════════════════════════════════════════════════",
+
+    "codegen":          "pnpm --filter @flit/frontend codegen",
+    "setup:env":            "./scripts/setup-env.sh --interactive",
+    "setup:env:check":      "./scripts/setup-env.sh --check",
+    "setup:secrets":        "./scripts/gen-secrets.sh",
+    "setup:secrets:check":  "./scripts/gen-secrets.sh --check",
+    "clean":            "pnpm -r --if-present exec rm -rf dist .next && dotnet clean services/core-api/Flit.slnx",
+    "check":            "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "doctor":           "node scripts/doctor.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  }
+}

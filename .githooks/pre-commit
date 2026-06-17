@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Pre-commit hook FLIT — bloquea commits con archivos sensibles.
+# Instalación: ejecutar `scripts/install-githooks.sh` una vez por clon.
+#
+# Reglas: rechaza si el staging incluye archivos que coincidan con los
+# patrones de la lista BLOCKED_PATTERNS. NO depende de .gitignore (un
+# archivo trackeado se ignora a sí mismo del gitignore).
+set -euo pipefail
+
+BLOCKED_PATTERNS=(
+  # .NET appsettings con secretos
+  '(^|/)appsettings\.Production\.json$'
+  '(^|/)appsettings\.Staging\.json$'
+  '(^|/)appsettings\.Local\.json$'
+  '(^|/)appsettings\..*\.Local\.json$'
+  '(^|/)appsettings\.user\.json$'
+  '(^|/)secrets\.json$'
+  # Claves criptográficas
+  '\.pem$'
+  '\.key$'
+  '\.p12$'
+  '\.pfx$'
+  '\.pkcs12$'
+  # Carpetas de secretos
+  '(^|/)infra/secrets/'
+  '(^|/)secrets/'
+  # Archivos .env reales (NO los .example)
+  '(^|/)\.env$'
+  '(^|/)\.env\.[^/]+$'
+)
+# Excepciones (archivos plantilla)
+ALLOWLIST_PATTERNS=(
+  '\.example$'
+  '\.example\.[^/]+$'
+)
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged_files" ] && exit 0
+
+violations=()
+while IFS= read -r file; do
+  allowed=0
+  for pat in "${ALLOWLIST_PATTERNS[@]}"; do
+    if [[ "$file" =~ $pat ]]; then
+      allowed=1
+      break
+    fi
+  done
+  [ "$allowed" -eq 1 ] && continue
+
+  for pat in "${BLOCKED_PATTERNS[@]}"; do
+    if [[ "$file" =~ $pat ]]; then
+      violations+=("$file (regla: $pat)")
+      break
+    fi
+  done
+done <<< "$staged_files"
+
+if [ ${#violations[@]} -gt 0 ]; then
+  echo ""
+  echo "  PRE-COMMIT FLIT — COMMIT BLOQUEADO"
+  echo "  ----------------------------------------"
+  echo "  Los siguientes archivos contienen patrones sensibles:"
+  for v in "${violations[@]}"; do
+    echo "    - $v"
+  done
+  echo ""
+  echo "  Para des-stagearlos:"
+  echo "    git reset HEAD <archivo>"
+  echo ""
+  echo "  Si el archivo NO contiene secretos reales y debe commitearse,"
+  echo "  revisa los patrones en .githooks/pre-commit."
+  echo ""
+  echo "  Para saltar este hook UNA VEZ (NO recomendado):"
+  echo "    git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0

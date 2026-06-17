@@ -1,0 +1,56 @@
+services:
+  # ── Base de Datos: PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: flit-postgres-dev
+    environment:
+      POSTGRES_DB: flit_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flit_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend: core-api (ASP.NET Core) ──────────────────────────────────────
+  backend:
+    build:
+      context: ./services/core-api
+      dockerfile: Dockerfile
+    container_name: flit-backend-dev
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
+    ports:
+      - "4003:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # volume configuration can be added if code changes need to be reflected dynamically (though usually require rebuilding for .NET unless dotnet watch is configured inside container)
+
+  # ── Frontend: Next.js ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    container_name: flit-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:4003
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/node_modules
+      - /app/frontend/.next
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

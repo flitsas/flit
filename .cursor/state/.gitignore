@@ -1,0 +1,5 @@
+# Archivos de estado del orquestador — no versionar
+*.json
+*.yaml
+# Ignorar archivos de fallback pero mantener el README y el .gitignore
+pending-ado-comments.md

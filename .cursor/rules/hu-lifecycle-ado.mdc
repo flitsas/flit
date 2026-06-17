@@ -1,0 +1,215 @@
+---
+description: Gestiona transiciones de HU en Azure DevOps — Active antes de implementar (confirmación humana) y Resolved tras merge confirmado en DEV. Usa MCP (user-ado) como canal primario y REST API como fallback.
+alwaysApply: true
+---
+
+# Ciclo de vida de HU — Azure DevOps
+
+## Motivos de invocación
+
+| Motivo | Cuándo dispara | Transición |
+|--------|----------------|------------|
+| **A — Inicio de implementación** | El usuario pide **implementar, desarrollar o codificar** una HU | → `Active` |
+| **B — Cierre post-merge DEV** | La historia está **confirmada como fusionada en DEV** (ver condiciones abajo) | → `Resolved` |
+
+Ambos motivos usan `@flit-azure-devops` (MCP primero, REST fallback) y comentarios en **Discussion** (`System.History`), nunca en `Custom.Evidences`.
+
+---
+
+## Motivo A — Activación (`Active`)
+
+### Cuándo aplica
+
+Cuando el usuario pida **implementar, desarrollar o codificar** una Historia de Usuario (HU / US / User Story), con o sin ID de ADO.
+
+### Paso 0 — Identificar la HU
+
+Si el usuario no proporcionó el ID de la HU, preguntarlo antes de continuar.
+
+### Paso 1 — Informar y pedir confirmación (OBLIGATORIO, nunca omitir)
+
+Mostrar al usuario el siguiente bloque **antes de tocar ningún archivo de código**:
+
+```
+⚠️  Antes de iniciar la implementación necesito activar la HU en Azure DevOps.
+
+  HU: #{id} — {título}
+  Acción: cambiar estado → Active
+  Comentario de inicio será publicado en Discussion.
+
+¿Confirmas? (sí / no)
+```
+
+**Bloquear toda implementación hasta recibir "sí" explícito.**  
+Si la respuesta es "no", detener y consultar al usuario cómo proceder.
+
+### Paso 2 — Activar la HU en Azure DevOps
+
+Seguir estrictamente la estrategia de conexión de `@flit-azure-devops`:
+
+#### 2a. MCP primero (user-ado)
+
+Verificar conexión:
+```
+CallMcpTool(server="user-ado", toolName="core_list_projects", arguments={})
+```
+
+Si responde OK → ejecutar con MCP:
+
+```
+// Cambiar estado a Active
+CallMcpTool(server="user-ado", toolName="wit_update_work_item", arguments={
+  "id": {hu_id},
+  "fields": { "System.State": "Active" }
+})
+
+// Agregar comentario de inicio en Discussion
+CallMcpTool(server="user-ado", toolName="wit_add_work_item_comment", arguments={
+  "id": {hu_id},
+  "text": "<div>🤖 [{Nombre-del-Agente}] usando <b>@skill-gestion-hu</b>: Iniciando desarrollo bajo supervisión de <a href=\"mailto:{USER_REAL_EMAIL}\">@{USER_REAL_NAME}</a>. Historia activada y en progreso.</div>"
+})
+```
+
+#### 2b. Fallback — REST API (si MCP falla o no está disponible)
+
+Leer credenciales de `.env.user-identity`:  
+`AZURE_ORG_URL`, `AZURE_PROJECT_NAME`, `AZURE_PAT`, `USER_REAL_NAME`, `USER_REAL_EMAIL`.
+
+**Cambiar estado:**
+```http
+PATCH {AZURE_ORG_URL}/{projectEncoded}/_apis/wit/workitems/{hu_id}?api-version=7.1
+Content-Type: application/json-patch+json; charset=utf-8
+Authorization: Basic <base64(:PAT)>
+
+[{ "op": "replace", "path": "/fields/System.State", "value": "Active" }]
+```
+
+**Comentario en Discussion (`System.History`):**
+```http
+PATCH {AZURE_ORG_URL}/{projectEncoded}/_apis/wit/workitems/{hu_id}?api-version=7.1
+
+[{
+  "op": "add",
+  "path": "/fields/System.History",
+  "value": "<div>🤖 [{Nombre-del-Agente}] usando <b>@skill-gestion-hu</b>: Iniciando desarrollo bajo supervisión de <a href=\"mailto:{USER_REAL_EMAIL}\">@{USER_REAL_NAME}</a>. Historia activada y en progreso.</div>"
+}]
+```
+
+#### 2c. Si ambos fallan
+
+Informar al usuario, entregar borrador `.md` local con el comentario de trazabilidad y **no** continuar con implementación hasta que el usuario confirme que la activación fue manual o autoriza continuar sin ella.
+
+### Paso 3 — Confirmar al usuario y proceder
+
+Solo después de que la activación en ADO sea exitosa (o el usuario autorice explícitamente saltar este paso), informar:
+
+```
+✅ HU #{id} activada en Azure DevOps. Procediendo con la implementación.
+```
+
+A partir de este punto, continuar con el desarrollo según los Acceptance Criteria de la HU.
+
+---
+
+## Motivo B — Cierre post-merge DEV (`Resolved`)
+
+### Cuándo aplica (disparadores)
+
+La regla **Motivo B** se ejecuta cuando la historia está **confirmada como fusionada en DEV**, por **cualquiera** de estas vías:
+
+1. **En la misma sesión:** el agente acaba de actualizar `Custom.DeployDEV` = `true` en ADO (p. ej. tras Modo B de `@flit-integration-ado` con PR mergeada en `develop`).
+2. **Por confirmación explícita en conversación:** el usuario preguntó si el PR ya estaba mergeado/integrado en DEV y el agente respondió **afirmativamente** (PR en estado `MERGED`, target `develop`, CI del merge commit en verde si aplica).
+
+Si **ninguna** condición se cumple, **no** ejecutar Motivo B.
+
+### Precondiciones
+
+- `hu_id` identificada.
+- PR mergeada con target `develop` (ambiente DEV).
+- Evidencia de merge: `Custom.DeployDEV` = `true` **o** verificación GitHub (`gh pr view` → `state == MERGED`, `baseRefName == develop`).
+- Estado actual **distinto de** `Resolved` (si ya está `Resolved`, informar y no repetir PATCH).
+- Evidencias unitarias publicadas (`Custom.Evidences` vía `@dev-tester`) y build exitoso según `@flit-gestion-hu`. Si faltan, **avisar** al usuario antes de cerrar; no marcar `Resolved` si el build falla.
+
+### Paso 1 — Informar acción (sin segundo «sí» si el disparador ya confirmó el merge)
+
+Mostrar al usuario:
+
+```
+ℹ️  Merge en DEV confirmado — cerrando la HU en Azure DevOps.
+
+  HU: #{id} — {título}
+  Acción: cambiar estado → Resolved
+  Comentario de entrega a QA será publicado en Discussion.
+```
+
+No pedir confirmación adicional: el merge ya quedó confirmado por el disparador (Deploy DEV o respuesta afirmativa del agente).
+
+### Paso 2 — Marcar `Resolved` en Azure DevOps
+
+Seguir `@flit-azure-devops` (MCP primero, REST fallback).
+
+Leer `QA_LEAD_NAME` y `QA_LEAD_EMAIL` desde `.env.user-identity`; si no existen, pedir al supervisor quién debe recibir la entrega QA.
+
+#### 2a. MCP primero (user-ado)
+
+```
+// Cambiar estado a Resolved
+CallMcpTool(server="user-ado", toolName="wit_update_work_item", arguments={
+  "id": {hu_id},
+  "fields": { "System.State": "Resolved" }
+})
+
+// Comentario de cierre en Discussion
+CallMcpTool(server="user-ado", toolName="wit_add_work_item_comment", arguments={
+  "id": {hu_id},
+  "text": "<div>✅ [{Nombre-del-Agente}] usando <b>@skill-gestion-hu</b>: PR integrada en <code>develop</code>. <b>Deploy DEV</b> confirmado. Desarrollo completado y listo para pruebas de QA.</div><div><a href=\"mailto:{QA_LEAD_EMAIL}\">@{QA_LEAD_NAME}</a> — Por favor proceder con la validación de esta HU.</div>"
+})
+```
+
+#### 2b. Fallback — REST API
+
+**Cambiar estado:**
+```http
+PATCH {AZURE_ORG_URL}/{projectEncoded}/_apis/wit/workitems/{hu_id}?api-version=7.1
+
+[{ "op": "replace", "path": "/fields/System.State", "value": "Resolved" }]
+```
+
+**Comentario en Discussion:**
+```http
+PATCH {AZURE_ORG_URL}/{projectEncoded}/_apis/wit/workitems/{hu_id}?api-version=7.1
+
+[{
+  "op": "add",
+  "path": "/fields/System.History",
+  "value": "<div>✅ [{Nombre-del-Agente}] usando <b>@skill-gestion-hu</b>: PR integrada en <code>develop</code>. <b>Deploy DEV</b> confirmado. Desarrollo completado y listo para pruebas de QA.</div><div><a href=\"mailto:{QA_LEAD_EMAIL}\">@{QA_LEAD_NAME}</a> — Por favor proceder con la validación de esta HU.</div>"
+}]
+```
+
+#### 2c. Si ambos fallan
+
+Informar al usuario, entregar borrador `.md` local con el comentario de cierre y **no** dar por cerrada la HU hasta confirmación manual o autorización explícita para continuar sin ADO.
+
+### Paso 3 — Confirmar al usuario
+
+Tras PATCH exitoso (o autorización para saltar ADO):
+
+```
+✅ HU #{id} marcada como Resolved en Azure DevOps. Entregada a QA para validación.
+```
+
+### Encadenamiento con `@flit-integration-ado`
+
+Tras marcar `Custom.DeployDEV` = `true` en Modo B, **ejecutar Motivo B en la misma sesión** (misma HU) sin esperar nueva instrucción del usuario, salvo que falten precondiciones (build, evidencias unitarias).
+
+---
+
+## Reglas de oro
+
+- **Motivo A:** nunca iniciar implementación sin confirmación humana previa (`sí` explícito).
+- **Motivo A:** nunca cambiar a `Active` sin confirmación, ni siquiera si el usuario dice «empieza ya».
+- **Motivo B:** ejecutar solo cuando el merge en DEV esté confirmado por uno de los dos disparadores definidos.
+- **Motivo B:** no repetir transición a `Resolved` si la HU ya está en ese estado.
+- Usar siempre MCP (`user-ado`) como canal primario; REST API solo si MCP falla.
+- Los comentarios van en `Discussion` (`System.History` vía REST o `wit_add_work_item_comment` vía MCP), nunca en `Custom.Evidences`.
+- Leer `USER_REAL_NAME` y `USER_REAL_EMAIL` desde `.env.user-identity`; si no existe el archivo, pedirlos al usuario.

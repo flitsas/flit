@@ -1,0 +1,33 @@
+---
+description: Enruta al orchestrator-agent cuando el usuario solicita flujos de desarrollo end-to-end. Se activa con intenciones de flujo completo.
+globs:
+alwaysApply: true
+---
+
+# Routing al Orquestador
+
+Cuando el usuario exprese cualquiera de las siguientes intenciones, el agente principal debe leer `.cursor/agents/orchestrator-agent.md` y seguir su protocolo:
+
+## Intenciones que activan el orquestador
+
+- "Necesito desarrollar [algo]"
+- "Quiero implementar [requerimiento]"
+- "Desarrolla este requerimiento: ..."
+- "Implementa la historia #ID"
+- "Revisa el PR !N" (si se pide pipeline completo, no una sola dimensión)
+- "Descompón el feature #ID"
+- "Despliega a [DEV / QA / PDN]"
+- "Continúa donde quedamos" / "retoma el flujo" / "resume"
+- "Flujo completo de ..."
+
+## Qué hacer al detectar una de estas intenciones
+
+1. Leer `.cursor/agents/orchestrator-agent.md`
+2. Seguir el protocolo del orquestador: identificar workflow, mostrar plan, esperar confirmación
+3. No improvisar el flujo — el orden correcto está en `.cursor/workflows/`
+
+## Qué NO hacer
+
+- No iniciar implementación de código sin pasar por el orquestador cuando la intención es un flujo completo
+- No saltarse los gates de activación de HU o de merge aunque el usuario pida "hazlo rápido"
+- No asumir que un requerimiento en lenguaje natural ya tiene Feature en ADO — verificar primero

@@ -1,0 +1,19 @@
+{
+  "Cors": {
+    "AllowedOrigins": ["http://localhost:4001"]
+  },
+  "ReverseProxy": {
+    "Clusters": {
+      "core-api-cluster": {
+        "Destinations": {
+          "core-api-1": { "Address": "http://localhost:4003/" }
+        }
+      },
+      "python-ml-cluster": {
+        "Destinations": {
+          "python-ml-1": { "Address": "http://localhost:4012/" }
+        }
+      }
+    }
+  }
+}

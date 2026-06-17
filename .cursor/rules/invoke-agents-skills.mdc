@@ -1,0 +1,36 @@
+---
+name: invoke-agents-skills
+description: Regla que indica el subagente o skill que se va a utilizar. Utilizala siempre que el agente invoque un agente o skill
+alwaysApply: true
+---
+
+# Regla de invocación de agentes y skills
+
+Cada vez que el agente princial invoque un subagente o skill (incluyendo archivos relacionados), en la conversación debe mostrarse el agente o skill que está siendo invocado y el motivo de invocación, utilizando estrictamente este formato:
+
+```markdown
+
+Invocaré lo siguiente para cumplir con la tarea
+
+**Tipo**: [`Agente` o `Skill`]
+
+**Nombre**: [Nombre del subagente o skill]
+
+**Motivo de invocación**: [Dar una razón clara y precisa del por qué el subagente o skill fue llamado]
+```
+
+## Ejemplo
+
+Invocaré lo siguiente para cumplir con la tarea
+
+```markdown
+**Tipo**: Agente
+**Nombre**: frontend-agent
+**Motivo de invocación**: El subagente frontend-agent fue llamado debido a que se va a implementar una historia de usuario de FrontEnd.
+```
+## Regla no bloqueante
+Esta regla no debe bloquear el flujo ejecución actual, solo funciona como regla informativa, no hace cambios, no influye en decisiones.
+
+
+## A tener en cuenta
+También debes mostrar la notificación de uso de subagente o skills cuando un subagente utilice una skill, o cuando por producto de una skill se llame a otra skill
