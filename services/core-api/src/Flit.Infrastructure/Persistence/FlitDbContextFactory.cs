@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EFCore.NamingConventions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +23,7 @@ public sealed class FlitDbContextFactory : IDesignTimeDbContextFactory<FlitDbCon
 
         var opts = new DbContextOptionsBuilder<FlitDbContext>()
             .UseNpgsql(connectionString)
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new FlitDbContext(opts);

@@ -1,8 +1,8 @@
+using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Flit.Infrastructure.Persistence;
 
 namespace Flit.Infrastructure;
 
@@ -24,6 +24,7 @@ public static class InfrastructureExtensions
                         maxRetryDelay: TimeSpan.FromSeconds(5),
                         errorCodesToAdd: null);
                 })
+            .UseSnakeCaseNamingConvention()
             .EnableSensitiveDataLogging(false)
             .EnableDetailedErrors(false));
 
