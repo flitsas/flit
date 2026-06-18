@@ -1,11 +1,16 @@
+using System.Security.Claims;
 using Flit.Admin.Application.Companies.ListCompanies;
+using Flit.Admin.Application.Companies.Settings;
+using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
+using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoints del Administrador de Compañías (HU #10189).
+/// Endpoints del Administrador de Compañías (HU #10189, #10190).
+/// Todo el grupo exige rol SuperAdmin (RF01 / AC5).
 /// </summary>
 public static class AdminCompaniesEndpoints
 {
@@ -17,9 +22,17 @@ public static class AdminCompaniesEndpoints
             .MapGroup("/api/v1/admin/companies")
             .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
 
-        // GET /api/v1/admin/companies/index — listado paginado con filtros (AC1, AC2).
+        // GET /api/v1/admin/companies/index — listado paginado con filtros (#10189 AC1, AC2).
         group.MapGet("/index", ListCompaniesAsync)
             .WithName("AdminCompaniesIndex");
+
+        // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
+        group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
+            .WithName("AdminCompanyGetSettings");
+
+        // PUT /api/v1/admin/companies/{tenantId}/settings — guardado atómico + audit (#10190 AC1/AC2).
+        group.MapPut("/{tenantId:guid}/settings", UpdateSettingsAsync)
+            .WithName("AdminCompanyUpdateSettings");
 
         return app;
     }
@@ -50,4 +63,52 @@ public static class AdminCompaniesEndpoints
 
         return Results.Ok(result);
     }
+
+    private static async Task<IResult> GetSettingsAsync(
+        Guid tenantId,
+        [FromServices] GetTenantSettingsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null
+            ? Results.NotFound(new { error = $"No existe configuración operativa para el tenant {tenantId}." })
+            : Results.Ok(result);
+    }
+
+    private static async Task<IResult> UpdateSettingsAsync(
+        Guid tenantId,
+        UpdateTenantSettingsRequest request,
+        HttpContext httpContext,
+        [FromServices] UpdateTenantSettingsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateTenantSettingsCommand
+        {
+            TenantId = tenantId,
+            Request = request,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.Ok(result.Settings)
+            : Results.Json(
+                new ValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static Guid? ResolveUserId(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirst("sub")?.Value
+            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return Guid.TryParse(raw, out var id) ? id : null;
+    }
+
+    /// <summary>Cuerpo de error de validación 422: <c>{ errors: [{ field, message }] }</c>.</summary>
+    private sealed record ValidationErrorResponse(IReadOnlyList<SettingsValidationError> Errors);
 }

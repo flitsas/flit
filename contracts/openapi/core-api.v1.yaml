@@ -79,6 +79,82 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/companies/{tenantId}/settings:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetSettings
+      summary: Configuración operativa actual del tenant (RF03, AC3)
+      description: >
+        Retorna la configuración operativa vigente del tenant. Requiere JWT con
+        rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Configuración operativa actual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe configuración para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyUpdateSettings
+      summary: Guardado atómico de configuración operativa + audit log (RF03/RF07–RF10, AC1/AC2)
+      description: >
+        Persiste de forma atómica (todo o nada) la configuración operativa del
+        tenant y genera una entrada de auditoría por cada campo modificado. Si la
+        validación falla (p. ej. notificationTarget fuera del enum) retorna 422 sin
+        persistir ni auditar. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantSettingsUpdate"
+      responses:
+        "200":
+          description: Configuración persistida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido. No se persiste ni se audita ningún cambio.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -114,3 +190,64 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    SwitchesMatricula:
+      type: object
+      properties:
+        allowInitialRegistration: { type: boolean }
+        allowMiscNewVehicles: { type: boolean }
+        onlyOwnVehicles: { type: boolean }
+      required: [allowInitialRegistration, allowMiscNewVehicles, onlyOwnVehicles]
+
+    TenantSettings:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
+          type: string
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
+          type: array
+          items: { type: string }
+      required:
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+
+    TenantSettingsUpdate:
+      type: object
+      properties:
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
+          type: string
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
+          type: array
+          items: { type: string }
+      required:
+        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+
+    ValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+      required: [field, message]
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+      required: [errors]

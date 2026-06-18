@@ -1,4 +1,7 @@
 using Flit.Admin.Application.Companies.ListCompanies;
+using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
+using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
+using Flit.Admin.Domain.Companies.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Admin.Application;
@@ -12,7 +15,13 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // HU #10189 — listado de compañías.
         services.AddScoped<ListCompaniesHandler>();
+
+        // HU #10190 — configuración operativa + audit log.
+        services.AddScoped<GetTenantSettingsHandler>();
+        services.AddScoped<UpdateTenantSettingsHandler>();
+        services.AddSingleton<ITenantPolicyResolver, SnapshotTenantPolicyResolver>();
 
         return services;
     }

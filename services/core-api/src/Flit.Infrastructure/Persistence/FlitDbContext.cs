@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     public DbSet<UserTempSuspension> UserTempSuspensions => Set<UserTempSuspension>();
+
+    public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
+
+    public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
