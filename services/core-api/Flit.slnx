@@ -3,5 +3,10 @@
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+    <Project Path="src/Flit.Tramites.Domain/Flit.Tramites.Domain.csproj" />
+    <Project Path="src/Flit.Tramites.Application/Flit.Tramites.Application.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Tramites.Application.Tests/Flit.Tramites.Application.Tests.csproj" />
   </Folder>
 </Solution>

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

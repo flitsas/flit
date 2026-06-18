@@ -1,11 +1,16 @@
+using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Public;
+using Flit.Api.Endpoints.SuperAdmin;
+using Flit.Infrastructure;
+using Flit.Tramites.Application;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Flit.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
 
@@ -20,6 +25,23 @@ else
         "ConnectionStrings:Core (PostgreSQL) es obligatoria.");
 }
 
+builder.Services.AddTramitesApplication();
+
+builder.Services.AddAuthentication("Stub")
+    .AddScheme<AuthenticationSchemeOptions, StubAuthenticationHandler>("Stub", null);
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("SuperAdminOnly", policy =>
+        policy.Requirements.Add(new SuperAdminRequirement()));
+
+builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorizationHandler>();
+
 var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapSuperAdminEndpoints();
+app.MapPublicProcedureEndpoints();
 
 app.Run();

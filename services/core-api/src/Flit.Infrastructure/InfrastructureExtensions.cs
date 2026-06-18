@@ -1,4 +1,6 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +29,9 @@ public static class InfrastructureExtensions
             .UseSnakeCaseNamingConvention()
             .EnableSensitiveDataLogging(false)
             .EnableDetailedErrors(false));
+
+        services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
+        services.AddScoped<ICatalogRepository, CatalogRepository>();
 
         return services;
     }
