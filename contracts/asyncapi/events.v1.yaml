@@ -1,0 +1,9 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT Domain Events
+  description: |
+    Stub mínimo AsyncAPI para pipeline contracts.yml.
+    Canales de eventos del motor de trámites se documentarán en iteraciones futuras.
+  version: 1.0.0
+
+channels: {}

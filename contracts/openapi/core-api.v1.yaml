@@ -1,0 +1,946 @@
+openapi: 3.0.3
+info:
+  title: FLIT Core API — Trámites Parametrización v1
+  description: |
+    Contrato OpenAPI v1 del motor de parametrización global SuperAdmin (Feature #10116)
+    y lectura runtime publicada (Feature #10128).
+
+    **Autenticación MVP:** header `X-Flit-SuperAdmin: true` en rutas `/api/v1/superadmin/*`.
+    Stub temporal hasta RBAC real (#10134). Ver ADR-0019.
+  version: 1.0.0
+  contact:
+    name: FLIT Evolution Team
+
+servers:
+  - url: https://api.orca.flitsas.com
+    description: Gateway producción
+  - url: http://localhost:4003
+    description: Desarrollo local (Flit.Api)
+
+tags:
+  - name: SuperAdmin — Procedure Types
+    description: CRUD y ciclo de vida de parametrizaciones globales
+  - name: SuperAdmin — Catalogs
+    description: Catálogos de aristas, fuentes externas y plantillas de consulta
+  - name: SuperAdmin — Validation
+    description: Validación de reglas de negocio antes de publicar
+  - name: Runtime — Procedure Configuration
+    description: |
+      Lectura de parametrización publicada. **Contrato estable** para consumo de Feature #10128.
+      No requiere autenticación SuperAdmin.
+
+paths:
+  /api/v1/superadmin/procedure-types:
+    get:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Listar parametrizaciones
+      operationId: listProcedureTypes
+      security:
+        - SuperAdminStub: []
+      parameters:
+        - $ref: '#/components/parameters/FamilyQuery'
+        - $ref: '#/components/parameters/PublicationStatusQuery'
+      responses:
+        '200':
+          description: Lista de resúmenes de tipos de trámite
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcedureTypeSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Crear parametrización en borrador
+      operationId: createProcedureType
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProcedureTypeRequest'
+      responses:
+        '201':
+          description: Parametrización creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/superadmin/procedure-types/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    get:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Obtener detalle agregado de parametrización
+      description: |
+        Retorna metadatos del tipo con árbol de conformación y pasos.
+        Consumidores deben usar los endpoints dedicados de conformation-rules/steps
+        para edición estructurada.
+      operationId: getProcedureType
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Detalle del tipo de trámite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Actualizar metadatos (solo borrador)
+      operationId: updateProcedureType
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProcedureTypeRequest'
+      responses:
+        '200':
+          description: Parametrización actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Archivar o eliminar borrador
+      operationId: deleteProcedureType
+      security:
+        - SuperAdminStub: []
+      responses:
+        '204':
+          description: Eliminación/archivado exitoso (sin cuerpo)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/superadmin/procedure-types/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    post:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Publicar parametrización válida
+      operationId: publishProcedureType
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishProcedureTypeRequest'
+      responses:
+        '200':
+          description: Publicación exitosa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: Validación de negocio fallida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+  /api/v1/superadmin/procedure-types/{id}/archive:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    post:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Archivar parametrización publicada
+      operationId: archiveProcedureType
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Archivado exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/superadmin/procedure-types/{id}/validate:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    post:
+      tags: [SuperAdmin — Validation]
+      summary: Validar reglas de negocio y campos mínimos
+      description: Ejecuta validaciones VIN/Placa, NIT/persona jurídica y cobertura de plantillas sin HTTP externo.
+      operationId: validateProcedureType
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Resultado de validación (puede ser isValid false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/superadmin/procedure-types/{id}/conformation-rules:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    get:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Obtener matriz de conformación (aristas)
+      operationId: getConformationRules
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Lista de reglas de conformación
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConformationRuleDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Reemplazar matriz de conformación (bulk upsert)
+      description: |
+        El cuerpo es un **array JSON en la raíz** (sin wrapper).
+        Ejemplo: `[{"procedureEntityCode":"VEHICLE","isActive":true,"sortOrder":1}]`
+      operationId: upsertConformationRules
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConformationRuleInput'
+      responses:
+        '200':
+          description: Matriz actualizada
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConformationRuleDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/superadmin/procedure-types/{id}/steps:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeId'
+    get:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Obtener árbol pasos → secciones → campos
+      operationId: getProcedureSteps
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Árbol del wizard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcedureStepDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [SuperAdmin — Procedure Types]
+      summary: Reemplazar árbol del wizard (bulk)
+      description: |
+        El cuerpo es un **array JSON en la raíz** (sin wrapper).
+        Campos con `isLocked=true` no pueden omitirse; intentarlo retorna 409.
+      operationId: upsertProcedureSteps
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProcedureStepInput'
+      responses:
+        '200':
+          description: Árbol actualizado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcedureStepDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/superadmin/procedure-entities:
+    get:
+      tags: [SuperAdmin — Catalogs]
+      summary: Catálogo de aristas (4 entidades)
+      operationId: listProcedureEntities
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Lista de entidades de procedimiento
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcedureEntityDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/superadmin/external-data-sources:
+    get:
+      tags: [SuperAdmin — Catalogs]
+      summary: Catálogo de fuentes externas
+      operationId: listExternalDataSources
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Lista de fuentes externas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExternalDataSourceDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/superadmin/consultation-templates:
+    get:
+      tags: [SuperAdmin — Catalogs]
+      summary: Plantillas de consulta con campos mínimos
+      operationId: listConsultationTemplates
+      security:
+        - SuperAdminStub: []
+      responses:
+        '200':
+          description: Lista de plantillas de consulta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsultationTemplateDto'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/superadmin/consultation-templates/{templateId}/apply-fields:
+    parameters:
+      - $ref: '#/components/parameters/ConsultationTemplateId'
+    post:
+      tags: [SuperAdmin — Catalogs]
+      summary: Sembrar campos locked en sección destino
+      description: |
+        Aplica los campos mínimos de la plantilla a la sección indicada.
+        Respuesta **200 sin cuerpo** en éxito (`Content-Length: 0`).
+      operationId: applyConsultationTemplateFields
+      security:
+        - SuperAdminStub: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyTemplateFieldsRequest'
+      responses:
+        '200':
+          description: Campos sembrados exitosamente (sin cuerpo de respuesta)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/procedure-types/{code}/configuration:
+    parameters:
+      - $ref: '#/components/parameters/ProcedureTypeCode'
+    get:
+      tags: [Runtime — Procedure Configuration]
+      summary: Lectura de parametrización publicada (runtime #10128)
+      description: |
+        **Contrato estable v1** — Feature #10128.
+
+        Retorna solo tipos en estado `published`. Incluye `conformationRules` y `steps`
+        listos para instanciación runtime. Fuera del prefijo `/superadmin`; no requiere
+        header SuperAdmin.
+      operationId: getProcedureTypeConfiguration
+      security: []
+      x-flit-stability: stable
+      x-flit-consumer-feature: '10128'
+      responses:
+        '200':
+          description: Configuración publicada del tipo de trámite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureTypeConfiguration'
+        '404':
+          description: Tipo no encontrado o no publicado
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  securitySchemes:
+    SuperAdminStub:
+      type: apiKey
+      in: header
+      name: X-Flit-SuperAdmin
+      description: |
+        MVP stub SuperAdmin. El valor debe ser exactamente `true`.
+        Reemplazado por JWT/RBAC en Feature #10134.
+
+  parameters:
+    ProcedureTypeId:
+      name: id
+      in: path
+      required: true
+      description: Identificador UUID del tipo de trámite
+      schema:
+        type: string
+        format: uuid
+    ConsultationTemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProcedureTypeCode:
+      name: code
+      in: path
+      required: true
+      description: Código único del tipo de trámite (ej. MI_ESTANDAR)
+      schema:
+        type: string
+        maxLength: 50
+    FamilyQuery:
+      name: family
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ProcedureFamily'
+    PublicationStatusQuery:
+      name: publicationStatus
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/PublicationStatus'
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso denegado — header X-Flit-SuperAdmin ausente o inválido
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflicto de estado o concurrencia
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    UnprocessableEntity:
+      description: Regla de negocio no satisfecha
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProcedureFamily:
+      type: string
+      enum: [MATRICULAS, TRASPASO, OTROS]
+
+    PublicationStatus:
+      type: string
+      enum: [draft, published, archived]
+
+    ProcedureEntityCode:
+      type: string
+      enum: [VEHICLE, OWNER, BUYER, LESSEE]
+
+    FieldType:
+      type: string
+      enum: [text, number, select, radio, checkbox, date]
+
+    ValidationErrorCode:
+      type: string
+      enum:
+        - MISSING_CONFORMATION
+        - MISSING_REQUIRED_FIELD
+        - LOCKED_FIELD_REMOVED
+        - VIN_PLATE_RULE
+        - NIT_PERSON_TYPE
+        - INCOMPLETE_CONSULTATION_FIELDS
+
+    ProcedureTypeSummary:
+      type: object
+      required: [id, code, name, family, publicationStatus, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 150
+        family:
+          $ref: '#/components/schemas/ProcedureFamily'
+        publicationStatus:
+          $ref: '#/components/schemas/PublicationStatus'
+        isActive:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateProcedureTypeRequest:
+      type: object
+      required: [family, code, name]
+      properties:
+        family:
+          $ref: '#/components/schemas/ProcedureFamily'
+        code:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+          nullable: true
+
+    UpdateProcedureTypeRequest:
+      type: object
+      required: [name, isActive]
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    PublishProcedureTypeRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Reservado; MVP siempre valida antes de publicar
+
+    ProcedureTypeDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProcedureTypeSummary'
+        - type: object
+          properties:
+            description:
+              type: string
+              nullable: true
+            conformationRules:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConformationRuleDto'
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProcedureStepDto'
+
+    ProcedureTypeConfiguration:
+      type: object
+      required: [id, code, name, family, conformationRules, steps]
+      description: Payload estable de lectura runtime (#10128)
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        family:
+          $ref: '#/components/schemas/ProcedureFamily'
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        conformationRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConformationRuleDto'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcedureStepDto'
+
+    ConformationRuleInput:
+      type: object
+      required: [procedureEntityCode, isActive, sortOrder]
+      properties:
+        procedureEntityCode:
+          $ref: '#/components/schemas/ProcedureEntityCode'
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+        validationProfile:
+          type: string
+          nullable: true
+          description: JSON serializado como string; default "{}"
+
+    ConformationRuleDto:
+      type: object
+      required:
+        - id
+        - procedureEntityCode
+        - procedureEntityName
+        - isActive
+        - sortOrder
+        - validationProfile
+      properties:
+        id:
+          type: string
+          format: uuid
+        procedureEntityCode:
+          $ref: '#/components/schemas/ProcedureEntityCode'
+        procedureEntityName:
+          type: string
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+        validationProfile:
+          type: string
+          description: JSON serializado como string (ej. "{}")
+
+    FormFieldItem:
+      type: object
+      required: [fieldKey, label, fieldType, isRequired, isLocked]
+      properties:
+        fieldKey:
+          type: string
+        label:
+          type: string
+        fieldType:
+          $ref: '#/components/schemas/FieldType'
+        isRequired:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+        isLocked:
+          type: boolean
+          readOnly: true
+        lockReason:
+          type: string
+          nullable: true
+        consultationTemplateId:
+          type: string
+          format: uuid
+          nullable: true
+        validationSchema:
+          type: string
+          description: JSON serializado como string (ej. "{}")
+        options:
+          type: string
+          nullable: true
+          description: JSON serializado como string (ej. '["CC","NIT"]')
+
+    FormFieldDto:
+      allOf:
+        - $ref: '#/components/schemas/FormFieldItem'
+        - type: object
+          required: [id, sortOrder, validationSchema]
+          properties:
+            id:
+              type: string
+              format: uuid
+
+    FormFieldInput:
+      type: object
+      required: [fieldKey, label, fieldType, isRequired, sortOrder]
+      properties:
+        fieldKey:
+          type: string
+        label:
+          type: string
+        fieldType:
+          type: string
+        isRequired:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+        options:
+          type: string
+          nullable: true
+        validationSchema:
+          type: string
+          nullable: true
+        defaultValue:
+          type: string
+          nullable: true
+
+    ProcedureSectionDto:
+      type: object
+      required: [id, code, title, sortOrder, layout, formFields]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        layout:
+          type: string
+        formFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormFieldDto'
+
+    ProcedureSectionInput:
+      type: object
+      required: [code, title, sortOrder, formFields]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        layout:
+          type: string
+          nullable: true
+        formFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormFieldInput'
+
+    ProcedureStepDto:
+      type: object
+      required: [id, code, title, sortOrder, isActive, sections]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        isActive:
+          type: boolean
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcedureSectionDto'
+
+    ProcedureStepInput:
+      type: object
+      required: [code, title, sortOrder, isActive, sections]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        isActive:
+          type: boolean
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcedureSectionInput'
+
+    ValidationError:
+      type: object
+      required: [code, message, path]
+      properties:
+        code:
+          $ref: '#/components/schemas/ValidationErrorCode'
+        message:
+          type: string
+        path:
+          type: string
+
+    ValidationResult:
+      type: object
+      required: [isValid, errors]
+      properties:
+        isValid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    ProcedureEntityDto:
+      type: object
+      required: [id, code, name, sortOrder, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          $ref: '#/components/schemas/ProcedureEntityCode'
+        name:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        isActive:
+          type: boolean
+
+    ExternalDataSourceDto:
+      type: object
+      required: [id, code, name, authType, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        authType:
+          type: string
+        isActive:
+          type: boolean
+
+    ConsultationTemplateDto:
+      type: object
+      required: [id, code, name, entityScope, requiredFieldKeys, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        entityScope:
+          type: string
+          enum: [vehicle, actor]
+        personType:
+          type: string
+          enum: [natural, juridical]
+          nullable: true
+        requiredFieldKeys:
+          type: string
+          description: JSON array serializado como string (ej. '["plate_or_vin"]')
+        isActive:
+          type: boolean
+
+    ApplyTemplateFieldsRequest:
+      type: object
+      required: [procedureTypeId, sectionId]
+      properties:
+        procedureTypeId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+
+    ProblemDetails:
+      type: object
+      description: RFC 7807 Problem Details (ASP.NET Core Results.Problem)
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        traceId:
+          type: string

@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: FLIT Python ML Service
+  description: |
+    Stub mínimo del contrato OpenAPI del servicio python-ml.
+    Placeholder para pipeline contracts.yml hasta definición completa del servicio.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Servicio disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        '503':
+          description: Servicio no disponible
