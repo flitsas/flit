@@ -1,0 +1,32 @@
+# Configuracion de gitleaks para FLIT.
+# Hereda el conjunto de reglas por defecto de gitleaks y agrega allowlists
+# para archivos de ejemplo/plantilla y dependencias que no contienen secretos reales.
+#
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+
+title = "FLIT gitleaks config"
+
+# Extiende el ruleset base oficial (detecta API keys, tokens, claves privadas, etc.)
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Rutas y patrones que no deben marcarse como secretos"
+
+paths = [
+  # Plantillas de variables de entorno: contienen placeholders, no valores reales.
+  '''\.env\.example$''',
+  '''\.env\..*\.example$''',
+  # Dependencias y artefactos generados.
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)build/''',
+  '''pnpm-lock\.yaml$''',
+  '''package-lock\.json$''',
+]
+
+# IDs de desarrollo conocidos (no son secretos). El VITE_DEV_USER_ID es un UUID
+# de usuario semilla usado solo en builds de desarrollo.
+regexes = [
+  '''01900000-100b-7001-8001-000000000001''',
+]
