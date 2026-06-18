@@ -6,11 +6,22 @@
     <PublishAot>false</PublishAot>
     <IsAotCompatible>false</IsAotCompatible>
     <NuGetAuditMode>direct</NuGetAuditMode>
-    <NoWarn>$(NoWarn);CA1861</NoWarn>
+    <!-- CA1861: arrays constantes en config EF.
+         CA1304/CA1310/CA1311/CA1862: las consultas EF Core deben usar overloads
+         sin StringComparison para que Npgsql las traduzca a SQL (lower()/LIKE). -->
+    <NoWarn>$(NoWarn);CA1861;CA1304;CA1310;CA1311;CA1862</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Persistence\Sql\Ddl\*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
   </ItemGroup>
 
   <ItemGroup>

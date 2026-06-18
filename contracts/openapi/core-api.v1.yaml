@@ -1,0 +1,116 @@
+openapi: 3.0.3
+info:
+  title: FLIT Core API
+  version: "1.0.0"
+  description: >
+    Contrato público de FLIT Core API. Versionado en el monorepo
+    (services/core-api). Este archivo se inicializa con HU #10189
+    (Administrador de Compañías — endpoint index paginado y seguridad SuperAdmin).
+
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4002
+    description: Local (Gateway)
+
+tags:
+  - name: Admin · Compañías
+    description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+
+paths:
+  /api/v1/admin/companies/index:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompaniesIndex
+      summary: Listado paginado de compañías (RF02)
+      description: >
+        Retorna el listado paginado de compañías registradas, ordenado por
+        fecha de creación descendente. Filtros opcionales e independientes.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nit
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial sobre el NIT (tax_id).
+        - name: razonSocial
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: estadoActivo
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: Filtra por estado activo/inactivo.
+        - name: fechaDesde
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite inferior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: fechaHasta
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite superior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CompanyListItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nit: { type: string }
+        razonSocial: { type: string }
+        estadoActivo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, nit, razonSocial, estadoActivo, fechaCreacion]
+
+    CompanyPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyListItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
