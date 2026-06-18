@@ -9,6 +9,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: monorepoRoot,
   },
+  // Proxy SuperAdmin API in dev — avoids browser CORS to :4003.
+  // Requires: pnpm run dev:core-api + pnpm run dev:frontend (leave NEXT_PUBLIC_API_URL unset).
+  async rewrites() {
+    const apiOrigin = process.env.CORE_API_ORIGIN ?? 'http://localhost:4003';
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${apiOrigin}/api/v1/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
