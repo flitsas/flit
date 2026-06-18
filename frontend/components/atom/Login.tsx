@@ -77,12 +77,16 @@ export function Login({ onBypass }: { onBypass: () => void }) {
 
   useEffect(() => {
     if (lockSeconds <= 0) return;
-    const id = setInterval(() => setLockSeconds((s) => (s > 0 ? s - 1 : 0)), 1000);
+    // El efecto se reejecuta en cada cambio de lockSeconds, así que el cierre lee el valor actual.
+    const id = setInterval(() => {
+      if (lockSeconds <= 1) {
+        setLockSeconds(0);
+        if (attempts >= 3) setAttempts(0); // reset de intentos al expirar el bloqueo
+      } else {
+        setLockSeconds(lockSeconds - 1);
+      }
+    }, 1000);
     return () => clearInterval(id);
-  }, [lockSeconds]);
-
-  useEffect(() => {
-    if (lockSeconds === 0 && attempts >= 3) setAttempts(0);
   }, [lockSeconds, attempts]);
 
   const locked = lockSeconds > 0;

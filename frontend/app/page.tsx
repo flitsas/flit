@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Login } from "@/components/atom/Login";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
@@ -10,32 +10,46 @@ import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
 
+const AUTH_KEY = "flit:authed";
+
+// Store externo (localStorage) leído con useSyncExternalStore: sin setState síncrono en efectos
+// y sin desajuste de hidratación (el snapshot de servidor es siempre "no autenticado").
+const authStore = {
+  subscribe(callback: () => void) {
+    window.addEventListener("storage", callback);
+    window.addEventListener(AUTH_KEY, callback);
+    return () => {
+      window.removeEventListener("storage", callback);
+      window.removeEventListener(AUTH_KEY, callback);
+    };
+  },
+  getSnapshot() {
+    return window.localStorage.getItem(AUTH_KEY) === "1";
+  },
+  getServerSnapshot() {
+    return false;
+  },
+  set(value: boolean) {
+    if (value) window.localStorage.setItem(AUTH_KEY, "1");
+    else window.localStorage.removeItem(AUTH_KEY);
+    window.dispatchEvent(new Event(AUTH_KEY));
+  },
+};
+
 export default function HomePage() {
-  const [authed, setAuthed] = useState(false);
+  const authed = useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
   const [module, setModule] = useState<ModuleId>("dashboard");
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setAuthed(window.localStorage.getItem("flit:authed") === "1");
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (authed) window.localStorage.setItem("flit:authed", "1");
-    else window.localStorage.removeItem("flit:authed");
-  }, [authed, hydrated]);
-
-  if (!hydrated) {
-    return null;
-  }
 
   if (!authed) {
-    return <Login onBypass={() => setAuthed(true)} />;
+    return <Login onBypass={() => authStore.set(true)} />;
   }
 
   return (
-    <Shell active={module} onNav={setModule} onLogout={() => setAuthed(false)}>
+    <Shell active={module} onNav={setModule} onLogout={() => authStore.set(false)}>
       {module === "dashboard" && <Dashboard onNewTramite={() => setModule("tramites")} />}
       {module === "tramites" && <Tramites />}
       {module === "reportes" && <Reportes />}

@@ -8,7 +8,8 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 
 export function useProcedureTypes() {
   const [items, setItems] = useState<ProcedureTypeSummary[]>([]);
-  const [status, setStatus] = useState<Status>('idle');
+  // Estado inicial 'loading': la carga de montaje arranca cargando sin setState síncrono en el efecto.
+  const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -25,8 +26,24 @@ export function useProcedureTypes() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // Carga inicial: setState ocurre solo en callbacks async, no de forma síncrona en el efecto.
+    let active = true;
+    superadminClient
+      .listProcedureTypes()
+      .then((data) => {
+        if (!active) return;
+        setItems(data);
+        setStatus('success');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Error al cargar parametrizaciones');
+        setStatus('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const publish = useCallback(
     async (id: string) => {
