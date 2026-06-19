@@ -46,6 +46,11 @@ app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
 app.MapPublicProcedureTypeEndpoints();
 app.MapTramitesInstanceEndpoints();
+app.MapTramitesActorEndpoints();
+app.MapTramitesAttachmentEndpoints();
 app.MapConsultationEndpoints();
+app.MapTramitesCommercialEndpoints();
+app.MapTramitesPreflightEndpoints();
+app.MapTramitesWizardEndpoints();
 
 app.Run();
