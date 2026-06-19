@@ -62,6 +62,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.BiometricValidations)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public Task<ProcedureInstance?> GetByIdWithBiometricsAndActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstances
+            .Include(x => x.BiometricValidations)
+            .Include(x => x.Actors)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);

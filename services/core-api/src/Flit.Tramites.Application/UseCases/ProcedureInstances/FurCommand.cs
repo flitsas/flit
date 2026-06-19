@@ -15,7 +15,7 @@ public sealed record GenerarFurResult(IReadOnlyList<FurDocumentDto> Documents);
 /// <summary>
 /// Genera el FUR (y, en traspaso, el contrato de compraventa) con los datos reales de la instancia.
 /// <para><b>Gating biométrica</b> (paridad Johan): traspaso requiere AMBAS partes aprobadas;
-/// matrícula_inicial requiere comprador aprobada (parte null). Si falta → <c>biometria_gate</c> (409).</para>
+/// matrícula_inicial requiere comprador aprobada (Parte == "comprador"). Si falta → <c>biometria_gate</c> (409).</para>
 /// El documento se genera vía el generador MOCK (sin librería PDF) y se persiste como ADJUNTO
 /// (<c>IAttachmentStorage</c> + fila en procedure_instance_attachments, tipo 'fur' / 'compraventa').
 /// Idempotente: re-generar reemplaza los adjuntos FUR/compraventa previos. Registra un evento
@@ -38,7 +38,7 @@ public sealed class GenerarFurHandler(
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
 
-        // Gating biométrica: traspaso → ambas partes; matrícula → comprador (parte null).
+        // Gating biométrica: traspaso → ambas partes; matrícula → comprador (Parte == "comprador").
         if (!BiometriaGateOk(instance, esTraspaso))
             return (null, "biometria_gate");
 
@@ -108,7 +108,7 @@ public sealed class GenerarFurHandler(
 
     /// <summary>
     /// Gating biométrica: traspaso requiere comprador + vendedor aprobados; matrícula requiere la
-    /// parte única (null) aprobada.
+    /// parte única (comprador) aprobada.
     /// </summary>
     private static bool BiometriaGateOk(ProcedureInstance instance, bool esTraspaso)
     {
@@ -118,7 +118,7 @@ public sealed class GenerarFurHandler(
 
         return esTraspaso
             ? Aprobada("comprador") && Aprobada("vendedor")
-            : Aprobada(null);
+            : Aprobada("comprador");
     }
 
     private static FurDocumentData AssembleData(ProcedureInstance instance, string? codigo, bool esTraspaso)

@@ -18,6 +18,12 @@ public interface IProcedureInstanceRepository
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
+    /// resuelve el actor de la parte para poblar nombre/documento/email de la validación aprobada).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithBiometricsAndActorsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con sus firmas electrónicas (Slice 7).</summary>
     Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

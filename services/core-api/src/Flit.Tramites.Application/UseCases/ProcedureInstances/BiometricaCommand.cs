@@ -83,7 +83,8 @@ public static class BiometricToken
 /// (para construir el magic-link). Idempotente por parte: si ya existe una validación activa
 /// (enviado/en_proceso) o aprobada para la misma parte, devuelve <c>biometria_activa</c> (409)
 /// — el gestor debe reusar la existente en vez de duplicar. Requiere instancia en <c>draft</c>.
-/// Para matrícula la parte es null (única parte = comprador); para traspaso 'comprador'|'vendedor'.
+/// La parte se normaliza vía <c>NormalizeParte</c>: matrícula usa 'comprador' (la FE/iniciar lo
+/// pasa explícito; vacío → null por compatibilidad legado); traspaso usa 'comprador'|'vendedor'.
 /// </summary>
 public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
 {
@@ -313,5 +314,108 @@ public sealed class CompletarBiometriaHandler(
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms, ct);
         return ms.ToArray();
+    }
+}
+
+// ── Handler: simular biométrica (autenticado, mock — sin fotos) ───────────────
+
+/// <summary>
+/// Aprueba directamente la biométrica de una parte (acción MOCK que sustituye el flujo de captura de
+/// 3 fotos por un botón "Simular validación"). Mismo patrón que <see cref="SimularFirmaHandler"/>.
+/// <para><paramref name="parte"/> vacía → <c>"comprador"</c> (matrícula, única parte); debe ser
+/// <c>"comprador"</c>|<c>"vendedor"</c> (else <c>parte_invalida</c>). Resuelve el actor de esa parte
+/// (comprador→BUYER/"comprador", vendedor→OWNER/"vendedor"); si falta → <c>actor_requerido</c>.</para>
+/// Idempotente: si ya hay una validación <c>aprobado</c> para la parte, la devuelve sin cambios. Si no,
+/// crea/actualiza la validación con estado <c>aprobado</c>, score 95, proveedor/scorer "mock" y los
+/// datos del actor. Devuelve el mismo <see cref="BiometricValidationDto"/> que la lista.
+/// </summary>
+public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
+{
+    private const int MockScore = 95;
+
+    public async Task<(BiometricValidationDto? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        string? parte,
+        CancellationToken ct = default)
+    {
+        var normalized = string.IsNullOrWhiteSpace(parte)
+            ? BiometricRules.ParteComprador
+            : parte.Trim().ToLowerInvariant();
+        if (normalized is not (BiometricRules.ParteComprador or BiometricRules.ParteVendedor))
+            return (null, "parte_invalida");
+
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (null, "instance_not_found");
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Idempotencia por parte: una validación ya aprobada se devuelve intacta.
+        var existing = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.Parte, normalized, StringComparison.OrdinalIgnoreCase));
+        if (existing is { Estado: BiometricEstados.Aprobado })
+            return (IniciarBiometriaHandler.ToDto(existing, now), null);
+
+        // Actor de la parte (ActorType guarda el rol: "comprador"/"vendedor").
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));
+        if (actor is null)
+            return (null, "actor_requerido");
+
+        var detalle = JsonSerializer.Serialize(new
+        {
+            score = MockScore,
+            aprobado = true,
+            motivo = "simulada",
+            scorer = "mock",
+            proveedor = "mock",
+            evaluado_at = now,
+        });
+
+        ProcedureInstanceBiometricValidation validation;
+        if (existing is not null)
+        {
+            // Reusa la validación existente (p.ej. enviado/rechazado): pásala a aprobado.
+            validation = existing;
+            validation.Estado = BiometricEstados.Aprobado;
+            validation.Score = MockScore;
+            validation.Detalle = detalle;
+            validation.Nombre = actor.FullName;
+            validation.TipoDoc = actor.DocumentType;
+            validation.Documento = actor.DocumentNumber;
+            validation.Email = actor.Email ?? string.Empty;
+            validation.ValidadoAt = now;
+            validation.UpdatedAt = now;
+        }
+        else
+        {
+            validation = new ProcedureInstanceBiometricValidation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Parte = normalized,
+                Nombre = actor.FullName,
+                TipoDoc = actor.DocumentType,
+                Documento = actor.DocumentNumber,
+                Email = actor.Email ?? string.Empty,
+                Estado = BiometricEstados.Aprobado,
+                TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
+                ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
+                Intentos = 0,
+                MaxIntentos = BiometricRules.MaxIntentos,
+                Score = MockScore,
+                Detalle = detalle,
+                ValidadoAt = now,
+                CreatedAt = now,
+            };
+            instance.BiometricValidations.Add(validation);
+            // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar INSERT.
+            repo.Add(validation);
+        }
+
+        await repo.SaveChangesAsync(ct);
+        return (IniciarBiometriaHandler.ToDto(validation, now), null);
     }
 }

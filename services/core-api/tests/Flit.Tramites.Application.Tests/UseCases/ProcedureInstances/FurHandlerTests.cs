@@ -121,7 +121,7 @@ public sealed class FurHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
-        instance.BiometricValidations.Add(Bio(parte: null)); // matrícula = parte null
+        instance.BiometricValidations.Add(Bio(parte: "comprador")); // matrícula = comprador
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
@@ -137,7 +137,7 @@ public sealed class FurHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
-        instance.BiometricValidations.Add(Bio(parte: null));
+        instance.BiometricValidations.Add(Bio(parte: "comprador"));
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id,

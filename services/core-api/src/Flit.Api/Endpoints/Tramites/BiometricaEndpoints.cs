@@ -53,6 +53,30 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceBiometric");
 
+        // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.
+        group.MapPost("/instances/{id:guid}/biometric/simulate", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] SimularBiometriaRequest? body,
+            SimularBiometriaHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, ct);
+            return error switch
+            {
+                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
+                "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de simular la biométrica."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("SimularProcedureInstanceBiometric");
+
         return app;
     }
 }
+
+/// <summary>Cuerpo de la simulación de biométrica. <c>parte</c> opcional (vacío → comprador).</summary>
+internal sealed record SimularBiometriaRequest(string? Parte);

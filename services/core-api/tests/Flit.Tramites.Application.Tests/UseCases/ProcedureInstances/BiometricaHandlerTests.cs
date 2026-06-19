@@ -20,6 +20,7 @@ public sealed class BiometricaHandlerTests
     private readonly GetBiometriaByTokenHandler _getByToken;
     private readonly CompletarBiometriaHandler _completar;
     private readonly ListBiometriaHandler _list;
+    private readonly SimularBiometriaHandler _simular;
 
     public BiometricaHandlerTests()
     {
@@ -27,7 +28,23 @@ public sealed class BiometricaHandlerTests
         _getByToken = new GetBiometriaByTokenHandler(_repo);
         _completar = new CompletarBiometriaHandler(_repo, _storage, _scorer);
         _list = new ListBiometriaHandler(_repo);
+        _simular = new SimularBiometriaHandler(_repo);
     }
+
+    private static ProcedureInstanceActor Actor(Guid tenant, string actorType) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = actorType,
+            DocumentType = "CC",
+            DocumentNumber = "999",
+            FullName = "Maria Compradora",
+            Email = "maria@x.com",
+            Metadata = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
 
     private sealed class FakeStorage : IAttachmentStorage
     {
@@ -360,5 +377,123 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle().Which.Estado.Should().Be(BiometricEstados.Aprobado);
+    }
+
+    // ── Simular (mock, sin fotos) ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Simular_DefaultParte_ApprovesWithScore95FromActor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(Actor(tenant, "comprador"));
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        // parte vacío → comprador (matrícula, única parte).
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: null, ct);
+
+        error.Should().BeNull();
+        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        result.Score.Should().Be(95);
+        result.Parte.Should().Be("comprador");
+        result.Nombre.Should().Be("Maria Compradora");
+        result.Documento.Should().Be("999");
+        instance.BiometricValidations.Should().ContainSingle()
+            .Which.Detalle.Should().Contain("mock");
+        _repo.Received(1).Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Simular_AlreadyApproved_IsIdempotent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(Actor(tenant, "comprador"));
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(), Parte = "comprador", Estado = BiometricEstados.Aprobado, Score = 95,
+            Nombre = "Maria Compradora", TipoDoc = "CC", Documento = "999", Email = "maria@x.com",
+            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        instance.BiometricValidations.Should().ContainSingle(); // no duplica
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Simular_NoActor_ReturnsActorRequerido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant); // sin actores
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+
+        error.Should().Be("actor_requerido");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Simular_InvalidParte_ReturnsParteInvalida()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "tercero", ct);
+
+        error.Should().Be("parte_invalida");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Simular_InstanceNotFound_ReturnsInstanceNotFound()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithBiometricsAndActorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
+            .Returns((ProcedureInstance?)null);
+
+        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "comprador", ct);
+
+        error.Should().Be("instance_not_found");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Simular_ReusesExistingRejected_FlipsToApproved()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(Actor(tenant, "comprador"));
+        var rejected = new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(), Parte = "comprador", Estado = BiometricEstados.Rechazado,
+            Nombre = "Old", TipoDoc = "CC", Documento = "1", Email = "old@x.com",
+            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.BiometricValidations.Add(rejected);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        result.Score.Should().Be(95);
+        instance.BiometricValidations.Should().ContainSingle(); // reusa, no crea
+        rejected.Estado.Should().Be(BiometricEstados.Aprobado);
+        rejected.Nombre.Should().Be("Maria Compradora"); // datos refrescados del actor
+        await _repo.Received(1).SaveChangesAsync(ct);
     }
 }

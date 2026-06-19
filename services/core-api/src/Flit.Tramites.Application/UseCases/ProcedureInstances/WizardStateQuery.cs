@@ -74,8 +74,8 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
         var docsCompletos = DocumentosObligatoriosCompletos(instance);
 
-        // Matrícula: la única parte (comprador) lleva la biométrica → parte null en la entidad.
-        var identidadAprobada = BiometriaAprobada(instance, null);
+        // Matrícula: la única parte (comprador) lleva la biométrica → Parte == "comprador".
+        var identidadAprobada = BiometriaAprobada(instance, "comprador");
 
         var ctx = new MatriculaGateContext
         {
@@ -311,9 +311,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         instance.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Biométrica aprobada para una parte. <paramref name="parte"/> null = matrícula (única parte =
-    /// comprador, validación con parte null). Aprobada = existe una validación de esa parte en estado
-    /// <c>aprobado</c>.
+    /// Biométrica aprobada para una parte. Matrícula usa la parte explícita <c>"comprador"</c> (única
+    /// parte); traspaso usa <c>"comprador"</c>/<c>"vendedor"</c>. Aprobada = existe una validación de
+    /// esa parte en estado <c>aprobado</c>.
     /// </summary>
     private static bool BiometriaAprobada(ProcedureInstance instance, string? parte) =>
         instance.BiometricValidations.Any(v =>

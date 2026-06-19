@@ -17,10 +17,12 @@ public sealed class WizardBiometricaStateTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly GetWizardStateHandler _handler;
+    private readonly SimularBiometriaHandler _simular;
 
     public WizardBiometricaStateTests()
     {
         _handler = new GetWizardStateHandler(_repo);
+        _simular = new SimularBiometriaHandler(_repo);
     }
 
     private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
@@ -52,7 +54,7 @@ public sealed class WizardBiometricaStateTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(instance);
 
-    // ── Matrícula: paso 4 (identidad) refleja biométrica del comprador (parte null) ──
+    // ── Matrícula: paso 4 (identidad) refleja biométrica del comprador (Parte == "comprador") ──
 
     [Fact]
     public async Task Matricula_NoBiometria_IdentidadIncompleteWithReason()
@@ -72,7 +74,7 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
-        instance.BiometricValidations.Add(Biometria(parte: null, estado: BiometricEstados.Aprobado));
+        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
@@ -87,12 +89,42 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
-        instance.BiometricValidations.Add(Biometria(parte: null, estado: BiometricEstados.Rechazado));
+        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Rechazado));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
+    }
+
+    [Fact]
+    public async Task Matricula_AfterSimular_IdentidadStep4FlipsToComplete()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador", DocumentType = "CC", DocumentNumber = "999",
+            FullName = "Maria", Email = "maria@x.com", Metadata = "{}", CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, instance.TenantId, ct).Returns(instance);
+        Setup(instance);
+
+        // Antes de simular: paso 4 incompleto.
+        var (before, _) = await _handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        before!.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
+
+        // Simular validación de identidad (mock, sin fotos).
+        var (sim, simError) = await _simular.HandleAsync(instance.Id, instance.TenantId, parte: null, ct);
+        simError.Should().BeNull();
+        sim!.Estado.Should().Be(BiometricEstados.Aprobado);
+
+        // Después: paso 4 (identidad) completo.
+        var (after, _) = await _handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var s4 = after!.Steps.Single(s => s.Index == 4);
+        s4.Status.Should().Be("complete");
+        s4.Reasons.Should().BeEmpty();
     }
 
     // ── Traspaso: paso 6 (FUR) exige biométrica de AMBAS partes ──────────────────

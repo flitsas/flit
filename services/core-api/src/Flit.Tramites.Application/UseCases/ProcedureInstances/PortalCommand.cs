@@ -143,14 +143,18 @@ public sealed class GetPortalByTokenHandler(IProcedureInstanceRepository repo)
             summary, pasos);
     }
 
-    /// <summary>Empareja la biométrica por parte == rol. En matrícula la parte puede ser null.</summary>
+    /// <summary>
+    /// Empareja la biométrica por Parte == rol. Tanto matrícula (única parte = comprador) como
+    /// traspaso usan la parte explícita ("comprador"/"vendedor"); se mantiene un fallback tolerante
+    /// a Parte vacía SOLO para comprador (datos legados anteriores a la unificación LV-1).
+    /// </summary>
     private static ProcedureInstanceBiometricValidation? FindForRol(
         IEnumerable<ProcedureInstanceBiometricValidation> all, string rol, Func<ProcedureInstanceBiometricValidation, string?> parteOf)
     {
         var match = all.FirstOrDefault(v => string.Equals(parteOf(v), rol, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
             return match;
-        // Matrícula: única parte (comprador) con Parte null.
+        // Tolerancia legado: validaciones de matrícula creadas con Parte vacía → comprador.
         return rol == ParticipantRoles.Comprador
             ? all.FirstOrDefault(v => string.IsNullOrEmpty(parteOf(v)))
             : null;
