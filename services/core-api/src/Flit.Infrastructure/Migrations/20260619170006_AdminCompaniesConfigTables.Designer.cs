@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    [Migration("20260619163400_AdminCompaniesConfigTables")]
+    [Migration("20260619170006_AdminCompaniesConfigTables")]
     partial class AdminCompaniesConfigTables
     {
         /// <inheritdoc />
