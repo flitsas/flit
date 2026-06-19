@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       env_name: ${{ steps.env.outputs.env_name }}
+      gh_env: ${{ steps.env.outputs.gh_env }}
       front_domain: ${{ steps.env.outputs.front_domain }}
       api_domain: ${{ steps.env.outputs.api_domain }}
       image_tag: ${{ steps.env.outputs.image_tag }}
@@ -44,9 +45,13 @@ jobs:
         id: env
         run: |
           # Puertos por ambiente: DEV 40xx, QA 50xx, PDN 60xx (front/gateway/core/python).
+          # gh_env: nombre del GitHub Environment donde viven los secrets del VPS
+          # (los Environments configurados son develop/staging/production). env_name
+          # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn
+              gh_env=production
               front_domain=pdn.flitsas.online
               api_domain=api.pdn.flitsas.online
               image_tag=pdn
@@ -54,6 +59,7 @@ jobs:
               ;;
             staging)
               env_name=qa
+              gh_env=staging
               front_domain=qa.flitsas.online
               api_domain=api.qa.flitsas.online
               image_tag=qa
@@ -61,6 +67,7 @@ jobs:
               ;;
             develop)
               env_name=dev
+              gh_env=develop
               front_domain=dev.flitsas.online
               api_domain=api.dev.flitsas.online
               image_tag=dev
@@ -81,6 +88,7 @@ jobs:
           fi
           {
             echo "env_name=$env_name"
+            echo "gh_env=$gh_env"
             echo "front_domain=$front_domain"
             echo "api_domain=$api_domain"
             echo "image_tag=$image_tag"
@@ -229,7 +237,7 @@ jobs:
     # (HOSTINGER_SSH_*, HOSTINGER_DEPLOY_PATH, GHCR_PAT). Asi un mismo workflow despliega
     # al VPS correcto segun la rama.
     environment:
-      name: ${{ needs.setup.outputs.env_name }}
+      name: ${{ needs.setup.outputs.gh_env }}
       url: https://${{ needs.setup.outputs.front_domain }}
 
     steps:
