@@ -55,3 +55,15 @@ export function adminResetPassword(email: string): Promise<void> {
     body: { email },
   });
 }
+
+/**
+ * POST /api/v1/auth/admin/block-user → 200 | 403 (fuera de ámbito) | 404.
+ * NOTA: el endpoint backend de bloqueo temporal está pendiente (HU backend separada);
+ * el frontend ya maneja su contrato (incl. 403 fuera de ámbito, HU #10174 AC2).
+ */
+export function adminBlockUser(email: string, days: number): Promise<void> {
+  return apiFetch<void>("/api/v1/auth/admin/block-user", {
+    method: "POST",
+    body: { email, days },
+  });
+}
