@@ -2,23 +2,30 @@
 #
 # CONVENCION DE PUERTOS: cada servicio usa el MISMO puerto en host e interno
 # (expuesto == interno), publicado solo en 127.0.0.1 (el reverse-proxy del HOST
-# termina TLS y enruta los dominios):
-#   frontend   -> 127.0.0.1:4001:4001   (Next.js)
-#   gateway    -> 127.0.0.1:4002:4002   (API publica YARP: /api, /hubs, /ml)
-#   core-api   -> 127.0.0.1:4003:4003   (Flit.Api interno/debug, detras de YARP)
-#   python-ml  -> 127.0.0.1:4012:4012   (FastAPI OCR/ML, detras de YARP)
+# termina TLS y enruta los dominios). Los puertos son PARAMETRIZABLES por ambiente:
 #
-# Mapeo de dominios en el reverse-proxy del HOST (ejemplo):
-#   dev.flitsas.online      -> 127.0.0.1:4001  (frontend)
-#   api.dev.flitsas.online  -> 127.0.0.1:4002  (gateway / API publica)
-#   core.dev.flitsas.online -> 127.0.0.1:4003  (core-api, opcional/debug)
+#   Servicio   var               DEV    QA     PDN
+#   frontend   FRONTEND_PORT     4001   5001   6001   (Next.js)
+#   gateway    GATEWAY_PORT      4002   5002   6002   (API publica YARP: /api, /hubs, /ml)
+#   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
+#   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
+#
+# Los defaults son los de DEV. El CD exporta las vars segun la rama (develop/staging/
+# release); para operacion manual, fijalas en el .env del VPS de ese ambiente.
+#
+# Mapeo de dominios en el reverse-proxy del HOST (ejemplo DEV):
+#   dev.flitsas.online      -> 127.0.0.1:${FRONTEND_PORT}  (frontend)
+#   api.dev.flitsas.online  -> 127.0.0.1:${GATEWAY_PORT}   (gateway / API publica)
+#   core.dev.flitsas.online -> 127.0.0.1:${CORE_API_PORT}  (core-api, opcional/debug)
 #
 # Postgres NO esta aqui: corre en el HOST (host.docker.internal:5432).
 #
 # Variables requeridas en .env (junto al compose):
 #   CONNECTION_STRING_CORE  cadena Npgsql .NET (Host=...;Port=5432;Database=...;Username=...;Password=...)
-#   CORS_ORIGIN             origen permitido del frontend (https://dev.flitsas.online)
+#   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online)
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
+# Variables de puerto (defaults DEV; el CD las inyecta por ambiente):
+#   FRONTEND_PORT / GATEWAY_PORT / CORE_API_PORT / PYTHON_ML_PORT
 # Variables para AISLAR este proyecto del resto del VPS:
 #   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitdev)
 # Variables opcionales:
@@ -49,7 +56,7 @@ x-default-logging: &default-logging
     max-file: '5'
 
 services:
-  # ── Flit.Api (interno, detras de YARP) — puerto 4003 ──────────────────────
+  # ── Flit.Api (interno, detras de YARP) — CORE_API_PORT ────────────────────
   core-api:
     image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/api/Flit.Api.dll"]
@@ -59,7 +66,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:4003
+      ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
@@ -69,9 +76,9 @@ services:
       Verifik__BaseUrl: ${VERIFIK_BASE_URL:-https://api.verifik.co}
       Verifik__TimeoutSeconds: ${VERIFIK_TIMEOUT_SECONDS:-30}
     ports:
-      - "127.0.0.1:4003:4003"
+      - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4003/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_API_PORT:-4003}/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -79,7 +86,7 @@ services:
     restart: *restart
     logging: *default-logging
 
-  # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — puerto 4002 ───────
+  # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
   gateway:
     image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/gateway/Flit.Gateway.dll"]
@@ -87,21 +94,21 @@ services:
     working_dir: /app/gateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:4002
+      ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://dev.flitsas.online}
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
-      ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:4003/
-      ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:4012/
+      ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
+      ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
     ports:
-      - "127.0.0.1:4002:4002"
+      - "127.0.0.1:${GATEWAY_PORT:-4002}:${GATEWAY_PORT:-4002}"
     depends_on:
       core-api:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4002/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${GATEWAY_PORT:-4002}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -109,14 +116,14 @@ services:
     restart: *restart
     logging: *default-logging
 
-  # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — puerto 4012 ──────────
+  # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — PYTHON_ML_PORT ────────
   python-ml:
     image: ghcr.io/flitsas/flitdev/python-ml:${PYTHON_ML_TAG:-latest}
-    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4012"]
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${PYTHON_ML_PORT:-4012}"]
     ports:
-      - "127.0.0.1:4012:4012"
+      - "127.0.0.1:${PYTHON_ML_PORT:-4012}:${PYTHON_ML_PORT:-4012}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:4012/health').status==200 else sys.exit(1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${PYTHON_ML_PORT:-4012}/health').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -124,15 +131,15 @@ services:
     restart: *restart
     logging: *default-logging
 
-  # ── Frontend (Next.js) — puerto 4001 ──────────────────────────────────────
+  # ── Frontend (Next.js) — FRONTEND_PORT ────────────────────────────────────
   frontend:
     image: ghcr.io/flitsas/flitdev/frontend:${FRONTEND_TAG:-latest}
     environment:
       # Next.js (next dev/start) escucha en este puerto interno.
-      PORT: "4001"
+      PORT: "${FRONTEND_PORT:-4001}"
       HOSTNAME: "0.0.0.0"
     ports:
-      - "127.0.0.1:4001:4001"
+      - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:
       - gateway
     restart: *restart

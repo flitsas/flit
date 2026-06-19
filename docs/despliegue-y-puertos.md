@@ -8,9 +8,19 @@ Guía de **dónde se configura cada cosa** en los tres escenarios de ejecución:
 | **Local con Docker** | Stack levantado con `docker compose` (BD incluida) | [docker-compose.yml](../docker-compose.yml) |
 | **DEV (VPS)** | Despliegue real en el servidor vía CD | [docker-compose.prod.yml](../docker-compose.prod.yml) + `.env` (ver [.env.prod.example](../.env.prod.example)) |
 
-> **Convención de puertos** (a partir de este ajuste): en Docker/DEV cada servicio
-> usa **el mismo puerto expuesto e interno**: `frontend 4001`, `gateway 4002`,
-> `core-api 4003`, `python-ml 4012`. Postgres siempre en `5432`.
+> **Convención de puertos:** cada servicio usa **el mismo puerto expuesto e interno**
+> (expuesto == interno) y el número **cambia por ambiente** en los despliegues:
+>
+> | Servicio | DEV | QA | PDN |
+> |----------|-----|-----|-----|
+> | frontend | 4001 | 5001 | 6001 |
+> | gateway | 4002 | 5002 | 6002 |
+> | core-api | 4003 | 5003 | 6003 |
+> | python-ml | 4012 | 5012 | 6012 |
+>
+> Postgres siempre en `5432`. En el compose los puertos son variables
+> (`FRONTEND_PORT`/`GATEWAY_PORT`/`CORE_API_PORT`/`PYTHON_ML_PORT`) con defaults DEV;
+> el CD las inyecta según la rama (ver §6.3).
 
 ---
 
@@ -104,24 +114,30 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
   Si necesitas la topología completa con gateway/ML, usa la de DEV (punto c) o levanta
   esos servicios en local con `pnpm dev:with-python`.
 
-### c) DEV (VPS) — puerto expuesto == interno
+### c) DEV / QA / PDN (VPS) — puerto expuesto == interno, parametrizado
 
-- **Archivo:** [docker-compose.prod.yml](../docker-compose.prod.yml), bloque `ports`
-  + variable de entorno que fija el puerto **interno** de cada servicio.
+- **Archivo:** [docker-compose.prod.yml](../docker-compose.prod.yml). Los puertos son
+  **variables** (default DEV); el mismo número se usa en el mapeo `ports` y en el
+  puerto interno. El número cambia por ambiente (40xx / 50xx / 60xx).
 
-| Servicio | Mapeo (`ports`) | Puerto interno fijado por |
-|----------|-----------------|----------------------------|
-| frontend | `127.0.0.1:4001:4001` | `PORT: "4001"` (Next.js) |
-| gateway  | `127.0.0.1:4002:4002` | `ASPNETCORE_URLS: http://+:4002` |
-| core-api | `127.0.0.1:4003:4003` | `ASPNETCORE_URLS: http://+:4003` |
-| python-ml| `127.0.0.1:4012:4012` | `command: uvicorn ... --port 4012` |
+| Servicio | Variable | Mapeo (`ports`) | Puerto interno fijado por |
+|----------|----------|-----------------|----------------------------|
+| frontend | `FRONTEND_PORT` | `127.0.0.1:${FRONTEND_PORT}:${FRONTEND_PORT}` | `PORT` (Next.js) |
+| gateway  | `GATEWAY_PORT` | `127.0.0.1:${GATEWAY_PORT}:${GATEWAY_PORT}` | `ASPNETCORE_URLS: http://+:${GATEWAY_PORT}` |
+| core-api | `CORE_API_PORT` | `127.0.0.1:${CORE_API_PORT}:${CORE_API_PORT}` | `ASPNETCORE_URLS: http://+:${CORE_API_PORT}` |
+| python-ml| `PYTHON_ML_PORT` | `127.0.0.1:${PYTHON_ML_PORT}:${PYTHON_ML_PORT}` | `command: uvicorn ... --port ${PYTHON_ML_PORT}` |
 
+- Además el gateway apunta sus destinos YARP a `core-api:${CORE_API_PORT}` y
+  `python-ml:${PYTHON_ML_PORT}`, y cada `healthcheck` usa el puerto de su servicio.
+- **De dónde salen los valores:** el **CD los exporta** según la rama (§6.3). Para
+  operación manual, fíjalos en el `.env` del VPS de ese ambiente.
 - El prefijo `127.0.0.1:` publica el puerto **solo en loopback** del VPS: el
   reverse-proxy del host (Nginx/Caddy) termina TLS y enruta los dominios a esos
   puertos locales. Nunca quedan expuestos públicamente.
-- **Importante:** para que "expuesto == interno" funcione, al cambiar un puerto hay
-  que cambiar **las dos partes**: el mapeo `ports` **y** la variable que define el
-  puerto interno (`ASPNETCORE_URLS` / `PORT` / `--port`). Cambiar solo el mapeo no basta.
+- **Importante:** "expuesto == interno" se mantiene porque la **misma variable** alimenta
+  el mapeo `ports` y el puerto interno (`ASPNETCORE_URLS` / `PORT` / `--port`) y los
+  destinos YARP. Cambiar el puerto de un ambiente = cambiar un solo número en el `setup`
+  del CD (o en el `.env`).
 
 ---
 
@@ -242,11 +258,12 @@ que define una clave gana.
 - **Para correr el gateway en local DEBES** copiar el `.example` a
   `appsettings.Development.json`; si no, hereda los hostnames Docker del base
   (`core-api`/`python-ml`) que no resuelven fuera de contenedores.
-- **En DEV (VPS)** el compose corre con `ASPNETCORE_ENVIRONMENT=Development`, pero el
-  archivo `appsettings.Development.json` **no se incluye en la imagen** (está
-  gitignored). Por eso el gateway usa el **base** (`core-api:4003`/`python-ml:4012`)
-  reforzado por las variables `ReverseProxy__...__Address` del compose. Cambiar un
-  puerto interno ⇒ actualizar el base **y** (opcionalmente) la variable del compose.
+- **En DEV/QA/PDN (VPS)** el compose corre con `ASPNETCORE_ENVIRONMENT=Development`,
+  pero el archivo `appsettings.Development.json` **no se incluye en la imagen** (está
+  gitignored). El gateway parte del **base** y las variables
+  `ReverseProxy__...__Address` del compose **lo sobreescriben con el puerto del
+  ambiente** (`core-api:${CORE_API_PORT}` / `python-ml:${PYTHON_ML_PORT}`). Por eso no
+  hay que tocar el JSON al cambiar de ambiente: basta el número de puerto que inyecta el CD.
 
 ---
 
@@ -336,7 +353,8 @@ Basado en la plantilla [.env.prod.example](../.env.prod.example). Variables a te
 | `VERIFIK_API_TOKEN` | ✅ | Token Verifik (RUNT). Secreto. |
 | `VERIFIK_BASE_URL` | ⛔ opc. | Default `https://api.verifik.co`. |
 | `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default `30`. |
-| `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc. | Default `latest`. **Para rollback**, fija un tag inmutable `sha-<commit>` en lugar de `latest`. |
+| `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. |
+| `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc.* | Default `latest`. El **CD los inyecta**: tag móvil (`dev`/`qa`) en DEV/QA y `sha-<commit>` inmutable en PDN. **Para rollback manual**, fija el `sha-<commit>` deseado. |
 | `COMPOSE_PROJECT_NAME` | ⛔ opc. | El compose ya fija `name: flitdev`. Solo defínela si necesitas aislar varias instancias en el mismo VPS (evita que `up --remove-orphans` borre contenedores de otro stack). |
 
 Consideraciones del archivo en sí:
@@ -370,34 +388,72 @@ Consideraciones del archivo en sí:
    `127.0.0.1:4002/health` respondan. Si cambias puertos, actualiza también esa
    verificación en [cd.yml](../.github/workflows/cd.yml).
 
-### 6.3 Secrets y variables de GitHub (para el CD)
+### 6.3 Ambientes por rama (CD multi-entorno)
 
-El job `deploy-to-vps` necesita configurados en el repo:
+El CD ([cd.yml](../.github/workflows/cd.yml)) despliega a **3 ambientes según la rama**.
+Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
+
+| Rama | Ambiente (`env_name`) | Front | API (gateway) | Tag con el que **despliega** |
+|------|:---------------------:|-------|---------------|------------------------------|
+| `develop` | `dev` | `dev.flitsas.online` | `api.dev.flitsas.online` | `dev` (móvil) |
+| `staging` | `qa` | `qa.flitsas.online` | `api.qa.flitsas.online` | `qa` (móvil) |
+| `release` | `pdn` | `pdn.flitsas.online` | `api.pdn.flitsas.online` | `sha-<commit>` (**inmutable**) |
+
+- **Tags publicados vs. tag de deploy:** cada build publica **3 tags** — `sha-<commit>`
+  (inmutable, formato largo), el tag móvil del ambiente (`dev`/`qa`/`pdn`) y `latest`
+  (solo `release`). Lo que el VPS **despliega** lo decide el output `deploy_tag` del CD:
+  - **DEV / QA** → tag móvil (`dev`/`qa`): siempre lo último de la rama.
+  - **PDN** → `sha-<commit>` **inmutable**: sabes exactamente qué corre y el rollback es
+    determinista (re-desplegar un commit anterior por su SHA).
+- El deploy exporta `CORE_API_TAG`/`FRONTEND_TAG`/`PYTHON_ML_TAG` con ese `deploy_tag`
+  (override del `.env` del VPS), así no hace falta fijar el tag a mano.
+- La **URL del API** se inyecta como build-arg del frontend según el ambiente
+  (`https://api.<env>.flitsas.online/api/v1`).
+- El `CORS_ORIGIN` del `.env` de cada VPS debe ser el dominio del front de **ese**
+  ambiente (p. ej. `https://qa.flitsas.online` en el VPS de QA).
+
+> **Puertos por ambiente:** cada ambiente usa su propio rango (DEV 40xx, QA 50xx,
+> PDN 60xx), inyectados por el CD. Esto permite incluso convivir en un mismo VPS sin
+> colisión de puertos (cada stack escucha en su rango y se aísla con
+> `COMPOSE_PROJECT_NAME`).
+
+### 6.4 Secrets de GitHub (por *Environment*)
+
+El job `deploy-to-vps` usa **GitHub Environments** (`dev`, `qa`, `pdn`). Crea los 3
+entornos en *Settings → Environments* y define en **cada uno** sus secrets (así el
+mismo workflow apunta al VPS correcto según la rama):
 
 | Nombre | Tipo | Para qué |
 |--------|------|----------|
-| `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | secret | Acceso SSH al VPS |
+| `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | secret | Acceso SSH al VPS de ese ambiente |
 | `HOSTINGER_DEPLOY_PATH` | secret | Carpeta del VPS donde viven compose + `.env` |
-| `GHCR_PAT` | secret | Login al registry en el VPS para `pull` |
-| `PUBLIC_DOMAIN` | var | URL pública mostrada en el entorno de GitHub (informativa) |
+| `GHCR_PAT` | secret | Login a GHCR en el VPS para `pull` (scope `read:packages`) |
 
-### 6.4 Pasos de despliegue
+> La URL del entorno en GitHub se arma sola desde el dominio del front (`front_domain`),
+> ya no se usa la variable `PUBLIC_DOMAIN`.
 
-**A) Preparación del VPS (una sola vez):**
+### 6.5 Pasos de despliegue
+
+**A) Preparación de CADA VPS (una sola vez por ambiente dev/qa/pdn):**
 1. Instalar Docker + Compose plugin.
 2. Crear el deploy path (`HOSTINGER_DEPLOY_PATH`).
 3. Configurar Postgres del host (usuario/BD, `listen_addresses`, `pg_hba.conf`).
-4. Configurar el reverse-proxy del host (Nginx/Caddy) con TLS para los dominios → puertos loopback.
-5. `docker login` al registry correcto (mismo que el CD).
-6. Crear el `.env` (§6.1) y `chmod 600 .env`.
+4. Configurar el reverse-proxy del host (Nginx/Caddy) con TLS para los dominios de ese
+   ambiente (`<env>.flitsas.online` y `api.<env>.flitsas.online`) → puertos loopback.
+5. `docker login ghcr.io` con el `GHCR_PAT`.
+6. Crear el `.env` (§6.1) con el `CORS_ORIGIN` del front de ese ambiente y `chmod 600 .env`.
 
-**B) Configurar GitHub (una sola vez):** los secrets/vars de §6.3.
+**B) Configurar GitHub (una sola vez):** crear los Environments `dev`/`qa`/`pdn` con sus
+secrets (§6.4).
 
-**C) Deploy continuo (automático):** un `push` a la rama `develop` dispara el CD, que:
-1. Construye y publica las 3 imágenes.
-2. Copia `docker-compose.prod.yml` al VPS.
-3. Por SSH: `docker compose -f docker-compose.prod.yml pull` + `up -d --remove-orphans`.
-4. Verifica health en `4001` y `4002`.
+**C) Deploy continuo (automático):** un `push` a `develop`/`staging`/`release` dispara el
+CD, que:
+1. `setup` resuelve el ambiente según la rama.
+2. Construye y publica las 3 imágenes con el tag del ambiente.
+3. Selecciona el Environment correcto (sus secrets de VPS).
+4. Copia `docker-compose.prod.yml` al VPS y hace `pull` + `up -d --remove-orphans`
+   con el tag del ambiente.
+5. Verifica health en `4001` y `4002`.
 
 **D) Deploy / operación manual (en el VPS):**
 ```bash
@@ -408,8 +464,19 @@ docker compose -f docker-compose.prod.yml ps      # estado
 docker compose -f docker-compose.prod.yml logs -f # logs
 ```
 
-**E) Rollback:** fija el tag anterior (`CORE_API_TAG=sha-<commit>` etc.) en el `.env` y
-repite `pull` + `up -d`, o `docker compose down && docker compose up -d`.
+**E) Rollback:**
+- **PDN** ya despliega por `sha-<commit>` inmutable. Para volver a una versión anterior,
+  re-lanza el CD sobre el commit deseado (`workflow_dispatch` desde ese commit), **o**
+  manualmente en el VPS fija el SHA previo y re-aplica:
+  ```bash
+  export CORE_API_TAG=sha-<commit-anterior>
+  export FRONTEND_TAG=sha-<commit-anterior>
+  export PYTHON_ML_TAG=sha-<commit-anterior>
+  docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+  ```
+  > Nota: un rollback manual dura hasta el siguiente deploy del CD, que volverá a pinear
+  > el SHA del último commit de `release`. Para fijarlo de forma permanente, revierte el commit.
+- **DEV/QA** usan tag móvil; el rollback es re-desplegar el commit/rama anterior.
 
 ---
 
