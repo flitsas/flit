@@ -33,6 +33,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAdminCompaniesEndpoints();
+app.MapTransfersEndpoints();
 
 app.Run();
 

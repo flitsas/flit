@@ -1,7 +1,11 @@
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
+using Flit.Admin.Application.Companies.VehicleOwnership;
+using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
+using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Admin.Application;
@@ -22,6 +26,11 @@ public static class DependencyInjection
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();
         services.AddSingleton<ITenantPolicyResolver, SnapshotTenantPolicyResolver>();
+
+        // HU #10191 — interceptor propiedad vehicular + API whitelist.
+        services.AddScoped<IVehicleOwnershipGuard, VehicleOwnershipGuard>();
+        services.AddScoped<AddWhitelistEmailsHandler>();
+        services.AddScoped<GetWhitelistHandler>();
 
         return services;
     }

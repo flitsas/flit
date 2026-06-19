@@ -21,6 +21,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();
 
+    public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
