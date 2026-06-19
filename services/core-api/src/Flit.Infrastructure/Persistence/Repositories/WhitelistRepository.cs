@@ -69,22 +69,28 @@ internal sealed class WhitelistRepository : IWhitelistRepository
 
         if (_context.Database.IsRelational())
         {
-            var transaction = await _context.Database
-                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            await using (transaction.ConfigureAwait(false))
+            // La transacción manual debe ejecutarse como unidad reintentables porque
+            // el DbContext tiene EnableRetryOnFailure (NpgsqlRetryingExecutionStrategy).
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                // RLS: habilita el acceso cross-tenant solo para esta transacción.
-                await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
-                    cancellationToken).ConfigureAwait(false);
+                var transaction = await _context.Database
+                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-                var outcome = await PersistAsync(tenantId, normalizedEmails, addedBy, correlationId, cancellationToken)
-                    .ConfigureAwait(false);
+                await using (transaction.ConfigureAwait(false))
+                {
+                    // RLS: habilita el acceso cross-tenant solo para esta transacción.
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                        cancellationToken).ConfigureAwait(false);
 
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return outcome;
-            }
+                    var outcome = await PersistAsync(tenantId, normalizedEmails, addedBy, correlationId, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return outcome;
+                }
+            }).ConfigureAwait(false);
         }
 
         // Proveedor no relacional (InMemory): un solo SaveChanges atómico.

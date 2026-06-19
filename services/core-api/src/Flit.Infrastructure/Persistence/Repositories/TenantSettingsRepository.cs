@@ -52,21 +52,27 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
 
         if (_context.Database.IsRelational())
         {
-            var transaction = await _context.Database
-                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            await using (transaction.ConfigureAwait(false))
+            // La transacción manual debe ejecutarse como unidad reintentables porque
+            // el DbContext tiene EnableRetryOnFailure (NpgsqlRetryingExecutionStrategy).
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                // RLS: habilita el acceso cross-tenant solo para esta transacción.
-                await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT set_config('app.current_tenant_id', {settings.TenantId.ToString()}, true)",
-                    cancellationToken).ConfigureAwait(false);
+                var transaction = await _context.Database
+                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-                await PersistAsync(settings, changes, changedBy, correlationId, cancellationToken)
-                    .ConfigureAwait(false);
+                await using (transaction.ConfigureAwait(false))
+                {
+                    // RLS: habilita el acceso cross-tenant solo para esta transacción.
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT set_config('app.current_tenant_id', {settings.TenantId.ToString()}, true)",
+                        cancellationToken).ConfigureAwait(false);
 
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
+                    await PersistAsync(settings, changes, changedBy, correlationId, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }).ConfigureAwait(false);
 
             return;
         }

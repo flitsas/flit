@@ -33,6 +33,12 @@ public static class ApiSecurityExtensions
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                // No remapear claims inbound: el claim de rol viaja como "role" y la
+                // policy SuperAdmin lo exige vía RoleClaimType="role". Con el mapeo por
+                // defecto (true), JWT Bearer renombra "role" al URI largo de .NET y
+                // RequireRole nunca encuentra match → todo SuperAdmin recibiría 403.
+                options.MapInboundClaims = false;
+
                 if (signingKey is not null)
                 {
                     options.TokenValidationParameters = new TokenValidationParameters
