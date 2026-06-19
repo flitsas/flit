@@ -43,6 +43,19 @@ public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountReposi
         return new AdminTargetUser(user.Id, user.Email, user.DisplayName, tenantId);
     }
 
+    public async Task<PasswordRecoveryUser?> FindActiveByDocumentAsync(string documentNumber, CancellationToken cancellationToken)
+    {
+        var document = documentNumber.Trim();
+
+        return await db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedAt == null
+                        && u.Status == "active"
+                        && u.DocumentNumber == document)
+            .Select(u => new PasswordRecoveryUser(u.Id, u.Email, u.DisplayName))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken)
     {
         return await db.UserCredentials
