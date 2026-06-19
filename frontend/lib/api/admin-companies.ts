@@ -5,7 +5,9 @@ import { ApiError } from "./types";
 import type {
   AuditLogPageResponse,
   CompaniesIndexParams,
+  CompanyListItem,
   CompanyPagedResult,
+  CreateCompanyRequest,
   TenantSettings,
   TenantSettingsUpdate,
   TransitGrantsResponse,
@@ -22,6 +24,11 @@ export function fetchCompaniesIndex(
   signal?: AbortSignal,
 ): Promise<CompanyPagedResult> {
   return apiFetch<CompanyPagedResult>(`${base}/index`, { query: { ...params }, signal });
+}
+
+/** POST /api/v1/admin/companies — alta de compañía. Lanza ApiValidationError en 422. */
+export function createCompany(body: CreateCompanyRequest): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(base, { method: "POST", body });
 }
 
 /**

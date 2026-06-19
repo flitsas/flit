@@ -27,6 +27,25 @@ export interface CompaniesIndexParams {
   pageSize?: number;
 }
 
+// ── Alta de compañía ────────────────────────────────────────────────────────
+export type TenantType = "RENTING" | "CONCESIONARIO" | "FLIT";
+
+/** Etiquetas legibles para el tipo de compañía (el valor enviado sigue siendo el enum). */
+export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
+  RENTING: "Renting",
+  CONCESIONARIO: "Concesionario",
+  FLIT: "FLIT",
+};
+
+/** Payload del POST /api/v1/admin/companies (alta de compañía). */
+export interface CreateCompanyRequest {
+  razonSocial: string;
+  nit: string;
+  code: string;
+  tenantType: TenantType;
+  estadoActivo: boolean;
+}
+
 // ── Configuración del tenant (AC2) ──────────────────────────────────────────
 export interface SwitchesMatricula {
   allowInitialRegistration: boolean;

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
@@ -33,6 +34,10 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/index — listado paginado con filtros (#10189 AC1, AC2).
         group.MapGet("/index", ListCompaniesAsync)
             .WithName("AdminCompaniesIndex");
+
+        // POST /api/v1/admin/companies — alta de compañía (botón "Crear compañía", #10118).
+        group.MapPost("", CreateCompanyAsync)
+            .WithName("AdminCompanyCreate");
 
         // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
         group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
@@ -94,6 +99,27 @@ public static class AdminCompaniesEndpoints
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> CreateCompanyAsync(
+        CreateCompanyRequest request,
+        HttpContext httpContext,
+        [FromServices] CreateCompanyHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new CreateCompanyCommand
+        {
+            Request = request,
+            CreatedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.Created($"/api/v1/admin/companies/{result.Company!.Id}", result.Company)
+            : Results.Json(
+                new CompanyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
     private static async Task<IResult> GetSettingsAsync(
@@ -258,6 +284,9 @@ public static class AdminCompaniesEndpoints
 
     /// <summary>Cuerpo de error de validación 422: <c>{ errors: [{ field, message }] }</c>.</summary>
     private sealed record ValidationErrorResponse(IReadOnlyList<SettingsValidationError> Errors);
+
+    /// <summary>Cuerpo de error 422 del alta de compañía: <c>{ errors: [{ field, message }] }</c>.</summary>
+    private sealed record CompanyValidationErrorResponse(IReadOnlyList<CompanyValidationError> Errors);
 
     /// <summary>Cuerpo 201 del alta de whitelist: correos insertados y omitidos (duplicados).</summary>
     private sealed record WhitelistAddResponse(IReadOnlyList<string> Added, IReadOnlyList<string> Skipped);
