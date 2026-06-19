@@ -11,6 +11,10 @@ using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
+using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
+using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
+using Flit.Admin.Application.DocumentOrderOverrides.GetResolvedDocumentMatrix;
+using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
@@ -70,6 +74,12 @@ public static class DependencyInjection
         services.AddScoped<ListProcedureDocumentRequirementsHandler>();
         services.AddScoped<UpdateProcedureDocumentRequirementHandler>();
         services.AddScoped<DeleteProcedureDocumentRequirementHandler>();
+
+        // HU #10196 — overrides de orden documental (OT/Cliente) + matriz resuelta.
+        services.AddScoped<CreateDocumentOrderOverrideHandler>();
+        services.AddScoped<ListDocumentOrderOverridesHandler>();
+        services.AddScoped<DeleteDocumentOrderOverrideHandler>();
+        services.AddScoped<GetResolvedDocumentMatrixHandler>();
 
         return services;
     }

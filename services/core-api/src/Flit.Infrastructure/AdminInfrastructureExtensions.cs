@@ -3,6 +3,7 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
+using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -40,6 +41,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();
         services.AddScoped<IProcedureTypeCatalog, ProcedureTypeCatalog>();
         services.AddScoped<IProcedureDocumentRequirementUsageGuard, StubProcedureDocumentRequirementUsageGuard>();
+
+        // HU #10196 — overrides de orden documental (OT/Cliente) + catálogo de clientes
+        // (read-only) + resolutor de la matriz documental (precedencia Cliente > OT > Default).
+        services.AddScoped<IDocumentOrderOverrideRepository, DocumentOrderOverrideRepository>();
+        services.AddScoped<ITenantCatalog, TenantCatalog>();
+        services.AddScoped<IResolvedDocumentMatrixResolver, ResolvedDocumentMatrixResolver>();
 
         return services;
     }

@@ -67,6 +67,8 @@ app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
+app.MapAdminDocumentOrderOverridesEndpoints();
+app.MapAdminResolvedDocumentMatrixEndpoints();
 app.MapTransfersEndpoints();
 
 app.Run();

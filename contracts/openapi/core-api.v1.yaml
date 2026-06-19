@@ -20,6 +20,10 @@ tags:
     description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
   - name: Admin · Documentos por Trámite
     description: Asociación de tipos de documento a tipos de trámite (rol SuperAdmin).
+  - name: Admin · Órdenes documentales
+    description: >
+      Overrides de orden documental por OT/Cliente y matriz documental resuelta
+      con precedencia Cliente > OT > Default (rol SuperAdmin).
 
 paths:
   /api/v1/admin/companies/index:
@@ -809,6 +813,207 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/document-order-overrides:
+    post:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideCreate
+      summary: Crea un override de orden por OT o Cliente (RF09–RF16)
+      description: >
+        Registra un orden personalizado de un documento para un trámite a nivel de
+        Organismo de Tránsito (scope=OT, usa transitOfficeId) o de Cliente
+        (scope=CLIENTE, usa clienteId). El trámite debe existir (404), el documento
+        debe existir (404) y estar asociado al trámite (422), la referencia del scope
+        debe existir (404) y la tupla debe ser única (422). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentOrderOverrideRequest"
+      responses:
+        "201":
+          description: Override creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "400":
+          description: Falta o es inválido el parámetro scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o la referencia del scope no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido, documento no asociado, referencia faltante o duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideList
+      summary: Lista los overrides de una combinación trámite/scope (RF09–RF16)
+      description: >
+        Retorna los overrides de la combinación (trámite, scope, referencia) ordenados
+        por orden ascendente. Requiere transitOfficeId si scope=OT o clienteId si
+        scope=CLIENTE. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (obligatorio si scope=OT).
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (obligatorio si scope=CLIENTE).
+      responses:
+        "200":
+          description: Listado de overrides.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId, scope o la referencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-order-overrides/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del override.
+    delete:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideDelete
+      summary: Elimina un override de orden (RF11-12, RF15-16)
+      description: >
+        Borrado físico del override. Tras eliminarlo, la matriz resuelta vuelve al
+        nivel inmediatamente inferior (OT o Default). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Override eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/resolved-document-matrix:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminResolvedDocumentMatrixGet
+      summary: Resuelve la matriz documental de un trámite (RF18)
+      description: >
+        Devuelve el orden final de cada documento del trámite aplicando la precedencia
+        Cliente > OT > Default. transitOfficeId y clienteId son opcionales: si no vienen,
+        ese nivel se omite. Un trámite existente sin documentos retorna 200 con data
+        vacío. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite a resolver.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (nivel OT) — opcional.
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (nivel CLIENTE) — opcional.
+      responses:
+        "200":
+          description: Matriz documental resuelta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedDocumentMatrix"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1175,3 +1380,82 @@ components:
         ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
         obligatorio: { type: boolean }
       required: [ordenDefault, obligatorio]
+
+    OverrideDocumentRef:
+      type: object
+      description: Datos mínimos del documento (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+      required: [codigo, nombre]
+
+    DocumentOrderOverrideResponse:
+      type: object
+      description: Override de orden documental por OT/Cliente (HU #10196).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        scope:
+          type: string
+          enum: [OT, CLIENTE]
+        scopeRefId:
+          type: string
+          format: uuid
+          description: transitOfficeId (scope OT) o clienteId (scope CLIENTE).
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+        documento:
+          $ref: "#/components/schemas/OverrideDocumentRef"
+      required: [id, procedureTypeId, documentTypeId, scope, scopeRefId, orden, documento]
+
+    DocumentOrderOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+      required: [data]
+
+    CreateDocumentOrderOverrideRequest:
+      type: object
+      description: >
+        Payload unificado de alta de override (AC1/AC2). El scope viaja como query;
+        según el scope se usa transitOfficeId (OT) o clienteId (CLIENTE).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Obligatorio si scope=OT.
+        clienteId:
+          type: string
+          format: uuid
+          description: Obligatorio si scope=CLIENTE.
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [procedureTypeId, documentTypeId, orden]
+
+    ResolvedDocumentMatrixRow:
+      type: object
+      description: Fila de la matriz documental resuelta (RF18).
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer, minimum: 0, maximum: 32767 }
+        nivelAplicado:
+          type: string
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que ganó la precedencia.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ResolvedDocumentMatrix:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedDocumentMatrixRow"
+      required: [data]
