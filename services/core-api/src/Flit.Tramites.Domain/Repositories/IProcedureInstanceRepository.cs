@@ -33,6 +33,20 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct = default);
 
+    /// <summary>Carga la instancia con sus participantes del portal (Slice 7 Part B, vista del gestor).</summary>
+    Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve un participante del portal por el hash SHA-256 de su token (acceso PÚBLICO vía
+    /// magic-link, sin tenant). Carga la instancia con el grafo necesario para agregar el estado de
+    /// los pasos del rol (biométricas, firmas, adjuntos). Devuelve null si no existe — el caller NO
+    /// debe filtrar existencia (not_found genérico, sin enumeración de PII).
+    /// </summary>
+    Task<ProcedureInstanceParticipant?> GetParticipantByTokenHashAsync(string tokenHash, CancellationToken ct = default);
+
+    /// <summary>Encola un evento de bitácora (append-only) para persistir en el próximo SaveChanges.</summary>
+    Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
+
     /// <summary>Último snapshot de preflight de la instancia (por created_at desc), o null.</summary>
     Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

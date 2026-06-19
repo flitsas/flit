@@ -46,6 +46,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     // Tramites — firma electrónica (Slice 7, mock)
     public DbSet<ProcedureInstanceSignature> ProcedureInstanceSignatures => Set<ProcedureInstanceSignature>();
 
+    // Tramites — portal público de participantes (Slice 7 Part B)
+    public DbSet<ProcedureInstanceParticipant> ProcedureInstanceParticipants => Set<ProcedureInstanceParticipant>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

@@ -66,6 +66,21 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
 
+    public Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstances
+            .Include(x => x.Participants)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
+    public Task<ProcedureInstanceParticipant?> GetParticipantByTokenHashAsync(string tokenHash, CancellationToken ct) =>
+        db.ProcedureInstanceParticipants
+            .Include(x => x.ProcedureInstance!).ThenInclude(i => i.BiometricValidations)
+            .Include(x => x.ProcedureInstance!).ThenInclude(i => i.Signatures)
+            .Include(x => x.ProcedureInstance!).ThenInclude(i => i.Attachments)
+            .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
+
+    public async Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct) =>
+        await db.ProcedureInstanceEvents.AddAsync(evt, ct);
+
     public Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstancePreflightSnapshots
             .Where(x => x.ProcedureInstanceId == id && x.TenantId == tenantId)

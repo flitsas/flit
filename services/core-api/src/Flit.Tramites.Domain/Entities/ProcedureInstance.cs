@@ -35,5 +35,6 @@ public sealed class ProcedureInstance
     public ICollection<ProcedureInstanceEvent> Events { get; set; } = [];
     public ICollection<ProcedureInstanceBiometricValidation> BiometricValidations { get; set; } = [];
     public ICollection<ProcedureInstanceSignature> Signatures { get; set; } = [];
+    public ICollection<ProcedureInstanceParticipant> Participants { get; set; } = [];
     public ProcedureInstanceCommercial? Commercial { get; set; }
 }
