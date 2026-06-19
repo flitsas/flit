@@ -27,6 +27,7 @@ paths:
     post:
       operationId: authLogin
       tags: [Auth]
+      security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
       summary: Login con email y contraseña
       requestBody:
         required: true
