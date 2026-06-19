@@ -20,6 +20,7 @@ import {
   UserCog,
   KeyRound,
   LogOut,
+  FolderCog,
 } from "lucide-react";
 
 export type ModuleId =
@@ -200,6 +201,15 @@ export function Shell({
               active={false}
               onClick={() => {
                 window.location.href = "/admin/companies";
+              }}
+              dark={dark}
+            />
+            {/* Consola de Gestión Documental (ruta aparte, gate SuperAdmin). */}
+            <DockBtn
+              item={{ label: "Documental", icon: FolderCog }}
+              active={false}
+              onClick={() => {
+                window.location.href = "/admin/documents";
               }}
               dark={dark}
             />
