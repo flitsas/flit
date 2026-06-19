@@ -1,4 +1,6 @@
+using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -8,6 +10,8 @@ public static class SecurityApplicationExtensions
     public static IServiceCollection AddSecurityApplication(this IServiceCollection services)
     {
         services.AddScoped<LoginHandler>();
+        services.AddScoped<ForgotPasswordHandler>();
+        services.AddScoped<ResetPasswordHandler>();
         return services;
     }
 }

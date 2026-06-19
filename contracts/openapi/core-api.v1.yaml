@@ -29,6 +29,7 @@ paths:
       tags: [Auth]
       security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
       summary: Login con email y contraseña
+      security: []
       requestBody:
         required: true
         content:
@@ -64,6 +65,57 @@ paths:
                 $ref: '#/components/schemas/CurrentUserResponse'
         '401':
           description: No autenticado o sesión expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: authForgotPassword
+      tags: [Auth]
+      summary: Solicitar recuperación de contraseña (HU #10169, RF19)
+      security: []
+      description: >
+        Genera un token de un solo uso y envía un correo con el enlace de
+        restablecimiento. Responde siempre 202 con un mensaje genérico, sin
+        revelar si el email está registrado (anti-enumeración, AC2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Solicitud aceptada (respuesta genérica).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/v1/auth/reset-password:
+    post:
+      operationId: authResetPassword
+      tags: [Auth]
+      summary: Restablecer contraseña con token de recuperación (HU #10169)
+      security: []
+      description: >
+        Valida el token vigente y fija la nueva contraseña. El token se invalida
+        tras su uso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Contraseña actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Token inválido/expirado o contraseña débil.
           content:
             application/json:
               schema:
@@ -590,6 +642,28 @@ components:
       properties:
         code:
           type: string
+        message:
+          type: string
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          format: password
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
         message:
           type: string
     CompanyListItem:
