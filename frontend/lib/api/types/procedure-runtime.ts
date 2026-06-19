@@ -121,6 +121,27 @@ export interface ActorsResponse {
   actors: ProcedureActor[];
 }
 
+// ── Autopopulado desde RUNT (Slice M3) ─────────────────────────────
+// POST /instances/{id}/runt-person  body { documentType, documentNumber }
+// Siempre 200 ante una petición válida; `found` indica si RUNT halló a la
+// persona. Si no, el usuario completa los datos manualmente (fallback).
+export interface RuntPersonLookupInput {
+  documentType: ActorDocumentType;
+  documentNumber: string;
+}
+
+export interface RuntPersonLookupResult {
+  found: boolean;
+  fullName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  documentType: string;
+  documentNumber: string;
+  licenseStatus: string | null;
+  source: 'RUNT';
+  mode: 'real' | 'mock';
+}
+
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
 
 export type PreflightCheckStatus = 'ok' | 'warn' | 'fail' | 'unknown';

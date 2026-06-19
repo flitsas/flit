@@ -28,6 +28,8 @@ import type {
   ProcedureConfiguration,
   ProcedureInstanceDetail,
   ProcedureInstanceSummary,
+  RuntPersonLookupInput,
+  RuntPersonLookupResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -182,6 +184,22 @@ export const tramitesClient = {
       headers: tenantHeader(tenantId),
       body: JSON.stringify({ actors }),
     }),
+
+  // Slice M3 — autopopulado del actor desde RUNT por documento. Siempre 200
+  // ante petición válida; `found=false` => fallback manual (no bloquea captura).
+  runtPersonLookup: (
+    instanceId: string,
+    input: RuntPersonLookupInput,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<RuntPersonLookupResult>(
+      `/api/v1/tramites/instances/${instanceId}/runt-person`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
 
   // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea
   // ConsultationResult del backend al shape PreflightSnapshot del panel.

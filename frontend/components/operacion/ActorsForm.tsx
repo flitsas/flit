@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
+import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
   ActorRol,
   ProcedureActor,
+  RuntPersonLookupResult,
 } from '@/lib/api/types/procedure-runtime';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
@@ -113,6 +115,14 @@ export function validateActors(
 const INPUT_BASE =
   'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
 
+/** Estado por actor de la consulta RUNT (autopopulado). */
+type RuntState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'found'; result: RuntPersonLookupResult }
+  | { status: 'not_found' }
+  | { status: 'error'; message: string };
+
 /**
  * Formulario reutilizable de captura de actores. Renderiza 1 actor
  * (comprador) en matrícula inicial y 2 (vendedor + comprador) en traspaso.
@@ -130,6 +140,8 @@ export function ActorsForm({ instanceId, modalidad, roles: rolesProp, onSaved }:
     roles.map(emptyActor),
   );
   const [showErrors, setShowErrors] = useState(false);
+  // Estado de la consulta RUNT por índice de actor (autopopulado).
+  const [runt, setRunt] = useState<Record<number, RuntState>>({});
 
   // Rehidrata desde el backend cuando llegan actores cargados, respetando los
   // roles de la modalidad (rellena los faltantes con vacíos).
@@ -156,6 +168,43 @@ export function ActorsForm({ instanceId, modalidad, roles: rolesProp, onSaved }:
     setActors((prev) =>
       prev.map((a, i) => (i === index ? { ...a, ...patch } : a)),
     );
+  };
+
+  const setRuntFor = (index: number, value: RuntState) =>
+    setRunt((prev) => ({ ...prev, [index]: value }));
+
+  // Consulta RUNT por documento y, si encuentra a la persona, autopopula el
+  // actor. Nunca bloquea la captura manual: not_found/error dejan los campos
+  // editables.
+  const handleRuntLookup = async (index: number) => {
+    const actor = actors[index];
+    const documentNumber = actor.numeroDocumento.trim();
+    if (!instanceId || !documentNumber || runt[index]?.status === 'loading') {
+      return;
+    }
+    setRuntFor(index, { status: 'loading' });
+    try {
+      const result = await tramitesClient.runtPersonLookup(instanceId, {
+        documentType: actor.tipoDocumento,
+        documentNumber,
+      });
+      if (result.found) {
+        updateActor(index, {
+          nombreCompleto: result.fullName ?? actor.nombreCompleto,
+          tipoDocumento:
+            (result.documentType as ActorDocumentType) || actor.tipoDocumento,
+          numeroDocumento: result.documentNumber || actor.numeroDocumento,
+        });
+        setRuntFor(index, { status: 'found', result });
+      } else {
+        setRuntFor(index, { status: 'not_found' });
+      }
+    } catch (err) {
+      setRuntFor(index, {
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Error consultando RUNT',
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -214,6 +263,7 @@ export function ActorsForm({ instanceId, modalidad, roles: rolesProp, onSaved }:
         {actors.map((actor, index) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
+          const runtState: RuntState = runt[index] ?? { status: 'idle' };
           return (
             <fieldset
               key={actor.rol}
@@ -287,7 +337,70 @@ export function ActorsForm({ instanceId, modalidad, roles: rolesProp, onSaved }:
                       {errors.numeroDocumento}
                     </p>
                   )}
+                  {/* Consultar RUNT: autopopula el actor por documento. */}
+                  <button
+                    type="button"
+                    onClick={() => handleRuntLookup(index)}
+                    disabled={
+                      runtState.status === 'loading' ||
+                      !actor.numeroDocumento.trim() ||
+                      !instanceId
+                    }
+                    className="mt-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
+                    style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                  >
+                    {runtState.status === 'loading'
+                      ? 'Consultando…'
+                      : 'Consultar RUNT'}
+                  </button>
                 </div>
+
+                {/* Resultado de la consulta RUNT (autopopulado). */}
+                {runtState.status === 'found' && (
+                  <div
+                    className="md:col-span-2 rounded-xl p-3 text-xs border"
+                    style={{
+                      borderColor: '#8CC63F',
+                      background: 'rgba(140,198,63,0.08)',
+                    }}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <p className="font-semibold" style={{ color: '#5a8a1f' }}>
+                      Persona encontrada en RUNT
+                    </p>
+                    <p className="opacity-80 mt-0.5">
+                      {runtState.result.fullName} ·{' '}
+                      {runtState.result.documentType}{' '}
+                      {runtState.result.documentNumber}
+                    </p>
+                  </div>
+                )}
+                {runtState.status === 'not_found' && (
+                  <div
+                    className="md:col-span-2 rounded-xl p-3 text-[11px] border opacity-80"
+                    style={{ borderColor: '#DFE5ED' }}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    No se encontró en RUNT — completa los datos manualmente.
+                  </div>
+                )}
+                {runtState.status === 'error' && (
+                  <div
+                    className="md:col-span-2 rounded-xl p-3 text-xs border"
+                    style={{
+                      borderColor: '#FF4E00',
+                      background: 'rgba(255,78,0,0.06)',
+                      color: '#FF4E00',
+                    }}
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    No se pudo consultar RUNT ({runtState.message}). Puedes
+                    completar los datos manualmente.
+                  </div>
+                )}
 
                 {/* Nombre completo */}
                 <div className="md:col-span-2">
