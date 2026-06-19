@@ -44,6 +44,24 @@ public sealed class VerifikInformacionGeneral
     [JsonPropertyName("modelo")]
     public string? Modelo { get; set; }
 
+    [JsonPropertyName("marca")]
+    public string? Marca { get; set; }
+
+    [JsonPropertyName("linea")]
+    public string? Linea { get; set; }
+
+    [JsonPropertyName("color")]
+    public string? Color { get; set; }
+
+    [JsonPropertyName("claseVehiculo")]
+    public string? ClaseVehiculo { get; set; }
+
+    [JsonPropertyName("tipoCombustible")]
+    public string? TipoCombustible { get; set; }
+
+    [JsonPropertyName("organismoTransito")]
+    public string? OrganismoTransito { get; set; }
+
     [JsonPropertyName("estadoDelVehiculo")]
     public string? EstadoDelVehiculo { get; set; }
 

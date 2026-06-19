@@ -124,6 +124,30 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(info.Modelo))
             fields.Add(new HydratedField("vehicle_year", info.Modelo, null));
 
+        if (!string.IsNullOrWhiteSpace(info.Marca))
+            fields.Add(new HydratedField("vehicle_brand", info.Marca, null));
+
+        if (!string.IsNullOrWhiteSpace(info.Linea))
+            fields.Add(new HydratedField("vehicle_line", info.Linea, null));
+
+        if (!string.IsNullOrWhiteSpace(info.Color))
+            fields.Add(new HydratedField("vehicle_color", info.Color, null));
+
+        if (!string.IsNullOrWhiteSpace(info.ClaseVehiculo))
+            fields.Add(new HydratedField("vehicle_class", info.ClaseVehiculo, null));
+
+        if (!string.IsNullOrWhiteSpace(info.TipoCombustible))
+            fields.Add(new HydratedField("vehicle_fuel", info.TipoCombustible, null));
+
+        if (!string.IsNullOrWhiteSpace(info.CilindrajeNormalizado))
+            fields.Add(new HydratedField("vehicle_engine_displacement", info.CilindrajeNormalizado, null));
+
+        if (!string.IsNullOrWhiteSpace(info.OrganismoTransito))
+            fields.Add(new HydratedField("transit_office_name", info.OrganismoTransito, null));
+
+        if (!string.IsNullOrWhiteSpace(info.EstadoDelVehiculo))
+            fields.Add(new HydratedField("vehicle_state", info.EstadoDelVehiculo, null));
+
         return fields;
     }
 

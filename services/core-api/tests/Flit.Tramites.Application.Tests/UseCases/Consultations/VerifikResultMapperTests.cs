@@ -20,7 +20,13 @@ public sealed class VerifikResultMapperTests
         string? noVin = "1HGCM82633A004352",
         string? modelo = "2020",
         string? cilindraje = null,
-        string? cilidraje = null) =>
+        string? cilidraje = null,
+        string? marca = "TESLA",
+        string? linea = "MODEL 3",
+        string? color = "PLATA",
+        string? claseVehiculo = "AUTOMOVIL",
+        string? tipoCombustible = "ELECTRICO",
+        string? organismoTransito = "STT BOGOTA") =>
         new()
         {
             Data = new VerifikVehicleData
@@ -33,6 +39,12 @@ public sealed class VerifikResultMapperTests
                     Modelo = modelo,
                     Cilindraje = cilindraje,
                     Cilidraje = cilidraje,
+                    Marca = marca,
+                    Linea = linea,
+                    Color = color,
+                    ClaseVehiculo = claseVehiculo,
+                    TipoCombustible = tipoCombustible,
+                    OrganismoTransito = organismoTransito,
                     TieneGravamenes = tieneGravamenes,
                     Prendas = prendas,
                 },
@@ -165,6 +177,62 @@ public sealed class VerifikResultMapperTests
         result.HydratedFields.Should().Contain(f => f.FieldKey == "plate" && f.ValueText == "XYZ987");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vin" && f.ValueText == "1HGCM82633A004352");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_year" && f.ValueText == "2021");
+    }
+
+    [Fact]
+    public void HydratedFields_MapFullVehicleAttributes()
+    {
+        var response = Response(
+            estado: "ACTIVO",
+            cilindraje: "1991",
+            marca: "TESLA",
+            linea: "MODEL 3",
+            color: "PLATA",
+            claseVehiculo: "AUTOMOVIL",
+            tipoCombustible: "ELECTRICO",
+            organismoTransito: "STT BOGOTA");
+
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_brand" && f.ValueText == "TESLA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_line" && f.ValueText == "MODEL 3");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_color" && f.ValueText == "PLATA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_class" && f.ValueText == "AUTOMOVIL");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_fuel" && f.ValueText == "ELECTRICO");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_engine_displacement" && f.ValueText == "1991");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "transit_office_name" && f.ValueText == "STT BOGOTA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_state" && f.ValueText == "ACTIVO");
+    }
+
+    [Fact]
+    public void HydratedFields_OmitsBlankAttributes()
+    {
+        // Atributos en blanco no deben generar field_values vacíos.
+        var response = Response(
+            marca: null,
+            linea: "",
+            color: "   ",
+            claseVehiculo: null,
+            tipoCombustible: null,
+            organismoTransito: null);
+
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "vehicle_brand");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "vehicle_line");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "vehicle_color");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "vehicle_class");
+    }
+
+    [Fact]
+    public void HydratedFields_EngineDisplacement_TypoTolerant_UsesCilidraje()
+    {
+        // by-plate trae "cilidraje" (typo); el field_value debe resolverlo igual.
+        var response = Response(cilindraje: null, cilidraje: "1600");
+
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_engine_displacement" && f.ValueText == "1600");
     }
 
     [Fact]

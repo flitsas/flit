@@ -18,7 +18,12 @@ public sealed class IntempoVehicleResultMapperTests
         string? noVin = "LRW3E7FS7TC753038",
         string? modelo = "2026",
         string? marca = "TESLA",
-        string? linea = "MODEL 3") =>
+        string? linea = "MODEL 3",
+        string? color = "PLATA",
+        string? claseVehiculo = "AUTOMOVIL",
+        string? tipoCombustible = "ELECTRICO",
+        string? cilindraje = "1991",
+        string? organismoTransito = "STT BOGOTA") =>
         new()
         {
             CodigoResultado = codigoResultado,
@@ -28,6 +33,11 @@ public sealed class IntempoVehicleResultMapperTests
             Modelo = modelo,
             Marca = marca,
             Linea = linea,
+            Color = color,
+            ClaseVehiculo = claseVehiculo,
+            TipoCombustible = tipoCombustible,
+            Cilindraje = cilindraje,
+            OrganismoTransito = organismoTransito,
             TieneGravamenes = tieneGravamenes,
             Prendas = prendas,
             SoatNacionales = [new IntempoSoat { Estado = soatEstado }],
@@ -118,6 +128,21 @@ public sealed class IntempoVehicleResultMapperTests
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_year" && f.ValueText == "2026");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_brand" && f.ValueText == "TESLA");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_line" && f.ValueText == "MODEL 3");
+    }
+
+    [Fact]
+    public void HydratedFields_MapFullVehicleAttributes()
+    {
+        var result = IntempoVehicleResultMapper.Map(
+            Response(color: "PLATA", claseVehiculo: "AUTOMOVIL", tipoCombustible: "ELECTRICO",
+                     cilindraje: "1991", organismoTransito: "STT BOGOTA", estadoDelVehiculo: "ACTIVO"));
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_color" && f.ValueText == "PLATA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_class" && f.ValueText == "AUTOMOVIL");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_fuel" && f.ValueText == "ELECTRICO");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_engine_displacement" && f.ValueText == "1991");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "transit_office_name" && f.ValueText == "STT BOGOTA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_state" && f.ValueText == "ACTIVO");
     }
 
     [Fact]

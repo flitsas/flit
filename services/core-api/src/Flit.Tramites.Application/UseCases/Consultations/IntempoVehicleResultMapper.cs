@@ -115,6 +115,24 @@ public static class IntempoVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(r.Linea))
             fields.Add(new HydratedField("vehicle_line", r.Linea, null));
 
+        if (!string.IsNullOrWhiteSpace(r.Color))
+            fields.Add(new HydratedField("vehicle_color", r.Color, null));
+
+        if (!string.IsNullOrWhiteSpace(r.ClaseVehiculo))
+            fields.Add(new HydratedField("vehicle_class", r.ClaseVehiculo, null));
+
+        if (!string.IsNullOrWhiteSpace(r.TipoCombustible))
+            fields.Add(new HydratedField("vehicle_fuel", r.TipoCombustible, null));
+
+        if (!string.IsNullOrWhiteSpace(r.Cilindraje))
+            fields.Add(new HydratedField("vehicle_engine_displacement", r.Cilindraje, null));
+
+        if (!string.IsNullOrWhiteSpace(r.OrganismoTransito))
+            fields.Add(new HydratedField("transit_office_name", r.OrganismoTransito, null));
+
+        if (!string.IsNullOrWhiteSpace(r.EstadoDelVehiculo))
+            fields.Add(new HydratedField("vehicle_state", r.EstadoDelVehiculo, null));
+
         return fields;
     }
 
