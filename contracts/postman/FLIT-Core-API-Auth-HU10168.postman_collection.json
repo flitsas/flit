@@ -1,0 +1,227 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "FLIT Core API — Auth (HU #10168)",
+    "description": "Colección para probar autenticación del carril Seguridad FLIT 2.0.\n\n**HU:** #10168 — Login email/contraseña y JWT 12h\n**OpenAPI:** contracts/openapi/core-api.v1.yaml\n\n**Variables de colección:**\n- `baseUrl` — URL base (API directa o Gateway)\n- `accessToken` — JWT (se guarda automáticamente tras Login exitoso)\n- `demoEmail` / `demoPassword` — credenciales seed Development\n\n**Orden sugerido:** 1) Login → 2) Get Current User → 3) Login Invalid Credentials",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4003",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "demoEmail",
+      "value": "demo@flit.local",
+      "type": "string"
+    },
+    {
+      "key": "demoPassword",
+      "value": "DemoPass1!",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Endpoints de autenticación — Feature #10113",
+      "item": [
+        {
+          "name": "Login — credenciales válidas (AC1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('JWT emitido', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.tokenType).to.eql('Bearer');",
+                  "    pm.expect(json.expiresInSeconds).to.eql(43200);",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{demoEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "AC1: credenciales válidas → JWT con exp 12h (tenant_id, rol, permisos en claims)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User — /me (AC1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Perfil con tenant y rol', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.userId).to.be.a('string');",
+                  "    pm.expect(json.email).to.eql(pm.collectionVariables.get('demoEmail'));",
+                  "    pm.expect(json.tenantId).to.be.a('string');",
+                  "    pm.expect(json.roleId).to.be.a('string');",
+                  "    pm.expect(json.permissions).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "me"]
+            },
+            "description": "Requiere Bearer token (ejecutar Login primero)."
+          },
+          "response": []
+        },
+        {
+          "name": "Login — credenciales inválidas (AC2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test('Mensaje genérico', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('INVALID_CREDENTIALS');",
+                  "    pm.expect(json.message).to.eql('Invalid credentials.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{demoEmail}}\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "AC2: contraseña incorrecta → 401 sin filtrar existencia de email."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User — sin token (AC3 parcial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 sin autenticación', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "me"]
+            },
+            "description": "Sin Bearer → 401. Para SESSION_EXPIRED usar token expirado manualmente en Authorization."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
