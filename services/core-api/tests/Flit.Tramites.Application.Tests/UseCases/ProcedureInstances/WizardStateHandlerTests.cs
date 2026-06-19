@@ -55,15 +55,14 @@ public sealed class WizardStateHandlerTests
         new() { Id = Guid.NewGuid(), Tipo = tipo, Filename = $"{tipo}.pdf" };
 
     /// <summary>
-    /// Satisface el checklist obligatorio de matrícula inicial: 3 docs por adjunto (factura,
-    /// impronta, soat) + 1 ítem manual sin DocTipo (cedula_titular vía checklist_estado).
+    /// Satisface el checklist obligatorio de matrícula inicial: 3 docs por adjunto
+    /// (factura, aduana, impronta). SOAT y los demás ítems son opcionales.
     /// </summary>
     private static void CompletarDocsMatricula(ProcedureInstance instance)
     {
         instance.Attachments.Add(Attachment("factura"));
+        instance.Attachments.Add(Attachment("aduana"));
         instance.Attachments.Add(Attachment("impronta"));
-        instance.Attachments.Add(Attachment("soat"));
-        instance.ChecklistEstado = "{\"cedula_titular\":true}";
     }
 
     private void Setup(ProcedureInstance instance) =>

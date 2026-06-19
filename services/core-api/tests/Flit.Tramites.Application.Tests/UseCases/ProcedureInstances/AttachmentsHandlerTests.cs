@@ -195,8 +195,9 @@ public sealed class AttachmentsHandlerTests
         var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
 
-        // "otro" no es docTipo de ningún ítem ⇒ checklist_estado queda {}
-        var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(tipo: "otro"), null, ct);
+        // "compraventa" es válido (whitelist) pero no es docTipo de ningún ítem de
+        // matrícula inicial ⇒ checklist_estado queda {}
+        var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(tipo: "compraventa"), null, ct);
 
         error.Should().BeNull();
         instance.ChecklistEstado.Should().Be("{}");
@@ -336,8 +337,13 @@ public sealed class AttachmentsHandlerTests
 
         error.Should().BeNull();
         result!.Items.Should().Contain(i => i.Key == "factura" && i.Satisfied);
+        // soat ahora es opcional: presente pero no bloquea
         result.Items.Should().Contain(i => i.Key == "soat" && !i.Satisfied);
-        result.FaltanObligatorios.Should().Contain("soat");
+        result.FaltanObligatorios.Should().NotContain("soat");
+        // aduana e impronta son los obligatorios restantes (junto a factura ya subida)
+        result.Items.Should().Contain(i => i.Key == "aduana" && !i.Satisfied);
+        result.FaltanObligatorios.Should().Contain("aduana");
+        result.FaltanObligatorios.Should().Contain("impronta");
         result.Completo.Should().BeFalse();
     }
 
@@ -347,12 +353,11 @@ public sealed class AttachmentsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        // matricula_inicial: obligatorios = factura, impronta, soat (docTipo) + cedula_titular (manual)
+        // matricula_inicial: obligatorios = factura, aduana, impronta (docTipo). SOAT es opcional.
         var instance = Instance(
             id, tenant,
-            tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial,
-            checklistEstado: "{\"cedula_titular\":true}");
-        foreach (var t in new[] { "factura", "impronta", "soat" })
+            tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        foreach (var t in new[] { "factura", "aduana", "impronta" })
         {
             instance.Attachments.Add(new ProcedureInstanceAttachment
             {

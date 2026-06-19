@@ -26,14 +26,26 @@ public static class TramiteTipologiaCatalog
             "Primera matrícula del vehículo en Colombia (VIN-first, adquirente único).",
             [
                 new ChecklistItem("factura", "Factura de venta", Obligatorio: true, DocTipo: "factura"),
-                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: true, DocTipo: "impronta"),
-                new ChecklistItem("soat", "SOAT vigente", Obligatorio: true, DocTipo: "soat"),
-                new ChecklistItem("cedula_titular", "Documento del titular", Obligatorio: true),
                 new ChecklistItem(
-                    "cert_ambiental",
-                    "Certificado de emisiones / ambiental",
+                    "aduana",
+                    "Manifiesto de importación / Aduana",
+                    Obligatorio: true,
+                    DocTipo: "aduana"),
+                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: true, DocTipo: "impronta"),
+                new ChecklistItem("soat", "SOAT vigente", Obligatorio: false, DocTipo: "soat"),
+                new ChecklistItem(
+                    "certificado_ambiental",
+                    "Certificado ambiental",
                     Obligatorio: false,
                     DocTipo: "certificado_ambiental"),
+                new ChecklistItem(
+                    "declaracion_aduana",
+                    "Declaración de importación (DIAN)",
+                    Obligatorio: false,
+                    DocTipo: "declaracion_aduana"),
+                new ChecklistItem("acta_remate", "Acta de remate", Obligatorio: false, DocTipo: "acta_remate"),
+                new ChecklistItem("oficio_judicial", "Oficio judicial", Obligatorio: false, DocTipo: "oficio_judicial"),
+                new ChecklistItem("otro", "Otro documento", Obligatorio: false, DocTipo: "otro"),
             ]),
         new TramiteTipologia(
             CodigoTraspasoStandard,
