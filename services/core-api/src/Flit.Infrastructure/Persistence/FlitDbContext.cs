@@ -17,6 +17,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<UserTempSuspension> UserTempSuspensions => Set<UserTempSuspension>();
 
+    public DbSet<SecurityModule> SecurityModules => Set<SecurityModule>();
+
+    public DbSet<RbacAction> RbacActions => Set<RbacAction>();
+
+    public DbSet<Role> Roles => Set<Role>();
+
+    public DbSet<RoleGrant> RoleGrants => Set<RoleGrant>();
+
+    public DbSet<UserRoleAssignment> UserRoleAssignments => Set<UserRoleAssignment>();
+
     public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
 
     public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();

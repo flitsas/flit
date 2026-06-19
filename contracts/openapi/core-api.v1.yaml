@@ -3,9 +3,10 @@ info:
   title: FLIT Core API
   version: "1.0.0"
   description: >
-    Contrato público de FLIT Core API. Versionado en el monorepo
-    (services/core-api). Este archivo se inicializa con HU #10189
-    (Administrador de Compañías — endpoint index paginado y seguridad SuperAdmin).
+    Contrato público de FLIT Core API (services/core-api). Cubre el carril de
+    Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
+    y el módulo Administrador de Compañías (HU #10189 — index paginado y
+    seguridad SuperAdmin).
 
 servers:
   - url: https://api.flit.co
@@ -14,10 +15,59 @@ servers:
     description: Local (Gateway)
 
 tags:
+  - name: Auth
+    description: Autenticación y sesión (login, perfil del usuario).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Trámites · Traspaso
+    description: Radicación de traspasos vehiculares.
 
 paths:
+  /api/v1/auth/login:
+    post:
+      operationId: authLogin
+      tags: [Auth]
+      security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
+      summary: Login con email y contraseña
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: JWT emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/me:
+    get:
+      operationId: authGetCurrentUser
+      tags: [Auth]
+      summary: Perfil del usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Claims del token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: No autenticado o sesión expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -491,6 +541,57 @@ components:
       bearerFormat: JWT
 
   schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresInSeconds, tokenType]
+      properties:
+        accessToken:
+          type: string
+        expiresInSeconds:
+          type: integer
+          format: int32
+        tokenType:
+          type: string
+          example: Bearer
+    CurrentUserResponse:
+      type: object
+      required: [userId, email, tenantId, roleId, permissions]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        tenantId:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+        roleCode:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    AuthErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
     CompanyListItem:
       type: object
       properties:

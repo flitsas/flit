@@ -1,29 +1,67 @@
+using System.Text.Json;
 using Flit.Admin.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Persistencia (EF Core + PostgreSQL).
+// Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
 
-if (!string.IsNullOrWhiteSpace(coreConnStr))
+if (string.IsNullOrWhiteSpace(coreConnStr))
 {
-    builder.Services.AddPostgresInfrastructure(
-        coreConnStr, builder.Configuration, builder.Environment);
-}
-else
-{
-    throw new InvalidOperationException(
-        "ConnectionStrings:Core (PostgreSQL) es obligatoria.");
+    throw new InvalidOperationException("ConnectionStrings:Core (PostgreSQL) es obligatoria.");
 }
 
-// Seguridad: JWT + policy SuperAdmin (HU #10189, RF01).
+builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, builder.Environment);
+
+// Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
+
+// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3).
+// Aditivo sobre AddApiSecurity: solo fija Events, sin alterar TokenValidationParameters.
+builder.Services.PostConfigure<JwtBearerOptions>(
+    JwtBearerDefaults.AuthenticationScheme,
+    options => options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            if (context.Exception is SecurityTokenExpiredException)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(JsonSerializer.Serialize(new
+                {
+                    code = "SESSION_EXPIRED",
+                    message = "Session expired. Please sign in again.",
+                }));
+            }
+
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            if (context.AuthenticateFailure is SecurityTokenExpiredException)
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(JsonSerializer.Serialize(new
+                {
+                    code = "SESSION_EXPIRED",
+                    message = "Session expired. Please sign in again.",
+                }));
+            }
+
+            return Task.CompletedTask;
+        },
+    });
 
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();
@@ -63,6 +101,7 @@ app.UseAuthorization();
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 
+app.MapAuthEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapTransfersEndpoints();
