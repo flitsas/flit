@@ -53,14 +53,25 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
+        return (ComputeState(instance), null);
+    }
+
+    /// <summary>
+    /// Computa el estado server-driven del wizard a partir de una instancia con el grafo del wizard
+    /// ya cargado (FieldValues, Actors, Attachments, Commercial, PreflightSnapshots, BiometricValidations,
+    /// Signatures). Expuesto para reusar la MISMA lógica de gates por paso desde otros handlers (p.ej. el
+    /// listado de trámites computa <c>PasoActual</c> contando los pasos en <c>complete</c>) sin duplicarla.
+    /// </summary>
+    public static WizardStateDto ComputeState(ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
-        var dto = modalidad == TramiteModalidadEntrada.Traspaso
+        return modalidad == TramiteModalidadEntrada.Traspaso
             ? BuildTraspaso(instance)
             : BuildMatricula(instance);
-
-        return (dto, null);
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------

@@ -15,6 +15,15 @@ public interface IProcedureInstanceRepository
     /// <summary>Carga la instancia con sus datos comerciales (1:1) para GET/PUT comercial.</summary>
     Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lista las instancias de un tenant (no eliminadas), las más recientes primero, cargando el grafo
+    /// del wizard necesario para el resumen de la tabla de operación (Slice M6): field values
+    /// (placa/VIN/marca/línea), actores (comprador), adjuntos (FUR), comercial, snapshots de preflight,
+    /// biométricas y firmas — el mismo grafo que consume <c>GetWizardStateHandler.ComputeState</c> para
+    /// derivar el paso actual. Limitado a <paramref name="limit"/> filas (cap razonable, p.ej. 200).
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstance>> ListByTenantWithSummaryGraphAsync(Guid tenantId, int limit, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

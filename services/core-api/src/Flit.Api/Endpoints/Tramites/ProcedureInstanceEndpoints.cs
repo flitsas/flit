@@ -29,6 +29,20 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("CreateProcedureInstance");
 
+        // Listado para la tabla de operación (Slice M6). Ruta literal /instances → NO colisiona con
+        // /instances/{id:guid} (la constraint :guid solo casa GUIDs; el listado no lleva segmento).
+        group.MapGet("/instances", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListProcedureInstancesHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var items = await handler.HandleAsync(tenantId.Value, ct);
+            return Results.Ok(new { items });
+        }).WithName("ListProcedureInstances");
+
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

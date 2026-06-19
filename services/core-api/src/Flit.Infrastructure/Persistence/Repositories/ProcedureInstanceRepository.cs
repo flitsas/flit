@@ -57,6 +57,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Commercial)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public async Task<IReadOnlyList<ProcedureInstance>> ListByTenantWithSummaryGraphAsync(Guid tenantId, int limit, CancellationToken ct)
+    {
+        var rows = await db.ProcedureInstances
+            .AsSplitQuery()
+            .Include(x => x.FieldValues)
+            .Include(x => x.Actors)
+            .Include(x => x.Attachments)
+            .Include(x => x.Commercial)
+            .Include(x => x.PreflightSnapshots)
+            .Include(x => x.BiometricValidations)
+            .Include(x => x.Signatures)
+            .Where(x => x.TenantId == tenantId && x.DeletedAt == null)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return rows;
+    }
+
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.BiometricValidations)

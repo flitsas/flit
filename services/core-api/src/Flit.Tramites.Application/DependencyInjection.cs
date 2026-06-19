@@ -28,6 +28,7 @@ public static class DependencyInjection
 
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
+        services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
