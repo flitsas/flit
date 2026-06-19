@@ -1,6 +1,7 @@
 // Cliente HTTP base contra el Gateway FLIT (HU #10194). Resuelve el token JWT,
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { clearToken, emitSessionExpired } from "@/lib/auth/session";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
 export const API_BASE_URL =
@@ -86,6 +87,15 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      // HU #10172 AC2 — sesión expirada: limpia el token y avisa al modal global.
+      const data = (await safeJson(response)) as { code?: string } | null;
+      if (data?.code === "SESSION_EXPIRED") {
+        clearToken();
+        emitSessionExpired();
+        throw new ApiError(401, "SESSION_EXPIRED");
+      }
+    }
     throw new ApiError(response.status, `Error ${response.status} al llamar ${path}`);
   }
 

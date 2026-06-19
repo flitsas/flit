@@ -5,8 +5,11 @@
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+    <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />
+    <Project Path="src/Flit.Modules.Security.Domain/Flit.Modules.Security.Domain.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
   </Folder>
 </Solution>

@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
