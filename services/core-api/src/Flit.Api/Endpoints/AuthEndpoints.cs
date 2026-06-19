@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
@@ -34,6 +35,13 @@ public static class AuthEndpoints
                 return Results.Json(
                     new ErrorResponse("INVALID_CREDENTIALS", "Invalid credentials."),
                     statusCode: StatusCodes.Status401Unauthorized);
+            }
+            catch (AccountSuspendedException)
+            {
+                // HU #10170 AC2 — bloqueo temporal vigente.
+                return Results.Json(
+                    new ErrorResponse("ACCOUNT_TEMPORARILY_BLOCKED", "La cuenta está bloqueada temporalmente."),
+                    statusCode: StatusCodes.Status403Forbidden);
             }
         });
 
@@ -78,6 +86,40 @@ public static class AuthEndpoints
             }
         });
 
+        // HU #10170 AC1 — reset administrativo: el admin restablece la contraseña de un usuario de su ámbito.
+        group.MapPost("/admin/reset-password", async (
+            [FromBody] AdminResetPasswordRequest request,
+            ClaimsPrincipal caller,
+            AdminResetPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            var callerTenantId = Guid.TryParse(tenantClaim, out var tid) ? tid : (Guid?)null;
+            var roleCode = caller.FindFirstValue("role_code") ?? string.Empty;
+            var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
+
+            try
+            {
+                await handler.HandleAsync(
+                    new AdminResetPasswordCommand(callerTenantId, roleCode, permissions, request.Email),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña restablecida; se notificó al usuario."));
+            }
+            catch (AdminScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_NOT_FOUND", "Usuario no encontrado."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+        }).RequireAuthorization();
+
         group.MapGet("/me", (ClaimsPrincipal user) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -109,6 +151,8 @@ public static class AuthEndpoints
     private sealed record ForgotPasswordRequest(string Email);
 
     private sealed record ResetPasswordRequest(string Token, string NewPassword);
+
+    private sealed record AdminResetPasswordRequest(string Email);
 
     private sealed record MessageResponse(string Message);
 

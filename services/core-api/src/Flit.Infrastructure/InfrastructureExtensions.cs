@@ -49,6 +49,7 @@ public static class InfrastructureExtensions
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddSingleton<ISecureTokenGenerator, SecureTokenGenerator>();
+        services.AddSingleton<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
 
         var passwordRecovery = configuration
             .GetSection(PasswordRecoveryOptions.SectionName)

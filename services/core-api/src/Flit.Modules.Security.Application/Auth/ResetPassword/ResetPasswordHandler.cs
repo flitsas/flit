@@ -33,7 +33,8 @@ public sealed class ResetPasswordHandler(
             throw new InvalidResetTokenException();
 
         var newHash = passwordHasher.Hash(command.NewPassword);
-        await userAccountRepository.UpdatePasswordHashAsync(record.UserId, newHash, now, cancellationToken);
+        await userAccountRepository.UpdatePasswordHashAsync(
+            record.UserId, newHash, now, mustChangePassword: false, cancellationToken);
         await tokenRepository.MarkUsedAsync(record.Id, now, cancellationToken);
         await tokenRepository.InvalidateActiveForUserAsync(record.UserId, Purpose, now, cancellationToken);
     }

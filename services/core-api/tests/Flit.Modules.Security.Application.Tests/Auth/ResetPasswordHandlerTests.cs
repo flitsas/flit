@@ -36,7 +36,7 @@ public sealed class ResetPasswordHandlerTests
         await _handler.HandleAsync(new ResetPasswordCommand("raw-token", "NewPass123!"), CancellationToken.None);
 
         await _userAccountRepository.Received(1).UpdatePasswordHashAsync(
-            userId, "argon2id|salt|hash", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            userId, "argon2id|salt|hash", Arg.Any<DateTimeOffset>(), false, Arg.Any<CancellationToken>());
         await _tokenRepository.Received(1).MarkUsedAsync(tokenId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _tokenRepository.Received(1).InvalidateActiveForUserAsync(
             userId, "password_reset", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -54,7 +54,7 @@ public sealed class ResetPasswordHandlerTests
 
         await act.Should().ThrowAsync<InvalidResetTokenException>();
         await _userAccountRepository.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
