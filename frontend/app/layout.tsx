@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Poppins } from "next/font/google";
+import { SessionExpiredListener } from "@/components/auth/SessionExpiredListener";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -26,7 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}>
-      <body className="h-full font-sans antialiased">{children}</body>
+      <body className="h-full font-sans antialiased">
+        {children}
+        <SessionExpiredListener />
+      </body>
     </html>
   );
 }
