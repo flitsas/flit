@@ -180,10 +180,12 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # La URL del API depende del ambiente (api.<env>.flitsas.online).
+          # Prefijo NEXT_PUBLIC_: Next.js solo embebe en el bundle del cliente las
+          # variables con este prefijo presentes durante `next build`.
           build-args: |
-            VITE_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1
-            VITE_TRASPASOS_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1/procedures
-            VITE_DEV_USER_ID=01900000-100b-7001-8001-000000000001
+            NEXT_PUBLIC_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1
+            NEXT_PUBLIC_TRASPASOS_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1/procedures
+            NEXT_PUBLIC_DEV_USER_ID=01900000-100b-7001-8001-000000000001
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

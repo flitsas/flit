@@ -19,6 +19,16 @@ COPY frontend/package.json ./frontend/
 # para `next build`. No fijamos NODE_ENV=production aqui para no omitir devDeps.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
+# Variables publicas del cliente (las inyecta el CD por ambiente). Deben existir como
+# ENV durante `next build` para quedar embebidas en el bundle. Si no se pasan, quedan
+# vacias (el front actual no las usa todavia).
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_TRASPASOS_API_BASE_URL
+ARG NEXT_PUBLIC_DEV_USER_ID
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_TRASPASOS_API_BASE_URL=$NEXT_PUBLIC_TRASPASOS_API_BASE_URL
+ENV NEXT_PUBLIC_DEV_USER_ID=$NEXT_PUBLIC_DEV_USER_ID
+
 # Codigo y build de produccion (.next compilado, baked en la imagen).
 COPY . .
 RUN pnpm --filter @flit/frontend build
