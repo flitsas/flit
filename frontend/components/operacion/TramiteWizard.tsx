@@ -9,6 +9,7 @@ import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { BiometricStep } from './BiometricStep';
+import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
@@ -357,18 +358,6 @@ export function TramiteWizard({ configuration, procedureTypeId, onExit }: Props)
   );
 }
 
-/** Placeholder para pasos de fases futuras (biométrica/firma). */
-function PendingStep({ message }: { message: string }) {
-  return (
-    <div
-      className="rounded-2xl p-6 border text-center"
-      style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}
-    >
-      <p className="text-xs font-semibold opacity-70">{message}</p>
-    </div>
-  );
-}
-
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
@@ -668,21 +657,23 @@ function StepBody({
         />
       );
 
-    // FUR (matrícula 5 / traspaso 6). La firma (Slice 7) sigue diferida, pero el
-    // paso requiere la biométrica de las partes (Slice 6): en traspaso la
-    // capturamos aquí (comprador + vendedor); la firma queda pendiente.
+    // FUR (matrícula 5 / traspaso 6). Biométrica de las partes (Slice 6) +
+    // firma electrónica, portal de participantes y generación del FUR (Slice 7).
+    // En matrícula la biométrica es del comprador (parte única) y no hay firma.
     case 'fur':
-      return modalidad === 'traspaso' ? (
+      return (
         <div className="space-y-6">
           <BiometricStep
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
           />
-          <PendingStep message="Firma del FUR — próxima fase." />
+          <FirmaFurStep
+            instanceId={instanceId}
+            modalidad={modalidad}
+            onRefresh={onRefresh}
+          />
         </div>
-      ) : (
-        <PendingStep message="Firma del FUR — próxima fase." />
       );
 
     default:

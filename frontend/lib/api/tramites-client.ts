@@ -1,5 +1,6 @@
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
+  AceptarConsentimientoResult,
   ActorsResponse,
   AttachmentsResponse,
   BiometriaPublicView,
@@ -11,14 +12,26 @@ import type {
   ConsultationResult,
   CreateInstanceRequest,
   FieldValueInput,
+  FinalizarPortalResult,
+  GenerarFurResult,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
+  InvitarParticipanteInput,
+  InvitarParticipanteResult,
+  Participant,
+  ParticipantsResponse,
+  PortalFirmaUrl,
+  PortalView,
   PreflightSnapshot,
   ProcedureActor,
   ProcedureAttachment,
   ProcedureConfiguration,
   ProcedureInstanceDetail,
   ProcedureInstanceSummary,
+  Signature,
+  SignaturesResponse,
+  SimularFirmaResult,
+  SolicitarFirmaInput,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -352,6 +365,167 @@ export const tramitesClient = {
     );
     return res?.validations ?? [];
   },
+
+  // ── Firma electrónica (Slice 7A) — lado gestor autenticado ──────────
+  // POST solicitar firma de una parte de la compraventa. Solo traspaso
+  // (matrícula → 409 no_aplica). Idempotente por (parte, docTipo).
+  solicitarFirma: (
+    instanceId: string,
+    input: SolicitarFirmaInput,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<Signature>(
+      `/api/v1/tramites/instances/${instanceId}/signatures`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  // GET lista/estado de firmas. Desempaqueta a arreglo.
+  listFirmas: async (
+    instanceId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<Signature[]> => {
+    const res = await request<SignaturesResponse>(
+      `/api/v1/tramites/instances/${instanceId}/signatures`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.signatures ?? [];
+  },
+
+  // POST simular firma (mock complete) -> firmada.
+  simularFirma: (
+    instanceId: string,
+    signatureId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<SimularFirmaResult>(
+      `/api/v1/tramites/instances/${instanceId}/signatures/${signatureId}/simulate`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // ── FUR / compraventa (Slice 7A) ────────────────────────────────────
+  // POST generar FUR (+ compraventa en traspaso). Gated por biométrica:
+  // 409 biometria_gate si la requerida no está aprobada. Los documentos
+  // generados se listan vía getAttachments (tipos fur/compraventa).
+  generarFur: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+    request<GenerarFurResult>(
+      `/api/v1/tramites/instances/${instanceId}/fur`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
+  // POST invitar participante. Devuelve el token CRUDO + magicLinkPath
+  // (/portal/{token}) solo aquí (en BD se persiste solo el hash).
+  invitarParticipante: (
+    instanceId: string,
+    input: InvitarParticipanteInput,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<InvitarParticipanteResult>(
+      `/api/v1/tramites/instances/${instanceId}/participants`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  // GET lista de participantes. Desempaqueta a arreglo.
+  listParticipantes: async (
+    instanceId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<Participant[]> => {
+    const res = await request<ParticipantsResponse>(
+      `/api/v1/tramites/instances/${instanceId}/participants`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.participants ?? [];
+  },
+
+  // POST reinvitar (rota token + reinicia expiración). 429 reminder_cooldown.
+  reinvitarParticipante: (
+    instanceId: string,
+    participantId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<InvitarParticipanteResult>(
+      `/api/v1/tramites/instances/${instanceId}/participants/${participantId}/reinvite`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+};
+
+/**
+ * Cliente PÚBLICO del portal de participantes (magic-link). Sin auth ni tenant
+ * header: el token de alta entropía es la credencial. Usado por /portal/[token].
+ * SEGURIDAD: token inválido/expirado/usado → 404 not_found genérico.
+ */
+export const portalPublicClient = {
+  // GET vista del portal por token (consent + pasos pendientes).
+  getByToken: (token: string) =>
+    request<PortalView>(
+      `/api/v1/public/portal/${encodeURIComponent(token)}`,
+    ),
+
+  // POST aceptar consentimiento Ley 1581 (IP/UA los captura el backend).
+  aceptarConsentimiento: (token: string) =>
+    request<AceptarConsentimientoResult>(
+      `/api/v1/public/portal/${encodeURIComponent(token)}/consent`,
+      { method: 'POST' },
+    ),
+
+  // POST subir documento (multipart: file + tipo). El browser fija el boundary.
+  subirDocumento: async (
+    token: string,
+    tipo: string,
+    file: File,
+  ): Promise<ProcedureAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('tipo', tipo);
+    const res = await fetch(
+      `${BASE_URL}/api/v1/public/portal/${encodeURIComponent(token)}/documentos`,
+      { method: 'POST', body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      );
+    }
+    return (await res.json()) as ProcedureAttachment;
+  },
+
+  // GET estado/URL de firma del participante.
+  getFirma: (token: string) =>
+    request<PortalFirmaUrl>(
+      `/api/v1/public/portal/${encodeURIComponent(token)}/firma`,
+    ),
+
+  // POST simular firma (mock complete) desde el portal.
+  simularFirma: (token: string) =>
+    request<SimularFirmaResult>(
+      `/api/v1/public/portal/${encodeURIComponent(token)}/firma/simulate`,
+      { method: 'POST' },
+    ),
+
+  // POST finalizar (revoca el token: uso único).
+  finalizar: (token: string) =>
+    request<FinalizarPortalResult>(
+      `/api/v1/public/portal/${encodeURIComponent(token)}/finalizar`,
+      { method: 'POST' },
+    ),
 };
 
 /**

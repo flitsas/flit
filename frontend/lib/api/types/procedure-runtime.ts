@@ -344,3 +344,204 @@ export interface CompletarBiometriaResult {
   score: number;
   motivo: string;
 }
+
+// ── Firma electrónica (Slice 7A) ────────────────────────────────────
+// Contrato FIJO acordado con backend:
+//   POST /api/v1/tramites/instances/{id}/signatures            -> SignatureDto (201)
+//   GET  /api/v1/tramites/instances/{id}/signatures            -> { signatures }
+//   POST /api/v1/tramites/instances/{id}/signatures/{sigId}/simulate -> SimularFirmaResult
+// La firma de la compraventa SOLO aplica a traspaso (matrícula → 409 no_aplica).
+
+/** Parte que firma la compraventa. */
+export type SignatureParte = 'comprador' | 'vendedor';
+
+/** Estados de una firma electrónica (espejo de SignatureEstados). */
+export type SignatureEstado =
+  | 'pendiente_envio'
+  | 'enviada'
+  | 'firmada'
+  | 'rechazada';
+
+/** Espejo de SignatureDto (vista del gestor autenticado). */
+export interface Signature {
+  id: string;
+  parte: string;
+  docTipo: string;
+  proveedor: string;
+  estado: string;
+  envelopeId: string | null;
+  signUrl: string | null;
+  firmada: boolean;
+  solicitadoAt: string;
+  firmadoAt: string | null;
+}
+
+/** Respuesta de GET /instances/{id}/signatures. */
+export interface SignaturesResponse {
+  signatures: Signature[];
+}
+
+/** Entrada para solicitar la firma de una parte (espejo de SolicitarFirmaInput). */
+export interface SolicitarFirmaInput {
+  parte: string;
+  docTipo?: string | null;
+}
+
+/** Resultado de simular la firma (mock complete). */
+export interface SimularFirmaResult {
+  id: string;
+  estado: string;
+  pdfPath: string | null;
+  sha256: string | null;
+}
+
+// ── FUR / compraventa (Slice 7A) ────────────────────────────────────
+// Contrato FIJO acordado con backend:
+//   POST /api/v1/tramites/instances/{id}/fur -> { documents } (201)
+//   409 biometria_gate si la biométrica requerida no está aprobada.
+// Los documentos generados se listan/descargan vía el endpoint de adjuntos
+// (GET /instances/{id}/attachments — tipos 'fur' / 'compraventa').
+
+/** Un documento generado (FUR / compraventa) referenciado al adjunto persistido. */
+export interface FurDocument {
+  attachmentId: string;
+  tipo: string;
+  filename: string;
+  sha256: string;
+}
+
+/** Respuesta de POST /instances/{id}/fur. */
+export interface GenerarFurResult {
+  documents: FurDocument[];
+}
+
+// ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
+// Contrato FIJO acordado con backend:
+//   POST /api/v1/tramites/instances/{id}/participants               -> InvitarParticipanteResult (201)
+//   GET  /api/v1/tramites/instances/{id}/participants               -> { participants }
+//   POST /api/v1/tramites/instances/{id}/participants/{pid}/reinvite -> InvitarParticipanteResult
+
+/** Roles admitidos para un participante del portal. */
+export type ParticipantRol = 'comprador' | 'vendedor' | 'mandatario';
+
+/** Espejo de ParticipantDto (vista del gestor autenticado). */
+export interface Participant {
+  id: string;
+  rol: string;
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  whatsappOptIn: boolean;
+  consentDado: boolean;
+  consentVersion: string | null;
+  consent1581At: string | null;
+  expiresAt: string;
+  completedAt: string | null;
+  lastReminderAt: string | null;
+  expirado: boolean;
+  completado: boolean;
+}
+
+/** Resultado de invitar/reinvitar: incluye el token CRUDO (solo aquí). */
+export interface InvitarParticipanteResult {
+  participant: Participant;
+  token: string;
+  magicLinkPath: string;
+}
+
+/** Respuesta de GET /instances/{id}/participants. */
+export interface ParticipantsResponse {
+  participants: Participant[];
+}
+
+/** Entrada para invitar a un participante (espejo de InvitarParticipanteInput). */
+export interface InvitarParticipanteInput {
+  rol: string;
+  nombre: string;
+  email: string;
+  telefono?: string | null;
+  whatsappOptIn: boolean;
+}
+
+// ── Portal público del participante (Slice 7B) ───────────────────────
+// Contrato FIJO acordado con backend (sin auth, token = credencial):
+//   GET  /api/v1/public/portal/{token}              -> PortalViewDto
+//   POST /api/v1/public/portal/{token}/consent      -> AceptarConsentimientoResult
+//   POST /api/v1/public/portal/{token}/documentos   (multipart file+tipo) -> AttachmentDto
+//   GET  /api/v1/public/portal/{token}/firma        -> PortalFirmaUrlDto
+//   POST /api/v1/public/portal/{token}/firma/simulate -> SimularFirmaResult
+//   POST /api/v1/public/portal/{token}/finalizar    -> FinalizarPortalResult
+// SEGURIDAD: token inválido/expirado/usado → 404 not_found genérico.
+
+/** Resumen mínimo de la instancia para el portal. */
+export interface PortalInstanceSummary {
+  referencia: string;
+  modalidadEntrada: string;
+  tipologiaCodigo: string | null;
+  tipologiaNombre: string | null;
+}
+
+/** Estado de un documento requerido para el rol del participante. */
+export interface PortalDocumentoStatus {
+  tipo: string;
+  label: string;
+  obligatorio: boolean;
+  subido: boolean;
+}
+
+/** Paso de biométrica del participante. */
+export interface PortalBiometricaStatus {
+  existe: boolean;
+  estado: string | null;
+  pendiente: boolean;
+}
+
+/** Paso de firma del participante. */
+export interface PortalFirmaStatus {
+  aplica: boolean;
+  existe: boolean;
+  estado: string | null;
+  firmada: boolean;
+}
+
+/** Pasos pendientes agregados para el rol del participante. */
+export interface PortalPasosPendientes {
+  consentDado: boolean;
+  documentos: PortalDocumentoStatus[];
+  biometrica: PortalBiometricaStatus;
+  firma: PortalFirmaStatus;
+  completado: boolean;
+}
+
+/** Vista PÚBLICA del portal (espejo de PortalViewDto). */
+export interface PortalView {
+  rol: string;
+  nombre: string;
+  consentDado: boolean;
+  consentVersion: string;
+  consentText: string;
+  expirado: boolean;
+  completado: boolean;
+  instancia: PortalInstanceSummary;
+  pasosPendientes: PortalPasosPendientes;
+}
+
+/** Resultado de aceptar el consentimiento Ley 1581. */
+export interface AceptarConsentimientoResult {
+  consentVersion: string;
+  consent1581At: string;
+}
+
+/** Estado/URL de firma del participante en el portal (espejo de PortalFirmaUrlDto). */
+export interface PortalFirmaUrl {
+  aplica: boolean;
+  signatureId: string | null;
+  estado: string | null;
+  signUrl: string | null;
+  firmada: boolean;
+}
+
+/** Resultado de finalizar la participación. */
+export interface FinalizarPortalResult {
+  completedAt: string;
+}
