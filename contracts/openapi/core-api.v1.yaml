@@ -29,6 +29,7 @@ paths:
       tags: [Auth]
       security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
       summary: Login con email y contraseña
+      security: []
       requestBody:
         required: true
         content:
@@ -73,6 +74,7 @@ paths:
       operationId: authForgotPassword
       tags: [Auth]
       summary: Solicitar recuperación de contraseña (HU #10169, RF19)
+      security: []
       description: >
         Genera un token de un solo uso y envía un correo con el enlace de
         restablecimiento. Responde siempre 202 con un mensaje genérico, sin
@@ -95,6 +97,7 @@ paths:
       operationId: authResetPassword
       tags: [Auth]
       summary: Restablecer contraseña con token de recuperación (HU #10169)
+      security: []
       description: >
         Valida el token vigente y fija la nueva contraseña. El token se invalida
         tras su uso.
