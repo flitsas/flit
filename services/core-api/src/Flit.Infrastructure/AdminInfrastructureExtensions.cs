@@ -18,6 +18,7 @@ public static class AdminInfrastructureExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
+        services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
 
         // HU #10191 — lista blanca + checker de propiedad vehicular (stub transitorio).
