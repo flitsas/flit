@@ -71,8 +71,10 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
 
         if (!string.IsNullOrWhiteSpace(filter.RazonSocial))
         {
-            var razon = filter.RazonSocial.Trim().ToLowerInvariant();
-            query = query.Where(t => t.LegalName.ToLowerInvariant().Contains(razon));
+            // ToLower() (no ToLowerInvariant) para que Npgsql lo traduzca a lower() en
+            // SQL; ToLowerInvariant no es traducible y rompe en PostgreSQL real.
+            var razon = filter.RazonSocial.Trim().ToLower();
+            query = query.Where(t => t.LegalName.ToLower().Contains(razon));
         }
 
         if (filter.EstadoActivo is { } estado)
