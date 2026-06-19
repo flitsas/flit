@@ -105,3 +105,9 @@ backend/dotnet/src/FLIT.Traspasos.Api/data/tramite-files/
 # JetBrains Junie — generado por sync-agents (symlink en Linux; ignorar drift)
 .junie/
 
+# Trámites — adjuntos subidos en runtime (disk attachment storage)
+services/core-api/src/Flit.Api/uploads/
+
+# Muestra real de respuesta Verifik (contiene PII, no commitear)
+context/verifik-vin-real-sample.json
+
