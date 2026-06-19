@@ -55,7 +55,7 @@
     "_comment_test__": "══════════════════════════════════════════════════",
 
     "test:frontend":    "pnpm --filter @flit/frontend test",
-    "test:core-api":    "dotnet test services/core-api/Flit.slnx --no-build",
+    "test:core-api":    "dotnet test services/core-api/Flit.slnx --no-build --configuration Release",
     "test:python":      "uv --directory services/python-ml run pytest",
     "test:e2e":         "pnpm --filter @flit/frontend test:e2e",
     "test:js":          "pnpm -r test",
