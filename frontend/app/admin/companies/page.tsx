@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -60,6 +61,15 @@ export default function AdminCompaniesPage() {
 
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+      <button
+        type="button"
+        onClick={() => router.push("/")}
+        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
+        style={{ color: "#557EFF" }}
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Volver al inicio
+      </button>
+
       <ModuleTitle
         title="Administración de compañías"
         subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
