@@ -15,6 +15,9 @@ using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.GetResolvedDocumentMatrix;
 using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
+using Flit.Admin.Application.DocumentOrderOverrides.UpdateDocumentOrderOverride;
+using Flit.Admin.Application.DocumentRequirementOverrides.ListDocumentRequirementOverrides;
+using Flit.Admin.Application.DocumentRequirementOverrides.SetDocumentRequirementOverride;
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
@@ -22,6 +25,7 @@ using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequire
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
@@ -70,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<ListDocumentTypesHandler>();
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
+        services.AddScoped<ReactivateDocumentTypeHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
         services.AddScoped<CreateProcedureDocumentRequirementHandler>();
@@ -80,8 +85,13 @@ public static class DependencyInjection
         // HU #10196 — overrides de orden documental (OT/Cliente) + matriz resuelta.
         services.AddScoped<CreateDocumentOrderOverrideHandler>();
         services.AddScoped<ListDocumentOrderOverridesHandler>();
+        services.AddScoped<UpdateDocumentOrderOverrideHandler>();
         services.AddScoped<DeleteDocumentOrderOverrideHandler>();
         services.AddScoped<GetResolvedDocumentMatrixHandler>();
+
+        // HU #10198 — obligatoriedad documental por OT (3 estados, granular solo para OT).
+        services.AddScoped<SetDocumentRequirementOverrideHandler>();
+        services.AddScoped<ListDocumentRequirementOverridesHandler>();
 
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();

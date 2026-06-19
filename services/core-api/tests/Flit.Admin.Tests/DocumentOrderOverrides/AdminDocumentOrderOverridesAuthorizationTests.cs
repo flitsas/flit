@@ -100,5 +100,17 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Overrides_Update_WithNonSuperAdminRole_Returns403()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
+
+        var response = await client.PutAsJsonAsync($"{OverridesUrl}/{Guid.NewGuid()}", new { orden = 1 });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     private sealed record ErrorBody(string Error);
 }

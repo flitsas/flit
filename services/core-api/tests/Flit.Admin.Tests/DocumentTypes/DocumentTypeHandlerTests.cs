@@ -2,6 +2,7 @@ using Flit.Admin.Application.DocumentTypes;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -253,6 +254,55 @@ public sealed class DocumentTypeHandlerTests
 
         await using var verify = NewContext(db);
         (await verify.DocumentTypes.SingleAsync(d => d.Id == id)).IsActive.Should().BeTrue();
+    }
+
+    // ---------- Reactivación (contraparte del soft-delete) ----------
+
+    [Fact]
+    public async Task Reactivate_RestoresInactiveDocument_ToActive()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType { Id = id, Code = "RUT", Name = "Doc", IsActive = false, CreatedAt = DateTimeOffset.UtcNow });
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(act));
+            var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id, UpdatedBy = Actor });
+            result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.Reactivated);
+        }
+
+        await using var verify = NewContext(db);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id);
+        row.IsActive.Should().BeTrue();
+        row.UpdatedBy.Should().Be(Actor);
+    }
+
+    [Fact]
+    public async Task Reactivate_AlreadyActive_IsIdempotent()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType { Id = id, Code = "RUT", Name = "Doc", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+
+        await using var ctx = NewContext(db);
+        var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(ctx));
+
+        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id });
+
+        result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.Reactivated);
+        (await ctx.DocumentTypes.SingleAsync(d => d.Id == id)).IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reactivate_NonExistent_ReturnsNotFound()
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(ctx));
+
+        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = Guid.NewGuid() });
+
+        result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.NotFound);
     }
 
     // ---------- Helpers ----------

@@ -72,6 +72,26 @@ internal sealed class DocumentOrderOverrideRepository : IDocumentOrderOverrideRe
         CancellationToken cancellationToken = default) =>
         QueryById(id).FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<DocumentOrderOverrideItem?> UpdateOrderAsync(
+        Guid id,
+        short orden,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.DocumentOrderOverrides
+            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.SortOrder = orden;
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return await QueryById(entity.Id).FirstAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<bool> DeleteAsync(
         Guid id,
         CancellationToken cancellationToken = default)

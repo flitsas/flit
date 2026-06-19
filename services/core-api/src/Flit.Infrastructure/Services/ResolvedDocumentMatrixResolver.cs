@@ -1,17 +1,23 @@
 using Flit.Admin.Domain.DocumentOrderOverrides;
+using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Services;
 
 /// <summary>
-/// Implementación EF Core del resolutor de la matriz documental (HU #10196, RF18).
+/// Implementación EF Core del resolutor de la matriz documental (HU #10196, RF18; HU #10198).
 ///
-/// Algoritmo de precedencia <b>Cliente &gt; OT &gt; Default</b>:
+/// Algoritmo de precedencia del <b>orden</b> <b>Cliente &gt; OT &gt; Default</b>:
 /// (1) carga la base del trámite desde <c>procedure_document_requirements</c> (join a
 /// <c>document_types</c>); (2) carga los overrides OT y CLIENTE solo cuando se aporta su
 /// referencia; (3) por cada documento aplica el override de mayor precedencia disponible;
 /// (4) ordena por orden resuelto asc, desempatando por <c>document_type_id</c>.
+///
+/// Además aplica la <b>obligatoriedad por OT</b> (HU #10198, granular solo para OT): cuando
+/// se aporta el OT, un override de obligatoriedad puede marcar el documento como obligatorio
+/// (<c>REQUIRED</c>), opcional (<c>OPTIONAL</c>) o no aplica (<c>NOT_APPLICABLE</c> → el
+/// documento se excluye de la matriz de ese OT). Sin override, hereda el default del trámite.
 /// </summary>
 internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixResolver
 {
@@ -47,10 +53,26 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
         var clienteOverrides = await LoadOverridesAsync(
                 procedureTypeId, DocumentOrderScope.Cliente, clienteId, cancellationToken)
             .ConfigureAwait(false);
+        var otRequirementStates = await LoadOtRequirementStatesAsync(
+                procedureTypeId, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
 
         var resolved = new List<ResolvedDocumentMatrixItem>(baseDocs.Count);
         foreach (var doc in baseDocs)
         {
+            // Obligatoriedad por OT (HU #10198): NOT_APPLICABLE excluye el documento de la
+            // matriz de ese OT; REQUIRED/OPTIONAL fijan la obligatoriedad; sin override hereda.
+            var obligatorio = doc.IsMandatory;
+            if (otRequirementStates.TryGetValue(doc.DocumentTypeId, out var requirementState))
+            {
+                if (requirementState == DocumentRequirementState.NotApplicable)
+                {
+                    continue;
+                }
+
+                obligatorio = requirementState == DocumentRequirementState.Required;
+            }
+
             short orden;
             string nivel;
 
@@ -75,7 +97,7 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 DocumentTypeId = doc.DocumentTypeId,
                 Codigo = doc.Code,
                 Nombre = doc.Name,
-                Obligatorio = doc.IsMandatory,
+                Obligatorio = obligatorio,
                 OrdenResuelto = orden,
                 NivelAplicado = nivel,
             });
@@ -105,6 +127,28 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 && o.ScopeType == scopeType
                 && o.ScopeRefId == scopeRefId.Value)
             .ToDictionaryAsync(o => o.DocumentTypeId, o => o.SortOrder, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Carga los estados de obligatoriedad por OT indexados por documento (HU #10198). Si no
+    /// se aporta el OT devuelve un diccionario vacío (sin override de obligatoriedad).
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> LoadOtRequirementStatesAsync(
+        Guid procedureTypeId,
+        Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (transitOfficeId is null || transitOfficeId == Guid.Empty)
+        {
+            return [];
+        }
+
+        return await _context.DocumentRequirementOverrides
+            .AsNoTracking()
+            .Where(o => o.ProcedureTypeId == procedureTypeId
+                && o.TransitOfficeId == transitOfficeId.Value)
+            .ToDictionaryAsync(o => o.DocumentTypeId, o => o.RequirementState, cancellationToken)
             .ConfigureAwait(false);
     }
 

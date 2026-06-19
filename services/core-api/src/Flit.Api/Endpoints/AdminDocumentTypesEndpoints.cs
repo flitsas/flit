@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,6 +34,9 @@ public static class AdminDocumentTypesEndpoints
 
         // DELETE /api/v1/admin/document-types/{id} — soft-delete (AC4/AC6 → 204 / 409 / 404).
         group.MapDelete("/{id:guid}", DeleteAsync).WithName("AdminDocumentTypeDelete");
+
+        // POST /api/v1/admin/document-types/{id}/reactivate — reactivación (→ 204 / 404).
+        group.MapPost("/{id:guid}/reactivate", ReactivateAsync).WithName("AdminDocumentTypeReactivate");
 
         return app;
     }
@@ -120,6 +124,27 @@ public static class AdminDocumentTypesEndpoints
             DeleteDocumentTypeOutcome.HasAssociations => Results.Json(
                 new ErrorResponse(DeleteDocumentTypeResult.HasAssociationsMessage),
                 statusCode: StatusCodes.Status409Conflict),
+            _ => Results.NotFound(new ErrorResponse($"No existe el tipo de documento {id}.")),
+        };
+    }
+
+    private static async Task<IResult> ReactivateAsync(
+        Guid id,
+        HttpContext httpContext,
+        [FromServices] ReactivateDocumentTypeHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new ReactivateDocumentTypeCommand
+        {
+            Id = id,
+            UpdatedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            ReactivateDocumentTypeOutcome.Reactivated => Results.NoContent(),
             _ => Results.NotFound(new ErrorResponse($"No existe el tipo de documento {id}.")),
         };
     }

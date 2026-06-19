@@ -4,6 +4,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
 using Flit.Admin.Domain.DocumentOrderOverrides;
+using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.ProcedureSnapshots;
@@ -48,6 +49,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IDocumentOrderOverrideRepository, DocumentOrderOverrideRepository>();
         services.AddScoped<ITenantCatalog, TenantCatalog>();
         services.AddScoped<IResolvedDocumentMatrixResolver, ResolvedDocumentMatrixResolver>();
+
+        // HU #10198 — overrides de obligatoriedad documental por OT (3 estados).
+        services.AddScoped<IDocumentRequirementOverrideRepository, DocumentRequirementOverrideRepository>();
 
         // HU #10197 — instancias de trámite + snapshot documental inmutable.
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();

@@ -32,6 +32,16 @@ public interface IDocumentOrderOverrideRepository
         Guid id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Actualiza el <c>sort_order</c> de un override (reordenamiento por arrastre, HU #10198).
+    /// Devuelve el read model enriquecido o null si el id no existe. La tupla única no cambia,
+    /// así que no hay conflicto de unicidad posible.
+    /// </summary>
+    Task<DocumentOrderOverrideItem?> UpdateOrderAsync(
+        Guid id,
+        short orden,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Borrado físico; devuelve false si no existe (AC6).</summary>
     Task<bool> DeleteAsync(
         Guid id,

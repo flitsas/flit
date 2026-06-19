@@ -653,6 +653,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/document-types/{id}/reactivate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeReactivate
+      summary: Reactiva un tipo de documento desactivado
+      description: >
+        Contraparte del soft-delete: marca is_active=true para que el documento
+        vuelva al catálogo y pueda asociarse a trámites. Idempotente (reactivar uno
+        ya activo retorna 204). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento reactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/procedure-document-requirements:
     post:
       tags: [Admin · Documentos por Trámite]
@@ -935,6 +970,49 @@ paths:
         required: true
         schema: { type: string, format: uuid }
         description: Identificador del override.
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideUpdate
+      summary: Reordena un override (arrastre en la lista)
+      description: >
+        Actualiza únicamente el orden (sort_order) de un override existente. Lo usa el
+        reordenamiento por arrastre de la lista de overrides; la tupla (trámite, documento,
+        scope, referencia) no cambia, por lo que no hay conflicto de unicidad. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentOrderOverrideRequest"
+      responses:
+        "200":
+          description: Override actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido (negativo o fuera de rango).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags: [Admin · Órdenes documentales]
       operationId: adminDocumentOrderOverrideDelete
@@ -957,6 +1035,97 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-requirement-overrides:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideList
+      summary: Lista la obligatoriedad por OT de un trámite (HU #10198)
+      description: >
+        Retorna los overrides de obligatoriedad (REQUIRED / OPTIONAL / NOT_APPLICABLE) de un
+        trámite para un Organismo de Tránsito. Solo devuelve los documentos con override; los
+        no listados heredan el default del trámite. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: transitOfficeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito.
+      responses:
+        "200":
+          description: Listado de overrides de obligatoriedad.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId o transitOfficeId).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideSet
+      summary: Fija (o limpia) la obligatoriedad por OT de un documento (HU #10198)
+      description: >
+        Upsert por tupla natural (trámite, documento, OT). El documento debe existir (404) y
+        estar asociado al trámite (422); el OT debe existir (404). estado=REQUIRED|OPTIONAL|
+        NOT_APPLICABLE crea/actualiza el override (200); estado=DEFAULT limpia el override y
+        el documento vuelve a heredar el default del trámite (204). Granular solo para OT.
+        Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDocumentRequirementOverrideRequest"
+      responses:
+        "200":
+          description: Override creado o actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+        "204":
+          description: Override limpiado (estado=DEFAULT).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o el OT no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Estado inválido o documento no asociado al trámite.
           content:
             application/json:
               schema:
@@ -1519,6 +1688,62 @@ components:
           description: Obligatorio si scope=CLIENTE.
         orden: { type: integer, minimum: 0, maximum: 32767 }
       required: [procedureTypeId, documentTypeId, orden]
+
+    UpdateDocumentOrderOverrideRequest:
+      type: object
+      description: >
+        Payload del reordenamiento por arrastre de un override (HU #10198). Solo el orden
+        es mutable; la tupla del override no cambia.
+      properties:
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [orden]
+
+    DocumentRequirementState:
+      type: string
+      enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE]
+      description: >
+        Obligatoriedad de un documento para un OT: REQUIRED (obligatorio), OPTIONAL
+        (opcional) o NOT_APPLICABLE (no aplica → se oculta de la matriz de ese OT).
+
+    SetDocumentRequirementOverrideRequest:
+      type: object
+      description: >
+        Upsert por tupla natural (trámite, documento, OT) de la obligatoriedad por OT
+        (HU #10198). estado=DEFAULT limpia el override (hereda el default del trámite).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE, DEFAULT]
+      required: [procedureTypeId, documentTypeId, transitOfficeId, estado]
+
+    DocumentRequirementOverrideResponse:
+      type: object
+      description: Override de obligatoriedad por OT (HU #10198).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado: { $ref: "#/components/schemas/DocumentRequirementState" }
+        documento:
+          type: object
+          properties:
+            codigo: { type: string }
+            nombre: { type: string }
+          required: [codigo, nombre]
+      required: [id, procedureTypeId, documentTypeId, transitOfficeId, estado, documento]
+
+    DocumentRequirementOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+      required: [data]
 
     ResolvedDocumentMatrixRow:
       type: object

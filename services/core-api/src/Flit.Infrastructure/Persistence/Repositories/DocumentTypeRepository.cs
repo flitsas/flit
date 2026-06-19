@@ -148,6 +148,29 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         return true;
     }
 
+    public async Task<bool> ReactivateAsync(
+        Guid id,
+        Guid? updatedBy,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.DocumentTypes
+            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return false;
+        }
+
+        entity.IsActive = true;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = updatedBy;
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
     public Task<bool> HasActiveAssociationsAsync(
         Guid documentTypeId,
         CancellationToken cancellationToken = default) =>

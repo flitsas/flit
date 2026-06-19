@@ -181,7 +181,75 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         docA.OrdenResuelto.Should().Be((short)5);
     }
 
+    // ---------- HU #10198: obligatoriedad por OT (3 estados) ----------
+
+    [Fact]
+    public async Task Resolve_OtRequirementOverrides_FlipObligatorio_AndExcludeNotApplicable()
+    {
+        var db = NewDbName();
+        await SeedRequirementsAsync(db);
+        await using (var seed = NewContext(db))
+        {
+            // DocA (default obligatorio) → OPTIONAL en este OT.
+            seed.DocumentRequirementOverrides.Add(RequirementOverride(DocA, "OPTIONAL"));
+            // DocB (default opcional) → REQUIRED en este OT.
+            seed.DocumentRequirementOverrides.Add(RequirementOverride(DocB, "REQUIRED"));
+            // DocC → NOT_APPLICABLE → se oculta de la matriz de este OT.
+            seed.DocumentRequirementOverrides.Add(RequirementOverride(DocC, "NOT_APPLICABLE"));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
+        {
+            ProcedureTypeId = ProcedureTypeId,
+            TransitOfficeId = TransitOfficeId,
+        });
+
+        result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
+        // DocC excluido → solo DocA y DocB.
+        result.Data.Should().HaveCount(2);
+        result.Data.Should().NotContain(d => d.DocumentTypeId == DocC);
+        result.Data.Single(d => d.DocumentTypeId == DocA).Obligatorio.Should().BeFalse();
+        result.Data.Single(d => d.DocumentTypeId == DocB).Obligatorio.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Resolve_WithoutOt_IgnoresRequirementOverrides()
+    {
+        var db = NewDbName();
+        await SeedRequirementsAsync(db);
+        await using (var seed = NewContext(db))
+        {
+            // Aunque exista un NOT_APPLICABLE, sin OT en la consulta no se aplica.
+            seed.DocumentRequirementOverrides.Add(RequirementOverride(DocC, "NOT_APPLICABLE"));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
+        {
+            ProcedureTypeId = ProcedureTypeId,
+        });
+
+        // Sin OT → los 3 documentos con su obligatoriedad default.
+        result.Data.Should().HaveCount(3);
+        result.Data.Single(d => d.DocumentTypeId == DocC).Obligatorio.Should().BeTrue();
+    }
+
     // ---------- Helpers ----------
+
+    private static Flit.Infrastructure.Persistence.Entities.Tramites.DocumentRequirementOverride RequirementOverride(
+        Guid documentTypeId, string state) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            ProcedureTypeId = ProcedureTypeId,
+            DocumentTypeId = documentTypeId,
+            TransitOfficeId = TransitOfficeId,
+            RequirementState = state,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
 
     private static GetResolvedDocumentMatrixHandler Handler(FlitDbContext ctx) =>
         new(new ProcedureTypeCatalog(ctx), new ResolvedDocumentMatrixResolver(ctx));

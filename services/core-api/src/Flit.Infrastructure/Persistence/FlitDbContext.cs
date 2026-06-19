@@ -34,6 +34,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
 
+    public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
+
     public DbSet<ProcedureInstance> ProcedureInstances => Set<ProcedureInstance>();
 
     public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();

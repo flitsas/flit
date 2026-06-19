@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
+using Flit.Admin.Application.DocumentOrderOverrides.UpdateDocumentOrderOverride;
 using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +30,9 @@ public static class AdminDocumentOrderOverridesEndpoints
 
         // GET ?procedureTypeId&scope&transitOfficeId|clienteId — lista por scope (AC5 → 200 / 400).
         group.MapGet("/", ListAsync).WithName("AdminDocumentOrderOverrideList");
+
+        // PUT /{id} — reordenamiento por arrastre: persiste el nuevo orden (→ 200 / 422 / 404).
+        group.MapPut("/{id:guid}", UpdateAsync).WithName("AdminDocumentOrderOverrideUpdate");
 
         // DELETE /{id} — borrado físico (AC6 → 204 / 404).
         group.MapDelete("/{id:guid}", DeleteAsync).WithName("AdminDocumentOrderOverrideDelete");
@@ -127,6 +131,27 @@ public static class AdminDocumentOrderOverridesEndpoints
             .ConfigureAwait(false);
 
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> UpdateAsync(
+        Guid id,
+        UpdateDocumentOrderOverrideRequest request,
+        [FromServices] UpdateDocumentOrderOverrideHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(
+                new UpdateDocumentOrderOverrideCommand { Id = id, Orden = request.Orden },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            UpdateDocumentOrderOverrideOutcome.Updated => Results.Ok(result.Response),
+            UpdateDocumentOrderOverrideOutcome.ValidationFailed => Results.Json(
+                new ErrorResponse(result.Error!), statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.NotFound(new ErrorResponse($"No existe el override {id}.")),
+        };
     }
 
     private static async Task<IResult> DeleteAsync(

@@ -3,6 +3,7 @@ using Flit.Admin.Application.DocumentOrderOverrides;
 using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
+using Flit.Admin.Application.DocumentOrderOverrides.UpdateDocumentOrderOverride;
 using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
@@ -284,6 +285,85 @@ public sealed class DocumentOrderOverrideHandlerTests
         result.Data.Should().HaveCount(2);
         result.Data.Select(d => d.Orden).Should().ContainInOrder((short)3, (short)7);
         result.Data.Should().OnlyContain(d => d.Scope == "OT" && d.ScopeRefId == TransitOfficeId);
+    }
+
+    // ---------- Reordenamiento (PUT) — arrastre en la lista de overrides (HU #10198) ----------
+
+    [Fact]
+    public async Task Update_PersistsNewOrder_AndReturnsUpdatedOverride()
+    {
+        var db = NewDbName();
+        await SeedCatalogAsync(db);
+        var id = Guid.NewGuid();
+        await using (var seed = NewContext(db))
+        {
+            seed.DocumentOrderOverrides.Add(new DocumentOrderOverride
+            {
+                Id = id,
+                ProcedureTypeId = ProcedureTypeId,
+                DocumentTypeId = DocId,
+                ScopeType = "OT",
+                ScopeRefId = TransitOfficeId,
+                SortOrder = 5,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(act));
+            var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = 30 });
+
+            result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.Updated);
+            result.Response!.Orden.Should().Be((short)30);
+            result.Response.Documento.Codigo.Should().Be("RUT");
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == id)).SortOrder.Should().Be((short)30);
+    }
+
+    [Fact]
+    public async Task Update_NonExistent_ReturnsNotFound()
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(ctx));
+
+        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = Guid.NewGuid(), Orden = 1 });
+
+        result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.NotFound);
+    }
+
+    [Theory]
+    [InlineData(null)] // orden faltante
+    [InlineData(-1)]    // orden negativo
+    public async Task Update_InvalidOrden_Returns422_WithoutTouchingRow(int? orden)
+    {
+        var db = NewDbName();
+        await SeedCatalogAsync(db);
+        var id = Guid.NewGuid();
+        await using (var seed = NewContext(db))
+        {
+            seed.DocumentOrderOverrides.Add(new DocumentOrderOverride
+            {
+                Id = id,
+                ProcedureTypeId = ProcedureTypeId,
+                DocumentTypeId = DocId,
+                ScopeType = "OT",
+                ScopeRefId = TransitOfficeId,
+                SortOrder = 5,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(ctx));
+        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = orden });
+
+        result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.ValidationFailed);
+        (await ctx.DocumentOrderOverrides.SingleAsync(o => o.Id == id)).SortOrder.Should().Be((short)5);
     }
 
     // ---------- AC6: DELETE borrado físico ----------

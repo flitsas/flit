@@ -42,6 +42,12 @@ public interface IDocumentTypeRepository
         Guid? updatedBy,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Reactivación: marca <c>is_active = true</c>; devuelve false si no existe.</summary>
+    Task<bool> ReactivateAsync(
+        Guid id,
+        Guid? updatedBy,
+        CancellationToken cancellationToken = default);
+
     /// <summary>True si el tipo de documento está referenciado en procedure_document_requirements (AC6).</summary>
     Task<bool> HasActiveAssociationsAsync(
         Guid documentTypeId,

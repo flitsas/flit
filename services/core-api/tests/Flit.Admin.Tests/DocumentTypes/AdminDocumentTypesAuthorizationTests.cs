@@ -74,5 +74,17 @@ public sealed class AdminDocumentTypesAuthorizationTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Reactivate_WithNonSuperAdminRole_Returns403()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
+
+        var response = await client.PostAsync($"{BaseUrl}/{Guid.NewGuid()}/reactivate", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     private sealed record ErrorBody(string Error);
 }
