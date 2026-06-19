@@ -198,6 +198,21 @@ Se corrió la app real (Postgres local + core-api con `.env.verifik` + RUNT real
 
 **Artefactos de la corrida (limpiar):** instancias draft de prueba en `flit_dev`, fila `MANUALTEST123` en field_values (instancia 5d75cbf0), `context/verifik-vin-real-sample.json` (PII real, untracked, NO commitear), `audit.audit_logs` creada a mano. La DB local conviene reconstruirla limpia (drop+migrate+bootstrap+seeds) para quitar el drift.
 
+## Slices 6 y 7 completados (2026-06-19)
+
+**Todos los slices 0–7 hechos y verdes. 405 tests (344 backend = 76 Domain + 268 Application; 61 frontend), build 0/0.** Commiteado granular en `feature/scardenas-tramites-10128` con prefijo `tramites-rework(<capa>)`, **sin push**.
+
+- **Slice 6 — Biométrica (mock):** tabla `procedure_instance_biometric_validations` (RLS+audit), scorer mock inyectable contract-first (3 fotos→score 85 aprobado, swap a Anthropic real); magic-link (raw→SHA256, TTL 24h, máx 5 intentos); fotos vía storage de disco; endpoints authed + públicos `/api/v1/public/biometric/{token}`; página pública `/biometric/[token]`; wizard paso `identidad` cableado a estado real (matrícula=comprador, traspaso=ambas partes).
+- **Slice 7A — Firma + FUR (mock):** tabla `procedure_instance_signatures`; proveedor firma mock inyectable (swap a ZapSign), solo traspaso, idempotente por rol; **FUR/contrato mock SIN librería PDF** (decisión del usuario — placeholder con datos reales, swap a generador real = deuda), gated por biométrica, persistido como attachment (`tipo` fur/compraventa) + evento; preflight firma compraventa; paso `fur` del wizard cableado.
+- **Slice 7B — Portal público + Ley 1581:** tabla `procedure_instance_participants` (RLS+audit, unique token_hash); magic-link hasheado, TTL 24h, single-use, sin enumeración; consent Ley 1581 versionado (`2026-06-19-v1`) con IP/UA truncada como prueba; endpoints públicos `/api/v1/public/portal/{token}` (view/consent/documentos/firma/finalizar) que agregan biométrica+firma+docs por rol; admin invitar/list/reinvite (cooldown 24h); página pública `/portal/[token]`.
+
+### Deuda nueva slices 6–7
+- **DF-1 (descarga de archivos):** NO hay endpoint de descarga/serving — attachments (pre-existente), FUR/compraventa generados y fotos biométricas solo se LISTAN, no se descargan. Falta `GET /instances/{id}/attachments/{attId}/download` (stream desde storage) + wiring FE.
+- **DF-2 (rate-limiting):** endpoints públicos (biométrica/portal) sin rate-limit (TODO en `PublicPortalEndpoints`). No existe limiter reusable en el repo.
+- **DF-3 (mocks swappables):** scorer biométrico (→ Anthropic real), generador FUR (→ PDF real), proveedor firma (→ ZapSign) son mocks contract-first; swap = cambiar transporte.
+- **DF-4 (.gitignore):** regla `storage/` (línea 79) ignora por error las fuentes C# `Storage/` (FS case-insensitive en macOS) → se hizo `git add -f` para no romper CI; afinar la regla (anclar/excluir).
+- **DF-5 (canSubmit):** biométrica/firma se reflejan en el estado del paso pero NO vetan `canSubmit` en matrícula (se preservó test pre-existente). Revisar si el submit debe bloquearse hasta identidad aprobada.
+
 ## Deuda heredada validada (de planes previos)
 
 D-199-* (auth stub, reference_number no atómico, RowVersion inactivo), D-200-* (validación required client-side, rehidratación borrador, GUIDs dev hardcodeados), D-201-* (mismatch config Verifik prod, cobertura transporte HTTP). Se arrastran; se abordarán donde cada slice las toque.
