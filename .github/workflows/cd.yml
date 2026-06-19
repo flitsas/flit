@@ -2,7 +2,7 @@ name: CD - Build & Deploy to VPS
 
 on:
   push:
-    branches: [develop]
+    branches: [release, staging, develop]
   workflow_dispatch:
 
 concurrency:
@@ -16,14 +16,85 @@ permissions:
 env:
   REGISTRY: ghcr.io
   # Nombres de imagen UNIFICADOS y con prefijo de registry ghcr.io/ (GHCR), igual que
-  # el pull del docker-compose.prod.yml en el VPS.
+  # el pull del docker-compose.prod.yml en el VPS. El ambiente se diferencia por TAG
+  # (dev/qa/pdn), no por nombre de repo.
   CORE_API_IMAGE: ghcr.io/flitsas/flitdev/core-api
   FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
 
 jobs:
+  # ── Resolver ambiente segun la rama ─────────────────────────────────────────
+  # develop -> dev, staging -> qa, release -> pdn.
+  # Centraliza el mapeo rama -> {ambiente, dominios, tag} en un solo lugar.
+  setup:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.env.outputs.env_name }}
+      front_domain: ${{ steps.env.outputs.front_domain }}
+      api_domain: ${{ steps.env.outputs.api_domain }}
+      image_tag: ${{ steps.env.outputs.image_tag }}
+      deploy_tag: ${{ steps.env.outputs.deploy_tag }}
+      front_port: ${{ steps.env.outputs.front_port }}
+      gateway_port: ${{ steps.env.outputs.gateway_port }}
+      core_port: ${{ steps.env.outputs.core_port }}
+      python_port: ${{ steps.env.outputs.python_port }}
+    steps:
+      - name: Map branch to environment
+        id: env
+        run: |
+          # Puertos por ambiente: DEV 40xx, QA 50xx, PDN 60xx (front/gateway/core/python).
+          case "${{ github.ref_name }}" in
+            release)
+              env_name=pdn
+              front_domain=pdn.flitsas.online
+              api_domain=api.pdn.flitsas.online
+              image_tag=pdn
+              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012
+              ;;
+            staging)
+              env_name=qa
+              front_domain=qa.flitsas.online
+              api_domain=api.qa.flitsas.online
+              image_tag=qa
+              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012
+              ;;
+            develop)
+              env_name=dev
+              front_domain=dev.flitsas.online
+              api_domain=api.dev.flitsas.online
+              image_tag=dev
+              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012
+              ;;
+            *)
+              echo "::error::Rama no soportada para deploy: ${{ github.ref_name }}"
+              exit 1
+              ;;
+          esac
+          # Tag con el que se DESPLIEGA (lo que el VPS hace pull):
+          #   PDN -> sha-<commit> inmutable (rollback determinista en produccion).
+          #   DEV/QA -> tag movil del ambiente (siempre lo ultimo de la rama).
+          if [ "$env_name" = "pdn" ]; then
+            deploy_tag="sha-${GITHUB_SHA}"
+          else
+            deploy_tag="$image_tag"
+          fi
+          {
+            echo "env_name=$env_name"
+            echo "front_domain=$front_domain"
+            echo "api_domain=$api_domain"
+            echo "image_tag=$image_tag"
+            echo "deploy_tag=$deploy_tag"
+            echo "front_port=$front_port"
+            echo "gateway_port=$gateway_port"
+            echo "core_port=$core_port"
+            echo "python_port=$python_port"
+          } >> "$GITHUB_OUTPUT"
+          echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag"
+
   build-core-api:
     name: Build & push core-api (.NET) image
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -47,8 +118,9 @@ jobs:
         with:
           images: ${{ env.CORE_API_IMAGE }}
           tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push core-api
         uses: docker/build-push-action@v6
@@ -63,6 +135,7 @@ jobs:
 
   build-frontend:
     name: Build & push frontend image
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -86,8 +159,9 @@ jobs:
         with:
           images: ${{ env.FRONTEND_IMAGE }}
           tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -97,15 +171,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # La URL del API depende del ambiente (api.<env>.flitsas.online).
           build-args: |
-            VITE_API_BASE_URL=https://api.orca.flitsas.com/api/v1
-            VITE_TRASPASOS_API_BASE_URL=https://api.orca.flitsas.com/api/v1/procedures
+            VITE_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1
+            VITE_TRASPASOS_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1/procedures
             VITE_DEV_USER_ID=01900000-100b-7001-8001-000000000001
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
   build-python-ml:
     name: Build & push python-ml image
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -129,8 +205,9 @@ jobs:
         with:
           images: ${{ env.PYTHON_ML_IMAGE }}
           tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
 
       - name: Build and push python-ml
         uses: docker/build-push-action@v6
@@ -144,30 +221,32 @@ jobs:
           cache-to: type=gha,mode=max,scope=python-ml
 
   deploy-to-vps:
-    name: Deploy to VPS
-    needs: [build-core-api, build-frontend, build-python-ml]
+    name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
+    needs: [setup, build-core-api, build-frontend, build-python-ml]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # GitHub Environment por ambiente: cada uno (dev/qa/pdn) tiene SUS PROPIOS secrets
+    # (HOSTINGER_SSH_*, HOSTINGER_DEPLOY_PATH, GHCR_PAT). Asi un mismo workflow despliega
+    # al VPS correcto segun la rama.
     environment:
-      name: production
-      url: ${{ vars.PUBLIC_DOMAIN && format('https://{0}', vars.PUBLIC_DOMAIN) || '' }}
+      name: ${{ needs.setup.outputs.env_name }}
+      url: https://${{ needs.setup.outputs.front_domain }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Copia robusta via appleboy/scp-action (mismo manejo de clave/host-key que el
+      # paso de deploy). Crea el directorio destino automaticamente.
       - name: Copy compose file to VPS
-        run: |
-          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ secrets.HOSTINGER_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -i /tmp/deploy_key ${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }} \
-            "mkdir -p ${{ secrets.HOSTINGER_DEPLOY_PATH }}"
-          scp -i /tmp/deploy_key \
-            docker-compose.prod.yml \
-            ${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }}:${{ secrets.HOSTINGER_DEPLOY_PATH }}/docker-compose.prod.yml
-          rm -f /tmp/deploy_key
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: 22
+          source: docker-compose.prod.yml
+          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -179,6 +258,16 @@ jobs:
           script: |
             set -euo pipefail
             cd "${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+
+            # Tag + puertos segun ambiente (override del .env del VPS).
+            # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
+            export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
+            export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
+            export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
+            export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
 
             # Authenticate to GHCR on the VPS to pull private images
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -195,9 +284,9 @@ jobs:
             sleep 15
             ok=0
             for i in 1 2 3 4 5 6; do
-              # Front (4001) + API publica del gateway (4002) deben responder.
-              if curl -fsS http://127.0.0.1:4001/ > /dev/null \
-                 && curl -fsS http://127.0.0.1:4002/health > /dev/null; then
+              # Front + API publica del gateway (puertos del ambiente) deben responder.
+              if curl -fsS http://127.0.0.1:${{ needs.setup.outputs.front_port }}/ > /dev/null \
+                 && curl -fsS http://127.0.0.1:${{ needs.setup.outputs.gateway_port }}/health > /dev/null; then
                 echo "Health check OK (attempt $i)"
                 ok=1
                 break
@@ -215,11 +304,11 @@ jobs:
 
       - name: Notify success
         if: success()
-        run: echo "Deploy to production succeeded."
+        run: echo "Deploy a ${{ needs.setup.outputs.env_name }} (https://${{ needs.setup.outputs.front_domain }}) exitoso."
 
       - name: Notify failure
         if: failure()
         run: |
-          echo "Deploy FAILED. Check logs above."
-          echo "Manual rollback: ssh into VPS and run:"
+          echo "Deploy a ${{ needs.setup.outputs.env_name }} FALLIDO. Revisa los logs arriba."
+          echo "Rollback manual: ssh al VPS y ejecuta:"
           echo "  cd <deploy-path> && docker compose down && docker compose up -d"
