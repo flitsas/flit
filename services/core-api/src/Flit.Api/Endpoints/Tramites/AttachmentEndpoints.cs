@@ -65,6 +65,26 @@ internal static class AttachmentEndpoints
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceAttachments");
 
+        // GET descarga del binario de un adjunto (DF-1) -> stream con Content-Disposition: attachment
+        group.MapGet("/instances/{id:guid}/attachments/{attachmentId:guid}/download", async (
+            Guid id,
+            Guid attachmentId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            DownloadAttachmentHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, attachmentId, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
+                "file_missing" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment file not found."),
+                _ => Results.File(result!.Content, result.Mimetype, result.Filename),
+            };
+        }).WithName("DownloadProcedureInstanceAttachment");
+
         // DELETE adjunto -> 204
         group.MapDelete("/instances/{id:guid}/attachments/{attachmentId:guid}", async (
             Guid id,

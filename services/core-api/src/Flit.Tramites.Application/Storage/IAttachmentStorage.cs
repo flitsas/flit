@@ -26,4 +26,10 @@ public interface IAttachmentStorage
 
     /// <summary>Borra el archivo apuntado por <paramref name="storagePath"/> (no-op si no existe).</summary>
     void Delete(string storagePath);
+
+    /// <summary>
+    /// Abre el contenido del archivo apuntado por <paramref name="storagePath"/> para lectura/streaming.
+    /// Devuelve <c>null</c> si el archivo no existe (el adjunto está en BD pero el binario se perdió).
+    /// </summary>
+    Stream? OpenRead(string storagePath);
 }

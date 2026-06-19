@@ -46,8 +46,22 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         sb.AppendLine($"Tipología: {data.TipologiaCodigo ?? "-"}");
         sb.AppendLine();
         sb.AppendLine("-- Vehículo --");
-        sb.AppendLine($"VIN: {data.Vin ?? "-"}");
-        sb.AppendLine($"Placa: {data.Placa ?? "-"}");
+        var v = data.Vehiculo;
+        sb.AppendLine($"Marca: {v.Marca ?? "-"}");
+        sb.AppendLine($"Línea: {v.Linea ?? "-"}");
+        sb.AppendLine($"Modelo (año): {v.Modelo ?? "-"}");
+        sb.AppendLine($"Color: {v.Color ?? "-"}");
+        sb.AppendLine($"Clase: {v.Clase ?? "-"}");
+        sb.AppendLine($"Combustible: {v.Combustible ?? "-"}");
+        sb.AppendLine($"Cilindraje: {v.Cilindraje ?? "-"}");
+        sb.AppendLine($"VIN: {v.Vin ?? "-"}");
+        sb.AppendLine($"Placa: {v.Placa ?? "-"}");
+        sb.AppendLine();
+        sb.AppendLine("-- Organismo de tránsito --");
+        var o = data.Organismo;
+        sb.AppendLine($"Código: {o.Codigo ?? "-"}");
+        sb.AppendLine($"Nombre: {o.Nombre ?? "-"}");
+        sb.AppendLine($"Ciudad: {o.Ciudad ?? "-"}");
         sb.AppendLine();
         sb.AppendLine("-- Partes --");
         foreach (var p in data.Partes)

@@ -61,6 +61,8 @@ public sealed class BiometricaHandlerTests
         }
 
         public void Delete(string storagePath) { }
+
+        public Stream? OpenRead(string storagePath) => null;
     }
 
     private static ProcedureInstance Instance(

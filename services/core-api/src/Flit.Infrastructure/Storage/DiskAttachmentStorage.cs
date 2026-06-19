@@ -82,6 +82,19 @@ internal sealed class DiskAttachmentStorage : IAttachmentStorage
             File.Delete(fullPath);
     }
 
+    public Stream? OpenRead(string storagePath)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+            return null;
+
+        var fullPath = Path.GetFullPath(Path.Combine(_root, storagePath));
+        EnsureWithinRoot(fullPath);
+
+        return File.Exists(fullPath)
+            ? new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
+            : null;
+    }
+
     private string ResolveInstanceDir(Guid instanceId)
     {
         // El Guid en formato "D" no contiene separadores de ruta; aun así forzamos saneo.

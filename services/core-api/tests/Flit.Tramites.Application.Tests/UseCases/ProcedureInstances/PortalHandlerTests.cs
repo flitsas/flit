@@ -46,6 +46,8 @@ public sealed class PortalHandlerTests
         }
 
         public void Delete(string storagePath) { }
+
+        public Stream? OpenRead(string storagePath) => null;
     }
 
     private static ProcedureInstance Instance(string tipologia = "traspaso_standard") =>

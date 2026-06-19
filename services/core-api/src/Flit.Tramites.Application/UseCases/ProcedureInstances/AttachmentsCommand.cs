@@ -137,6 +137,43 @@ public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
     }
 }
 
+/// <summary>Contenido binario de un adjunto, listo para streamear en la respuesta.</summary>
+public sealed record AttachmentDownload(Stream Content, string Mimetype, string Filename);
+
+/// <summary>
+/// Resuelve un adjunto de la instancia/tenant y abre su binario para descarga (DF-1). Sirve docs
+/// subidos por el usuario y los generados por el sistema (FUR, certificado de identidad). No exige
+/// <c>draft</c> (descargable en cualquier estado). Errores: instancia o adjunto inexistente → not_found;
+/// binario perdido en disco → file_missing.
+/// </summary>
+public sealed class DownloadAttachmentHandler(
+    IProcedureInstanceRepository repo,
+    IAttachmentStorage storage)
+{
+    public async Task<(AttachmentDownload? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid attachmentId,
+        CancellationToken ct = default)
+    {
+        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (null, "not_found");
+
+        var attachment = instance.Attachments.FirstOrDefault(a => a.Id == attachmentId);
+        if (attachment is null)
+            return (null, "not_found");
+
+        var stream = storage.OpenRead(attachment.StoragePath);
+        if (stream is null)
+            return (null, "file_missing");
+
+        var filename = string.IsNullOrWhiteSpace(attachment.Filename) ? attachment.Tipo : attachment.Filename;
+        var mime = string.IsNullOrWhiteSpace(attachment.Mimetype) ? "application/octet-stream" : attachment.Mimetype;
+        return (new AttachmentDownload(stream, mime, filename), null);
+    }
+}
+
 /// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,

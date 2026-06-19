@@ -13,7 +13,7 @@ public sealed class SubmitProcedureInstanceHandler(
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -23,6 +23,12 @@ public sealed class SubmitProcedureInstanceHandler(
         var procedureType = await typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct);
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
             return (null, "not_published");
+
+        // Hard-gate server-side ANTES de transicionar: re-valida los gates del wizard (no se confía
+        // en el cliente). Devuelve el primer código de error (mapeado a 409 en el endpoint).
+        var gateErrors = SubmitGate.Evaluate(instance);
+        if (gateErrors.Count > 0)
+            return (null, gateErrors[0]);
 
         var now = DateTimeOffset.UtcNow;
         instance.Status = ProcedureInstanceStatus.Submitted;

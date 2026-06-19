@@ -16,12 +16,13 @@ public sealed class FurHandlerTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
+    private readonly IIdentityCertificateGenerator _identityGenerator = new MockIdentityCertificateGenerator();
     private readonly FakeStorage _storage = new();
     private readonly GenerarFurHandler _handler;
 
     public FurHandlerTests()
     {
-        _handler = new GenerarFurHandler(_repo, _generator, _storage);
+        _handler = new GenerarFurHandler(_repo, _generator, _identityGenerator, _storage);
     }
 
     private sealed class FakeStorage : IAttachmentStorage
@@ -40,6 +41,8 @@ public sealed class FurHandlerTests
         }
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
+
+        public Stream? OpenRead(string storagePath) => null;
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
@@ -54,6 +57,14 @@ public sealed class FurHandlerTests
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+
+    /// <summary>Setea el organismo de tránsito (transit_office_code) para satisfacer el gate.</summary>
+    private static void WithOrganismo(ProcedureInstance instance) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureInstanceId = instance.Id,
+            FieldKey = "transit_office_code", ValueText = "11001000", Source = "user",
+        });
 
     private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
         new()
@@ -98,6 +109,7 @@ public sealed class FurHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
         instance.BiometricValidations.Add(Bio("comprador"));
         instance.BiometricValidations.Add(Bio("vendedor"));
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
@@ -105,11 +117,12 @@ public sealed class FurHandlerTests
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Documents.Should().HaveCount(2);
-        result.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "compraventa"]);
-        instance.Attachments.Should().HaveCount(2);
+        // FUR + certificado de identidad + compraventa (traspaso).
+        result!.Documents.Should().HaveCount(3);
+        result.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "certificado_identidad", "compraventa"]);
+        instance.Attachments.Should().HaveCount(3);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
-        _repo.Received(2).Add(Arg.Any<ProcedureInstanceAttachment>());
+        _repo.Received(3).Add(Arg.Any<ProcedureInstanceAttachment>());
         _repo.Received(1).Add(Arg.Any<ProcedureInstanceEvent>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }
@@ -121,13 +134,31 @@ public sealed class FurHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
         instance.BiometricValidations.Add(Bio(parte: "comprador")); // matrícula = comprador
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Documents.Should().ContainSingle().Which.Tipo.Should().Be("fur");
+        // Matrícula: FUR + certificado de identidad (sin compraventa).
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "certificado_identidad"]);
+    }
+
+    [Fact]
+    public async Task Generar_Matricula_WithoutOrganismo_RejectsGate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.BiometricValidations.Add(Bio(parte: "comprador")); // biométrica ok, falta organismo
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().Be("organismo_requerido");
+        _storage.Saved.Should().BeEmpty();
     }
 
     [Fact]
@@ -137,6 +168,7 @@ public sealed class FurHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
         instance.BiometricValidations.Add(Bio(parte: "comprador"));
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
@@ -149,9 +181,9 @@ public sealed class FurHandlerTests
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Documents.Should().ContainSingle();
         _storage.Deleted.Should().Contain("old/fur");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "fur");
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_identidad");
     }
 }
 
@@ -163,8 +195,11 @@ public sealed class MockFurDocumentGeneratorTests
             ReferenceNumber: "TRM-2026-000001",
             Modalidad: "traspaso",
             TipologiaCodigo: "traspaso_standard",
-            Vin: "1HGCM82633A004352",
-            Placa: "ABC123",
+            Vehiculo: new VehiculoDatos(
+                Marca: "TOYOTA", Linea: "COROLLA", Modelo: "2024", Color: "ROJO",
+                Clase: "AUTOMOVIL", Combustible: "GASOLINA", Cilindraje: "1800",
+                Vin: "1HGCM82633A004352", Placa: "ABC123"),
+            Organismo: new OrganismoTransito(Codigo: "11001000", Nombre: "SDM Bogotá", Ciudad: "Bogotá"),
             Partes: [new DocumentParte("comprador", "Juan", "123", "j@x.com")],
             ValorVenta: 50000m,
             Causal: "venta",
@@ -180,8 +215,33 @@ public sealed class MockFurDocumentGeneratorTests
         var content = Encoding.UTF8.GetString(doc.Content);
         content.Should().Contain("TRM-2026-000001");
         content.Should().Contain("1HGCM82633A004352");
+        content.Should().Contain("TOYOTA");
+        content.Should().Contain("COROLLA");
+        content.Should().Contain("SDM Bogotá");
+        content.Should().Contain("11001000");
         content.Should().Contain("Juan");
         content.Should().Contain("MOCK FUR");
+    }
+
+    [Fact]
+    public void GenerateIdentityCertificate_EmbedsBuyerAndScore()
+    {
+        var doc = new MockIdentityCertificateGenerator().GenerateIdentityCertificate(
+            new IdentityCertificateData(
+                ProcedureInstanceId: Guid.NewGuid(),
+                ReferenceNumber: "TRM-2026-000001",
+                CompradorNombre: "Juan Pérez",
+                CompradorDocumento: "123",
+                Score: 95,
+                Resultado: "APROBADO"));
+
+        doc.Tipo.Should().Be("certificado_identidad");
+        doc.Mimetype.Should().Be("text/plain");
+        var content = Encoding.UTF8.GetString(doc.Content);
+        content.Should().Contain("Juan Pérez");
+        content.Should().Contain("123");
+        content.Should().Contain("95");
+        content.Should().Contain("APROBADO");
     }
 
     [Fact]

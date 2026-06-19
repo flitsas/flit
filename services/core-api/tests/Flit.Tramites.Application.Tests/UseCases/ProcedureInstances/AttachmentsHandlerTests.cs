@@ -18,6 +18,7 @@ public sealed class AttachmentsHandlerTests
     private readonly UploadAttachmentHandler _upload;
     private readonly ListAttachmentsHandler _list;
     private readonly DeleteAttachmentHandler _delete;
+    private readonly DownloadAttachmentHandler _download;
     private readonly GetChecklistHandler _checklist;
 
     public AttachmentsHandlerTests()
@@ -25,6 +26,7 @@ public sealed class AttachmentsHandlerTests
         _upload = new UploadAttachmentHandler(_repo, _storage);
         _list = new ListAttachmentsHandler(_repo);
         _delete = new DeleteAttachmentHandler(_repo, _storage);
+        _download = new DownloadAttachmentHandler(_repo, _storage);
         _checklist = new GetChecklistHandler(_repo);
     }
 
@@ -33,6 +35,7 @@ public sealed class AttachmentsHandlerTests
     {
         public List<string> Saved { get; } = [];
         public List<string> Deleted { get; } = [];
+        public Dictionary<string, byte[]> Contents { get; } = [];
 
         public async Task<StoredFile> SaveAsync(
             Guid procedureInstanceId, string tipo, string originalFilename, Stream content, CancellationToken ct = default)
@@ -41,10 +44,14 @@ public sealed class AttachmentsHandlerTests
             await content.CopyToAsync(ms, ct);
             var path = $"{procedureInstanceId:D}/{tipo}_{originalFilename}";
             Saved.Add(path);
+            Contents[path] = ms.ToArray();
             return new StoredFile(path, "deadbeef", ms.Length);
         }
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
+
+        public Stream? OpenRead(string storagePath) =>
+            Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null;
     }
 
     private static ProcedureInstance Instance(
@@ -305,6 +312,55 @@ public sealed class AttachmentsHandlerTests
         var error = await _delete.HandleAsync(id, tenant, Guid.NewGuid(), ct);
 
         error.Should().Be("not_draft");
+    }
+
+    // ── Download (DF-1) ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Download_HappyPath_StreamsBytesWithMimeAndFilename()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        // Sube un adjunto real para que el FakeStorage guarde su contenido y OpenRead lo devuelva.
+        await _upload.HandleAsync(id, tenant, Pdf(tipo: "factura", name: "doc.pdf"), null, ct);
+        var attachment = instance.Attachments.First();
+
+        var (result, error) = await _download.HandleAsync(id, tenant, attachment.Id, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Mimetype.Should().Be("application/pdf");
+        result.Filename.Should().Be("doc.pdf");
+        using var ms = new MemoryStream();
+        await result.Content.CopyToAsync(ms, ct);
+        Encoding.UTF8.GetString(ms.ToArray()).Should().Be("hello-pdf-content");
+    }
+
+    [Fact]
+    public async Task Download_InstanceNotFound_Returns404()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+
+        var (_, error) = await _download.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        error.Should().Be("not_found");
+    }
+
+    [Fact]
+    public async Task Download_AttachmentNotFound_Returns404()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+
+        var (_, error) = await _download.HandleAsync(id, tenant, Guid.NewGuid(), ct);
+
+        error.Should().Be("not_found");
     }
 
     // ── Checklist ─────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ public sealed record GenerarFurResult(IReadOnlyList<FurDocumentDto> Documents);
 public sealed class GenerarFurHandler(
     IProcedureInstanceRepository repo,
     IFurDocumentGenerator generator,
+    IIdentityCertificateGenerator identityGenerator,
     IAttachmentStorage storage)
 {
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
@@ -42,13 +43,24 @@ public sealed class GenerarFurHandler(
         if (!BiometriaGateOk(instance, esTraspaso))
             return (null, "biometria_gate");
 
-        var data = AssembleData(instance, codigo, esTraspaso);
+        var fv = instance.FieldValues
+            .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
+
+        // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
+        if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
+            return (null, "organismo_requerido");
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(2);
 
-        // FUR siempre. Compraventa solo en traspaso.
-        var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
+        // FUR siempre + certificado de validación de identidad. Compraventa solo en traspaso.
+        var generated = new List<GeneratedDocument>
+        {
+            generator.GenerateFur(data),
+            identityGenerator.GenerateIdentityCertificate(AssembleIdentityData(instance)),
+        };
         if (esTraspaso)
             generated.Add(generator.GenerateCompraventa(data));
 
@@ -121,11 +133,9 @@ public sealed class GenerarFurHandler(
             : Aprobada("comprador");
     }
 
-    private static FurDocumentData AssembleData(ProcedureInstance instance, string? codigo, bool esTraspaso)
+    private static FurDocumentData AssembleData(
+        ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv)
     {
-        var fv = instance.FieldValues
-            .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
-
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
         if (esTraspaso)
@@ -136,17 +146,60 @@ public sealed class GenerarFurHandler(
             .Select(s => $"{s.Parte}/{s.DocTipo}: {s.Sha256 ?? "-"} ({s.FirmadoAt:O})")
             .ToList();
 
+        var vehiculo = new VehiculoDatos(
+            Marca: Get(fv, "vehicle_brand"),
+            Linea: Get(fv, "vehicle_line"),
+            Modelo: Get(fv, "vehicle_year"),
+            Color: Get(fv, "vehicle_color"),
+            Clase: Get(fv, "vehicle_class"),
+            Combustible: Get(fv, "vehicle_fuel"),
+            Cilindraje: Get(fv, "vehicle_engine_displacement"),
+            Vin: Get(fv, "vin"),
+            Placa: Get(fv, "plate"));
+
+        var organismo = new OrganismoTransito(
+            Codigo: Get(fv, "transit_office_code"),
+            Nombre: Get(fv, "transit_office_name"),
+            Ciudad: Get(fv, "transit_office_city"));
+
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
             ReferenceNumber: instance.ReferenceNumber,
             Modalidad: instance.ModalidadEntrada,
             TipologiaCodigo: codigo,
-            Vin: Get(fv, "vin"),
-            Placa: Get(fv, "plate"),
+            Vehiculo: vehiculo,
+            Organismo: organismo,
             Partes: partes,
             ValorVenta: instance.Commercial?.ValorVenta,
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos);
+    }
+
+    /// <summary>
+    /// Datos del certificado de identidad: comprador (de actores) + resultado de la biométrica del
+    /// comprador. Score real si existe; el resultado refleja el estado aprobado de la validación.
+    /// </summary>
+    private static IdentityCertificateData AssembleIdentityData(ProcedureInstance instance)
+    {
+        var comprador = instance.Actors.FirstOrDefault(x =>
+            string.Equals(x.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
+
+        var bio = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.Parte, "comprador", StringComparison.OrdinalIgnoreCase)
+            && v.Estado == BiometricEstados.Aprobado);
+
+        var nombre = comprador?.FullName ?? bio?.Nombre ?? "-";
+        var documento = comprador?.DocumentNumber ?? bio?.Documento ?? "-";
+        // La biométrica del comprador ya está aprobada (gate previo) → score real o 95 por defecto.
+        var score = bio?.Score ?? 95;
+
+        return new IdentityCertificateData(
+            ProcedureInstanceId: instance.Id,
+            ReferenceNumber: instance.ReferenceNumber,
+            CompradorNombre: nombre,
+            CompradorDocumento: documento,
+            Score: score,
+            Resultado: "APROBADO");
     }
 
     private static void AddParte(List<DocumentParte> partes, ProcedureInstance instance, string rol)

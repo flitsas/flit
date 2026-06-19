@@ -32,6 +32,7 @@ internal static class FurEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "biometria_gate" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La biométrica requerida no está aprobada para generar el FUR."),
+                "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de generar el FUR."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments", result),
             };
         }).WithName("GenerarProcedureInstanceFur");

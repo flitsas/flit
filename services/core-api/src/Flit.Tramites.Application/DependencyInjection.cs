@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
+        services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GetChecklistHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
@@ -56,6 +57,7 @@ public static class DependencyInjection
         // se reemplazan por ZapSign / generador PDF real sin tocar los handlers.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
         services.AddSingleton<Documents.IFurDocumentGenerator, Documents.MockFurDocumentGenerator>();
+        services.AddSingleton<Documents.IIdentityCertificateGenerator, Documents.MockIdentityCertificateGenerator>();
         services.AddScoped<SolicitarFirmaHandler>();
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
