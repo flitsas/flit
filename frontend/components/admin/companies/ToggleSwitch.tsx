@@ -14,12 +14,12 @@ export function ToggleSwitch({ id, label, description, checked, onChange }: Togg
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border bg-white px-4 py-3 dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
       <div>
-        <label htmlFor={id} className="text-xs font-semibold">
+        <label htmlFor={id} className="cursor-pointer text-xs font-semibold">
           {label}
         </label>
         {description && <p className="mt-0.5 text-[11px] opacity-60">{description}</p>}
       </div>
-      <span className="relative inline-flex">
+      <label htmlFor={id} className="relative inline-flex shrink-0 cursor-pointer">
         <input
           id={id}
           type="checkbox"
@@ -38,7 +38,7 @@ export function ToggleSwitch({ id, label, description, checked, onChange }: Togg
           className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
           style={{ left: checked ? "calc(100% - 18px)" : "2px" }}
         />
-      </span>
+      </label>
     </div>
   );
 }
