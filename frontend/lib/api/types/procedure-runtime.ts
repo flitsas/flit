@@ -265,3 +265,82 @@ export interface CommercialData {
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
 }
+
+// ── Biométrica (Slice 6) ────────────────────────────────────────────
+// Contrato FIJO acordado con backend:
+//   POST /api/v1/tramites/instances/{id}/biometric  -> IniciarBiometriaResult (201)
+//   GET  /api/v1/tramites/instances/{id}/biometric  -> { validations }
+//   GET  /api/v1/public/biometric/{token}           -> BiometriaPublicView
+//   POST /api/v1/public/biometric/{token} (multipart: rostro|cedula_frontal|cedula_reverso)
+//        -> CompletarBiometriaResult
+// La parte es null en matrícula (única parte = comprador) y 'comprador'|'vendedor'
+// en traspaso. El status/gating lo decide el wizard server-driven (no se calcula aquí).
+
+/** Estados posibles de una validación biométrica (espejo de BiometricEstados). */
+export type BiometricEstado =
+  | 'enviado'
+  | 'en_proceso'
+  | 'aprobado'
+  | 'rechazado'
+  | 'expirado';
+
+/** Parte a la que pertenece la validación. null = matrícula (comprador único). */
+export type BiometricParte = 'comprador' | 'vendedor';
+
+/** Tipos de documento admitidos por la captura biométrica. */
+export type BiometricTipoDoc = 'CC' | 'CE' | 'TI' | 'PPT' | 'PAS';
+
+/** Espejo de BiometricValidationDto (vista del gestor autenticado). */
+export interface BiometricValidation {
+  id: string;
+  parte: BiometricParte | null;
+  nombre: string;
+  tipoDoc: string;
+  documento: string;
+  email: string;
+  estado: BiometricEstado;
+  intentos: number;
+  maxIntentos: number;
+  score: number | null;
+  expiresAt: string;
+  validadoAt: string | null;
+  expired: boolean;
+}
+
+/** Entrada para iniciar una biométrica (espejo de IniciarBiometriaInput). */
+export interface IniciarBiometriaInput {
+  parte?: BiometricParte | null;
+  nombre: string;
+  tipoDoc: string;
+  documento: string;
+  email: string;
+}
+
+/** Resultado de iniciar: incluye el token CRUDO y el path del magic-link. */
+export interface IniciarBiometriaResult {
+  validation: BiometricValidation;
+  token: string;
+  magicLinkPath: string;
+}
+
+/** Respuesta de GET /instances/{id}/biometric. */
+export interface BiometricValidationsResponse {
+  validations: BiometricValidation[];
+}
+
+/** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */
+export interface BiometriaPublicView {
+  estado: BiometricEstado;
+  parte: BiometricParte | null;
+  nombre: string;
+  intentos: number;
+  maxIntentos: number;
+  expired: boolean;
+}
+
+/** Resultado de completar la biométrica (espejo de CompletarBiometriaResult). */
+export interface CompletarBiometriaResult {
+  estado: BiometricEstado;
+  score: number;
+  motivo: string;
+}

@@ -2,11 +2,17 @@ import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
   ActorsResponse,
   AttachmentsResponse,
+  BiometriaPublicView,
+  BiometricValidation,
+  BiometricValidationsResponse,
   ChecklistView,
   CommercialData,
+  CompletarBiometriaResult,
   ConsultationResult,
   CreateInstanceRequest,
   FieldValueInput,
+  IniciarBiometriaInput,
+  IniciarBiometriaResult,
   PreflightSnapshot,
   ProcedureActor,
   ProcedureAttachment,
@@ -317,4 +323,69 @@ export const tramitesClient = {
         body: JSON.stringify(data),
       },
     ),
+
+  // ── Biométrica (Slice 6) — lado gestor autenticado ──────────────
+  // POST iniciar una validación biométrica de una parte. Devuelve el token
+  // CRUDO + magicLinkPath (solo aquí) para construir el enlace del participante.
+  iniciarBiometric: (
+    instanceId: string,
+    input: IniciarBiometriaInput,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<IniciarBiometriaResult>(
+      `/api/v1/tramites/instances/${instanceId}/biometric`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  // GET lista/estado de las validaciones de la instancia. Desempaqueta a arreglo.
+  listBiometric: async (
+    instanceId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<BiometricValidation[]> => {
+    const res = await request<BiometricValidationsResponse>(
+      `/api/v1/tramites/instances/${instanceId}/biometric`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.validations ?? [];
+  },
+};
+
+/**
+ * Cliente PÚBLICO de la biométrica (magic-link). Sin auth ni tenant header:
+ * el token de alta entropía es la credencial. Usado por la página /biometric/[token].
+ */
+export const biometricPublicClient = {
+  // GET info de la tarea por token (vista pública sin PII sensible).
+  getByToken: (token: string) =>
+    request<BiometriaPublicView>(
+      `/api/v1/public/biometric/${encodeURIComponent(token)}`,
+    ),
+
+  // POST completar con las 3 fotos (multipart). El browser fija el boundary;
+  // NO se setea Content-Type. Nombres de campo EXACTOS del backend:
+  // rostro | cedula_frontal | cedula_reverso.
+  complete: async (
+    token: string,
+    photos: { rostro: File; cedulaFrontal: File; cedulaReverso: File },
+  ): Promise<CompletarBiometriaResult> => {
+    const form = new FormData();
+    form.append('rostro', photos.rostro);
+    form.append('cedula_frontal', photos.cedulaFrontal);
+    form.append('cedula_reverso', photos.cedulaReverso);
+    const res = await fetch(
+      `${BASE_URL}/api/v1/public/biometric/${encodeURIComponent(token)}`,
+      { method: 'POST', body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      );
+    }
+    return (await res.json()) as CompletarBiometriaResult;
+  },
 };

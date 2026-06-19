@@ -23,7 +23,9 @@ const REASON_COPY: Record<string, string> = {
   comercial_incompleto: 'Faltan datos comerciales (valor, causal, impuestos)',
   // identidad / firma (fases próximas)
   identidad_pendiente: 'Validación biométrica pendiente',
+  pendiente_biometria: 'Validación biométrica pendiente',
   fur_pendiente: 'Firma del FUR pendiente',
+  pendiente_firma: 'Firma del FUR pendiente',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -33,7 +35,9 @@ const BLOCKER_COPY: Record<string, string> = {
   actores_incompletos: 'Faltan datos de los participantes',
   comercial_incompleto: 'Faltan datos comerciales',
   identidad_pendiente: 'Validación biométrica pendiente',
+  pendiente_biometria: 'Validación biométrica pendiente',
   fur_pendiente: 'Firma del FUR pendiente',
+  pendiente_firma: 'Firma del FUR pendiente',
   pasos_incompletos: 'Hay pasos sin completar',
 };
 

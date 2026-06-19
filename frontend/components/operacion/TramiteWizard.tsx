@@ -8,6 +8,7 @@ import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import { BiometricStep } from './BiometricStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
@@ -657,14 +658,31 @@ function StepBody({
     case 'comercial':
       return <CommercialForm instanceId={instanceId} onSaved={onRefresh} />;
 
+    // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
     case 'identidad':
       return (
-        <PendingStep message="Pendiente (biométrica — próxima fase)." />
+        <BiometricStep
+          instanceId={instanceId}
+          modalidad={modalidad}
+          onRefresh={onRefresh}
+        />
       );
 
+    // FUR (matrícula 5 / traspaso 6). La firma (Slice 7) sigue diferida, pero el
+    // paso requiere la biométrica de las partes (Slice 6): en traspaso la
+    // capturamos aquí (comprador + vendedor); la firma queda pendiente.
     case 'fur':
-      return (
-        <PendingStep message="Pendiente (firma — próxima fase)." />
+      return modalidad === 'traspaso' ? (
+        <div className="space-y-6">
+          <BiometricStep
+            instanceId={instanceId}
+            modalidad={modalidad}
+            onRefresh={onRefresh}
+          />
+          <PendingStep message="Firma del FUR — próxima fase." />
+        </div>
+      ) : (
+        <PendingStep message="Firma del FUR — próxima fase." />
       );
 
     default:
