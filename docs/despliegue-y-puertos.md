@@ -417,17 +417,36 @@ Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
 > colisión de puertos (cada stack escucha en su rango y se aísla con
 > `COMPOSE_PROJECT_NAME`).
 
-### 6.4 Secrets de GitHub (por *Environment*)
+### 6.4 Secrets de GitHub
 
-El job `deploy-to-vps` usa **GitHub Environments** (`dev`, `qa`, `pdn`). Crea los 3
-entornos en *Settings → Environments* y define en **cada uno** sus secrets (así el
-mismo workflow apunta al VPS correcto según la rama):
+El job `deploy-to-vps` usa **GitHub Environments** para seleccionar la carpeta destino
+del VPS según la rama. Los nombres de los Environments coinciden con la rama (no con el
+`env_name` interno dev/qa/pdn): el workflow mapea `rama → Environment` con el output
+`gh_env`.
 
-| Nombre | Tipo | Para qué |
-|--------|------|----------|
-| `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | secret | Acceso SSH al VPS de ese ambiente |
-| `HOSTINGER_DEPLOY_PATH` | secret | Carpeta del VPS donde viven compose + `.env` |
-| `GHCR_PAT` | secret | Login a GHCR en el VPS para `pull` (scope `read:packages`) |
+| Rama (push) | `env_name` (tags/display) | GitHub Environment (secrets) |
+|-------------|---------------------------|------------------------------|
+| `develop`   | `dev`                     | `develop`                    |
+| `staging`   | `qa`                      | `staging`                    |
+| `release`   | `pdn`                     | `production`                 |
+
+**Secrets de Repositorio** (*Settings → Secrets and variables → Actions → Repository
+secrets*) — compartidos por todos los ambientes (un solo VPS):
+
+| Nombre | Para qué |
+|--------|----------|
+| `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | Acceso SSH al VPS |
+| `GHCR_PAT` | Login a GHCR en el VPS para `pull` (scope `read:packages`) |
+
+**Secrets de Environment** (*Settings → Environments → {develop, staging, production}*)
+— específicos por ambiente:
+
+| Nombre | Para qué |
+|--------|----------|
+| `HOSTINGER_DEPLOY_PATH` | Carpeta del VPS donde viven compose + `.env` de ESE ambiente |
+
+> Si algún día separas en varios VPS (uno por ambiente), mueve también
+> `HOSTINGER_SSH_*` a secrets de Environment para que cada rama apunte a su host.
 
 > La URL del entorno en GitHub se arma sola desde el dominio del front (`front_domain`),
 > ya no se usa la variable `PUBLIC_DOMAIN`.
@@ -443,8 +462,9 @@ mismo workflow apunta al VPS correcto según la rama):
 5. `docker login ghcr.io` con el `GHCR_PAT`.
 6. Crear el `.env` (§6.1) con el `CORS_ORIGIN` del front de ese ambiente y `chmod 600 .env`.
 
-**B) Configurar GitHub (una sola vez):** crear los Environments `dev`/`qa`/`pdn` con sus
-secrets (§6.4).
+**B) Configurar GitHub (una sola vez):** crear los Environments `develop`/`staging`/
+`production` con su secret `HOSTINGER_DEPLOY_PATH`, y los Repository secrets compartidos
+(§6.4).
 
 **C) Deploy continuo (automático):** un `push` a `develop`/`staging`/`release` dispara el
 CD, que:
