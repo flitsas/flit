@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
@@ -28,6 +29,9 @@ public static class DependencyInjection
 
         // HU #10189 — listado de compañías.
         services.AddScoped<ListCompaniesHandler>();
+
+        // Alta de compañías (botón "Crear compañía" en la consola, #10118).
+        services.AddScoped<CreateCompanyHandler>();
 
         // HU #10190 — configuración operativa + audit log.
         services.AddScoped<GetTenantSettingsHandler>();
