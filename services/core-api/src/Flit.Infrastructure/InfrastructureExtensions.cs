@@ -31,6 +31,7 @@ public static class InfrastructureExtensions
             .EnableDetailedErrors(false));
 
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
+        services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
 
         return services;

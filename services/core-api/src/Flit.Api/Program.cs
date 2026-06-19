@@ -1,6 +1,7 @@
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
+using Flit.Api.Endpoints.Tramites;
 using Flit.Infrastructure;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication;
@@ -43,5 +44,6 @@ app.UseAuthorization();
 
 app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
+app.MapTramitesInstanceEndpoints();
 
 app.Run();

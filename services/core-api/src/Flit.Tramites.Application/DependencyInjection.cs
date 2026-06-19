@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.Catalogs;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,11 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureStepsHandler>();
         services.AddScoped<UpsertProcedureStepsHandler>();
         services.AddScoped<GetProcedureTypeConfigurationHandler>();
+
+        services.AddScoped<CreateProcedureInstanceHandler>();
+        services.AddScoped<GetProcedureInstanceHandler>();
+        services.AddScoped<PatchFieldValuesHandler>();
+        services.AddScoped<SubmitProcedureInstanceHandler>();
 
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();
