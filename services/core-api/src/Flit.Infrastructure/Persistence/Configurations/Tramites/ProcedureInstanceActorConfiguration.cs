@@ -9,7 +9,8 @@ internal sealed class ProcedureInstanceActorConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<ProcedureInstanceActor> builder)
     {
-        builder.ToTable("procedure_instance_actors", SchemaNames.Tramites);
+        builder.ToTable("procedure_instance_actors", SchemaNames.Tramites, t =>
+            t.HasTrigger("tr_procedure_instance_actors_audit"));
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

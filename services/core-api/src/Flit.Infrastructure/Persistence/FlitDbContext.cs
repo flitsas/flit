@@ -34,6 +34,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<ProcedureInstanceFieldValue> ProcedureInstanceFieldValues => Set<ProcedureInstanceFieldValue>();
     public DbSet<ProcedureInstanceStatusHistory> ProcedureInstanceStatusHistories => Set<ProcedureInstanceStatusHistory>();
 
+    // Tramites — rework núcleo (Slice 1): attachments, preflight, comercial, eventos
+    public DbSet<ProcedureInstanceAttachment> ProcedureInstanceAttachments => Set<ProcedureInstanceAttachment>();
+    public DbSet<ProcedureInstancePreflightSnapshot> ProcedureInstancePreflightSnapshots => Set<ProcedureInstancePreflightSnapshot>();
+    public DbSet<ProcedureInstanceCommercial> ProcedureInstanceCommercials => Set<ProcedureInstanceCommercial>();
+    public DbSet<ProcedureInstanceEvent> ProcedureInstanceEvents => Set<ProcedureInstanceEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

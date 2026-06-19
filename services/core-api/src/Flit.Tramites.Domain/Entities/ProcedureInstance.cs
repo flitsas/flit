@@ -7,6 +7,12 @@ public sealed class ProcedureInstance
     public Guid ProcedureTypeId { get; set; }
     public string ReferenceNumber { get; set; } = string.Empty;
     public string Status { get; set; } = Enums.ProcedureInstanceStatus.Draft;
+
+    // Rework trámites (Slice 1) — modalidad/tipología/checklist explícitos
+    public string ModalidadEntrada { get; set; } = "matricula_inicial";
+    public string? TipologiaCodigo { get; set; }
+    public string ChecklistEstado { get; set; } = "{}";
+
     public Guid? TransitOfficeId { get; set; }
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
@@ -24,4 +30,8 @@ public sealed class ProcedureInstance
     public ICollection<ProcedureInstanceActor> Actors { get; set; } = [];
     public ICollection<ProcedureInstanceFieldValue> FieldValues { get; set; } = [];
     public ICollection<ProcedureInstanceStatusHistory> StatusHistory { get; set; } = [];
+    public ICollection<ProcedureInstanceAttachment> Attachments { get; set; } = [];
+    public ICollection<ProcedureInstancePreflightSnapshot> PreflightSnapshots { get; set; } = [];
+    public ICollection<ProcedureInstanceEvent> Events { get; set; } = [];
+    public ProcedureInstanceCommercial? Commercial { get; set; }
 }

@@ -9,7 +9,11 @@ internal sealed class ProcedureInstanceFieldValueConfiguration : IEntityTypeConf
 {
     public void Configure(EntityTypeBuilder<ProcedureInstanceFieldValue> builder)
     {
-        builder.ToTable("procedure_instance_field_values", SchemaNames.Tramites);
+        builder.ToTable("procedure_instance_field_values", SchemaNames.Tramites, t =>
+        {
+            t.HasTrigger("tr_procedure_instance_field_values_audit");
+            t.HasTrigger("tr_procedure_instance_field_values_immutable");
+        });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

@@ -9,7 +9,8 @@ internal sealed class ProcedureInstanceStatusHistoryConfiguration : IEntityTypeC
 {
     public void Configure(EntityTypeBuilder<ProcedureInstanceStatusHistory> builder)
     {
-        builder.ToTable("procedure_instance_status_history", SchemaNames.Tramites);
+        builder.ToTable("procedure_instance_status_history", SchemaNames.Tramites, t =>
+            t.HasTrigger("tr_procedure_instance_status_history_audit"));
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
