@@ -18,6 +18,8 @@ tags:
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
   - name: Admin · Documentos
     description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
+  - name: Admin · Documentos por Trámite
+    description: Asociación de tipos de documento a tipos de trámite (rol SuperAdmin).
 
 paths:
   /api/v1/admin/companies/index:
@@ -643,6 +645,170 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/procedure-document-requirements:
+    post:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementCreate
+      summary: Asocia un documento a un tipo de trámite (RF05)
+      description: >
+        Crea la asociación (trámite, documento) con su orden default y
+        obligatoriedad. El tipo de trámite debe existir (404 si no), el tipo de
+        documento debe existir (404) y estar activo (422 si está inactivo), y el
+        par debe ser único (422 si duplicado). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureDocumentRequirementRequest"
+      responses:
+        "201":
+          description: Asociación creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite o el tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido, documento inactivo o par duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementList
+      summary: Lista los documentos de un tipo de trámite (RF06)
+      description: >
+        Retorna las asociaciones del trámite ordenadas por orden default
+        ascendente, enriquecidas con los datos del documento. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite cuyo catálogo de documentos se consulta.
+      responses:
+        "200":
+          description: Listado de asociaciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementList"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/procedure-document-requirements/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador de la asociación.
+    put:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementUpdate
+      summary: Actualiza la configuración de una asociación (RF07)
+      description: >
+        Modifica únicamente el orden default y la obligatoriedad. El par
+        (trámite, documento) es inmutable. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProcedureDocumentRequirementRequest"
+      responses:
+        "200":
+          description: Asociación actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementDelete
+      summary: Elimina una asociación (RF08)
+      description: >
+        Borrado físico de la asociación. Si está en uso en trámites activos
+        retorna 409 y no se elimina. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Asociación eliminada.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La asociación está en uso y no puede eliminarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -958,3 +1124,54 @@ components:
         nombre: { type: string, maxLength: 150 }
         descripcion: { type: string, nullable: true, maxLength: 500 }
       required: [codigo, nombre]
+
+    DocumentRef:
+      type: object
+      description: Datos del tipo de documento asociado (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+      required: [codigo, nombre, estado]
+
+    ProcedureDocumentRequirementResponse:
+      type: object
+      description: Asociación trámite ↔ documento (HU #10195).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+        documento:
+          $ref: "#/components/schemas/DocumentRef"
+      required: [id, procedureTypeId, documentTypeId, ordenDefault, obligatorio, documento]
+
+    ProcedureDocumentRequirementList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+      required: [data]
+
+    CreateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de alta de la asociación (AC1).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [procedureTypeId, documentTypeId, ordenDefault, obligatorio]
+
+    UpdateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de actualización de la asociación (AC3).
+      properties:
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [ordenDefault, obligatorio]

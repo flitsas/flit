@@ -3,8 +3,10 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Infrastructure;
@@ -32,6 +34,12 @@ public static class AdminInfrastructureExtensions
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
+
+        // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
+        // (read-only) + guard de uso (stub transitorio hasta #10197).
+        services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();
+        services.AddScoped<IProcedureTypeCatalog, ProcedureTypeCatalog>();
+        services.AddScoped<IProcedureDocumentRequirementUsageGuard, StubProcedureDocumentRequirementUsageGuard>();
 
         return services;
     }

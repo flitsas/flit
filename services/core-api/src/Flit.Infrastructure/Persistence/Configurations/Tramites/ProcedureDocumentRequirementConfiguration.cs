@@ -7,8 +7,9 @@ namespace Flit.Infrastructure.Persistence.Configurations.Tramites;
 
 /// <summary>
 /// Mapeo de <see cref="ProcedureDocumentRequirement"/> a
-/// <c>tramites.procedure_document_requirements</c> (DDL HU #10155). Mapeo mínimo de
-/// solo lectura para el guard de integridad del soft-delete (HU #10193, AC6).
+/// <c>tramites.procedure_document_requirements</c> (DDL HU #10155). Originalmente de
+/// solo lectura para el guard del soft-delete (HU #10193, AC6); extendido en la
+/// HU #10195 para el CRUD de asociaciones (unicidad del par trámite ↔ documento).
 /// </summary>
 internal sealed class ProcedureDocumentRequirementConfiguration
     : IEntityTypeConfiguration<ProcedureDocumentRequirement>
@@ -28,5 +29,11 @@ internal sealed class ProcedureDocumentRequirementConfiguration
 
         builder.HasIndex(x => x.DocumentTypeId)
             .HasDatabaseName("ix_procedure_document_requirements_document_type_id");
+
+        // Unicidad del par (trámite, documento) — un documento no se asocia dos veces
+        // al mismo tipo de trámite (HU #10195).
+        builder.HasIndex(x => new { x.ProcedureTypeId, x.DocumentTypeId })
+            .IsUnique()
+            .HasDatabaseName("uq_procedure_document_requirements");
     }
 }

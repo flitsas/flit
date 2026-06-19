@@ -11,6 +11,10 @@ using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
+using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
+using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
+using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
+using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
@@ -60,6 +64,12 @@ public static class DependencyInjection
         services.AddScoped<ListDocumentTypesHandler>();
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
+
+        // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
+        services.AddScoped<CreateProcedureDocumentRequirementHandler>();
+        services.AddScoped<ListProcedureDocumentRequirementsHandler>();
+        services.AddScoped<UpdateProcedureDocumentRequirementHandler>();
+        services.AddScoped<DeleteProcedureDocumentRequirementHandler>();
 
         return services;
     }
