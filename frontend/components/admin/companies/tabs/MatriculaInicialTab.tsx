@@ -16,14 +16,14 @@ export function MatriculaInicialTab({ form, onChange, fieldErrors }: MatriculaIn
       <ToggleSwitch
         id="allowInitialRegistration"
         label="Permitir matrícula inicial"
-        description="Habilita el registro de vehículos nuevos por primera vez."
+        description="Autoriza a esta compañía a tramitar la primera matrícula de un vehículo nuevo (0 km) ante el organismo de tránsito, es decir, asignarle placa por primera vez. Si se desactiva, la compañía no podrá radicar matrículas iniciales en la plataforma."
         checked={form.allowInitialRegistration}
         onChange={(v) => onChange({ allowInitialRegistration: v })}
       />
       <ToggleSwitch
         id="allowMiscNewVehicles"
-        label="Permitir vehículos nuevos misceláneos"
-        description="Habilita matrícula de categorías misceláneas."
+        label="Permitir vehículos de categorías misceláneas"
+        description="Extiende la matrícula inicial a vehículos nuevos de categorías especiales o «misceláneas» —como remolques, semirremolques, maquinaria agrícola o industrial, motocarros y similares—, además de los automóviles y camiones convencionales. Si se desactiva, solo se podrán matricular las categorías estándar."
         checked={form.allowMiscNewVehicles}
         onChange={(v) => onChange({ allowMiscNewVehicles: v })}
       />

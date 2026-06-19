@@ -1,7 +1,7 @@
 "use client";
 
 import { Info } from "lucide-react";
-import { SMTP_LABELS, type SettingsForm } from "../settingsForm";
+import { NOTIFICATION_TARGET_LABELS, SMTP_LABELS, type SettingsForm } from "../settingsForm";
 
 // Pestaña Contingencia FLIT (HU #10194, AC2). El backend no expone campos
 // adicionales de contingencia; se presenta como sección informativa derivada de
@@ -37,7 +37,10 @@ export function ContingenciaFlitTab({ form }: ContingenciaFlitTabProps) {
           label="Métodos de recaudo"
           value={form.metodosRecaudo.length > 0 ? form.metodosRecaudo.join(", ") : "Ninguno"}
         />
-        <SummaryItem label="Destinatario de notificaciones" value={form.notificationTarget} />
+        <SummaryItem
+          label="Destinatario de notificaciones"
+          value={NOTIFICATION_TARGET_LABELS[form.notificationTarget]}
+        />
       </dl>
     </div>
   );

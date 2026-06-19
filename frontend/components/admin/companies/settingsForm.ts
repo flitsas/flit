@@ -54,3 +54,10 @@ export const SMTP_LABELS: Record<EnrutamientoSMTP, string> = {
 };
 
 export const NOTIFICATION_TARGETS: NotificationTarget[] = ["COMPRADOR", "RADICADOR", "NINGUNO"];
+
+/** Etiquetas legibles para el destinatario de notificaciones (el valor enviado sigue siendo el enum). */
+export const NOTIFICATION_TARGET_LABELS: Record<NotificationTarget, string> = {
+  COMPRADOR: "Comprador del vehículo",
+  RADICADOR: "Radicador del trámite",
+  NINGUNO: "Sin notificaciones",
+};

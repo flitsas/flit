@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import {
   METODOS_RECAUDO,
+  NOTIFICATION_TARGET_LABELS,
   NOTIFICATION_TARGETS,
   SMTP_LABELS,
   type SettingsForm,
@@ -38,7 +39,7 @@ export function ConfiguracionEmpresaTab({
       <ToggleSwitch
         id="baulFirmasActivo"
         label="Baúl de firmas activo"
-        description="Habilita el almacenamiento de firmas digitales del tenant."
+        description="Guarda de forma segura las firmas digitales de la compañía para reutilizarlas al firmar los documentos de cada trámite, sin tener que capturarlas en cada radicación."
         checked={form.baulFirmasActivo}
         onChange={(v) => onChange({ baulFirmasActivo: v })}
       />
@@ -60,6 +61,11 @@ export function ConfiguracionEmpresaTab({
             </option>
           ))}
         </select>
+        <p className="mt-1 max-w-md text-[11px] opacity-60">
+          Canal por el que salen los correos de notificación. «Colas FLIT» los envía con la
+          infraestructura de correo de FLIT; «API Renting cliente» los entrega a través del sistema
+          propio de la compañía.
+        </p>
         {fieldErrors?.enrutamientoSMTP && (
           <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
             {fieldErrors.enrutamientoSMTP}
@@ -80,10 +86,14 @@ export function ConfiguracionEmpresaTab({
         >
           {NOTIFICATION_TARGETS.map((value) => (
             <option key={value} value={value}>
-              {value}
+              {NOTIFICATION_TARGET_LABELS[value]}
             </option>
           ))}
         </select>
+        <p className="mt-1 max-w-md text-[11px] opacity-60">
+          Quién recibe los avisos del avance de cada trámite: el comprador del vehículo, el radicador
+          que gestiona el trámite, o nadie si eliges «Sin notificaciones».
+        </p>
         {fieldErrors?.notificationTarget && (
           <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
             {fieldErrors.notificationTarget}
@@ -92,7 +102,12 @@ export function ConfiguracionEmpresaTab({
       </div>
 
       <fieldset>
-        <legend className="mb-2 text-xs font-semibold">Métodos de recaudo</legend>
+        <legend className="text-xs font-semibold">Métodos de recaudo</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Medios habilitados para cobrar a los usuarios los costos del trámite: la pasarela de pagos
+          de FLIT, el recaudo a través del organismo de tránsito (OT) u otros acordados con la
+          compañía.
+        </p>
         <div className="flex flex-wrap gap-3">
           {METODOS_RECAUDO.map((metodo) => {
             const checked = form.metodosRecaudo.includes(metodo);

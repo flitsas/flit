@@ -19,7 +19,7 @@ export function TraspasosTab({ form, onChange, whitelistSlot }: TraspasosTabProp
       <ToggleSwitch
         id="onlyOwnVehicles"
         label="Solo vehículos propios"
-        description="Restringe los traspasos a vehículos de propiedad del tenant (con excepciones por lista blanca)."
+        description="Restringe los traspasos a vehículos que ya figuran como propiedad de esta compañía. Los correos registrados en la lista blanca quedan exentos y pueden tramitar traspasos de otros vehículos."
         checked={form.onlyOwnVehicles}
         onChange={(v) => onChange({ onlyOwnVehicles: v })}
       />
