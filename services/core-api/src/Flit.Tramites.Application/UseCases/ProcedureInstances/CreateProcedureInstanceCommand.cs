@@ -36,16 +36,20 @@ public sealed class CreateProcedureInstanceHandler(
 
         var now = DateTimeOffset.UtcNow;
         var year = now.Year;
-        var seq = await repo.CountByTenantAndYearAsync(request.TenantId, year, ct) + 1;
-        var reference = $"TRM-{year}-{seq:D6}";
+
+        // Slice 4b: deriva modalidad/tipología desde la familia del tipo elegido para que el
+        // wizard y el gating de documentos apliquen la modalidad correcta en runtime.
+        var (modalidad, tipologia) = TipologiaResolver.FromFamily(procedureType.Family);
 
         var instance = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
             ProcedureTypeId = request.ProcedureTypeId,
-            ReferenceNumber = reference,
+            ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
             Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = modalidad,
+            TipologiaCodigo = tipologia,
             TransitOfficeId = request.TransitOfficeId,
             CreatedByUserId = request.CreatedByUserId,
             CreatedAt = now,
@@ -63,8 +67,9 @@ public sealed class CreateProcedureInstanceHandler(
             ChangedBy = request.CreatedByUserId
         });
 
-        await repo.AddAsync(instance, ct);
-        await repo.SaveChangesAsync(ct);
+        var saved = await repo.AddWithUniqueReferenceAsync(instance, year, ct);
+        if (!saved)
+            return (null, "reference_conflict");
 
         return (ToSummary(instance), null);
     }

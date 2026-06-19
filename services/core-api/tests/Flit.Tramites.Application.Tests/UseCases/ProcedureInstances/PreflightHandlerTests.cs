@@ -1,0 +1,279 @@
+using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Repositories;
+using FluentAssertions;
+using NSubstitute;
+using Xunit;
+
+namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
+
+public sealed class PreflightHandlerTests
+{
+    private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
+
+    // ── Test doubles para providers ───────────────────────────────────────────
+
+    private sealed class StubProvider(string key, ConsultationResult result) : IConsultationProvider
+    {
+        public string Key => key;
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class ThrowingProvider(string key) : IConsultationProvider
+    {
+        public string Key => key;
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct) =>
+            throw new InvalidOperationException("boom");
+    }
+
+    /// <summary>Captura el contexto recibido para aserciones sobre los field_values pasados al provider.</summary>
+    private sealed class CapturingProvider(string key, ConsultationResult result) : IConsultationProvider
+    {
+        public string Key => key;
+        public ConsultationContext? LastContext { get; private set; }
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
+        {
+            LastContext = ctx;
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class StaticRegistry(Dictionary<string, IConsultationProvider> providers) : IConsultationProviderRegistry
+    {
+        public IConsultationProvider? Resolve(string providerKey) =>
+            providers.TryGetValue(providerKey, out var p) ? p : null;
+    }
+
+    private static ConsultationResult Result(string overall, params ConsultationCheck[] checks) =>
+        new("stub", overall, checks, []);
+
+    private static ConsultationCheck Check(string status) =>
+        new("vehiculo", "Vehículo RUNT", status, "stub", null);
+
+    private static ProcedureInstance Instance(
+        string modalidad,
+        string status = ProcedureInstanceStatus.Draft,
+        params ProcedureInstanceActor[] actors)
+    {
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000001",
+            Status = status,
+            ModalidadEntrada = modalidad,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        foreach (var a in actors)
+            instance.Actors.Add(a);
+        return instance;
+    }
+
+    private static ProcedureInstanceActor Actor(string actorType, string doc = "123") =>
+        new()
+        {
+            ActorType = actorType,
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = "X",
+            Email = "x@x.com",
+        };
+
+    private RunPreflightHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers)
+    {
+        var dict = providers.ToDictionary(p => p.key, p => p.provider);
+        return new RunPreflightHandler(_repo, new StaticRegistry(dict));
+    }
+
+    // ── 404 / 409 ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Post_InstanceNotFound_ReturnsNotFound()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        var handler = HandlerWith();
+
+        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        error.Should().Be("not_found");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Post_NotDraft_ReturnsConflict()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", status: "submitted");
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be("not_draft");
+    }
+
+    // ── Composición de overall (regla del dominio) ────────────────────────────
+
+    [Fact]
+    public void ComposeOverall_AnyFail_IsRed()
+    {
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("a", "A", "ok", "s", null),
+            new PreflightCheckDto("b", "B", "fail", "s", null),
+            new PreflightCheckDto("c", "C", "warn", "s", null),
+        ]).Should().Be("red");
+    }
+
+    [Fact]
+    public void ComposeOverall_WarnNoFail_IsYellow()
+    {
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("a", "A", "ok", "s", null),
+            new PreflightCheckDto("b", "B", "warn", "s", null),
+        ]).Should().Be("yellow");
+    }
+
+    [Fact]
+    public void ComposeOverall_UnknownDoesNotBlockGreen()
+    {
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("a", "A", "ok", "s", null),
+            new PreflightCheckDto("b", "B", "unknown", "s", null),
+        ]).Should().Be("green");
+    }
+
+    [Fact]
+    public void ComposeOverall_NoChecks_IsGreen() =>
+        RunPreflightHandler.ComposeOverall([]).Should().Be("green");
+
+    // ── Providers por modalidad ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task Post_Matricula_RunsOnlyVehiculo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Be("verifik"); // SIMIT no corre en matrícula.
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RunsVehiculoSimitBothAndRnmc()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik");
+        result.Provider.Should().Contain("verifik_simit");
+        result.Provider.Should().Contain("verifik_rnmc");
+        // vehiculo + simit comprador + simit vendedor + rnmc = 4 checks.
+        result.Checks.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_VehiculoContextIncludesOwnerDocumentFromFieldValues()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // Traspaso con el doc del propietario en field_values (paso "consulta"),
+        // sin actor vendedor todavía.
+        var instance = Instance("traspaso", actors: Actor("comprador", "111"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "owner_document_type", ValueText = "CC", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "owner_document_number", ValueText = "987654", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var vehiculo = new CapturingProvider("verifik", Result("green", Check("ok")));
+        var handler = HandlerWith(
+            ("verifik", vehiculo),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        vehiculo.LastContext.Should().NotBeNull();
+        vehiculo.LastContext!.FieldValues.Should().Contain("plate", "ABC123");
+        vehiculo.LastContext.FieldValues.Should().Contain("owner_document_type", "CC");
+        vehiculo.LastContext.FieldValues.Should().Contain("owner_document_number", "987654");
+    }
+
+    // ── Persistencia ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Post_PersistsSnapshot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("red", Check("fail")))));
+
+        var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        result!.Overall.Should().Be("red");
+        await _repo.Received(1).AddPreflightSnapshotAsync(
+            Arg.Is<ProcedureInstancePreflightSnapshot>(s =>
+                s.Overall == "red" &&
+                s.ProcedureInstanceId == instance.Id &&
+                s.TenantId == instance.TenantId &&
+                s.Checks.Contains("fail")),
+            ct);
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    // ── Degradación: provider falla → no 500, check unknown ───────────────────
+
+    [Fact]
+    public async Task Post_ProviderThrows_DegradesToUnknownNoThrow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(("verifik", new ThrowingProvider("verifik")));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Overall.Should().Be("green"); // unknown no bloquea green.
+        result.Checks.Should().ContainSingle(c => c.Status == "unknown");
+    }
+
+    [Fact]
+    public async Task Post_ProviderNotRegistered_DegradesToUnknown()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(); // registry vacío.
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().ContainSingle(c => c.Status == "unknown");
+        result.Overall.Should().Be("green");
+    }
+}

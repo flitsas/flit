@@ -5,7 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed record FieldValueInput(
-    Guid FormFieldId,
+    Guid? FormFieldId,
     string FieldKey,
     string? ValueText,
     string? ValueJson);
@@ -41,22 +41,40 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             }
             else
             {
-                instance.FieldValues.Add(new ProcedureInstanceFieldValue
+                // El front no conoce el form_field.id, así que al crear un value nuevo lo
+                // resolvemos por field_key contra el grafo del procedure_type de la instancia.
+                // Si el front sí mandó un Guid válido, se respeta tal cual.
+                var formFieldId = item.FormFieldId;
+                if (formFieldId is null || formFieldId == Guid.Empty)
+                {
+                    formFieldId = await repo.GetFormFieldIdByKeyAsync(instance.ProcedureTypeId, item.FieldKey, ct);
+                    if (formFieldId is null)
+                        return (null, "unknown_field");
+                }
+
+                var fieldValue = new ProcedureInstanceFieldValue
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
                     ProcedureInstanceId = id,
-                    FormFieldId = item.FormFieldId,
+                    FormFieldId = formFieldId.Value,
                     FieldKey = item.FieldKey,
                     ValueText = item.ValueText,
                     ValueJson = item.ValueJson,
                     Source = "user",
                     CreatedAt = now
-                });
+                };
+                instance.FieldValues.Add(fieldValue);
+                // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
+                // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
+                repo.Add(fieldValue);
             }
         }
 
-        await repo.UpdateAsync(instance, ct);
+        // La instancia se cargó trackeada (GetByIdWithDetailsAsync sin AsNoTracking), así que
+        // el change tracker de EF detecta adds/updates sobre el grafo. NO se llama Update():
+        // db.Update() sobre un grafo trackeado marcaría todo (incluidos los hijos NUEVOS con Id
+        // ya seteado) como Modified → emitiría UPDATE de 0 filas en vez de INSERT.
         await repo.SaveChangesAsync(ct);
 
         return (GetProcedureInstanceHandler.ToDetail(instance), null);

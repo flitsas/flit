@@ -19,6 +19,19 @@ public sealed class CreateProcedureInstanceTests
         _sut = new CreateProcedureInstanceHandler(_repo, _typeRepo);
     }
 
+    /// <summary>Simula el repo real: genera la referencia con seq inicial y persiste OK.</summary>
+    private void StubReferenceGenerator(int seq = 1)
+    {
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var instance = call.Arg<ProcedureInstance>();
+                var year = call.ArgAt<int>(1);
+                instance.ReferenceNumber = $"TRM-{year}-{seq:D6}";
+                return Task.FromResult(true);
+            });
+    }
+
     private static CreateProcedureInstanceRequest Request() =>
         new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null);
 
@@ -69,7 +82,7 @@ public sealed class CreateProcedureInstanceTests
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
-        _repo.CountByTenantAndYearAsync(Arg.Any<Guid>(), Arg.Any<int>(), ct).Returns(0);
+        StubReferenceGenerator();
 
         var (result, error) = await _sut.HandleAsync(Request(), ct);
 
@@ -79,11 +92,68 @@ public sealed class CreateProcedureInstanceTests
         result!.ReferenceNumber.Should().Be($"TRM-{year}-000001");
         result.Status.Should().Be(ProcedureInstanceStatus.Draft);
 
-        await _repo.Received(1).AddAsync(
+        await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.Status == ProcedureInstanceStatus.Draft &&
                 i.StatusHistory.Any(h => h.ToStatus == ProcedureInstanceStatus.Draft && h.FromStatus == null)),
+            year,
             ct);
-        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ReferenceConflictExhausted_ReturnsReferenceConflict()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "X",
+            Name = "X",
+            Family = "matriculas",
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        var (result, error) = await _sut.HandleAsync(Request(), ct);
+
+        error.Should().Be("reference_conflict");
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("TRASPASO", "traspaso", "traspaso_standard")]
+    [InlineData("traspaso", "traspaso", "traspaso_standard")] // case-insensitive
+    [InlineData("MATRICULAS", "matricula_inicial", "matricula_inicial")]
+    [InlineData("OTROS", "matricula_inicial", "matricula_inicial")]
+    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "matricula_inicial")] // default defensivo
+    public async Task HandleAsync_SetsModalidadAndTipologiaFromFamily(
+        string family, string expectedModalidad, string expectedTipologia)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "X",
+            Name = "X",
+            Family = family,
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
+        StubReferenceGenerator();
+
+        var (result, error) = await _sut.HandleAsync(Request(), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _repo.Received(1).AddWithUniqueReferenceAsync(
+            Arg.Is<ProcedureInstance>(i =>
+                i.ModalidadEntrada == expectedModalidad &&
+                i.TipologiaCodigo == expectedTipologia),
+            Arg.Any<int>(),
+            ct);
     }
 }

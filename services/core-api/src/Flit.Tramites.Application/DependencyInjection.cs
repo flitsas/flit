@@ -30,6 +30,17 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
+        services.AddScoped<GetActorsHandler>();
+        services.AddScoped<PutActorsHandler>();
+        services.AddScoped<UploadAttachmentHandler>();
+        services.AddScoped<ListAttachmentsHandler>();
+        services.AddScoped<DeleteAttachmentHandler>();
+        services.AddScoped<GetChecklistHandler>();
+        services.AddScoped<GetCommercialHandler>();
+        services.AddScoped<PutCommercialHandler>();
+        services.AddScoped<RunPreflightHandler>();
+        services.AddScoped<GetPreflightHandler>();
+        services.AddScoped<GetWizardStateHandler>();
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
 

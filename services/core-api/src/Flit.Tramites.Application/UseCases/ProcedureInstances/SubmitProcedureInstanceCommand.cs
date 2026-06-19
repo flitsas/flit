@@ -29,7 +29,7 @@ public sealed class SubmitProcedureInstanceHandler(
         instance.SubmittedAt = now;
         instance.UpdatedAt = now;
 
-        instance.StatusHistory.Add(new ProcedureInstanceStatusHistory
+        var statusHistory = new ProcedureInstanceStatusHistory
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -37,9 +37,15 @@ public sealed class SubmitProcedureInstanceHandler(
             FromStatus = ProcedureInstanceStatus.Draft,
             ToStatus = ProcedureInstanceStatus.Submitted,
             ChangedAt = now
-        });
+        };
+        instance.StatusHistory.Add(statusHistory);
+        // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
+        // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
+        repo.Add(statusHistory);
 
-        await repo.UpdateAsync(instance, ct);
+        // Instancia trackeada (GetByIdWithDetailsAsync sin AsNoTracking): el change tracker
+        // detecta el cambio de estado de la instancia y el status_history nuevo (INSERT). NO se
+        // llama Update(): marcaría el status_history nuevo como Modified → UPDATE de 0 filas.
         await repo.SaveChangesAsync(ct);
 
         return (CreateProcedureInstanceHandler.ToSummary(instance), null);

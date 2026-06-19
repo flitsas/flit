@@ -89,7 +89,8 @@ public sealed class SubmitProcedureInstanceTests
         instance.SubmittedAt.Should().NotBeNull();
         instance.StatusHistory.Should().ContainSingle(h =>
             h.FromStatus == ProcedureInstanceStatus.Draft && h.ToStatus == ProcedureInstanceStatus.Submitted);
-        await _repo.Received(1).UpdateAsync(instance, ct);
+        // El status_history NUEVO se marca Added explícito → INSERT (PK store-generated con Id ya seteado).
+        _repo.Received(1).Add(Arg.Any<ProcedureInstanceStatusHistory>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 }

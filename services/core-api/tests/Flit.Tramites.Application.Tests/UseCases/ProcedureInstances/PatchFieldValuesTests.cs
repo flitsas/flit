@@ -77,8 +77,50 @@ public sealed class PatchFieldValuesTests
         error.Should().BeNull();
         instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "plate" && f.ValueText == "ABC123");
         result!.FieldValues.Should().ContainSingle(f => f.FieldKey == "plate");
-        await _repo.Received(1).UpdateAsync(instance, ct);
+        // El hijo NUEVO se marca Added explícito → INSERT (no inferencia de estado por PK store-generated).
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceFieldValue>(f => f.FieldKey == "plate"));
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Draft_NewField_NullFormFieldId_ResolvesByFieldKey()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        var resolvedFieldId = Guid.NewGuid();
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(instance.ProcedureTypeId, "plate", ct).Returns(resolvedFieldId);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "plate", "ABC123", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "plate" && f.ValueText == "ABC123" && f.FormFieldId == resolvedFieldId);
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Draft_NewField_UnknownFieldKey_ReturnsUnknownField()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "ghost", "x", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().Be("unknown_field");
+        result.Should().BeNull();
     }
 
     [Fact]
@@ -112,5 +154,7 @@ public sealed class PatchFieldValuesTests
         existing.ValueText.Should().Be("NEW");
         existing.UpdatedAt.Should().NotBeNull();
         result!.FieldValues.Should().ContainSingle(f => f.FieldKey == "plate" && f.ValueText == "NEW");
+        // Actualizar un value EXISTENTE (ya trackeado) NO debe marcar Added: queda como UPDATE.
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceFieldValue>());
     }
 }
