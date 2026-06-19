@@ -14,6 +14,7 @@ import { reasonCopy, blockerCopy } from './wizard-copy';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
+  FieldValue,
   FieldValueInput,
   PreflightSnapshot,
   ProcedureConfiguration,
@@ -380,6 +381,92 @@ export function TramiteWizard(props: Props) {
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
+ * Grupos de atributos del vehículo hidratados por el backend en field_values
+ * tras la consulta (origen RUNT). Solo se pinta lo presente; nada de proveedor.
+ */
+const VEHICLE_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
+  {
+    title: 'Identificación',
+    fields: [
+      { key: 'plate', label: 'Placa' },
+      { key: 'vin', label: 'VIN' },
+    ],
+  },
+  {
+    title: 'Características',
+    fields: [
+      { key: 'vehicle_brand', label: 'Marca' },
+      { key: 'vehicle_line', label: 'Línea' },
+      { key: 'vehicle_year', label: 'Modelo' },
+      { key: 'vehicle_color', label: 'Color' },
+      { key: 'vehicle_class', label: 'Clase' },
+      { key: 'vehicle_fuel', label: 'Combustible' },
+      { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
+    ],
+  },
+  {
+    title: 'Tránsito',
+    fields: [
+      { key: 'transit_office_name', label: 'Organismo de tránsito' },
+      { key: 'vehicle_state', label: 'Estado del vehículo' },
+    ],
+  },
+];
+
+/**
+ * Tarjeta "Datos del vehículo · RUNT". Lee los field_values frescos de la
+ * instancia y muestra una fila por atributo presente, agrupado. Reusa la
+ * convención de cards de operación (rounded-2xl + borde #DFE5ED).
+ */
+function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
+  const byKey = (key: string) =>
+    fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+
+  const groups = VEHICLE_GROUPS.map((g) => ({
+    title: g.title,
+    rows: g.fields
+      .map((f) => ({ label: f.label, value: byKey(f.key) }))
+      .filter((r) => r.value.trim() !== ''),
+  })).filter((g) => g.rows.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      style={{ borderColor: '#DFE5ED' }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h4 className="text-sm font-bold">Datos del vehículo</h4>
+        <span
+          className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+          style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+        >
+          RUNT
+        </span>
+      </div>
+      <div className="space-y-4">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <p className="text-[10px] font-semibold uppercase opacity-60 mb-1.5">
+              {g.title}
+            </p>
+            <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              {g.rows.map((r) => (
+                <div key={r.label} className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] opacity-60 shrink-0">{r.label}</dt>
+                  <dd className="text-xs font-semibold text-right">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Paso de consulta inicial. Captura el identificador del vehículo
  * (VIN en matrícula; placa + propietario en traspaso) y, al consultar,
  * PERSISTE los field_values vía PATCH ANTES de correr el preflight, para que
@@ -407,28 +494,32 @@ function ConsultaStep({
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // field_values frescos de la instancia: rehidratan inputs y alimentan la
+  // tarjeta "Datos del vehículo · RUNT" tras la consulta.
+  const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+
+  // Carga (o recarga) la instancia y rehidrata inputs + field_values.
+  const loadInstance = async () => {
+    if (!instanceId) return;
+    const detail = await tramitesClient.getInstance(instanceId);
+    if (!detail?.fieldValues) return;
+    setFieldValues(detail.fieldValues);
+    const byKey = (key: string) =>
+      detail.fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+    setVin((v) => v || byKey('vin'));
+    setPlate((v) => v || byKey('plate'));
+    setOwnerDocNumber((v) => v || byKey('owner_document_number'));
+    const docType = byKey('owner_document_type');
+    if (docType && DOC_TYPES.includes(docType as ActorDocumentType)) {
+      setOwnerDocType(docType as ActorDocumentType);
+    }
+  };
 
   // Rehidrata los inputs desde los field_values guardados de la instancia.
   useEffect(() => {
     if (!instanceId) return;
-    let cancelled = false;
-    Promise.resolve(tramitesClient.getInstance(instanceId))
-      .then((detail) => {
-        if (cancelled || !detail?.fieldValues) return;
-        const byKey = (key: string) =>
-          detail.fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
-        setVin((v) => v || byKey('vin'));
-        setPlate((v) => v || byKey('plate'));
-        setOwnerDocNumber((v) => v || byKey('owner_document_number'));
-        const docType = byKey('owner_document_type');
-        if (docType && DOC_TYPES.includes(docType as ActorDocumentType)) {
-          setOwnerDocType(docType as ActorDocumentType);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    void loadInstance().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
   const buildItems = (): FieldValueInput[] | null => {
@@ -471,9 +562,12 @@ function ConsultaStep({
     setError(null);
     setPersisting(true);
     try {
-      // 1) Persistir identificador → 2) preflight → 3) refresh (en onRunPreflight).
+      // 1) Persistir identificador → 2) preflight (el backend hidrata los datos
+      // del vehículo en field_values) → 3) recargar la instancia para pintar la
+      // tarjeta "Datos del vehículo · RUNT" con los valores frescos.
       await tramitesClient.patchFieldValues(instanceId, items);
       await onRunPreflight();
+      await loadInstance();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo consultar.');
     } finally {
@@ -488,8 +582,8 @@ function ConsultaStep({
     <div className="space-y-4">
       <p className="text-xs opacity-70">
         {isVin
-          ? 'Ingresa el VIN del vehículo para iniciar la matrícula y correr el pre-vuelo.'
-          : 'Ingresa la placa y el propietario del vehículo para iniciar el traspaso y correr el pre-vuelo.'}
+          ? 'Ingresa el VIN del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'
+          : 'Ingresa la placa y el propietario del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'}
       </p>
 
       {isVin ? (
@@ -582,6 +676,8 @@ function ConsultaStep({
         riesgoAceptado={false}
         onToggleRiesgo={() => {}}
       />
+
+      <VehicleDataCard fieldValues={fieldValues} />
     </div>
   );
 }

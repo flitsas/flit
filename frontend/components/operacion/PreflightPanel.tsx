@@ -30,6 +30,24 @@ const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
   red: { label: 'Pre-vuelo con bloqueos', bg: 'rgba(255,78,0,0.15)', color: '#FF4E00' },
 };
 
+/**
+ * Mapea el código de proveedor (interno) a la fuente colombiana que ve el
+ * usuario. Nunca debe filtrarse el nombre del proveedor a la UI: el origen del
+ * dato es el RUNT/SIMIT/RNMC, no la pasarela de consulta.
+ */
+const SOURCE_LABEL: Record<string, string> = {
+  verifik: 'RUNT',
+  verifik_vehicle: 'RUNT',
+  verifik_simit: 'SIMIT',
+  verifik_rnmc: 'RNMC',
+  intempo: 'RUNT',
+};
+
+export function sourceLabel(source: string | null | undefined): string {
+  if (!source) return '';
+  return SOURCE_LABEL[source] ?? source.toUpperCase();
+}
+
 export function PreflightPanel({
   snapshot,
   loading,
@@ -112,7 +130,7 @@ export function PreflightPanel({
                       className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
                       style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
                     >
-                      {c.source}
+                      {sourceLabel(c.source)}
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>
