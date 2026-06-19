@@ -43,6 +43,15 @@ public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountReposi
         return new AdminTargetUser(user.Id, user.Email, user.DisplayName, tenantId);
     }
 
+    public async Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await db.UserCredentials
+            .AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.PasswordHash)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task UpdatePasswordHashAsync(
         Guid userId,
         string passwordHash,

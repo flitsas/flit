@@ -18,6 +18,9 @@ public interface IUserAccountRepository
     /// <summary>Usuario activo objetivo (con su tenant) para una acción administrativa, o null.</summary>
     Task<AdminTargetUser?> FindActiveTargetByEmailAsync(string email, CancellationToken cancellationToken);
 
+    /// <summary>Hash de contraseña actual del usuario (para verificar el cambio voluntario), o null.</summary>
+    Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken);
+
     /// <summary>Reemplaza el hash de contraseña y fija el flag de cambio forzado.</summary>
     Task UpdatePasswordHashAsync(
         Guid userId,

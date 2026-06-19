@@ -21,8 +21,7 @@ public sealed class ResetPasswordHandler(
         if (string.IsNullOrWhiteSpace(command.Token))
             throw new InvalidResetTokenException();
 
-        if (string.IsNullOrWhiteSpace(command.NewPassword)
-            || command.NewPassword.Length < options.MinPasswordLength)
+        if (!PasswordPolicy.IsCompliant(command.NewPassword, options.MinPasswordLength))
             throw new WeakPasswordException();
 
         var now = DateTimeOffset.UtcNow;

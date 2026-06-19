@@ -1,0 +1,70 @@
+using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.ChangePassword;
+using Flit.Modules.Security.Domain.Auth;
+using FluentAssertions;
+using NSubstitute;
+using Xunit;
+
+namespace Flit.Modules.Security.Application.Tests.Auth;
+
+public sealed class ChangePasswordHandlerTests
+{
+    private readonly IUserAccountRepository _repo = Substitute.For<IUserAccountRepository>();
+    private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
+    private readonly PasswordRecoveryOptions _options = new();
+    private readonly ChangePasswordHandler _handler;
+    private readonly Guid _userId = Guid.NewGuid();
+
+    public ChangePasswordHandlerTests()
+    {
+        _handler = new ChangePasswordHandler(_repo, _hasher, _options);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidCurrentAndCompliantNew_PersistsNewHash()
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _hasher.Verify("Current1!", "current-hash").Returns(true);
+        _hasher.Hash("NewPass123").Returns("new-hash");
+
+        await _handler.HandleAsync(new ChangePasswordCommand(_userId, "Current1!", "NewPass123"), CancellationToken.None);
+
+        await _repo.Received(1).UpdatePasswordHashAsync(
+            _userId, "new-hash", Arg.Any<DateTimeOffset>(), false, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("short1")]      // < 8
+    [InlineData("alllowercase123")] // sin mayúscula
+    [InlineData("ALLUPPERCASE123")] // sin minúscula
+    [InlineData("NoDigitsHere")]    // sin dígito
+    public async Task HandleAsync_NonCompliantNewPassword_ThrowsWeakPassword(string weak)
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _hasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+
+        await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "Current1!", weak), CancellationToken.None))
+            .Should().ThrowAsync<WeakPasswordException>();
+        await _repo.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WrongCurrentPassword_ThrowsInvalidCurrent()
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _hasher.Verify("WrongCurrent", "current-hash").Returns(false);
+
+        await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "WrongCurrent", "NewPass123"), CancellationToken.None))
+            .Should().ThrowAsync<InvalidCurrentPasswordException>();
+    }
+
+    [Fact]
+    public async Task HandleAsync_NoCredential_ThrowsInvalidCredentials()
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns((string?)null);
+
+        await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "Current1!", "NewPass123"), CancellationToken.None))
+            .Should().ThrowAsync<InvalidCredentialsException>();
+    }
+}
