@@ -83,6 +83,8 @@ export function Login({ onBypass }: { onBypass: () => void }) {
   }, [lockSeconds]);
 
   useEffect(() => {
+    // Reinicia los intentos cuando expira el bloqueo temporal (reacción al timer).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (lockSeconds === 0 && attempts >= 3) setAttempts(0);
   }, [lockSeconds, attempts]);
 
