@@ -42,6 +42,14 @@ public static class DependencyInjection
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();
 
+        // Biométrica (Slice 6, mock). El scorer es un MOCK determinista; se reemplazará por uno real
+        // (proveedor biométrico) sin tocar handlers. Contract-first, igual que los consultation providers.
+        services.AddSingleton<Biometrics.IBiometricScorer, Biometrics.MockBiometricScorer>();
+        services.AddScoped<IniciarBiometriaHandler>();
+        services.AddScoped<ListBiometriaHandler>();
+        services.AddScoped<GetBiometriaByTokenHandler>();
+        services.AddScoped<CompletarBiometriaHandler>();
+
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
 
         services.AddScoped<ListProcedureEntitiesHandler>();

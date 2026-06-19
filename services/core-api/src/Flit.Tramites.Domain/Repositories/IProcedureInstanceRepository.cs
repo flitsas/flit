@@ -15,6 +15,15 @@ public interface IProcedureInstanceRepository
     /// <summary>Carga la instancia con sus datos comerciales (1:1) para GET/PUT comercial.</summary>
     Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
+    Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
+    /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct = default);
+
     /// <summary>Último snapshot de preflight de la instancia (por created_at desc), o null.</summary>
     Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

@@ -73,14 +73,16 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
         var docsCompletos = DocumentosObligatoriosCompletos(instance);
 
+        // Matrícula: la única parte (comprador) lleva la biométrica → parte null en la entidad.
+        var identidadAprobada = BiometriaAprobada(instance, null);
+
         var ctx = new MatriculaGateContext
         {
             VehiculoConsultado = HasVehiculoConsulta(fv),
             Preflight = preflight,
             Comprador = comprador,
             RuntComprador = runtComprador,
-            // Biométrica/identidad diferida (slice 6) → siempre false en este slice.
-            IdentidadAprobada = false,
+            IdentidadAprobada = identidadAprobada,
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
         };
@@ -96,12 +98,20 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             var reasons = new List<string>();
             string status;
 
-            // Pasos diferidos (dependen de slices 6-7): incomplete con reason, sin bloqueo.
-            // 4 = Identidad (biométrica, slice 6); 5 = Generar FUR (firma, slice 7).
+            // 4 = Identidad (biométrica, slice 6): refleja el estado real de la biométrica del comprador.
+            // 5 = Generar FUR (firma, slice 7): diferido → incomplete con reason, sin bloqueo.
             if (p == 4)
             {
-                status = "incomplete";
-                reasons.Add(PendienteBiometria);
+                if (identidadAprobada)
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    reasons.Add("identidad_pendiente");
+                    reasons.Add(PendienteBiometria);
+                }
             }
             else if (p == 5)
             {
@@ -123,6 +133,10 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         }
 
         var blockers = BlockersFrom(preflight, docsCompletos);
+        // Identidad (paso 4) refleja el estado real de la biométrica (slice 6) en su status/reasons,
+        // pero NO se cuenta como bloqueo duro del submit de este slice (paridad con Johan: la
+        // biométrica se valida en el flujo FUR, no veta el radicado de datos). El FUR/firma (paso 5,
+        // slice 7) sigue diferido. Si la identidad ya está aprobada, el paso queda complete sin reason.
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
 
         return new WizardStateDto(
@@ -159,8 +173,10 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             RuntComprador = runtComprador,
             SimitComprador = simitComprador,
             ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            // Biométrica diferida (slice 6) → null.
-            Biometria = null,
+            // Biométrica real (slice 6): traspaso requiere ambas partes (comprador + vendedor).
+            Biometria = new BiometriaSnapshot(
+                Vendedor: BiometriaAprobada(instance, "vendedor"),
+                Comprador: BiometriaAprobada(instance, "comprador")),
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
         };
@@ -176,13 +192,15 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             var reasons = new List<string>();
             string status;
 
-            // 6 = Generar FUR (biométrica slice 6 + firma slice 7): incomplete con reasons, sin bloqueo.
+            // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) + firma (slice 7).
+            // La biométrica refleja estado real vía GateFur; la firma sigue diferida.
             if (p == 6)
             {
                 status = "incomplete";
                 if (!docsCompletos)
                     reasons.Add("documentos_incompletos");
-                reasons.Add(PendienteBiometria);
+                if (!TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok)
+                    reasons.Add(PendienteBiometria);
                 reasons.Add(PendienteFirma);
             }
             else if (gate.Ok)
@@ -273,6 +291,16 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
     private static Dictionary<string, string?> FieldValues(ProcedureInstance instance) =>
         instance.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Biométrica aprobada para una parte. <paramref name="parte"/> null = matrícula (única parte =
+    /// comprador, validación con parte null). Aprobada = existe una validación de esa parte en estado
+    /// <c>aprobado</c>.
+    /// </summary>
+    private static bool BiometriaAprobada(ProcedureInstance instance, string? parte) =>
+        instance.BiometricValidations.Any(v =>
+            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
+            && v.Estado == BiometricEstados.Aprobado);
 
     private static ParteDatos? ParteOf(ProcedureInstance instance, string actorType)
     {
