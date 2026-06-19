@@ -1,12 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, RefreshCw } from 'lucide-react';
+import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
-  BiometricEstado,
   BiometricParte,
-  BiometricTipoDoc,
   BiometricValidation,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
@@ -14,7 +12,7 @@ import type {
 interface Props {
   instanceId: string | null;
   modalidad: WizardModalidad;
-  /** Re-consulta el estado del wizard tras iniciar/refrescar (server-driven). */
+  /** Re-consulta el estado del wizard tras simular/refrescar (server-driven). */
   onRefresh?: () => void;
 }
 
@@ -28,52 +26,13 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
   vendedor: 'Vendedor',
 };
 
-const DOC_OPTIONS: { value: BiometricTipoDoc; label: string }[] = [
-  { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
-  { value: 'CE', label: 'Cédula de extranjería (CE)' },
-  { value: 'TI', label: 'Tarjeta de identidad (TI)' },
-  { value: 'PPT', label: 'Permiso por Protección Temporal (PPT)' },
-  { value: 'PAS', label: 'Pasaporte' },
-];
-
-const ESTADO_BADGE: Record<BiometricEstado, { label: string; bg: string; color: string }> = {
-  enviado: { label: 'Enviado', bg: 'rgba(85,126,255,0.12)', color: '#557EFF' },
-  en_proceso: { label: 'En proceso', bg: 'rgba(249,172,0,0.12)', color: '#F9AC00' },
-  aprobado: { label: 'Aprobado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F' },
-  rechazado: { label: 'Rechazado', bg: 'rgba(255,78,0,0.10)', color: '#FF4E00' },
-  expirado: { label: 'Expirado', bg: '#EEF1F5', color: '#9AA5B1' },
-};
-
-/** Badge de color por estado de la validación. */
-function EstadoBadge({ estado }: { estado: BiometricEstado }) {
-  const s = ESTADO_BADGE[estado] ?? ESTADO_BADGE.enviado;
-  return (
-    <span
-      className="px-2.5 py-1 rounded-full text-[10px] font-bold"
-      style={{ background: s.bg, color: s.color }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
-
-/** Construye el magic-link absoluto a partir del path relativo del backend. */
-function absoluteLink(path: string): string {
-  if (typeof window === 'undefined') return path;
-  return `${window.location.origin}${path}`;
-}
-
 /**
- * Paso de validación biométrica (Slice 6, mock). Muestra una tarjeta por parte
- * requerida según la modalidad (matrícula → comprador; traspaso → comprador +
- * vendedor). Si la parte no tiene validación, un formulario inicia la biométrica
- * y, al éxito, muestra el magic-link generado (en DEV no hay envío de correo).
- * El status/gating lo decide el wizard server-driven: este paso solo refresca.
+ * Paso de validación de identidad. En esta iteración la biométrica real está
+ * mockeada: por cada parte requerida (matrícula → comprador; traspaso →
+ * comprador + vendedor) se ofrece un botón "Simular validación de identidad"
+ * que aprueba la validación (score 95). Al aprobarse, la tarjeta se pinta en
+ * verde con "Identidad verificada — {score}/100". El status/gating lo decide el
+ * wizard server-driven: este paso solo refresca tras simular.
  */
 export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
   const partes = partesFor(modalidad);
@@ -82,8 +41,6 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // No se fija "loading" de forma síncrona: el spinner de "Actualizar" lo maneja
-  // handleRefresh (acción del usuario), evitando el cascading-render del efecto.
   const load = useCallback(async () => {
     if (!instanceId) return;
     try {
@@ -115,9 +72,8 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs opacity-70">
-          Validación biométrica de identidad de cada parte. Genera el enlace, el
-          participante sube su selfie y la cédula (frente y reverso) y el sistema
-          resuelve la validación.
+          Validación de identidad de cada parte. La biométrica real llegará en una
+          iteración futura; por ahora puedes simular la validación de cada parte.
         </p>
         <button
           type="button"
@@ -150,12 +106,13 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
               ? v.parte === parte
               : v.parte === null || v.parte === 'comprador',
           );
+          const approved = validation?.estado === 'aprobado';
           return (
             <ParteCard
               key={parte}
               parte={parte}
               instanceId={instanceId}
-              validation={validation ?? null}
+              validation={approved ? validation ?? null : null}
               onChanged={() => void handleRefresh()}
             />
           );
@@ -165,7 +122,7 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
   );
 }
 
-/** Tarjeta por parte: estado actual o formulario para iniciar la biométrica. */
+/** Tarjeta por parte: resultado verificado (verde) o botón para simular. */
 function ParteCard({
   parte,
   instanceId,
@@ -183,216 +140,76 @@ function ParteCard({
       style={{ borderColor: '#DFE5ED' }}
       aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
     >
-      <legend className="px-1 text-xs font-bold flex items-center gap-2">
-        {PARTE_LABEL[parte]}
-        {validation && <EstadoBadge estado={validation.estado} />}
-      </legend>
+      <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
 
       {validation ? (
-        <ValidationView validation={validation} />
+        <VerifiedView validation={validation} />
       ) : (
-        <IniciarForm parte={parte} instanceId={instanceId} onStarted={onChanged} />
+        <SimulateAction parte={parte} instanceId={instanceId} onSimulated={onChanged} />
       )}
     </fieldset>
   );
 }
 
-/** Vista del estado de una validación existente: score, intentos y magic-link. */
-function ValidationView({ validation: v }: { validation: BiometricValidation }) {
+/** Tarjeta verde "Identidad verificada — {score}/100" con el nombre de la parte. */
+function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
   return (
-    <div className="space-y-2 text-xs">
-      <p>
-        <span className="opacity-60">Participante: </span>
-        <span className="font-medium">{v.nombre}</span>{' '}
-        <span className="opacity-60">
-          ({v.tipoDoc} {v.documento})
-        </span>
-      </p>
-      <p className="opacity-70">{v.email}</p>
-      <div className="flex flex-wrap gap-x-6 gap-y-1">
-        <span>
-          <span className="opacity-60">Intentos: </span>
-          {v.intentos}/{v.maxIntentos}
-        </span>
-        {v.score !== null && (
-          <span>
-            <span className="opacity-60">Score: </span>
-            <span className="font-semibold">{v.score}</span>
-          </span>
-        )}
+    <div
+      className="flex items-center gap-3 rounded-xl p-3"
+      style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
+    >
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
+        style={{ background: '#5B8A1F', color: 'white' }}
+        aria-hidden
+      >
+        <Check className="h-5 w-5" />
+      </span>
+      <div className="space-y-0.5">
+        <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
+          Identidad verificada — {v.score ?? 95}/100
+        </p>
+        <p className="text-[11px] opacity-70">{v.nombre}</p>
       </div>
-      {v.estado === 'aprobado' && (
-        <p className="flex items-center gap-1.5 font-semibold" style={{ color: '#5B8A1F' }}>
-          <Check className="h-3.5 w-3.5" /> Identidad verificada
-        </p>
-      )}
-      {v.estado === 'rechazado' && (
-        <p style={{ color: '#FF4E00' }}>
-          Validación rechazada. El participante puede reintentar mientras queden intentos.
-        </p>
-      )}
-      {(v.estado === 'expirado' || v.expired) && (
-        <p style={{ color: '#9AA5B1' }}>El enlace de validación expiró.</p>
-      )}
     </div>
   );
 }
 
-/** Formulario para iniciar la biométrica de una parte. */
-function IniciarForm({
+/** Acción de simular la validación de identidad de una parte (mock). */
+function SimulateAction({
   parte,
   instanceId,
-  onStarted,
+  onSimulated,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
-  onStarted: () => void;
+  onSimulated: () => void;
 }) {
-  const [nombre, setNombre] = useState('');
-  const [tipoDoc, setTipoDoc] = useState<BiometricTipoDoc>('CC');
-  const [documento, setDocumento] = useState('');
-  const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
-  const prefix = `bio-${parte}`;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSimulate = async () => {
     if (!instanceId) return;
-    if (!nombre.trim() || !documento.trim() || !email.trim()) {
-      setError('Completa nombre, documento y correo.');
-      return;
-    }
-    if (!EMAIL_RE.test(email.trim())) {
-      setError('Correo no válido.');
-      return;
-    }
     setError(null);
     setSubmitting(true);
     try {
-      const result = await tramitesClient.iniciarBiometric(instanceId, {
-        parte,
-        nombre: nombre.trim(),
-        tipoDoc,
-        documento: documento.trim(),
-        email: email.trim(),
-      });
-      setLink(absoluteLink(result.magicLinkPath));
-      onStarted();
+      await tramitesClient.simulateBiometric(instanceId, { parte });
+      onSimulated();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'No se pudo iniciar la biométrica.',
+        err instanceof Error ? err.message : 'No se pudo simular la validación.',
       );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCopy = async () => {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Sin acceso al portapapeles: el enlace ya está visible para copiar a mano.
-    }
-  };
-
-  if (link) {
-    return (
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold" style={{ color: '#5B8A1F' }}>
-          Enlace de validación generado (DEV: sin envío de correo).
-        </p>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            readOnly
-            value={link}
-            aria-label={`Enlace biométrico ${PARTE_LABEL[parte]}`}
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          />
-          <button
-            type="button"
-            onClick={() => void handleCopy()}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white shrink-0"
-            style={{ background: '#557EFF' }}
-            aria-label="Copiar enlace"
-          >
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            {copied ? 'Copiado' : 'Copiar'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="md:col-span-2">
-          <label htmlFor={`${prefix}-nombre`} className="text-xs font-semibold mb-1.5 block">
-            Nombre completo
-          </label>
-          <input
-            id={`${prefix}-nombre`}
-            type="text"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          />
-        </div>
-        <div>
-          <label htmlFor={`${prefix}-tipoDoc`} className="text-xs font-semibold mb-1.5 block">
-            Tipo de documento
-          </label>
-          <select
-            id={`${prefix}-tipoDoc`}
-            value={tipoDoc}
-            onChange={(e) => setTipoDoc(e.target.value as BiometricTipoDoc)}
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          >
-            {DOC_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={`${prefix}-documento`} className="text-xs font-semibold mb-1.5 block">
-            Número de documento
-          </label>
-          <input
-            id={`${prefix}-documento`}
-            type="text"
-            value={documento}
-            onChange={(e) => setDocumento(e.target.value)}
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor={`${prefix}-email`} className="text-xs font-semibold mb-1.5 block">
-            Correo electrónico
-          </label>
-          <input
-            id={`${prefix}-email`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          />
-        </div>
-      </div>
+    <div className="space-y-3">
+      <p className="text-[11px] opacity-60">
+        Mock de esta iteración: simula la validación biométrica de esta parte. La
+        captura biométrica real se integrará más adelante.
+      </p>
 
       {error && (
         <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
@@ -400,16 +217,20 @@ function IniciarForm({
         </p>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={submitting || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: '#557EFF' }}
-        >
-          {submitting ? 'Generando…' : 'Generar enlace biométrico'}
-        </button>
-      </div>
-    </form>
+      <button
+        type="button"
+        onClick={() => void handleSimulate()}
+        disabled={submitting || !instanceId}
+        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+        style={{ background: '#557EFF' }}
+      >
+        {submitting ? (
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <ShieldCheck className="h-3.5 w-3.5" />
+        )}
+        {submitting ? 'Simulando…' : 'Simular validación de identidad'}
+      </button>
+    </div>
   );
 }

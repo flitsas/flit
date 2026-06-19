@@ -4,6 +4,7 @@ import type {
   ActorsResponse,
   AttachmentsResponse,
   BiometriaPublicView,
+  BiometricParte,
   BiometricValidation,
   BiometricValidationsResponse,
   ChecklistView,
@@ -365,6 +366,23 @@ export const tramitesClient = {
   ) =>
     request<IniciarBiometriaResult>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  // POST simular la validación biométrica de una parte (mock de esta iteración:
+  // la biométrica real es una iteración futura). Devuelve la validación aprobada
+  // (estado 'aprobado', score 95). Mismo DTO que listBiometric.
+  simulateBiometric: (
+    instanceId: string,
+    input: { parte: BiometricParte },
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<BiometricValidation>(
+      `/api/v1/tramites/instances/${instanceId}/biometric/simulate`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
