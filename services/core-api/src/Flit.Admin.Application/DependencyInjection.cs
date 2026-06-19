@@ -1,10 +1,17 @@
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
+using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
+using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
+using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,6 +38,14 @@ public static class DependencyInjection
         services.AddScoped<IVehicleOwnershipGuard, VehicleOwnershipGuard>();
         services.AddScoped<AddWhitelistEmailsHandler>();
         services.AddScoped<GetWhitelistHandler>();
+
+        // HU #10192 — catálogo OT (estático en memoria) + grants + consulta audit log.
+        services.AddSingleton<ITransitOfficeCatalog, StaticTransitOfficeCatalog>();
+        services.AddScoped<SearchTransitOfficesHandler>();
+        services.AddScoped<AddTransitGrantHandler>();
+        services.AddScoped<RemoveTransitGrantHandler>();
+        services.AddScoped<GetTransitGrantsHandler>();
+        services.AddScoped<GetTenantAuditLogHandler>();
 
         return services;
     }

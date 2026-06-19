@@ -259,6 +259,192 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/transit-offices:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesSearch
+      summary: Catálogo estático de organismos de tránsito con búsqueda (RF13, AC1)
+      description: >
+        Retorna el catálogo estático en memoria de organismos de tránsito. El parámetro
+        opcional `search` filtra por nombre o código (case-insensitive e insensible a
+        tildes). No consulta base de datos. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+          description: Término opcional de búsqueda (nombre o código).
+      responses:
+        "200":
+          description: Catálogo de organismos (filtrado si se informó `search`).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitOffice"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetTransitGrants
+      summary: Organismos de tránsito habilitados del tenant (RF13, AC5)
+      description: >
+        Retorna los ids de organismos de tránsito habilitados para el tenant.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de organismos habilitados (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyAddTransitGrant
+      summary: Habilita un organismo de tránsito para el tenant + audit log (RF13, AC2)
+      description: >
+        Habilita un organismo de tránsito (que debe existir en el catálogo estático)
+        para el tenant y genera una entrada de auditoría. Idempotente: si el grant ya
+        existe retorna 201 sin duplicar fila ni auditoría. Si el organismo no existe en
+        el catálogo retorna 422 sin persistir. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitGrantRequest"
+      responses:
+        "201":
+          description: Grant habilitado (alta nueva o idempotente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantCreatedResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: El organismo no existe en el catálogo. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId}:
+    delete:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyRemoveTransitGrant
+      summary: Deshabilita un organismo de tránsito del tenant + audit log (RF13, AC3)
+      description: >
+        Elimina el grant del organismo para el tenant y genera una entrada de auditoría.
+        Retorna 404 si el grant no existía. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+      responses:
+        "204":
+          description: Grant eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe el grant para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/audit-log:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetAuditLog
+      summary: Historial de auditoría de gobernanza paginado (AC4)
+      description: >
+        Retorna el historial de cambios de configuración del tenant ordenado por
+        `changedAt` descendente, paginado. Cada registro incluye el campo modificado,
+        el valor anterior/nuevo, el operador y el timestamp. Requiere JWT con rol
+        SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del historial de auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPageResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -423,3 +609,85 @@ components:
         userEmail: { type: string, format: email, nullable: true }
         onlyOwnVehicles: { type: boolean }
       required: [tenantId, onlyOwnVehicles]
+
+    TransitOffice:
+      type: object
+      description: Organismo de tránsito del catálogo estático (AC1).
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        departmentCode: { type: string }
+        cityCode: { type: string }
+      required: [id, code, name, departmentCode, cityCode]
+
+    TransitGrantRequest:
+      type: object
+      description: Habilitación de un organismo de tránsito a un tenant (AC2).
+      properties:
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Id del organismo a habilitar. Debe existir en el catálogo estático.
+      required: [transitOfficeId]
+
+    TransitGrantCreatedResponse:
+      type: object
+      description: Resultado del alta de un grant (AC2).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        created:
+          type: boolean
+          description: true si se creó el grant; false si ya existía (idempotente).
+      required: [transitOfficeId, created]
+
+    TransitGrantListResponse:
+      type: object
+      description: Organismos de tránsito habilitados del tenant (AC5).
+      properties:
+        transitOfficeIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [transitOfficeIds]
+
+    TransitGrantValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    TransitGrantValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitGrantValidationError"
+      required: [errors]
+
+    AuditLogEntry:
+      type: object
+      description: Entrada del historial de auditoría de gobernanza (AC4).
+      properties:
+        entityName: { type: string }
+        fieldName: { type: string }
+        oldValue: { type: string, nullable: true }
+        newValue: { type: string, nullable: true }
+        changedBy: { type: string, format: uuid, nullable: true }
+        changedAt: { type: string, format: date-time }
+      required: [entityName, fieldName, changedAt]
+
+    AuditLogPageResponse:
+      type: object
+      description: Página del historial de auditoría (AC4).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
