@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   reinvitarParticipante: vi.fn(),
   generarFur: vi.fn(),
   getAttachments: vi.fn(),
+  getInstance: vi.fn(),
+  patchFieldValues: vi.fn(),
+  submitInstance: vi.fn(),
+  downloadAttachment: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -30,6 +34,10 @@ vi.mock('@/lib/api/tramites-client', () => ({
     reinvitarParticipante: mocks.reinvitarParticipante,
     generarFur: mocks.generarFur,
     getAttachments: mocks.getAttachments,
+    getInstance: mocks.getInstance,
+    patchFieldValues: mocks.patchFieldValues,
+    submitInstance: mocks.submitInstance,
+    downloadAttachment: mocks.downloadAttachment,
   },
 }));
 
@@ -78,11 +86,39 @@ const FUR_DOC: ProcedureAttachment = {
   uploadedAt: '2026-06-19T00:00:00Z',
 };
 
+// Detalle con organismo YA seleccionado: el modal no se auto-abre y no
+// interfiere con las aserciones de las regiones/botones existentes.
+const INSTANCE_DETAIL = {
+  id: INSTANCE,
+  referenceNumber: 'REF-1',
+  status: 'draft' as const,
+  procedureTypeId: 'pt-1',
+  tenantId: 't-1',
+  createdAt: '2026-06-19T00:00:00Z',
+  submittedAt: null,
+  completedAt: null,
+  fieldValues: [
+    { formFieldId: null, fieldKey: 'transit_office_code', valueText: '11001', valueJson: null, source: 'runt' },
+    { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría Distrital de Movilidad de Bogotá', valueJson: null, source: 'runt' },
+    { formFieldId: null, fieldKey: 'transit_office_city', valueText: 'Bogotá D.C.', valueJson: null, source: 'runt' },
+  ],
+  statusHistory: [],
+  actors: [],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
+  mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
+  mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'submitted' });
+  mocks.downloadAttachment.mockResolvedValue({
+    blob: new Blob(['x'], { type: 'text/plain' }),
+    filename: 'fur.txt',
+    mimetype: 'text/plain',
+  });
   mocks.solicitarFirma.mockResolvedValue(FIRMA_ENVIADA);
   mocks.simularFirma.mockResolvedValue({ id: 'sig-1', estado: 'firmada', pdfPath: 'p', sha256: 's' });
   mocks.invitarParticipante.mockResolvedValue({
@@ -166,12 +202,14 @@ describe('FirmaFurStep — invitar participante', () => {
 
 describe('FirmaFurStep — generar FUR', () => {
   it('genera el FUR y lista los documentos', async () => {
-    mocks.getAttachments.mockResolvedValueOnce([]).mockResolvedValueOnce([FUR_DOC]);
+    // getAttachments lo consumen Expediente y FUR; tras generar devolvemos el doc.
+    mocks.getAttachments.mockResolvedValue([]);
     const onRefresh = vi.fn();
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" onRefresh={onRefresh} />);
     await screen.findByRole('region', { name: 'Generación del FUR' });
-    await user.click(screen.getByRole('button', { name: 'Generar FUR / contrato' }));
+    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
     await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/fur · fur.txt/)).toBeInTheDocument();
     expect(onRefresh).toHaveBeenCalled();
@@ -182,9 +220,92 @@ describe('FirmaFurStep — generar FUR', () => {
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     await screen.findByRole('region', { name: 'Generación del FUR' });
-    await user.click(screen.getByRole('button', { name: 'Generar FUR / contrato' }));
+    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
     expect(
-      await screen.findByText(/primero debe aprobarse la biométrica/),
+      await screen.findByText(/Falta validar identidad/),
+    ).toBeInTheDocument();
+  });
+
+  it('maneja el 409 organismo_requerido', async () => {
+    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: organismo_requerido'));
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
+    expect(
+      await screen.findByText(/Selecciona el organismo de tránsito/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — organismo de tránsito', () => {
+  it('auto-abre el modal y sugiere el organismo del RUNT cuando no hay selección', async () => {
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, fieldValues: [] });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(
+      await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' }),
+    ).toBeInTheDocument();
+  });
+
+  it('persiste el organismo elegido vía patchFieldValues con las 3 keys', async () => {
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, fieldValues: [] });
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const dialog = await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' });
+    await user.click(within(dialog).getByRole('button', { name: /Secretaría de Movilidad de Cali/ }));
+    await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalledTimes(1));
+    const items = mocks.patchFieldValues.mock.calls[0][1];
+    const keys = items.map((i: { fieldKey: string }) => i.fieldKey);
+    expect(keys).toEqual(
+      expect.arrayContaining(['transit_office_code', 'transit_office_name', 'transit_office_city']),
+    );
+  });
+});
+
+describe('FirmaFurStep — descarga de documentos', () => {
+  it('descarga un documento generado disparando el download del navegador', async () => {
+    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    const clickSpy = vi.fn();
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag) as HTMLElement;
+      if (tag === 'a') (el as HTMLAnchorElement).click = clickSpy;
+      return el;
+    });
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    globalThis.URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const docList = await screen.findByRole('list', { name: 'Documentos generados' });
+    await user.click(within(docList).getByRole('button', { name: /Descargar/ }));
+    await waitFor(() => expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-fur'));
+    expect(clickSpy).toHaveBeenCalled();
+    vi.mocked(document.createElement).mockRestore();
+  });
+});
+
+describe('FirmaFurStep — enviar a tránsito', () => {
+  it('envía y muestra la confirmación', async () => {
+    const onSubmitted = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onSubmitted={onSubmitted} />,
+    );
+    await screen.findByRole('region', { name: 'Envío a tránsito' });
+    await user.click(screen.getByRole('button', { name: 'Enviar a tránsito' }));
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith(INSTANCE));
+    expect(await screen.findByText('Enviado a tránsito')).toBeInTheDocument();
+    expect(onSubmitted).toHaveBeenCalled();
+  });
+
+  it('mapea el 409 documentos_incompletos al copy correcto', async () => {
+    mocks.submitInstance.mockRejectedValue(new Error('409 Conflict: documentos_incompletos'));
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByRole('region', { name: 'Envío a tránsito' });
+    await user.click(screen.getByRole('button', { name: 'Enviar a tránsito' }));
+    expect(
+      await screen.findByText(/Faltan documentos obligatorios/),
     ).toBeInTheDocument();
   });
 });

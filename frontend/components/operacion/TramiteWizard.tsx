@@ -314,6 +314,7 @@ export function TramiteWizard(props: Props) {
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
+                onSubmitted={() => setSubmitted(true)}
               />
             </div>
           )}
@@ -694,6 +695,7 @@ function StepBody({
   preflightLoading,
   onRunPreflight,
   onRefresh,
+  onSubmitted,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -702,6 +704,7 @@ function StepBody({
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
+  onSubmitted: () => void;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -787,6 +790,7 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            onSubmitted={onSubmitted}
           />
         </div>
       );

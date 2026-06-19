@@ -278,6 +278,41 @@ export const tramitesClient = {
     return (await res.json()) as ProcedureAttachment;
   },
 
+  // GET descarga binaria de un adjunto. Devuelve el blob + filename/mimetype
+  // (resueltos del Content-Disposition / Content-Type de la respuesta) para que
+  // el consumidor dispare la descarga del navegador (blob → objectURL → anchor).
+  downloadAttachment: async (
+    instanceId: string,
+    attachmentId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
+    const res = await fetch(
+      `${BASE_URL}/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`,
+      { headers: tenantHeader(tenantId) },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      );
+    }
+    const blob = await res.blob();
+    const mimetype =
+      res.headers.get('content-type') ?? 'application/octet-stream';
+    // Content-Disposition: attachment; filename="fur.txt"  (o filename*=UTF-8'')
+    const cd = res.headers.get('content-disposition') ?? '';
+    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+    const plain = /filename="?([^";]+)"?/i.exec(cd);
+    const raw = star?.[1] ?? plain?.[1] ?? '';
+    let filename = raw.trim();
+    try {
+      filename = raw ? decodeURIComponent(raw.trim()) : '';
+    } catch {
+      // raw no era URI-encoded; se usa tal cual.
+    }
+    return { blob, filename: filename || attachmentId, mimetype };
+  },
+
   // DELETE adjunto -> 204.
   deleteAttachment: (
     instanceId: string,
