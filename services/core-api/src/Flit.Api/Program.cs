@@ -46,5 +46,6 @@ app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
 app.MapPublicProcedureTypeEndpoints();
 app.MapTramitesInstanceEndpoints();
+app.MapConsultationEndpoints();
 
 app.Run();

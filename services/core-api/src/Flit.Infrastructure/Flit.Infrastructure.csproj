@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Tramites.Domain\Flit.Tramites.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

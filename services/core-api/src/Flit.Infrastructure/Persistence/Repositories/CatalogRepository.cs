@@ -23,6 +23,11 @@ internal sealed class CatalogRepository(FlitDbContext db) : ICatalogRepository
             .Include(t => t.ExternalDataSource)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
 
+    public Task<ConsultationTemplate?> GetConsultationTemplateByCodeAsync(string code, CancellationToken ct) =>
+        db.ConsultationTemplates
+            .Include(t => t.ExternalDataSource)
+            .FirstOrDefaultAsync(t => t.Code == code, ct);
+
     public Task<ProcedureEntity?> GetProcedureEntityByCodeAsync(string code, CancellationToken ct) =>
         db.ProcedureEntities.FirstOrDefaultAsync(e => e.Code == code, ct);
 }

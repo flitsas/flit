@@ -112,3 +112,27 @@ export interface PreflightSnapshot {
   checks: PreflightCheck[];
   createdAt: string;
 }
+
+// ── Consulta real #10201: POST /instances/{id}/consultations/{templateCode} ──
+// Tipos aditivos espejo del DTO ConsultationResult del backend.
+
+export interface ConsultationCheck {
+  key: string;
+  label: string;
+  status: PreflightCheckStatus;
+  source: string;
+  message?: string;
+}
+
+export interface ConsultationHydratedField {
+  fieldKey: string;
+  valueText?: string;
+  valueJson?: string;
+}
+
+export interface ConsultationResult {
+  provider: string;
+  overall: PreflightOverall;
+  checks: ConsultationCheck[];
+  hydratedFields: ConsultationHydratedField[];
+}

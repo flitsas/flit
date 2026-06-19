@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getInstance: vi.fn(),
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
-  runConsultationStub: vi.fn(),
+  runConsultation: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -24,8 +24,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getInstance: mocks.getInstance,
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
+    runConsultation: mocks.runConsultation,
   },
-  runConsultationStub: mocks.runConsultationStub,
 }));
 
 import { OperacionView } from '@/components/operacion/OperacionView';
@@ -110,7 +110,7 @@ beforeEach(() => {
     createdAt: '2026-06-18T00:00:00Z',
   });
   mocks.patchFieldValues.mockResolvedValue({});
-  mocks.runConsultationStub.mockResolvedValue({
+  mocks.runConsultation.mockResolvedValue({
     overall: 'yellow',
     createdAt: '2026-06-18T00:00:00Z',
     checks: [
@@ -171,7 +171,8 @@ describe('AC3 — guardar borrador + consulta semáforo', () => {
     await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
 
     await user.click(await screen.findByRole('button', { name: /Consultar RUNT/ }));
-    await waitFor(() => expect(mocks.runConsultationStub).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.runConsultation).toHaveBeenCalledTimes(1));
+    expect(mocks.runConsultation).toHaveBeenCalledWith('inst-1', 'RUNT_VEHICLE');
     expect(await screen.findByText('Pre-vuelo con advertencias')).toBeInTheDocument();
   });
 });

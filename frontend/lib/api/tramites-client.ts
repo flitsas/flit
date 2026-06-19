@@ -1,5 +1,6 @@
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
+  ConsultationResult,
   CreateInstanceRequest,
   FieldValueInput,
   PreflightSnapshot,
@@ -98,40 +99,31 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
       },
     ),
-};
 
-// STUB #10201 — consulta de fuentes externas (RUNT/SIMIT) simulada en cliente.
-// Sin HTTP real: devuelve un snapshot determinista para validar el panel semáforo.
-// La consulta real se cablea en #10201.
-export function runConsultationStub(): Promise<PreflightSnapshot> {
-  const snapshot: PreflightSnapshot = {
-    overall: 'yellow',
-    createdAt: new Date().toISOString(),
-    checks: [
+  // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea
+  // ConsultationResult del backend al shape PreflightSnapshot del panel.
+  runConsultation: async (
+    instanceId: string,
+    templateCode: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<PreflightSnapshot> => {
+    const result = await request<ConsultationResult>(
+      `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}`,
       {
-        key: 'runt_inscripcion',
-        label: 'Inscripción RUNT',
-        status: 'ok',
-        source: 'RUNT',
-        message: 'Vehículo inscrito y activo en el RUNT.',
+        method: 'POST',
+        headers: tenantHeader(tenantId),
       },
-      {
-        key: 'simit_comparendos',
-        label: 'Comparendos',
-        status: 'warn',
-        source: 'SIMIT',
-        message: '1 comparendo pendiente por $234.500 COP.',
-        action: { label: 'Ver detalle en SIMIT', ctaId: 'simit_detail' },
-      },
-      {
-        key: 'runt_soat',
-        label: 'SOAT vigente',
-        status: 'fail',
-        source: 'RUNT',
-        message: 'SOAT vencido. Renueva antes de radicar.',
-        action: { label: 'Renovar SOAT', ctaId: 'soat_renew' },
-      },
-    ],
-  };
-  return Promise.resolve(snapshot);
-}
+    );
+    return {
+      overall: result.overall,
+      checks: result.checks.map((c) => ({
+        key: c.key,
+        label: c.label,
+        status: c.status,
+        source: c.source,
+        message: c.message ?? '',
+      })),
+      createdAt: new Date().toISOString(),
+    };
+  },
+};

@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<PatchFieldValuesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
 
+        services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
+
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();
         services.AddScoped<ListConsultationTemplatesHandler>();

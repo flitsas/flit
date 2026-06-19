@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { tramitesClient, runConsultationStub } from '@/lib/api/tramites-client';
+import { tramitesClient } from '@/lib/api/tramites-client';
 import { DEV_TENANT_ID, DEV_USER_ID } from '@/lib/api/dev-constants';
 import type { FormFieldItem } from '@/lib/api/types/procedure-parametrization';
 import type {
@@ -62,7 +62,7 @@ const INITIAL_STATE: InstanceState = {
 /**
  * Orquesta el runtime de una instancia de trámite:
  * start (POST create draft) → saveDraft (PATCH field-values) por step →
- * goToStep → submit. runConsulta usa el stub local (#10201).
+ * goToStep → submit. runConsulta llama la consulta real de fuentes (#10201).
  */
 export function useProcedureInstance() {
   const [state, setState] = useState<InstanceState>(INITIAL_STATE);
@@ -155,9 +155,16 @@ export function useProcedureInstance() {
   }, []);
 
   const runConsulta = useCallback(async () => {
+    const instanceId = stateRef.current.instanceId;
+    if (!instanceId) return null;
     setState((s) => ({ ...s, preflightLoading: true }));
     try {
-      const snapshot = await runConsultationStub();
+      // TODO #10201: 'RUNT_VEHICLE' hardcoded (MVP) — debería venir de la
+      // config del trámite (consultationTemplateId del field/step).
+      const snapshot = await tramitesClient.runConsultation(
+        instanceId,
+        'RUNT_VEHICLE',
+      );
       setState((s) => ({
         ...s,
         preflight: snapshot,
