@@ -3,6 +3,7 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
+using Flit.Admin.Domain.DocumentTypes;
 using Flit.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,6 +28,9 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + consulta de audit log.
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
+
+        // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
+        services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
         return services;
     }

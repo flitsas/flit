@@ -10,6 +10,10 @@ using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
+using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
+using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
+using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -46,6 +50,12 @@ public static class DependencyInjection
         services.AddScoped<RemoveTransitGrantHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
+        services.AddScoped<CreateDocumentTypeHandler>();
+        services.AddScoped<ListDocumentTypesHandler>();
+        services.AddScoped<UpdateDocumentTypeHandler>();
+        services.AddScoped<DeleteDocumentTypeHandler>();
 
         return services;
     }

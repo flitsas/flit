@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence;
@@ -24,6 +25,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+
+    public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

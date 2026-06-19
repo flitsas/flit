@@ -34,6 +34,7 @@ app.UseAuthorization();
 
 app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminDocumentTypesEndpoints();
 app.MapTransfersEndpoints();
 
 app.Run();

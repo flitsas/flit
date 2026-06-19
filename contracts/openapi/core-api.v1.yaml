@@ -16,6 +16,8 @@ servers:
 tags:
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Admin · Documentos
+    description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
 
 paths:
   /api/v1/admin/companies/index:
@@ -445,6 +447,164 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/document-types:
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeCreate
+      summary: Crea un tipo de documento (RF01)
+      description: >
+        Da de alta un tipo de documento en el catálogo maestro
+        (tramites.document_types) con estado activo. El código es único global.
+        El campo `obligatorio` se acepta pero no se persiste (la obligatoriedad
+        vive por trámite en procedure_document_requirements). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentTypeRequest"
+      responses:
+        "201":
+          description: Tipo de documento creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeList
+      summary: Listado paginado de tipos de documento (RF02)
+      description: >
+        Retorna el catálogo paginado ordenado por nombre ascendente. Por defecto
+        solo incluye activos. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: includeInactive
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Si es true incluye también los inactivos (soft-deleted).
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypePagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    put:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeUpdate
+      summary: Actualiza un tipo de documento (RF03)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentTypeRequest"
+      responses:
+        "200":
+          description: Tipo de documento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeDelete
+      summary: Baja lógica de un tipo de documento (RF04)
+      description: >
+        Soft-delete: marca is_active=false sin borrado físico. Si el tipo de
+        documento está referenciado en procedure_document_requirements retorna
+        409 y no se desactiva. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento desactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tiene asociaciones activas y no puede desactivarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -691,3 +851,60 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    DocumentTypeResponse:
+      type: object
+      description: Tipo de documento del catálogo maestro (HU #10193).
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: Estado derivado de is_active (soft-delete).
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, codigo, nombre, estado, fechaCreacion]
+
+    DocumentTypePagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentTypeResponse"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateDocumentTypeRequest:
+      type: object
+      description: Payload de alta (AC1).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+        obligatorio:
+          type: boolean
+          nullable: true
+          description: >
+            Aceptado por el AC pero NO persistido en el catálogo; la obligatoriedad
+            vive por trámite en procedure_document_requirements (HU #10195).
+      required: [codigo, nombre]
+
+    UpdateDocumentTypeRequest:
+      type: object
+      description: Payload de actualización (AC3).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+      required: [codigo, nombre]
