@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type {
   CreateInstanceRequest,
+  InstanceSummary,
   WizardState,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -26,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   saveActors: vi.fn(),
   getChecklist: vi.fn(),
   getAttachments: vi.fn(),
+  // Slice M6 — listado de instancias para la tabla "Trámites en curso".
+  listInstances: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -94,6 +97,71 @@ beforeEach(() => {
   mocks.getActors.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
+  // Por defecto la tabla de "Trámites en curso" está vacía.
+  mocks.listInstances.mockResolvedValue([]);
+});
+
+const INSTANCE_DRAFT: InstanceSummary = {
+  id: 'inst-1',
+  referenceNumber: 'TR-001',
+  modalidad: 'traspaso',
+  estado: 'draft',
+  placa: 'ABC123',
+  vin: 'VIN-XYZ-001',
+  vehiculoMarca: 'Toyota',
+  vehiculoLinea: 'Corolla',
+  compradorNombre: 'Carlos Mendoza',
+  compradorDocumento: '12345678',
+  pasoActual: 2,
+  totalPasos: 6,
+  createdAt: '2026-06-18T00:00:00Z',
+};
+
+const INSTANCE_SUBMITTED: InstanceSummary = {
+  id: 'inst-2',
+  referenceNumber: 'MA-002',
+  modalidad: 'matricula_inicial',
+  estado: 'submitted',
+  placa: null,
+  vin: 'VIN-NEW-002',
+  vehiculoMarca: 'Mazda',
+  vehiculoLinea: 'CX-30',
+  compradorNombre: 'María Restrepo',
+  compradorDocumento: '87654321',
+  pasoActual: 5,
+  totalPasos: 5,
+  createdAt: '2026-06-19T00:00:00Z',
+};
+
+describe('M6 — tabla de trámites en curso', () => {
+  it('muestra el estado vacío cuando no hay instancias', async () => {
+    render(<OperacionView />);
+    expect(await screen.findByText('Aún no hay trámites')).toBeInTheDocument();
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+  });
+
+  it('renderiza una fila por instancia con placa, comprador, VIN, paso y chip de estado', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    render(<OperacionView />);
+
+    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+
+    // Fila draft: placa real, comprador, VIN, vehículo concatenado, paso, chip ámbar.
+    expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('TR-001')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Carlos Mendoza')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('VIN-XYZ-001')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Toyota Corolla')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('En preparación')).toBeInTheDocument();
+
+    // Fila submitted: placa nula -> "—", chip azul "Enviado a tránsito".
+    expect(within(rows[1]).getByText('—')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Enviado a tránsito')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('5/5')).toBeInTheDocument();
+  });
 });
 
 describe('M0 — chooser por modalidad (sin tipos publicados)', () => {

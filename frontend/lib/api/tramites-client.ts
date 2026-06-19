@@ -15,6 +15,8 @@ import type {
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
+  InstanceSummary,
+  InstancesResponse,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
   InvitarParticipanteInput,
@@ -131,6 +133,18 @@ export const tramitesClient = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Slice M6 — listado de instancias para la tabla "Trámites en curso".
+  // GET devuelve { items }; se desempaqueta al arreglo para el consumidor.
+  listInstances: async (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<InstanceSummary[]> => {
+    const res = await request<InstancesResponse>(
+      '/api/v1/tramites/instances',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.items ?? [];
+  },
 
   getInstance: (id: string, tenantId: string = DEV_TENANT_ID) =>
     request<ProcedureInstanceDetail>(`/api/v1/tramites/instances/${id}`, {

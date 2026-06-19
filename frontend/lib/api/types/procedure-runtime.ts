@@ -51,6 +51,32 @@ export interface ProcedureInstanceSummary {
   submittedAt?: string | null;
 }
 
+// ── Listado de instancias (Slice M6) ───────────────────────────────
+// Contrato FIJO acordado con backend:
+//   GET /api/v1/tramites/instances  (X-Tenant-Id)  -> { items: InstanceSummary[] }
+// Resumen pensado para la tabla de "Trámites en curso" de OperacionView:
+// trae placa/VIN/vehículo/comprador desnormalizados + progreso del wizard.
+export interface InstanceSummary {
+  id: string;
+  referenceNumber: string;
+  modalidad: WizardModalidad;
+  estado: InstanceStatus;
+  placa: string | null;
+  vin: string | null;
+  vehiculoMarca: string | null;
+  vehiculoLinea: string | null;
+  compradorNombre: string | null;
+  compradorDocumento: string | null;
+  pasoActual: number;
+  totalPasos: number;
+  createdAt: string;
+}
+
+/** Respuesta de GET /instances. */
+export interface InstancesResponse {
+  items: InstanceSummary[];
+}
+
 export interface FieldValue {
   formFieldId: string;
   fieldKey: string;

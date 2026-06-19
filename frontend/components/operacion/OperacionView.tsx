@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, Car, ArrowLeftRight } from 'lucide-react';
 import { TramiteWizard } from './TramiteWizard';
+import { TramitesTable } from './TramitesTable';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -36,8 +37,14 @@ const MODALIDADES: Modalidad[] = [
 
 export function OperacionView() {
   const [selected, setSelected] = useState<Modalidad | null>(null);
+  // Se incrementa al volver del wizard para forzar el refetch de la tabla:
+  // así, tras "Enviar a tránsito", el listado refleja el trámite nuevo/actualizado.
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleExit = () => setSelected(null);
+  const handleExit = () => {
+    setSelected(null);
+    setRefreshKey((k) => k + 1);
+  };
 
   // Wizard activo: hay una modalidad elegida. El wizard crea la instancia.
   if (selected) {
@@ -104,24 +111,13 @@ export function OperacionView() {
         </ul>
       </section>
 
-      {/* Listado de instancias — FUERA DE ALCANCE de #10200 (placeholder). */}
+      {/* Listado de instancias (Slice M6) — se refresca al volver del wizard. */}
       <section
         className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] shrink-0"
         style={{ borderColor: '#DFE5ED' }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-bold">Trámites en curso</h2>
-          <span
-            className="px-2 py-0.5 rounded text-[9px] font-bold text-white"
-            style={{ background: '#557EFF' }}
-          >
-            Próximamente
-          </span>
-        </div>
-        <p className="text-[11px] opacity-60">
-          El listado y seguimiento de instancias se habilita en una próxima
-          entrega.
-        </p>
+        <h2 className="text-sm font-bold mb-3">Trámites en curso</h2>
+        <TramitesTable refreshKey={refreshKey} />
       </section>
     </div>
   );
