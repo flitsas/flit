@@ -22,11 +22,15 @@ public sealed class VerifikVehicleData
     [JsonPropertyName("soat")]
     public List<VerifikSoat>? Soat { get; set; }
 
-    [JsonPropertyName("revisionTecnomecanica")]
-    public VerifikTecnomecanica? RevisionTecnomecanica { get; set; }
+    // RUNT real: "tecnoMecanica" es un ARRAY de revisiones (cada una con vigente SI/NO/NO APLICA).
+    [JsonPropertyName("tecnoMecanica")]
+    public List<VerifikTecnomecanica>? TecnoMecanica { get; set; }
 
+    // RUNT real: "garantiasMobiliarias" es un ARRAY (normalmente []). La señal de gravámenes
+    // vive en informacionGeneral.tieneGravamenes/prendas, NO aquí. Se mapea como lista solo
+    // para no romper la deserialización (array-vs-objeto era la causa de la JsonException).
     [JsonPropertyName("garantiasMobiliarias")]
-    public VerifikGravamenes? GarantiasMobiliarias { get; set; }
+    public List<object>? GarantiasMobiliarias { get; set; }
 }
 
 public sealed class VerifikInformacionGeneral
@@ -42,6 +46,13 @@ public sealed class VerifikInformacionGeneral
 
     [JsonPropertyName("estadoDelVehiculo")]
     public string? EstadoDelVehiculo { get; set; }
+
+    // Señal de gravámenes real: viven aquí (strings "SI"/"NO"), no en garantiasMobiliarias.
+    [JsonPropertyName("tieneGravamenes")]
+    public string? TieneGravamenes { get; set; }
+
+    [JsonPropertyName("prendas")]
+    public string? Prendas { get; set; }
 
     // by-vin: "cilindraje" (con n)
     [JsonPropertyName("cilindraje")]
@@ -70,18 +81,12 @@ public sealed class VerifikTecnomecanica
     [JsonPropertyName("vigente")]
     public string? Vigente { get; set; }
 
+    [JsonPropertyName("estado")]
+    public string? Estado { get; set; }
+
     [JsonPropertyName("fechaVencimiento")]
     public string? FechaVencimiento { get; set; }
-}
 
-public sealed class VerifikGravamenes
-{
-    [JsonPropertyName("tieneGravamenes")]
-    public string? TieneGravamenes { get; set; }
-
-    [JsonPropertyName("prendas")]
-    public string? Prendas { get; set; }
-
-    [JsonPropertyName("limitacionPropiedad")]
-    public string? LimitacionPropiedad { get; set; }
+    [JsonPropertyName("cdaExpide")]
+    public string? CdaExpide { get; set; }
 }

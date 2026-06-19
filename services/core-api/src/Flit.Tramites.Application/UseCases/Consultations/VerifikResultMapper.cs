@@ -28,8 +28,8 @@ public static class VerifikResultMapper
         {
             MapEstadoVehiculo(info),
             MapSoat(response.Data?.Soat),
-            MapTecnomecanica(response.Data?.RevisionTecnomecanica),
-            MapGravamenes(response.Data?.GarantiasMobiliarias),
+            MapTecnomecanica(response.Data?.TecnoMecanica),
+            MapGravamenes(info),
         };
 
         var hydrated = MapHydratedFields(info);
@@ -55,8 +55,10 @@ public static class VerifikResultMapper
 
     private static ConsultationCheck MapSoat(List<VerifikSoat>? soat)
     {
+        // RUNT real: soat es un array. Vacío → unknown (sin información),
+        // algún item VIGENTE → ok, todos vencidos/otros → fail.
         if (soat is null || soat.Count == 0)
-            return new ConsultationCheck("soat", "SOAT", Fail, Provider, "Sin SOAT registrado");
+            return new ConsultationCheck("soat", "SOAT", Unknown, Provider, "Sin SOAT registrado");
 
         var vigente = soat.Any(s => string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
         return new ConsultationCheck(
@@ -67,39 +69,44 @@ public static class VerifikResultMapper
             vigente ? null : "SOAT vencido o no vigente");
     }
 
-    private static ConsultationCheck MapTecnomecanica(VerifikTecnomecanica? tecno)
+    private static ConsultationCheck MapTecnomecanica(List<VerifikTecnomecanica>? tecno)
     {
-        var vigente = tecno?.Vigente;
-        if (string.IsNullOrWhiteSpace(vigente))
+        // RUNT real: tecnoMecanica es un array (puede venir vacío). Tomamos la revisión
+        // vigente="SI" si existe; si no, evaluamos la forma del resto.
+        if (tecno is null || tecno.Count == 0)
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
 
-        if (string.Equals(vigente, "SI", StringComparison.OrdinalIgnoreCase))
+        if (tecno.Any(t => string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase)))
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Ok, Provider, null);
 
-        if (string.Equals(vigente, "NO APLICA", StringComparison.OrdinalIgnoreCase))
+        if (tecno.All(t => string.Equals(t?.Vigente, "NO APLICA", StringComparison.OrdinalIgnoreCase)))
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "No aplica para este vehículo");
 
-        // "NO" u otros → fail
-        return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Fail, Provider, "Tecnomecánica no vigente");
+        if (tecno.Any(t => string.Equals(t?.Vigente, "NO", StringComparison.OrdinalIgnoreCase)))
+            return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Fail, Provider, "Tecnomecánica no vigente");
+
+        // Items sin señal clara de vigencia → unknown.
+        return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
     }
 
-    private static ConsultationCheck MapGravamenes(VerifikGravamenes? grav)
+    private static ConsultationCheck MapGravamenes(VerifikInformacionGeneral? info)
     {
-        if (grav is null)
+        // RUNT real: la señal de gravámenes vive en informacionGeneral.tieneGravamenes/prendas
+        // (strings "SI"/"NO"), no en el array garantiasMobiliarias.
+        if (info is null || (string.IsNullOrWhiteSpace(info.TieneGravamenes) && string.IsNullOrWhiteSpace(info.Prendas)))
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Unknown, Provider, "Sin información de gravámenes");
 
-        var sinGravamenes = IsNo(grav.TieneGravamenes);
-        var sinPrendas = IsNo(grav.Prendas);
-        var sinLimitacion = string.IsNullOrWhiteSpace(grav.LimitacionPropiedad);
+        var sinGravamenes = !IsSi(info.TieneGravamenes);
+        var sinPrendas = !IsSi(info.Prendas);
 
-        if (sinGravamenes && sinPrendas && sinLimitacion)
+        if (sinGravamenes && sinPrendas)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
-        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes, prendas o limitaciones");
+        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes o prendas");
     }
 
-    private static bool IsNo(string? value) =>
-        string.Equals(value, "NO", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSi(string? value) =>
+        string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
 
     private static List<HydratedField> MapHydratedFields(VerifikInformacionGeneral? info)
     {

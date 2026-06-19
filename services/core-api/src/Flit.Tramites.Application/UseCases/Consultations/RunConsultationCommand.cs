@@ -49,9 +49,8 @@ public sealed class RunConsultationHandler(
 
         var result = await provider.ConsultAsync(ctx, ct);
 
-        UpsertHydratedFields(instance, tenantId, result.HydratedFields);
+        UpsertHydratedFields(instance, tenantId, instanceRepo, result.HydratedFields);
 
-        await instanceRepo.UpdateAsync(instance, ct);
         try
         {
             await instanceRepo.SaveChangesAsync(ct);
@@ -92,6 +91,7 @@ public sealed class RunConsultationHandler(
     private static void UpsertHydratedFields(
         ProcedureInstance instance,
         Guid tenantId,
+        IProcedureInstanceRepository repo,
         IReadOnlyList<HydratedField> hydratedFields)
     {
         var now = DateTimeOffset.UtcNow;
@@ -108,7 +108,7 @@ public sealed class RunConsultationHandler(
             }
             else
             {
-                instance.FieldValues.Add(new ProcedureInstanceFieldValue
+                var fieldValue = new ProcedureInstanceFieldValue
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -119,7 +119,11 @@ public sealed class RunConsultationHandler(
                     ValueJson = field.ValueJson,
                     Source = ConsultationSource,
                     CreatedAt = now
-                });
+                };
+                instance.FieldValues.Add(fieldValue);
+                // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
+                // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
+                repo.Add(fieldValue);
             }
         }
     }

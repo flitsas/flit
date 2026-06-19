@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using FluentAssertions;
 using Xunit;
@@ -6,13 +7,15 @@ namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
 public sealed class VerifikResultMapperTests
 {
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
+    // Datos ficticios con la MISMA forma que la respuesta REAL de RUNT (no PII).
     private static VerifikVehicleResponse Response(
         string? estado = "ACTIVO",
         string? soatEstado = "VIGENTE",
         string? tecnoVigente = "SI",
         string? tieneGravamenes = "NO",
         string? prendas = "NO",
-        string? limitacion = null,
         string? noPlaca = "ABC123",
         string? noVin = "1HGCM82633A004352",
         string? modelo = "2020",
@@ -30,15 +33,12 @@ public sealed class VerifikResultMapperTests
                     Modelo = modelo,
                     Cilindraje = cilindraje,
                     Cilidraje = cilidraje,
-                },
-                Soat = soatEstado is null ? [] : [new VerifikSoat { Estado = soatEstado }],
-                RevisionTecnomecanica = new VerifikTecnomecanica { Vigente = tecnoVigente },
-                GarantiasMobiliarias = new VerifikGravamenes
-                {
                     TieneGravamenes = tieneGravamenes,
                     Prendas = prendas,
-                    LimitacionPropiedad = limitacion,
                 },
+                Soat = soatEstado is null ? [] : [new VerifikSoat { Estado = soatEstado }],
+                TecnoMecanica = tecnoVigente is null ? [] : [new VerifikTecnomecanica { Vigente = tecnoVigente }],
+                GarantiasMobiliarias = [],
             },
         };
 
@@ -65,10 +65,10 @@ public sealed class VerifikResultMapperTests
     }
 
     [Fact]
-    public void Soat_EmptyList_IsFail()
+    public void Soat_EmptyList_IsUnknown()
     {
         var result = VerifikResultMapper.MapVehicle(Response(soatEstado: null));
-        Check(result, "soat").Status.Should().Be("fail");
+        Check(result, "soat").Status.Should().Be("unknown");
     }
 
     [Theory]
@@ -82,22 +82,57 @@ public sealed class VerifikResultMapperTests
     }
 
     [Fact]
+    public void Tecnomecanica_EmptyArray_IsUnknown()
+    {
+        var result = VerifikResultMapper.MapVehicle(Response(tecnoVigente: null));
+        Check(result, "tecnomecanica").Status.Should().Be("unknown");
+    }
+
+    [Fact]
+    public void Tecnomecanica_MultipleItems_VigenteSiWins()
+    {
+        var response = new VerifikVehicleResponse
+        {
+            Data = new VerifikVehicleData
+            {
+                InformacionGeneral = new VerifikInformacionGeneral { EstadoDelVehiculo = "ACTIVO" },
+                TecnoMecanica =
+                [
+                    new VerifikTecnomecanica { Vigente = "NO" },
+                    new VerifikTecnomecanica { Vigente = "SI" },
+                ],
+            },
+        };
+
+        var result = VerifikResultMapper.MapVehicle(response);
+        Check(result, "tecnomecanica").Status.Should().Be("ok");
+    }
+
+    [Fact]
     public void Gravamenes_NoneIsOk()
     {
         var result = VerifikResultMapper.MapVehicle(
-            Response(tieneGravamenes: "NO", prendas: "NO", limitacion: null));
+            Response(tieneGravamenes: "NO", prendas: "NO"));
         Check(result, "gravamenes").Status.Should().Be("ok");
     }
 
     [Theory]
-    [InlineData("SI", "NO", null)]
-    [InlineData("NO", "SI", null)]
-    [InlineData("NO", "NO", "EMBARGO")]
-    public void Gravamenes_AnyPresentIsWarn(string tiene, string prendas, string? limitacion)
+    [InlineData("SI", "NO")]
+    [InlineData("NO", "SI")]
+    [InlineData("SI", "SI")]
+    public void Gravamenes_AnyPresentIsWarn(string tiene, string prendas)
     {
         var result = VerifikResultMapper.MapVehicle(
-            Response(tieneGravamenes: tiene, prendas: prendas, limitacion: limitacion));
+            Response(tieneGravamenes: tiene, prendas: prendas));
         Check(result, "gravamenes").Status.Should().Be("warn");
+    }
+
+    [Fact]
+    public void Gravamenes_NoInfo_IsUnknown()
+    {
+        var result = VerifikResultMapper.MapVehicle(
+            Response(tieneGravamenes: null, prendas: null));
+        Check(result, "gravamenes").Status.Should().Be("unknown");
     }
 
     [Fact]
@@ -165,14 +200,69 @@ public sealed class VerifikResultMapperTests
         {
             Data = new VerifikVehicleData
             {
-                InformacionGeneral = new VerifikInformacionGeneral(), // estado null → unknown
+                InformacionGeneral = new VerifikInformacionGeneral { TieneGravamenes = "NO", Prendas = "NO" }, // gravámenes ok, estado null → unknown
                 Soat = [new VerifikSoat { Estado = "VIGENTE" }], // ok
-                RevisionTecnomecanica = new VerifikTecnomecanica { Vigente = "NO APLICA" }, // unknown
-                GarantiasMobiliarias = new VerifikGravamenes { TieneGravamenes = "NO", Prendas = "NO" }, // ok
+                TecnoMecanica = [new VerifikTecnomecanica { Vigente = "NO APLICA" }], // unknown
             },
         };
 
         var result = VerifikResultMapper.MapVehicle(response);
         result.Overall.Should().Be("green"); // hay ok, ningún fail/warn
+    }
+
+    // Forma REAL de RUNT (datos ficticios, sin PII): vehículo ACTIVO, soat VIGENTE,
+    // tecnoMecanica vacío, garantiasMobiliarias como ARRAY [], gravámenes en informacionGeneral.
+    private const string RealShapeJson = """
+        {
+          "data": {
+            "garantiasFavorDe": [],
+            "garantiasMobiliarias": [],
+            "limitacionPropiedad": [],
+            "informacionGeneral": {
+              "estadoDelVehiculo": "ACTIVO",
+              "noPlaca": "QPL705",
+              "noVin": "1HGCM82633A004352",
+              "modelo": "2026",
+              "cilindraje": "0",
+              "tieneGravamenes": "NO",
+              "prendas": "NO",
+              "marca": "TESLA",
+              "color": "PLATA"
+            },
+            "soat": [
+              { "estado": "VIGENTE", "fechaVencimiento": "05/05/2027", "noPoliza": "12345" }
+            ],
+            "tecnoMecanica": [],
+            "vin": "1HGCM82633A004352"
+          },
+          "signature": { "dateTime": "June 19, 2026 2:36 PM", "message": "Certified by Verifik.co" },
+          "id": "ABC12"
+        }
+        """;
+
+    [Fact]
+    public void RealShape_DeserializesWithoutError_AndMapsCoherently()
+    {
+        // El bug original: garantiasMobiliarias array vs objeto rompía TODA la deserialización.
+        var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(RealShapeJson, WebJsonOptions);
+
+        response.Should().NotBeNull();
+        response!.Data.Should().NotBeNull();
+        response.Data!.InformacionGeneral!.EstadoDelVehiculo.Should().Be("ACTIVO");
+        response.Data.Soat.Should().HaveCount(1);
+        response.Data.TecnoMecanica.Should().BeEmpty();
+        response.Data.GarantiasMobiliarias.Should().BeEmpty(); // array vacío, no rompe
+
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        Check(result, "estado_vehiculo").Status.Should().Be("ok");
+        Check(result, "soat").Status.Should().Be("ok");
+        Check(result, "tecnomecanica").Status.Should().Be("unknown"); // tecnoMecanica vacío
+        Check(result, "gravamenes").Status.Should().Be("ok");
+        result.Overall.Should().Be("green"); // hay ok, ningún fail/warn
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "plate" && f.ValueText == "QPL705");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vin" && f.ValueText == "1HGCM82633A004352");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_year" && f.ValueText == "2026");
     }
 }

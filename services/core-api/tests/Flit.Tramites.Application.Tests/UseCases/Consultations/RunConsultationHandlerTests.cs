@@ -140,7 +140,14 @@ public sealed class RunConsultationHandlerTests
         instance.FieldValues.Should().Contain(f => f.FieldKey == "plate" && f.ValueText == "ABC123" && f.Source == "consultation");
         instance.FieldValues.Should().Contain(f => f.FieldKey == "vin" && f.ValueText == "1HGCM82633A004352" && f.Source == "consultation");
 
-        await _instanceRepo.Received(1).UpdateAsync(instance, ct);
+        // La instancia está trackeada: el change tracker persiste los adds vía
+        // SaveChangesAsync. UpdateAsync marcaría el grafo Modified y los nuevos
+        // field_values se emitirían como UPDATE de 0 filas (no INSERT), por lo
+        // que NO debe llamarse.
+        await _instanceRepo.DidNotReceive().UpdateAsync(Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>());
+        // Los field_values NUEVOS hidratados se marcan Added explícito → INSERT
+        // (PK store-generated con Id ya seteado).
+        _instanceRepo.Received(2).Add(Arg.Any<ProcedureInstanceFieldValue>());
         await _instanceRepo.Received(1).SaveChangesAsync(ct);
     }
 
