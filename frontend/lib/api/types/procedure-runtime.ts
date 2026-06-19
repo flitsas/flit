@@ -81,10 +81,36 @@ export interface ProcedureInstanceDetail {
 
 /** Item del body de PATCH /instances/{id}/field-values. */
 export interface FieldValueInput {
-  formFieldId: string;
+  /** Nullable: el backend resuelve el campo por fieldKey si llega null. */
+  formFieldId: string | null;
   fieldKey: string;
   valueText?: string | null;
   valueJson?: string | null;
+}
+
+// ── Actores del trámite (Slice 2) ──────────────────────────────────
+// Contrato FIJO acordado con backend:
+//   GET  /api/v1/tramites/instances/{id}/actors  -> { actors: ProcedureActor[] }
+//   PUT  /api/v1/tramites/instances/{id}/actors  body { actors }
+// La entidad `Actor` (arriba) es el espejo del detalle de instancia ya
+// existente; estos tipos modelan la captura/edición dedicada de actores.
+
+export type ActorRol = 'comprador' | 'vendedor';
+
+export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
+
+export interface ProcedureActor {
+  rol: ActorRol;
+  tipoDocumento: ActorDocumentType;
+  numeroDocumento: string;
+  nombreCompleto: string;
+  email: string;
+  telefono?: string;
+}
+
+/** Respuesta de GET /instances/{id}/actors. */
+export interface ActorsResponse {
+  actors: ProcedureActor[];
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -135,4 +161,107 @@ export interface ConsultationResult {
   overall: PreflightOverall;
   checks: ConsultationCheck[];
   hydratedFields: ConsultationHydratedField[];
+}
+
+// ── Documentos / checklist del trámite (Slice 3) ───────────────────
+// Contrato FIJO acordado con backend:
+//   GET    /api/v1/tramites/instances/{id}/attachments   -> { attachments }
+//   POST   /api/v1/tramites/instances/{id}/attachments   (multipart) -> AttachmentDto
+//   DELETE /api/v1/tramites/instances/{id}/attachments/{attachmentId} -> 204
+//   GET    /api/v1/tramites/instances/{id}/checklist     -> ChecklistView
+
+/** Espejo del AttachmentDto del backend. */
+export interface ProcedureAttachment {
+  id: string;
+  tipo: string;
+  filename: string;
+  mimetype: string;
+  sizeBytes: number;
+  sha256: string;
+  source: string;
+  uploadedAt: string;
+}
+
+/** Respuesta de GET /instances/{id}/attachments. */
+export interface AttachmentsResponse {
+  attachments: ProcedureAttachment[];
+}
+
+/** Item del checklist guiado por la tipología del trámite. */
+export interface ChecklistItemView {
+  key: string;
+  label: string;
+  obligatorio: boolean;
+  docTipo?: string;
+  satisfied: boolean;
+}
+
+/** Respuesta de GET /instances/{id}/checklist. */
+export interface ChecklistView {
+  items: ChecklistItemView[];
+  faltanObligatorios: number;
+  completo: boolean;
+}
+
+// ── Wizard diferenciado server-driven (Slice 4b) ───────────────────
+// Contrato FIJO acordado con backend:
+//   GET /api/v1/tramites/instances/{id}/wizard -> WizardState
+// El backend manda el orden, status y razones de cada paso por modalidad
+// (matrícula 5 pasos VIN-first / traspaso 6 pasos placa-first). La shell
+// pinta lo que el backend decide; no recalcula gates en el cliente.
+
+export type WizardModalidad = 'matricula_inicial' | 'traspaso';
+
+export type WizardStepStatus = 'complete' | 'incomplete' | 'locked';
+
+/** Keys canónicas por modalidad (matrícula: 5, traspaso: 6). */
+export type WizardStepKey =
+  // matrícula
+  | 'consulta_vin'
+  | 'documentos'
+  | 'comprador'
+  | 'identidad'
+  | 'fur'
+  // traspaso
+  | 'consulta'
+  | 'validacion'
+  | 'vendedor'
+  | 'comercial';
+
+export interface WizardStep {
+  index: number;
+  key: WizardStepKey | string;
+  label: string;
+  status: WizardStepStatus;
+  /** Códigos de razón de incompletitud (mapeados a copy en la UI). */
+  reasons: string[];
+}
+
+/** Respuesta de GET /instances/{id}/wizard. */
+export interface WizardState {
+  modalidad: WizardModalidad;
+  tipologiaCodigo: string;
+  totalSteps: number;
+  steps: WizardStep[];
+  canSubmit: boolean;
+  /** Códigos de bloqueo de envío (mapeados a copy en la UI). */
+  blockers: string[];
+}
+
+// ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
+
+export type CommercialCausal =
+  | 'COMPRAVENTA'
+  | 'DONACION'
+  | 'DACION_EN_PAGO'
+  | 'ADJUDICACION';
+
+export type CommercialMetodoPago = string;
+
+export interface CommercialData {
+  valorVenta: number | null;
+  causal: CommercialCausal | null;
+  tasaImpuesto: number | null;
+  derechos: number | null;
+  metodoPago: CommercialMetodoPago | null;
 }

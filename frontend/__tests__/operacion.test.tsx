@@ -3,7 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
-import type { ProcedureConfiguration } from '@/lib/api/types/procedure-runtime';
+import type {
+  ProcedureConfiguration,
+  WizardState,
+} from '@/lib/api/types/procedure-runtime';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
@@ -14,18 +17,22 @@ const mocks = vi.hoisted(() => ({
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
   runConsultation: vi.fn(),
+  // wizard server-driven (Slice 4b)
+  getWizardState: vi.fn(),
+  runPreflight: vi.fn(),
+  getPreflight: vi.fn(),
+  getCommercial: vi.fn(),
+  putCommercial: vi.fn(),
+  getActors: vi.fn(),
+  saveActors: vi.fn(),
+  getChecklist: vi.fn(),
+  getAttachments: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
-  tramitesClient: {
-    listPublishedProcedureTypes: mocks.listPublishedProcedureTypes,
-    getConfiguration: mocks.getConfiguration,
-    createInstance: mocks.createInstance,
-    getInstance: mocks.getInstance,
-    patchFieldValues: mocks.patchFieldValues,
-    submitInstance: mocks.submitInstance,
-    runConsultation: mocks.runConsultation,
-  },
+  tramitesClient: mocks,
+  DEV_TENANT_ID: 'tenant-dev',
+  DEV_USER_ID: 'user-dev',
 }));
 
 import { OperacionView } from '@/components/operacion/OperacionView';
@@ -97,6 +104,22 @@ const CONFIG: ProcedureConfiguration = {
   ],
 };
 
+const WIZARD: WizardState = {
+  modalidad: 'traspaso',
+  tipologiaCodigo: 'traspaso',
+  totalSteps: 6,
+  canSubmit: false,
+  blockers: ['documentos_incompletos'],
+  steps: [
+    { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
+    { index: 1, key: 'validacion', label: 'Validación', status: 'incomplete', reasons: ['validacion_pendiente'] },
+    { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
+    { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
+    { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
+    { index: 5, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.listPublishedProcedureTypes.mockResolvedValue(PUBLISHED);
@@ -110,13 +133,21 @@ beforeEach(() => {
     createdAt: '2026-06-18T00:00:00Z',
   });
   mocks.patchFieldValues.mockResolvedValue({});
-  mocks.runConsultation.mockResolvedValue({
+  mocks.getWizardState.mockResolvedValue(WIZARD);
+  mocks.runPreflight.mockResolvedValue({
     overall: 'yellow',
     createdAt: '2026-06-18T00:00:00Z',
     checks: [
       { key: 'runt', label: 'RUNT', status: 'ok', source: 'RUNT', message: 'ok' },
     ],
   });
+  mocks.getPreflight.mockResolvedValue(null);
+  mocks.getCommercial.mockResolvedValue({
+    valorVenta: null, causal: null, tasaImpuesto: null, derechos: null, metodoPago: null,
+  });
+  mocks.getActors.mockResolvedValue([]);
+  mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
+  mocks.getAttachments.mockResolvedValue([]);
 });
 
 describe('AC1 — selector solo published', () => {
@@ -129,50 +160,47 @@ describe('AC1 — selector solo published', () => {
   });
 });
 
-describe('AC2 — wizard renderiza la config dinámica', () => {
-  it('pinta los labels/inputs de los steps/sections/fields de la config', async () => {
+describe('AC2 — wizard server-driven (Slice 4b)', () => {
+  it('al elegir el tipo crea la instancia y pinta el sidebar server-driven', async () => {
     const user = userEvent.setup();
     render(<OperacionView />);
     await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
 
-    // step 1: heading del step + label del campo dinámico
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos del vehículo' }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText(/Placa del vehículo/)).toBeInTheDocument();
-    // sidebar de progreso con ambos steps
-    expect(screen.getByText('Confirmación')).toBeInTheDocument();
-    expect(mocks.getConfiguration).toHaveBeenCalledWith('TRASPASO_STD');
-    expect(mocks.createInstance).toHaveBeenCalledTimes(1);
+    // El wizard crea la instancia y consulta el estado server-driven.
+    await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mocks.getWizardState).toHaveBeenCalledWith('inst-1', expect.anything()),
+    );
+
+    // Sidebar con los 6 pasos del traspaso.
+    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
+    expect(stepButtons).toHaveLength(6);
+    expect(screen.getByRole('button', { name: /^Paso 1: Consulta/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 6: FUR/ })).toBeInTheDocument();
   });
 });
 
-describe('AC3 — guardar borrador + consulta semáforo', () => {
-  it('llama patchFieldValues con los items del step al Continuar', async () => {
+describe('AC3 — preflight server-driven en el paso consulta', () => {
+  it('Consultar RUNT corre el preflight y refresca el wizard', async () => {
     const user = userEvent.setup();
     render(<OperacionView />);
     await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
 
-    const input = await screen.findByLabelText(/Placa del vehículo/);
-    await user.type(input, 'ABC123');
-    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(1));
 
-    await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalledTimes(1));
-    const [instanceId, items] = mocks.patchFieldValues.mock.calls[0];
-    expect(instanceId).toBe('inst-1');
-    expect(items).toEqual([
-      { formFieldId: 'f-placa', fieldKey: 'placa', valueText: 'ABC123', valueJson: null },
-    ]);
-  });
-
-  it('muestra el panel semáforo al Consultar RUNT', async () => {
-    const user = userEvent.setup();
-    render(<OperacionView />);
-    await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
+    // El paso consulta de traspaso exige placa + documento del propietario;
+    // sin ellos la consulta no persiste ni corre el preflight (DS-4B-1).
+    await user.type(screen.getByLabelText(/^Placa$/), 'ABC123');
+    await user.type(
+      screen.getByLabelText(/Número documento propietario/),
+      '1020304050',
+    );
 
     await user.click(await screen.findByRole('button', { name: /Consultar RUNT/ }));
-    await waitFor(() => expect(mocks.runConsultation).toHaveBeenCalledTimes(1));
-    expect(mocks.runConsultation).toHaveBeenCalledWith('inst-1', 'RUNT_VEHICLE');
+    await waitFor(() => expect(mocks.runPreflight).toHaveBeenCalledWith('inst-1'));
+    // Tras correr el preflight, el wizard se re-consulta (refresh()).
+    await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Pre-vuelo con advertencias')).toBeInTheDocument();
   });
 });

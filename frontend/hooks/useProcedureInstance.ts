@@ -19,7 +19,7 @@ export function buildFieldValueInput(
   field: Pick<FormFieldItem, 'id' | 'fieldKey' | 'fieldType'>,
   rawValue: unknown,
 ): FieldValueInput {
-  const formFieldId = field.id ?? '';
+  const formFieldId = field.id ?? null;
   if (field.fieldType === 'checkbox') {
     return {
       formFieldId,
