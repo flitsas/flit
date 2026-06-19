@@ -26,7 +26,7 @@ export function getToken(): string | null {
 }
 
 /** Helper de desarrollo/tests: inyecta un JWT SuperAdmin mock en cookie + storage. */
-export function setDevSuperAdminToken(sub = "00000000-0000-0000-0000-000000000001"): void {
+export function setDevSuperAdminToken(sub = "11111111-1111-1111-1111-111111111111"): void {
   const header = base64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
   const payload = base64Url(JSON.stringify({ sub, role: "SuperAdmin" }));
   const token = `${header}.${payload}.`;
