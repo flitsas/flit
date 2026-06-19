@@ -1,14 +1,16 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed record CreateProcedureInstanceRequest(
     Guid TenantId,
-    Guid ProcedureTypeId,
+    Guid? ProcedureTypeId,
     Guid CreatedByUserId,
-    Guid? TransitOfficeId);
+    Guid? TransitOfficeId,
+    string? Modalidad = null);
 
 public sealed record ProcedureInstanceSummary(
     Guid Id,
@@ -23,16 +25,48 @@ public sealed class CreateProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
     IProcedureTypeRepository typeRepo)
 {
+    // M0: mapeo modalidad → código canónico del procedure_type sembrado (dev seed).
+    // matricula_inicial → MATRICULA_NUEVA (familia MATRICULAS), traspaso → TRASPASO_STANDARD (familia TRASPASO).
+    // Resolvemos por el código estable y publicado para que la selección sea determinista incluso
+    // si en el futuro coexisten varios tipos publicados en la misma familia.
+    private static readonly Dictionary<string, string> ModalidadToCanonicalCode =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            [TramiteModalidadEntradaCodes.MatriculaInicial] = "MATRICULA_NUEVA",
+            [TramiteModalidadEntradaCodes.Traspaso] = "TRASPASO_STANDARD",
+        };
+
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         CreateProcedureInstanceRequest request,
         CancellationToken ct = default)
     {
-        var procedureType = await typeRepo.GetByIdAsync(request.ProcedureTypeId, ct);
-        if (procedureType is null)
-            return (null, "not_found");
+        var hasTypeId = request.ProcedureTypeId is { } id && id != Guid.Empty;
+        var hasModalidad = !string.IsNullOrWhiteSpace(request.Modalidad);
 
-        if (procedureType.PublicationStatus != PublicationStatus.Published)
-            return (null, "not_published");
+        // Exactamente uno de {procedureTypeId, modalidad} debe venir.
+        if (hasTypeId == hasModalidad)
+            return (null, "invalid_request");
+
+        ProcedureType? procedureType;
+        if (hasTypeId)
+        {
+            procedureType = await typeRepo.GetByIdAsync(request.ProcedureTypeId!.Value, ct);
+            if (procedureType is null)
+                return (null, "not_found");
+
+            if (procedureType.PublicationStatus != PublicationStatus.Published)
+                return (null, "not_published");
+        }
+        else
+        {
+            // Resolución por modalidad: si la modalidad no es canónica o no hay tipo publicado → no disponible.
+            if (!ModalidadToCanonicalCode.TryGetValue(request.Modalidad!.Trim(), out var canonicalCode))
+                return (null, "modalidad_not_available");
+
+            procedureType = await typeRepo.GetByCodePublishedAsync(canonicalCode, ct);
+            if (procedureType is null)
+                return (null, "modalidad_not_available");
+        }
 
         var now = DateTimeOffset.UtcNow;
         var year = now.Year;
@@ -45,7 +79,7 @@ public sealed class CreateProcedureInstanceHandler(
         {
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
-            ProcedureTypeId = request.ProcedureTypeId,
+            ProcedureTypeId = procedureType.Id,
             ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
             Status = ProcedureInstanceStatus.Draft,
             ModalidadEntrada = modalidad,
