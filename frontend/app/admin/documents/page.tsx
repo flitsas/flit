@@ -12,6 +12,7 @@ import {
   createDocumentType,
   deactivateDocumentType,
   fetchDocumentTypes,
+  reactivateDocumentType,
   updateDocumentType,
 } from "@/lib/api/admin-document-types";
 import { ApiError } from "@/lib/api/types";
@@ -42,7 +43,13 @@ function DocumentsCatalog() {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchDocumentTypes({ page, pageSize: PAGE_SIZE }, signal);
+        // includeInactive: el catálogo lista activos e inactivos; los desactivados
+        // siguen visibles (badge «Inactivo», acción Desactivar deshabilitada) en lugar
+        // de desaparecer. La asociación a trámites sigue ofreciendo solo activos.
+        const data = await fetchDocumentTypes(
+          { page, pageSize: PAGE_SIZE, includeInactive: true },
+          signal,
+        );
         if (signal?.aborted) {
           return;
         }
@@ -101,6 +108,16 @@ function DocumentsCatalog() {
       } else {
         show("No se pudo desactivar el documento.", "error");
       }
+    }
+  };
+
+  const handleReactivate = async (documentType: DocumentType) => {
+    try {
+      await reactivateDocumentType(documentType.id);
+      show(`Documento «${documentType.nombre}» reactivado.`, "success");
+      void load();
+    } catch {
+      show("No se pudo reactivar el documento.", "error");
     }
   };
 
@@ -166,6 +183,7 @@ function DocumentsCatalog() {
               onPageChange={setPage}
               onEdit={openEdit}
               onDeactivate={handleDeactivate}
+              onReactivate={handleReactivate}
             />
           )}
         </UiStateBoundary>

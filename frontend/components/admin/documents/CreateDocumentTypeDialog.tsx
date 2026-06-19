@@ -44,6 +44,7 @@ export function CreateDocumentTypeDialog({
   // Sincroniza el formulario al abrir/cambiar el documento en edición.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir modal (mismo patrón que companies/documents tabs)
       setCodigo(editing?.codigo ?? "");
       setNombre(editing?.nombre ?? "");
       setDescripcion(editing?.descripcion ?? "");

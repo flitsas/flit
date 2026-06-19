@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { OrderOverrideForm } from "../panels/OrderOverrideForm";
+import { ApiValidationError } from "@/lib/api/types";
 import type { DocumentType } from "@/lib/api/types-documents";
 
 const documents: DocumentType[] = [
@@ -51,5 +52,30 @@ describe("OrderOverrideForm (AC3/AC4)", () => {
     // así que se valida el mensaje de error por su role="alert" (sin ambigüedad).
     expect(await screen.findByRole("alert")).toHaveTextContent(/selecciona un documento/i);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("muestra el mensaje real del backend cuando el documento no es válido (422)", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockRejectedValue(
+      new ApiValidationError(
+        [{ field: "documentTypeId", message: "El documento no está asociado a este tipo de trámite y no admite un override de orden." }],
+        422,
+      ),
+    );
+    render(<OrderOverrideForm scope="OT" documents={documents} onSubmit={onSubmit} />);
+
+    await user.selectOptions(screen.getByLabelText(/documento/i), "doc-a");
+    await user.type(screen.getByLabelText(/orden/i), "1");
+    await user.click(screen.getByRole("button", { name: /agregar/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no está asociado a este tipo de trámite/i);
+  });
+
+  it("oculta del selector los documentos ya con override (excludeIds)", () => {
+    render(
+      <OrderOverrideForm scope="OT" documents={documents} excludeIds={["doc-a"]} onSubmit={vi.fn()} />,
+    );
+    expect(screen.queryByRole("option", { name: /Documento A/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Documento B/i })).toBeInTheDocument();
   });
 });

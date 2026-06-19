@@ -7,12 +7,17 @@ import { useToast } from "@/components/admin/Toast";
 import { OrderOverrideForm } from "@/components/admin/documents/panels/OrderOverrideForm";
 import { OverridesList } from "@/components/admin/documents/panels/OverridesList";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
-import { fetchDocumentTypes } from "@/lib/api/admin-document-types";
+import { fetchProcedureDocumentRequirements } from "@/lib/api/admin-procedure-documents";
 import {
   createDocumentOrderOverride,
   fetchDocumentOrderOverrides,
   removeDocumentOrderOverride,
 } from "@/lib/api/admin-document-overrides";
+import {
+  persistReorderedOverrides,
+  renumberOverrides,
+  toDocumentOptions,
+} from "@/components/admin/documents/panels/overrideDocuments";
 import type { DocumentOrderOverride, DocumentType } from "@/lib/api/types-documents";
 import type { CompanyListItem } from "@/lib/api/types";
 
@@ -22,30 +27,32 @@ import type { CompanyListItem } from "@/lib/api/types";
 export function ClienteOverridesTab({ procedureTypeId }: { procedureTypeId: string }) {
   const { show } = useToast();
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
-  const [catalog, setCatalog] = useState<DocumentType[]>([]);
+  // Solo los documentos asociados al trámite admiten override (el backend rechaza el
+  // resto con 422); alimentamos el selector con esos, no con todo el catálogo.
+  const [associatedDocs, setAssociatedDocs] = useState<DocumentType[]>([]);
   const [clienteId, setClienteId] = useState("");
   const [status, setStatus] = useState<UiStatus>("empty");
   const [overrides, setOverrides] = useState<DocumentOrderOverride[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // Catálogos base (clientes + documentos activos) — una sola vez.
+  // Catálogos base (clientes + documentos asociados al trámite) — una sola vez.
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
       try {
-        const [page, docs] = await Promise.all([
+        const [page, requirements] = await Promise.all([
           fetchCompaniesIndex({ page: 1, pageSize: 100 }, controller.signal),
-          fetchDocumentTypes({ page: 1, pageSize: 100 }, controller.signal),
+          fetchProcedureDocumentRequirements(procedureTypeId, controller.signal),
         ]);
         if (controller.signal.aborted) return;
         setCompanies(page.data);
-        setCatalog(docs.data);
+        setAssociatedDocs(toDocumentOptions(requirements));
       } catch {
         /* el selector queda vacío; la sección de overrides gestiona su propio estado */
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [procedureTypeId]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -87,6 +94,24 @@ export function ClienteOverridesTab({ procedureTypeId }: { procedureTypeId: stri
     setOverrides((prev) => [...prev, created].sort((a, b) => a.orden - b.orden));
     setStatus("ready");
     show("Override de cliente creado.", "success");
+  };
+
+  // Reordenamiento por arrastre: renumera, aplica optimista y persiste los cambiados.
+  const handleReorder = async (ordered: DocumentOrderOverride[]) => {
+    const previous = overrides;
+    const previousOrderById = new Map(previous.map((o) => [o.id, o.orden]));
+    const renumbered = renumberOverrides(ordered);
+    setOverrides(renumbered);
+    setBusy(true);
+    try {
+      await persistReorderedOverrides(renumbered, previousOrderById);
+      show("Orden actualizado.", "success");
+    } catch {
+      setOverrides(previous);
+      show("No se pudo actualizar el orden.", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleDelete = async (override: DocumentOrderOverride) => {
@@ -137,14 +162,25 @@ export function ClienteOverridesTab({ procedureTypeId }: { procedureTypeId: stri
 
       {clienteId ? (
         <>
-          <OrderOverrideForm scope="CLIENTE" documents={catalog} onSubmit={handleCreate} disabled={busy} />
+          <OrderOverrideForm
+            scope="CLIENTE"
+            documents={associatedDocs}
+            excludeIds={overrides.map((o) => o.documentTypeId)}
+            onSubmit={handleCreate}
+            disabled={busy}
+          />
           <UiStateBoundary
             status={status}
             onRetry={() => void load()}
             emptyMessage="Este cliente no tiene overrides de orden."
             errorMessage="No se pudieron cargar los overrides."
           >
-            <OverridesList overrides={overrides} onDelete={handleDelete} busy={busy} />
+            <OverridesList
+              overrides={overrides}
+              onReorder={handleReorder}
+              onDelete={handleDelete}
+              busy={busy}
+            />
           </UiStateBoundary>
         </>
       ) : (

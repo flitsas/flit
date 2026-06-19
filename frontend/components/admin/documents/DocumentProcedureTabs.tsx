@@ -12,15 +12,40 @@ import { MatrixPreviewTab } from "@/components/admin/documents/tabs/MatrixPrevie
 // pestaña gestiona su propia carga y sus 4 estados UI (AC7).
 type TabId = "documentos" | "ot" | "cliente" | "matriz";
 
-const TABS: { id: TabId; label: string; icon: typeof FileStack }[] = [
-  { id: "documentos", label: "Documentos", icon: FileStack },
-  { id: "ot", label: "Overrides OT", icon: Building2 },
-  { id: "cliente", label: "Overrides Cliente", icon: Users },
-  { id: "matriz", label: "Matriz resuelta", icon: Table2 },
+const TABS: { id: TabId; label: string; icon: typeof FileStack; description: string }[] = [
+  {
+    id: "documentos",
+    label: "Documentos",
+    icon: FileStack,
+    description:
+      "Define qué documentos exige este trámite y en qué orden por defecto, marcando cuáles son obligatorios.",
+  },
+  {
+    id: "ot",
+    label: "Overrides OT",
+    icon: Building2,
+    description:
+      "Ajusta el orden de los documentos para un organismo de tránsito específico, sin alterar el orden por defecto.",
+  },
+  {
+    id: "cliente",
+    label: "Overrides Cliente",
+    icon: Users,
+    description:
+      "Ajusta el orden de los documentos para un cliente puntual. Tiene mayor precedencia que el override de OT.",
+  },
+  {
+    id: "matriz",
+    label: "Matriz resuelta",
+    icon: Table2,
+    description:
+      "Previsualiza el orden final que verá un trámite combinando la precedencia Cliente › OT › Default.",
+  },
 ];
 
 export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: string }) {
   const [tab, setTab] = useState<TabId>("documentos");
+  const activeTab = TABS.find((t) => t.id === tab);
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -48,6 +73,10 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
           );
         })}
       </div>
+
+      {activeTab && (
+        <p className="text-xs opacity-60">{activeTab.description}</p>
+      )}
 
       <div role="tabpanel" id={`tabpanel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex-1">
         {tab === "documentos" && <RequirementsTab procedureTypeId={procedureTypeId} />}

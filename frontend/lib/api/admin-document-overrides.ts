@@ -40,6 +40,14 @@ export function createDocumentOrderOverride(
   return apiFetch<DocumentOrderOverride>(base, { method: "POST", query: { scope }, body });
 }
 
+/** PUT /{id} — reordena un override (arrastre): persiste el nuevo `orden`. Idempotente. */
+export function updateDocumentOrderOverride(
+  id: string,
+  orden: number,
+): Promise<DocumentOrderOverride> {
+  return apiFetch<DocumentOrderOverride>(`${base}/${id}`, { method: "PUT", body: { orden } });
+}
+
 /** DELETE /{id} — elimina un override; la matriz vuelve al nivel inferior (AC3/AC4). */
 export function removeDocumentOrderOverride(id: string): Promise<void> {
   return apiFetch<void>(`${base}/${id}`, { method: "DELETE" });

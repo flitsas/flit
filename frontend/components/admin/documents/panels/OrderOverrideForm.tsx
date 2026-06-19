@@ -4,20 +4,25 @@ import { useState } from "react";
 import { Info, Loader2, Plus } from "lucide-react";
 import { DocumentTypeSelect } from "@/components/admin/documents/DocumentTypeSelect";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
+import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type { DocumentType, OverrideScope } from "@/lib/api/types-documents";
 
 // Formulario de alta de override de orden por OT o Cliente (HU #10198, AC3/AC4).
 // Muestra el badge del scope (OT/CLIENTE) y, para CLIENTE, la nota de precedencia
 // "CLIENTE > OT > Default". Valida documento + orden antes de delegar a `onSubmit`.
+// `documents` ya viene acotado a los documentos asociados al trámite (solo esos
+// admiten override); `excludeIds` oculta los que ya tienen override.
 export interface OrderOverrideFormProps {
   scope: OverrideScope;
   documents: DocumentType[];
+  /** Documentos ya con override en este scope: se ocultan para evitar el duplicado. */
+  excludeIds?: string[];
   /** Persiste el override. Debe lanzar para que el formulario muestre el error. */
   onSubmit: (documentTypeId: string, orden: number) => Promise<void>;
   disabled?: boolean;
 }
 
-export function OrderOverrideForm({ scope, documents, onSubmit, disabled }: OrderOverrideFormProps) {
+export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disabled }: OrderOverrideFormProps) {
   const [documentTypeId, setDocumentTypeId] = useState("");
   const [orden, setOrden] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +45,10 @@ export function OrderOverrideForm({ scope, documents, onSubmit, disabled }: Orde
       await onSubmit(documentTypeId, ordenValue);
       setDocumentTypeId("");
       setOrden("");
-    } catch {
-      setError("No se pudo crear el override. Intenta de nuevo.");
+    } catch (err) {
+      // Surface el motivo real del backend (p. ej. documento no asociado al trámite)
+      // en lugar de un genérico, para que el usuario sepa qué corregir.
+      setError(resolveErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -72,6 +79,7 @@ export function OrderOverrideForm({ scope, documents, onSubmit, disabled }: Orde
             value={documentTypeId}
             onChange={setDocumentTypeId}
             options={documents}
+            excludeIds={excludeIds}
             disabled={disabled}
           />
         </div>
@@ -110,4 +118,17 @@ export function OrderOverrideForm({ scope, documents, onSubmit, disabled }: Orde
       )}
     </div>
   );
+}
+
+/** Traduce el error de la API al mensaje que ve el usuario, priorizando el detalle 422. */
+function resolveErrorMessage(err: unknown): string {
+  if (err instanceof ApiValidationError) {
+    return err.errors[0]?.message ?? "Revisa los datos del override.";
+  }
+  if (err instanceof ApiError) {
+    return err.status === 404
+      ? "El documento o el ámbito ya no existe. Actualiza la página."
+      : "No se pudo crear el override. Intenta de nuevo.";
+  }
+  return "No se pudo crear el override. Intenta de nuevo.";
 }

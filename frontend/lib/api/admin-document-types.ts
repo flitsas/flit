@@ -36,3 +36,8 @@ export function updateDocumentType(
 export function deactivateDocumentType(id: string): Promise<void> {
   return apiFetch<void>(`${base}/${id}`, { method: "DELETE" });
 }
+
+/** POST /{id}/reactivate — reactivación (contraparte del soft-delete). Idempotente. */
+export function reactivateDocumentType(id: string): Promise<void> {
+  return apiFetch<void>(`${base}/${id}/reactivate`, { method: "POST" });
+}

@@ -36,6 +36,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onPageChange={vi.fn()}
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
       />,
     );
 
@@ -59,6 +60,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onPageChange={vi.fn()}
         onEdit={onEdit}
         onDeactivate={onDeactivate}
+        onReactivate={vi.fn()}
       />,
     );
 
@@ -69,7 +71,8 @@ describe("DocumentTypeListTable (AC1)", () => {
     expect(onDeactivate).toHaveBeenCalledWith(items[0]);
   });
 
-  it("deshabilita 'Desactivar' en documentos inactivos", () => {
+  it("ofrece 'Activar' (no 'Desactivar') en documentos inactivos y dispara onReactivate", () => {
+    const onReactivate = vi.fn();
     render(
       <DocumentTypeListTable
         items={items}
@@ -79,9 +82,14 @@ describe("DocumentTypeListTable (AC1)", () => {
         onPageChange={vi.fn()}
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
+        onReactivate={onReactivate}
       />,
     );
-    expect(screen.getByRole("button", { name: /desactivar soat/i })).toBeDisabled();
+
+    // El inactivo (SOAT) no muestra 'Desactivar' sino 'Activar'.
+    expect(screen.queryByRole("button", { name: /desactivar soat/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /activar soat/i }));
+    expect(onReactivate).toHaveBeenCalledWith(items[1]);
   });
 
   it("pagina server-side vía onPageChange", () => {
@@ -95,6 +103,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onPageChange={onPageChange}
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
       />,
     );
     expect(screen.getByText("1 / 2")).toBeInTheDocument();

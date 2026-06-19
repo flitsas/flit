@@ -101,6 +101,40 @@ export interface CreateDocumentOrderOverrideRequest {
   orden: number;
 }
 
+// ── Obligatoriedad por OT (#10198, 3 estados) ───────────────────────────────
+// Granular SOLO para Organismo de Tránsito. La ausencia de override = «Por defecto»
+// (hereda la obligatoriedad del trámite). NOT_APPLICABLE oculta el documento de la
+// matriz de ese OT.
+export type DocumentRequirementState = "REQUIRED" | "OPTIONAL" | "NOT_APPLICABLE";
+
+/** Selección del control por documento: los 3 estados + «DEFAULT» (limpiar override). */
+export type DocumentRequirementSelection = DocumentRequirementState | "DEFAULT";
+
+/** Etiquetas legibles del control de obligatoriedad por OT. */
+export const REQUIREMENT_SELECTION_LABELS: Record<DocumentRequirementSelection, string> = {
+  DEFAULT: "Por defecto (según trámite)",
+  REQUIRED: "Obligatorio",
+  OPTIONAL: "Opcional",
+  NOT_APPLICABLE: "No aplica",
+};
+
+export interface DocumentRequirementOverride {
+  id: string;
+  procedureTypeId: string;
+  documentTypeId: string;
+  transitOfficeId: string;
+  estado: DocumentRequirementState;
+  documento: OverrideDocumentRef;
+}
+
+/** Payload del PUT (upsert por tupla natural). estado=DEFAULT limpia el override. */
+export interface SetDocumentRequirementOverrideRequest {
+  procedureTypeId: string;
+  documentTypeId: string;
+  transitOfficeId: string;
+  estado: DocumentRequirementSelection;
+}
+
 // ── Matriz documental resuelta (RF18, AC5) ──────────────────────────────────
 export type ResolutionLevel = "CLIENTE" | "OT" | "DEFAULT";
 

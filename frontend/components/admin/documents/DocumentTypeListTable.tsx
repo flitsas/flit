@@ -14,6 +14,7 @@ export interface DocumentTypeListTableProps {
   onPageChange: (page: number) => void;
   onEdit: (documentType: DocumentType) => void;
   onDeactivate: (documentType: DocumentType) => void;
+  onReactivate: (documentType: DocumentType) => void;
 }
 
 export function DocumentTypeListTable({
@@ -24,6 +25,7 @@ export function DocumentTypeListTable({
   onPageChange,
   onEdit,
   onDeactivate,
+  onReactivate,
 }: DocumentTypeListTableProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -85,16 +87,27 @@ export function DocumentTypeListTable({
                     >
                       <Pencil className="h-3 w-3" /> Editar
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeactivate(d)}
-                      disabled={!activo}
-                      aria-label={`Desactivar ${d.nombre}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-40"
-                      style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                    >
-                      <Power className="h-3 w-3" /> Desactivar
-                    </button>
+                    {activo ? (
+                      <button
+                        type="button"
+                        onClick={() => onDeactivate(d)}
+                        aria-label={`Desactivar ${d.nombre}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+                      >
+                        <Power className="h-3 w-3" /> Desactivar
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onReactivate(d)}
+                        aria-label={`Activar ${d.nombre}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "#00DBD5", color: "#0a8f8b" }}
+                      >
+                        <Power className="h-3 w-3" /> Activar
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
