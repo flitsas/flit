@@ -118,3 +118,14 @@ export class ApiValidationError extends Error {
     this.name = "ApiValidationError";
   }
 }
+
+/** Error HTTP genérico que conserva el status para distinguir casos (p. ej. 404). */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}

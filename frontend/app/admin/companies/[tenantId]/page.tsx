@@ -32,6 +32,7 @@ function CompanyDetail() {
 
   const [status, setStatus] = useState<UiStatus>("loading");
   const [settings, setSettings] = useState<TenantSettings | null>(null);
+  const [isNew, setIsNew] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -41,7 +42,10 @@ function CompanyDetail() {
         if (signal?.aborted) {
           return;
         }
-        setSettings(data);
+        // 404 → compañía sin configurar: se muestra el formulario en blanco para
+        // que el SuperAdmin defina y guarde (el PUT hace upsert).
+        setIsNew(data === null);
+        setSettings(data ?? defaultSettings(tenantId));
         setStatus("ready");
       } catch {
         if (!signal?.aborted) {
@@ -64,6 +68,7 @@ function CompanyDetail() {
     // Propaga ApiValidationError (422) para que CompanyConfigTabs marque campos.
     const updated = await updateTenantSettings(tenantId, update);
     setSettings(updated);
+    setIsNew(false);
   };
 
   return (
@@ -89,17 +94,46 @@ function CompanyDetail() {
           errorMessage="No se pudo cargar la configuración de la compañía."
         >
           {settings && (
-            <CompanyConfigTabs
-              settings={settings}
-              onSaveSettings={handleSaveSettings}
-              onNotify={show}
-              whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
-              otSlot={<OTMatrixPanel tenantId={tenantId} />}
-              auditSlot={<AuditLogPanel tenantId={tenantId} />}
-            />
+            <>
+              {isNew && (
+                <div
+                  className="mb-3 rounded-xl border px-3 py-2 text-xs"
+                  style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+                  role="status"
+                >
+                  Esta compañía aún no tiene configuración. Define los valores y pulsa
+                  &nbsp;<strong>Guardar todo</strong>&nbsp;para crearla.
+                </div>
+              )}
+              <CompanyConfigTabs
+                settings={settings}
+                onSaveSettings={handleSaveSettings}
+                onNotify={show}
+                whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
+                otSlot={<OTMatrixPanel tenantId={tenantId} />}
+                auditSlot={<AuditLogPanel tenantId={tenantId} />}
+              />
+            </>
           )}
         </UiStateBoundary>
       </div>
     </main>
   );
+}
+
+// Configuración por defecto para una compañía aún sin parametrizar (404 en GET).
+// Todos los switches apagados, sin métodos de recaudo; el SuperAdmin ajusta y guarda.
+function defaultSettings(tenantId: string): TenantSettings {
+  return {
+    tenantId,
+    switchesMatricula: {
+      allowInitialRegistration: false,
+      allowMiscNewVehicles: false,
+      onlyOwnVehicles: false,
+    },
+    baulFirmasActivo: false,
+    enrutamientoSMTP: "FLIT_SMTP",
+    notificationTarget: "NINGUNO",
+    metodosRecaudo: [],
+  };
 }

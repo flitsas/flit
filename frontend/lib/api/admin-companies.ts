@@ -1,6 +1,7 @@
 // Cliente tipado de la API admin de compañías (HU #10194). Una función por
 // endpoint del contrato (`contracts/openapi/core-api.v1.yaml`).
 import { apiFetch } from "./client";
+import { ApiError } from "./types";
 import type {
   AuditLogPageResponse,
   CompaniesIndexParams,
@@ -23,9 +24,22 @@ export function fetchCompaniesIndex(
   return apiFetch<CompanyPagedResult>(`${base}/index`, { query: { ...params }, signal });
 }
 
-/** GET /{tenantId}/settings — configuración operativa actual (AC2). */
-export function fetchTenantSettings(tenantId: string, signal?: AbortSignal): Promise<TenantSettings> {
-  return apiFetch<TenantSettings>(`${base}/${tenantId}/settings`, { signal });
+/**
+ * GET /{tenantId}/settings — configuración operativa actual (AC2). Devuelve `null`
+ * en 404 (compañía aún sin configurar): el caller muestra el formulario en blanco.
+ */
+export async function fetchTenantSettings(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<TenantSettings | null> {
+  try {
+    return await apiFetch<TenantSettings>(`${base}/${tenantId}/settings`, { signal });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /** PUT /{tenantId}/settings — guardado atómico (AC2). Lanza ApiValidationError en 422. */

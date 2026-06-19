@@ -1,7 +1,7 @@
 // Cliente HTTP base contra el Gateway FLIT (HU #10194). Resuelve el token JWT,
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
-import { ApiValidationError, type ValidationErrorResponse } from "./types";
+import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4002";
@@ -86,7 +86,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   if (!response.ok) {
-    throw new Error(`Error ${response.status} al llamar ${path}`);
+    throw new ApiError(response.status, `Error ${response.status} al llamar ${path}`);
   }
 
   return (await safeJson(response)) as T;
