@@ -28,6 +28,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<ConsultationTemplate> ConsultationTemplates => Set<ConsultationTemplate>();
     public DbSet<FieldApiBinding> FieldApiBindings => Set<FieldApiBinding>();
 
+    // Tramites — runtime instancias (HU10150, con tenant_id)
+    public DbSet<ProcedureInstance> ProcedureInstances => Set<ProcedureInstance>();
+    public DbSet<ProcedureInstanceActor> ProcedureInstanceActors => Set<ProcedureInstanceActor>();
+    public DbSet<ProcedureInstanceFieldValue> ProcedureInstanceFieldValues => Set<ProcedureInstanceFieldValue>();
+    public DbSet<ProcedureInstanceStatusHistory> ProcedureInstanceStatusHistories => Set<ProcedureInstanceStatusHistory>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
