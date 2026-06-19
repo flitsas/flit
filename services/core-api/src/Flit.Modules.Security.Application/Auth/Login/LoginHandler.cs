@@ -20,11 +20,13 @@ public sealed class LoginHandler(
         if (!string.Equals(snapshot.Status, "active", StringComparison.OrdinalIgnoreCase))
             throw new InvalidCredentialsException();
 
-        if (snapshot.IsTemporarilySuspended)
-            throw new InvalidCredentialsException();
-
         if (!passwordHasher.Verify(command.Password, snapshot.PasswordHash))
             throw new InvalidCredentialsException();
+
+        // Bloqueo temporal vigente (HU #10170, AC2): solo se revela tras verificar la
+        // contraseña, para no filtrar el estado de la cuenta a terceros.
+        if (snapshot.IsTemporarilySuspended)
+            throw new AccountSuspendedException();
 
         var issued = jwtTokenIssuer.IssueToken(
             snapshot.UserId,

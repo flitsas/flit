@@ -18,10 +18,36 @@ public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountReposi
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<AdminTargetUser?> FindActiveTargetByEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+
+        var user = await db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedAt == null
+                        && u.Status == "active"
+                        && EF.Functions.ILike(u.Email, normalizedEmail))
+            .Select(u => new { u.Id, u.Email, u.DisplayName })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (user is null)
+            return null;
+
+        // El tenant del usuario se deriva de su asignación de rol (puede no existir).
+        var tenantId = await db.UserRoleAssignments
+            .AsNoTracking()
+            .Where(a => a.UserId == user.Id && a.DeletedAt == null)
+            .Select(a => (Guid?)a.TenantId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new AdminTargetUser(user.Id, user.Email, user.DisplayName, tenantId);
+    }
+
     public async Task UpdatePasswordHashAsync(
         Guid userId,
         string passwordHash,
         DateTimeOffset changedAt,
+        bool mustChangePassword,
         CancellationToken cancellationToken)
     {
         await db.UserCredentials
@@ -30,7 +56,7 @@ public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountReposi
                 s => s
                     .SetProperty(c => c.PasswordHash, passwordHash)
                     .SetProperty(c => c.PasswordChangedAt, changedAt)
-                    .SetProperty(c => c.MustChangePassword, false)
+                    .SetProperty(c => c.MustChangePassword, mustChangePassword)
                     .SetProperty(c => c.UpdatedAt, changedAt),
                 cancellationToken);
     }
