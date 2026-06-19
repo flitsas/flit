@@ -10,8 +10,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
   </Folder>
 </Solution>
