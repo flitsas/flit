@@ -6,6 +6,7 @@ using Flit.Admin.Domain.Companies.Whitelist;
 using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,16 +38,20 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
         // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
-        // (read-only) + guard de uso (stub transitorio hasta #10197).
+        // (read-only). El guard de uso es ahora la implementación real (HU #10197).
         services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();
         services.AddScoped<IProcedureTypeCatalog, ProcedureTypeCatalog>();
-        services.AddScoped<IProcedureDocumentRequirementUsageGuard, StubProcedureDocumentRequirementUsageGuard>();
+        services.AddScoped<IProcedureDocumentRequirementUsageGuard, ProcedureDocumentRequirementUsageGuard>();
 
         // HU #10196 — overrides de orden documental (OT/Cliente) + catálogo de clientes
         // (read-only) + resolutor de la matriz documental (precedencia Cliente > OT > Default).
         services.AddScoped<IDocumentOrderOverrideRepository, DocumentOrderOverrideRepository>();
         services.AddScoped<ITenantCatalog, TenantCatalog>();
         services.AddScoped<IResolvedDocumentMatrixResolver, ResolvedDocumentMatrixResolver>();
+
+        // HU #10197 — instancias de trámite + snapshot documental inmutable.
+        services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        services.AddScoped<IProcedureDocumentSnapshotRepository, ProcedureDocumentSnapshotRepository>();
 
         return services;
     }

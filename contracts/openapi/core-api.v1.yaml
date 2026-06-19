@@ -24,6 +24,10 @@ tags:
     description: >
       Overrides de orden documental por OT/Cliente y matriz documental resuelta
       con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Trámites · Documentos
+    description: >
+      Alta de trámite con snapshot documental inmutable y lectura de los documentos
+      requeridos congelados al crear el trámite (cualquier JWT válido).
 
 paths:
   /api/v1/admin/companies/index:
@@ -1014,6 +1018,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites:
+    post:
+      tags: [Trámites · Documentos]
+      operationId: tramitesCreate
+      summary: Crea un trámite y congela su snapshot documental (RF19)
+      description: >
+        Crea un trámite en estado draft y captura, en la misma transacción, un snapshot
+        inmutable de la matriz documental resuelta vigente (precedencia Cliente > OT >
+        Default). Si la generación del snapshot falla, toda la operación se revierte y no
+        queda trámite creado (500). Requiere JWT autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureInstanceRequest"
+      responses:
+        "201":
+          description: Trámite creado con su snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureInstanceResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El tipo de trámite o el cliente (tenant) no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Datos inválidos o número de referencia duplicado para el cliente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Falló la persistencia del trámite o del snapshot; operación revertida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/{tramiteId}/document-requirements:
+    get:
+      tags: [Trámites · Documentos]
+      operationId: tramitesGetDocumentRequirements
+      summary: Documentos requeridos del snapshot de un trámite (RF19)
+      description: >
+        Devuelve los documentos congelados en el snapshot del trámite, ordenados por el
+        orden capturado al crearlo (ordenResuelto asc). Los cambios posteriores en el
+        catálogo o los overrides no afectan la respuesta (inmutabilidad). Requiere JWT
+        autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tramiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del trámite (procedure_instance_id).
+      responses:
+        "200":
+          description: Documentos del snapshot del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotList"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El trámite no existe o no tiene snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1458,4 +1542,58 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ResolvedDocumentMatrixRow"
+      required: [data]
+
+    CreateProcedureInstanceRequest:
+      type: object
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        transitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo de tránsito (nivel OT) — opcional, afecta la precedencia.
+        referenceNumber:
+          type: string
+          maxLength: 30
+          description: Número de referencia del trámite, único por cliente.
+        createdByUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario creador; si se omite, se resuelve del JWT (sub).
+      required: [procedureTypeId, tenantId, referenceNumber]
+
+    ProcedureInstanceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string, example: draft }
+        snapshotAt: { type: string, format: date-time }
+        documentCount: { type: integer, description: Documentos congelados en el snapshot. }
+      required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    ProcedureDocumentRequirementSnapshotRow:
+      type: object
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer }
+        nivelAplicado:
+          type: string
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que determinó el orden en el momento de creación.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ProcedureDocumentRequirementSnapshotList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotRow"
       required: [data]

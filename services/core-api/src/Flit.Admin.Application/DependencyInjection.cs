@@ -23,6 +23,8 @@ using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
+using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -80,6 +82,10 @@ public static class DependencyInjection
         services.AddScoped<ListDocumentOrderOverridesHandler>();
         services.AddScoped<DeleteDocumentOrderOverrideHandler>();
         services.AddScoped<GetResolvedDocumentMatrixHandler>();
+
+        // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
+        services.AddScoped<CreateProcedureInstanceHandler>();
+        services.AddScoped<GetProcedureDocumentRequirementsHandler>();
 
         return services;
     }
