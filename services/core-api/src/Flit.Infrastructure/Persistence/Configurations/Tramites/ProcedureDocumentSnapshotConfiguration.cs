@@ -29,5 +29,15 @@ internal sealed class ProcedureDocumentSnapshotConfiguration
         builder.HasIndex(x => x.ProcedureInstanceId)
             .IsUnique()
             .HasDatabaseName("uq_procedure_document_snapshots_instance");
+
+        // Relación con el trámite (FK procedure_instance_id → procedure_instances.id,
+        // ON DELETE CASCADE en BD). Sin mapearla, EF Core desconoce la dependencia
+        // padre→hijo y no garantiza el orden de inserción: contra PostgreSQL real
+        // intenta insertar el snapshot antes que la instancia y viola el FK (HU #10197).
+        // El índice único de arriba mantiene la cardinalidad 1:1.
+        builder.HasOne<ProcedureInstance>()
+            .WithMany()
+            .HasForeignKey(x => x.ProcedureInstanceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
