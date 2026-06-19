@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
+using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
@@ -120,6 +121,43 @@ public static class AuthEndpoints
             }
         }).RequireAuthorization();
 
+        // HU #10171 AC1/AC2 — cambio voluntario de contraseña del propio usuario autenticado.
+        group.MapPut("/change-password", async (
+            [FromBody] ChangePasswordRequest request,
+            ClaimsPrincipal user,
+            ChangePasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var sub = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
+            if (!Guid.TryParse(sub, out var userId))
+                return Results.Unauthorized();
+
+            try
+            {
+                await handler.HandleAsync(
+                    new ChangePasswordCommand(userId, request.CurrentPassword, request.NewPassword),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña actualizada correctamente."));
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_POLICY_VIOLATION", "La contraseña no cumple la política de complejidad."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidCurrentPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVALID_CURRENT_PASSWORD", "La contraseña actual es incorrecta."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidCredentialsException)
+            {
+                return Results.Unauthorized();
+            }
+        }).RequireAuthorization();
+
         group.MapGet("/me", (ClaimsPrincipal user) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -153,6 +191,8 @@ public static class AuthEndpoints
     private sealed record ResetPasswordRequest(string Token, string NewPassword);
 
     private sealed record AdminResetPasswordRequest(string Email);
+
+    private sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
     private sealed record MessageResponse(string Message);
 

@@ -65,3 +65,12 @@ public sealed class TargetUserNotFoundException : Exception
     {
     }
 }
+
+/// <summary>La contraseña actual aportada en un cambio voluntario no coincide (HU #10171).</summary>
+public sealed class InvalidCurrentPasswordException : Exception
+{
+    public InvalidCurrentPasswordException()
+        : base("The current password is incorrect.")
+    {
+    }
+}
