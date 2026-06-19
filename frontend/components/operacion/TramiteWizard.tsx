@@ -22,11 +22,21 @@ import type {
   WizardStepStatus,
 } from '@/lib/api/types/procedure-runtime';
 
-interface Props {
-  configuration: ProcedureConfiguration;
-  procedureTypeId: string;
+/**
+ * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
+ * modalidad/pasos/status. Por eso solo necesita saber CÓMO crear la instancia.
+ *
+ * - Entrada por modalidad (M0): `modalidad` + `title` (etiqueta para el header).
+ * - Entrada legacy por tipo publicado: `configuration` + `procedureTypeId`.
+ *
+ * Exactamente una de las dos vías debe estar presente.
+ */
+type Props = {
   onExit: () => void;
-}
+} & (
+  | { modalidad: WizardModalidad; title: string; configuration?: undefined; procedureTypeId?: undefined }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; modalidad?: undefined; title?: undefined }
+);
 
 const STATUS_BADGE: Record<
   WizardStepStatus,
@@ -64,24 +74,33 @@ function StepMarker({ status, index }: { status: WizardStepStatus; index: number
  * acción que mueva gates (actor, documento, preflight, comercial) se llama
  * `refresh()` para re-consultar el estado autoritativo.
  */
-export function TramiteWizard({ configuration, procedureTypeId, onExit }: Props) {
+export function TramiteWizard(props: Props) {
+  const { configuration, procedureTypeId, modalidad: entryModalidad, title, onExit } = props;
   const { state, start } = useProcedureInstance();
   const instanceId = state.instanceId;
+
+  // Header: por modalidad usamos `title`; legacy usa configuration.name.
+  const headerTitle = title ?? configuration?.name ?? 'Trámite';
+
+  // Clave estable de creación (modalidad o procedureTypeId) para el guard.
+  const startKey = entryModalidad ?? procedureTypeId ?? '';
 
   // Guardia anti doble-create: StrictMode re-invoca los efectos en dev, lo que
   // dispararía DOS POST /instances casi simultáneos → choque UNIQUE de
   // reference_number → 500 y wizard sin instanceId (luego 404 en silencio).
   // El ref persiste entre la doble invocación del mismo montaje y garantiza
-  // que `start()` corra UNA sola vez por procedureTypeId.
+  // que `start()` corra UNA sola vez por entrada.
   const startedForRef = useRef<string | null>(null);
 
-  // Crea la instancia draft al montar (una sola vez por procedureTypeId).
+  // Crea la instancia draft al montar (una sola vez por entrada).
   useEffect(() => {
-    if (startedForRef.current === procedureTypeId) return;
-    startedForRef.current = procedureTypeId;
-    void start(procedureTypeId);
+    if (startedForRef.current === startKey) return;
+    startedForRef.current = startKey;
+    void start(
+      entryModalidad ? { modalidad: entryModalidad } : { procedureTypeId: procedureTypeId! },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [procedureTypeId]);
+  }, [startKey]);
 
   const {
     wizard,
@@ -168,7 +187,7 @@ export function TramiteWizard({ configuration, procedureTypeId, onExit }: Props)
           </div>
           <h2 className="text-xl font-bold">¡Trámite enviado!</h2>
           <p className="text-xs opacity-70 mt-2">
-            El trámite {configuration.name} fue radicado correctamente.
+            El trámite {headerTitle} fue radicado correctamente.
           </p>
           <button
             onClick={onExit}
@@ -190,7 +209,7 @@ export function TramiteWizard({ configuration, procedureTypeId, onExit }: Props)
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold">{configuration.name}</h1>
+          <h1 className="text-xl font-bold">{headerTitle}</h1>
           {wizard && (
             <p className="text-[11px] opacity-60 mt-0.5">
               {modalidad === 'traspaso' ? 'Traspaso' : 'Matrícula inicial'} ·{' '}

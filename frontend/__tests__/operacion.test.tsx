@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import type {
-  ProcedureConfiguration,
+  CreateInstanceRequest,
   WizardState,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -37,74 +36,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 import { OperacionView } from '@/components/operacion/OperacionView';
 
-const PUBLISHED: ProcedureTypeSummary[] = [
-  {
-    id: 'pt-traspaso',
-    code: 'TRASPASO_STD',
-    name: 'Traspaso estándar',
-    family: 'TRASPASO',
-    publicationStatus: 'published',
-    isActive: true,
-    publishedAt: '2026-01-01T00:00:00Z',
-  },
-];
-
-const CONFIG: ProcedureConfiguration = {
-  id: 'pt-traspaso',
-  code: 'TRASPASO_STD',
-  name: 'Traspaso estándar',
-  family: 'TRASPASO',
-  publishedAt: '2026-01-01T00:00:00Z',
-  conformationRules: [],
-  steps: [
-    {
-      id: 'step-1',
-      code: 'datos_vehiculo',
-      title: 'Datos del vehículo',
-      sortOrder: 1,
-      isActive: true,
-      sections: [
-        {
-          id: 'sec-1',
-          code: 'vehiculo',
-          title: 'Vehículo',
-          sortOrder: 1,
-          formFields: [
-            {
-              id: 'f-placa',
-              fieldKey: 'placa',
-              label: 'Placa del vehículo',
-              fieldType: 'text',
-              isRequired: true,
-              sortOrder: 1,
-              isLocked: false,
-              lockReason: null,
-              consultationTemplateId: null,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      id: 'step-2',
-      code: 'confirmacion',
-      title: 'Confirmación',
-      sortOrder: 2,
-      isActive: true,
-      sections: [
-        {
-          id: 'sec-2',
-          code: 'confirm',
-          title: 'Confirmar',
-          sortOrder: 1,
-          formFields: [],
-        },
-      ],
-    },
-  ],
-};
-
-const WIZARD: WizardState = {
+const TRASPASO_WIZARD: WizardState = {
   modalidad: 'traspaso',
   tipologiaCodigo: 'traspaso',
   totalSteps: 6,
@@ -120,20 +52,34 @@ const WIZARD: WizardState = {
   ],
 };
 
+const MATRICULA_WIZARD: WizardState = {
+  modalidad: 'matricula_inicial',
+  tipologiaCodigo: 'matricula_inicial',
+  totalSteps: 5,
+  canSubmit: false,
+  blockers: ['documentos_incompletos'],
+  steps: [
+    { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
+    { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
+    { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
+    { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listPublishedProcedureTypes.mockResolvedValue(PUBLISHED);
-  mocks.getConfiguration.mockResolvedValue(CONFIG);
   mocks.createInstance.mockResolvedValue({
     id: 'inst-1',
     referenceNumber: 'TR-001',
     status: 'draft',
-    procedureTypeId: 'pt-traspaso',
-    tenantId: '11111111-1111-1111-1111-111111111111',
+    procedureTypeId: null,
+    tenantId: 'tenant-dev',
     createdAt: '2026-06-18T00:00:00Z',
   });
-  mocks.patchFieldValues.mockResolvedValue({});
-  mocks.getWizardState.mockResolvedValue(WIZARD);
+  mocks.getInstance.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
+  mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
+  mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
   mocks.runPreflight.mockResolvedValue({
     overall: 'yellow',
     createdAt: '2026-06-18T00:00:00Z',
@@ -150,57 +96,49 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
 });
 
-describe('AC1 — selector solo published', () => {
-  it('lista únicamente los tipos publicados que devuelve el cliente', async () => {
+describe('M0 — chooser por modalidad (sin tipos publicados)', () => {
+  it('muestra las dos modalidades y NO consulta tipos publicados', async () => {
     render(<OperacionView />);
-    expect(await screen.findByText('Traspaso estándar')).toBeInTheDocument();
-    expect(screen.getByText(/TRASPASO_STD/)).toBeInTheDocument();
-    // sólo se consultó el endpoint de published
-    expect(mocks.listPublishedProcedureTypes).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Iniciar Traspaso estándar/ })).toBeInTheDocument();
+    // M0 desliga de Parametrización: ya no se listan tipos publicados.
+    expect(mocks.listPublishedProcedureTypes).not.toHaveBeenCalled();
   });
-});
 
-describe('AC2 — wizard server-driven (Slice 4b)', () => {
-  it('al elegir el tipo crea la instancia y pinta el sidebar server-driven', async () => {
+  it('Matrícula inicial crea la instancia con modalidad (sin procedureTypeId)', async () => {
+    mocks.getWizardState.mockResolvedValue(MATRICULA_WIZARD);
+    const user = userEvent.setup();
+    render(<OperacionView />);
+    await user.click(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ }));
+
+    await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
+    const body = mocks.createInstance.mock.calls[0][0] as CreateInstanceRequest;
+    expect(body.modalidad).toBe('matricula_inicial');
+    expect(body.procedureTypeId).toBeUndefined();
+    // tenantId/createdByUserId provienen de dev-constants (UUIDs fijos del seed),
+    // no del mock del cliente: useProcedureInstance los importa directamente.
+    expect(body.tenantId).toBe('11111111-1111-1111-1111-111111111111');
+    expect(body.createdByUserId).toBe('22222222-2222-2222-2222-222222222222');
+
+    // Wizard server-driven: 5 pasos de matrícula.
+    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
+    expect(stepButtons).toHaveLength(5);
+  });
+
+  it('Traspaso estándar crea la instancia con modalidad traspaso', async () => {
     const user = userEvent.setup();
     render(<OperacionView />);
     await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
 
-    // El wizard crea la instancia y consulta el estado server-driven.
     await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
+    const body = mocks.createInstance.mock.calls[0][0] as CreateInstanceRequest;
+    expect(body.modalidad).toBe('traspaso');
+    expect(body.procedureTypeId).toBeUndefined();
+
     await waitFor(() =>
       expect(mocks.getWizardState).toHaveBeenCalledWith('inst-1', expect.anything()),
     );
-
-    // Sidebar con los 6 pasos del traspaso.
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(6);
-    expect(screen.getByRole('button', { name: /^Paso 1: Consulta/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 6: FUR/ })).toBeInTheDocument();
-  });
-});
-
-describe('AC3 — preflight server-driven en el paso consulta', () => {
-  it('Consultar RUNT corre el preflight y refresca el wizard', async () => {
-    const user = userEvent.setup();
-    render(<OperacionView />);
-    await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
-
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
-    await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(1));
-
-    // El paso consulta de traspaso exige placa + documento del propietario;
-    // sin ellos la consulta no persiste ni corre el preflight (DS-4B-1).
-    await user.type(screen.getByLabelText(/^Placa$/), 'ABC123');
-    await user.type(
-      screen.getByLabelText(/Número documento propietario/),
-      '1020304050',
-    );
-
-    await user.click(await screen.findByRole('button', { name: /Consultar RUNT/ }));
-    await waitFor(() => expect(mocks.runPreflight).toHaveBeenCalledWith('inst-1'));
-    // Tras correr el preflight, el wizard se re-consulta (refresh()).
-    await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('Pre-vuelo con advertencias')).toBeInTheDocument();
   });
 });

@@ -25,11 +25,19 @@ export interface ProcedureConfiguration {
   steps: ProcedureStep[];
 }
 
-/** POST /tramites/instances — tenant viaja en el BODY (inconsistencia documentada). */
+/**
+ * POST /tramites/instances — tenant viaja en el BODY (inconsistencia documentada).
+ *
+ * Entrada por MODALIDAD (M0): el backend deriva la tipología desde `modalidad`,
+ * por lo que `procedureTypeId` ya NO es obligatorio cuando se envía `modalidad`.
+ * Se mantiene `procedureTypeId` opcional para el flujo legacy (selector de tipos
+ * publicados) que aún cubren los tests del wizard.
+ */
 export interface CreateInstanceRequest {
   tenantId: string;
-  procedureTypeId: string;
   createdByUserId: string;
+  modalidad?: WizardModalidad;
+  procedureTypeId?: string;
   transitOfficeId?: string;
 }
 

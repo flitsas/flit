@@ -6,18 +6,27 @@ import { ParametrizationWizard } from "@/components/superadmin/ParametrizationWi
 import { OperacionView } from "@/components/operacion/OperacionView";
 import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 
+// M0 — Parametrización oculta: el usuario quiere "desligarse" visualmente de
+// la parametrización mientras hardcodeamos el flujo de matrícula. El código de
+// ParametrizacionView se conserva intacto; solo se apaga la pestaña vía flag.
+const SHOW_PARAMETRIZACION = false;
+
 export function Tramites() {
   const [view, setView] = useState<"operacion" | "parametrizacion">("operacion");
+
+  const tabs = [
+    { id: "operacion" as const, label: "Operación", icon: List },
+    ...(SHOW_PARAMETRIZACION
+      ? [{ id: "parametrizacion" as const, label: "Parametrización", icon: Settings2 }]
+      : []),
+  ];
 
   return (
     <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
       <ModuleTitle title="Gestión Integral de Trámites" subtitle="Embudo de tus trámites vehiculares" />
 
       <div className="flex items-center gap-2 shrink-0">
-        {[
-          { id: "operacion" as const, label: "Operación", icon: List },
-          { id: "parametrizacion" as const, label: "Parametrización", icon: Settings2 },
-        ].map((v) => {
+        {tabs.map((v) => {
           const Icon = v.icon;
           const active = view === v.id;
           return (

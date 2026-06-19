@@ -5,9 +5,11 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { DEV_TENANT_ID, DEV_USER_ID } from '@/lib/api/dev-constants';
 import type { FormFieldItem } from '@/lib/api/types/procedure-parametrization';
 import type {
+  CreateInstanceRequest,
   FieldValueInput,
   PreflightSnapshot,
   ProcedureInstanceDetail,
+  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -91,25 +93,36 @@ export function useProcedureInstance() {
     setState((s) => ({ ...s, error: null }));
   }, []);
 
-  const start = useCallback(async (procedureTypeId: string) => {
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const summary = await tramitesClient.createInstance({
+  // Crea la instancia draft. M0: si se pasa `modalidad`, el backend deriva la
+  // tipología y NO se envía procedureTypeId. El flujo legacy (selector de tipos
+  // publicados) sigue funcionando pasando un procedureTypeId.
+  const start = useCallback(
+    async (
+      target: { modalidad: WizardModalidad } | { procedureTypeId: string },
+    ) => {
+      setState((s) => ({ ...s, loading: true, error: null }));
+      const body: CreateInstanceRequest = {
         tenantId: DEV_TENANT_ID,
-        procedureTypeId,
         createdByUserId: DEV_USER_ID,
-      });
-      setState((s) => ({ ...s, instanceId: summary.id, loading: false, step: 0 }));
-      return summary;
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: err instanceof Error ? err.message : 'Error al iniciar el trámite',
-      }));
-      return null;
-    }
-  }, []);
+        ...('modalidad' in target
+          ? { modalidad: target.modalidad }
+          : { procedureTypeId: target.procedureTypeId }),
+      };
+      try {
+        const summary = await tramitesClient.createInstance(body);
+        setState((s) => ({ ...s, instanceId: summary.id, loading: false, step: 0 }));
+        return summary;
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: err instanceof Error ? err.message : 'Error al iniciar el trámite',
+        }));
+        return null;
+      }
+    },
+    [],
+  );
 
   const saveDraft = useCallback(
     async (items: FieldValueInput[]) => {

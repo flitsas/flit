@@ -1,54 +1,50 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { useProcedureConfiguration } from '@/hooks/useProcedureConfiguration';
+import { ChevronRight, Car, ArrowLeftRight } from 'lucide-react';
 import { TramiteWizard } from './TramiteWizard';
-import {
-  OperacionEmptyState,
-  OperacionErrorState,
-  OperacionLoadingState,
-} from './states';
-import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
+import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
-const FAMILY_LABELS: Record<string, string> = {
-  MATRICULAS: 'Matrículas',
-  TRASPASO: 'Traspaso',
-  OTROS: 'Otros Trámites',
-};
+/**
+ * M0 — Entrada por MODALIDAD (desligada de Parametrización). En vez de listar
+ * tipos publicados, el gestor elige Matrícula inicial o Traspaso; el backend
+ * deriva la tipología desde la modalidad al crear la instancia (POST /instances
+ * con `modalidad`). El wizard es server-driven, así que NO se necesita cargar la
+ * configuración del tipo aquí: basta la modalidad para el header y la creación.
+ */
+interface Modalidad {
+  id: WizardModalidad;
+  label: string;
+  description: string;
+  icon: typeof Car;
+}
+
+const MODALIDADES: Modalidad[] = [
+  {
+    id: 'matricula_inicial',
+    label: 'Matrícula inicial',
+    description: 'Registra por primera vez un vehículo nuevo ante el organismo de tránsito.',
+    icon: Car,
+  },
+  {
+    id: 'traspaso',
+    label: 'Traspaso estándar',
+    description: 'Transfiere la propiedad de un vehículo entre vendedor y comprador.',
+    icon: ArrowLeftRight,
+  },
+];
 
 export function OperacionView() {
-  const {
-    items,
-    status,
-    error,
-    reload,
-    configuration,
-    configStatus,
-    configError,
-    loadConfiguration,
-    clearConfiguration,
-  } = useProcedureConfiguration();
+  const [selected, setSelected] = useState<Modalidad | null>(null);
 
-  const [selected, setSelected] = useState<ProcedureTypeSummary | null>(null);
+  const handleExit = () => setSelected(null);
 
-  const handleSelect = async (type: ProcedureTypeSummary) => {
-    setSelected(type);
-    await loadConfiguration(type.code);
-  };
-
-  const handleExit = () => {
-    setSelected(null);
-    clearConfiguration();
-    void reload();
-  };
-
-  // Wizard activo: hay config cargada para el tipo elegido.
-  if (selected && configuration && configStatus === 'success') {
+  // Wizard activo: hay una modalidad elegida. El wizard crea la instancia.
+  if (selected) {
     return (
       <TramiteWizard
-        configuration={configuration}
-        procedureTypeId={configuration.id}
+        modalidad={selected.id}
+        title={selected.label}
         onExit={handleExit}
       />
     );
@@ -62,71 +58,50 @@ export function OperacionView() {
       >
         <h2 className="text-sm font-bold mb-1">Iniciar nuevo trámite</h2>
         <p className="text-[11px] opacity-60 mb-4">
-          Selecciona un tipo de trámite publicado para comenzar.
+          Selecciona la modalidad del trámite para comenzar.
         </p>
 
-        {status === 'loading' && <OperacionLoadingState />}
-        {status === 'error' && error && (
-          <OperacionErrorState message={error} onRetry={reload} />
-        )}
-        {status === 'success' && items.length === 0 && <OperacionEmptyState />}
-
-        {status === 'success' && items.length > 0 && (
-          <>
-            {configStatus === 'error' && configError && (
-              <div
-                className="rounded-xl p-3 text-xs border mb-3"
-                style={{
-                  borderColor: '#FF4E00',
-                  background: 'rgba(255,78,0,0.06)',
-                  color: '#FF4E00',
-                }}
-                role="alert"
-                aria-live="polite"
-              >
-                {configError}
-              </div>
-            )}
-            <ul
-              className="space-y-2"
-              role="list"
-              aria-label="Tipos de trámite publicados"
-            >
-              {items.map((type) => {
-                const isLoading =
-                  selected?.id === type.id && configStatus === 'loading';
-                return (
-                  <li key={type.id}>
-                    <button
-                      type="button"
-                      onClick={() => void handleSelect(type)}
-                      disabled={configStatus === 'loading'}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left text-xs transition disabled:opacity-60"
-                      style={{ borderColor: '#DFE5ED' }}
-                      aria-label={`Iniciar ${type.name}`}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold truncate">{type.name}</p>
-                        <p className="opacity-60 mt-0.5">
-                          <span className="font-mono">{type.code}</span>
-                          {' · '}
-                          {FAMILY_LABELS[type.family] ?? type.family}
-                        </p>
-                      </div>
-                      <span
-                        className="shrink-0 flex items-center gap-1 font-semibold"
-                        style={{ color: '#557EFF' }}
-                      >
-                        {isLoading ? 'Cargando…' : 'Iniciar'}
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
+        <ul
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+          role="list"
+          aria-label="Modalidades de trámite"
+        >
+          {MODALIDADES.map((m) => {
+            const Icon = m.icon;
+            return (
+              <li key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(m)}
+                  className="w-full h-full flex flex-col gap-3 px-4 py-4 rounded-xl border text-left transition hover:border-[#557EFF]"
+                  style={{ borderColor: '#DFE5ED' }}
+                  aria-label={`Iniciar ${m.label}`}
+                >
+                  <span
+                    className="h-10 w-10 rounded-xl grid place-items-center"
+                    style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+                    aria-hidden="true"
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{m.label}</span>
+                    <span className="block text-[11px] opacity-60 mt-0.5">
+                      {m.description}
+                    </span>
+                  </span>
+                  <span
+                    className="mt-auto flex items-center gap-1 text-xs font-semibold"
+                    style={{ color: '#557EFF' }}
+                  >
+                    Iniciar
+                    <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       {/* Listado de instancias — FUERA DE ALCANCE de #10200 (placeholder). */}
