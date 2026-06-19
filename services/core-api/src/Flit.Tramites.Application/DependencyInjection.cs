@@ -50,6 +50,16 @@ public static class DependencyInjection
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
 
+        // Firma electrónica + FUR (Slice 7, mock). El proveedor de firma y el generador de
+        // documentos son MOCKs swappables (contract-first, igual que el scorer biométrico):
+        // se reemplazan por ZapSign / generador PDF real sin tocar los handlers.
+        services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
+        services.AddSingleton<Documents.IFurDocumentGenerator, Documents.MockFurDocumentGenerator>();
+        services.AddScoped<SolicitarFirmaHandler>();
+        services.AddScoped<ListFirmasHandler>();
+        services.AddScoped<SimularFirmaHandler>();
+        services.AddScoped<GenerarFurHandler>();
+
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
 
         services.AddScoped<ListProcedureEntitiesHandler>();

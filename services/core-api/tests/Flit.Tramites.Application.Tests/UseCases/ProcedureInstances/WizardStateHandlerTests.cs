@@ -126,9 +126,12 @@ public sealed class WizardStateHandlerTests
         identidad.Status.Should().Be("incomplete");
         identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
 
+        // FUR matrícula (Slice 7): completa al GENERAR el FUR; NO requiere firma. Sin FUR generado
+        // el paso queda incomplete con 'fur_pendiente' (antes diferido con 'pendiente_firma').
         var fur = result.Steps.Single(s => s.Index == 5);
         fur.Status.Should().Be("incomplete");
-        fur.Reasons.Should().Contain(GetWizardStateHandler.PendienteFirma);
+        fur.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
+        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
     }
 
     [Fact]

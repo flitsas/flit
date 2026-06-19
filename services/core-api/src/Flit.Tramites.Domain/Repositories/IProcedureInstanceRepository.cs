@@ -18,6 +18,15 @@ public interface IProcedureInstanceRepository
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>Carga la instancia con sus firmas electrónicas (Slice 7).</summary>
+    Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con TODO el grafo necesario para generar el FUR (Slice 7): actores,
+    /// field values, adjuntos, comercial, biométricas y firmas.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
     /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.

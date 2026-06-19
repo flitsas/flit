@@ -42,6 +42,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
+    public const string FurPendiente = "fur_pendiente";
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -115,8 +116,16 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             }
             else if (p == 5)
             {
-                status = "incomplete";
-                reasons.Add(PendienteFirma);
+                // FUR (Slice 7): matrícula NO requiere firma; completa cuando el FUR está generado.
+                if (FurGenerado(instance))
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    reasons.Add(FurPendiente);
+                }
             }
             else if (gate.Ok)
             {
@@ -192,16 +201,25 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             var reasons = new List<string>();
             string status;
 
-            // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) + firma (slice 7).
-            // La biométrica refleja estado real vía GateFur; la firma sigue diferida.
+            // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) +
+            // firma de AMBAS partes (slice 7) + FUR generado. Completa solo cuando todo está listo;
+            // emite las razones precisas de lo que falta.
             if (p == 6)
             {
-                status = "incomplete";
+                var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
+                var firmaOk = FirmaAmbasFirmadas(instance);
+                var furOk = FurGenerado(instance);
+
                 if (!docsCompletos)
                     reasons.Add("documentos_incompletos");
-                if (!TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok)
+                if (!biometriaOk)
                     reasons.Add(PendienteBiometria);
-                reasons.Add(PendienteFirma);
+                if (!firmaOk)
+                    reasons.Add(PendienteFirma);
+                if (!furOk)
+                    reasons.Add(FurPendiente);
+
+                status = (docsCompletos && biometriaOk && firmaOk && furOk) ? "complete" : "incomplete";
             }
             else if (gate.Ok)
             {
@@ -301,6 +319,53 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
             && v.Estado == BiometricEstados.Aprobado);
+
+    /// <summary>
+    /// Check preflight de la firma de la compraventa (paridad Johan <c>derivaFirmaCompraventaCheck</c>).
+    /// Devuelve <c>null</c> si la tipología NO es traspaso_standard (no aplica firma de compraventa).
+    /// <c>ok</c> (status green) cuando AMBAS partes están firmadas; <c>fail</c> (red) si alguna firma
+    /// está rechazada; <c>warn</c> (yellow) en cualquier otro caso (pendiente de firmar).
+    /// </summary>
+    public static PreflightCheckDto? DerivaFirmaCompraventaCheck(ProcedureInstance instance)
+    {
+        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        if (!string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var firmas = instance.Signatures
+            .Where(s => string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var anyRechazada = firmas.Any(s => s.Estado == SignatureEstados.Rechazada);
+        if (anyRechazada)
+            return new PreflightCheckDto("firma_compraventa", "Firma compraventa", "fail", "firma",
+                "Una de las partes rechazó la firma de la compraventa.");
+
+        if (FirmaAmbasFirmadas(instance))
+            return new PreflightCheckDto("firma_compraventa", "Firma compraventa", "green", "firma",
+                "Ambas partes firmaron la compraventa.");
+
+        return new PreflightCheckDto("firma_compraventa", "Firma compraventa", "warn", "firma",
+            "Pendiente de firma de la compraventa.");
+    }
+
+    /// <summary>FUR generado = existe un adjunto del sistema con tipo 'fur' (Slice 7).</summary>
+    private static bool FurGenerado(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Firma de la compraventa completa: AMBAS partes (comprador + vendedor) tienen una firma
+    /// <c>firmada</c> de la compraventa (Slice 7, solo traspaso).
+    /// </summary>
+    private static bool FirmaAmbasFirmadas(ProcedureInstance instance)
+    {
+        bool Firmada(string parte) => instance.Signatures.Any(s =>
+            string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase)
+            && s.Estado == SignatureEstados.Firmada);
+
+        return Firmada(SignatureRules.ParteComprador) && Firmada(SignatureRules.ParteVendedor);
+    }
 
     private static ParteDatos? ParteOf(ProcedureInstance instance, string actorType)
     {

@@ -50,6 +50,8 @@ app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
 app.MapTramitesAttachmentEndpoints();
 app.MapTramitesBiometricaEndpoints();
+app.MapTramitesFirmaEndpoints();
+app.MapTramitesFurEndpoints();
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();

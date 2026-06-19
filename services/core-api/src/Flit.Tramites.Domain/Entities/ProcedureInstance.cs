@@ -34,5 +34,6 @@ public sealed class ProcedureInstance
     public ICollection<ProcedureInstancePreflightSnapshot> PreflightSnapshots { get; set; } = [];
     public ICollection<ProcedureInstanceEvent> Events { get; set; } = [];
     public ICollection<ProcedureInstanceBiometricValidation> BiometricValidations { get; set; } = [];
+    public ICollection<ProcedureInstanceSignature> Signatures { get; set; } = [];
     public ProcedureInstanceCommercial? Commercial { get; set; }
 }

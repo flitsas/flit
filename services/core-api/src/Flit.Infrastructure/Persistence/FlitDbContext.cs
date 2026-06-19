@@ -43,6 +43,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     // Tramites — biométrica (Slice 6, mock)
     public DbSet<ProcedureInstanceBiometricValidation> ProcedureInstanceBiometricValidations => Set<ProcedureInstanceBiometricValidation>();
 
+    // Tramites — firma electrónica (Slice 7, mock)
+    public DbSet<ProcedureInstanceSignature> ProcedureInstanceSignatures => Set<ProcedureInstanceSignature>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
