@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Search, X } from "lucide-react";
 
 // Panel de filtros del listado de compañías (HU #10194, AC1). El filtrado es
-// server-side: los cambios se acumulan en estado local y solo se confirman al
-// pulsar "Buscar" (o "Limpiar").
+// server-side: NIT/Razón Social/fechas se confirman al pulsar "Buscar"; el
+// Estado se aplica de inmediato al seleccionarlo. "Limpiar" resetea todo.
 export interface CompanyFilters {
   nit?: string;
   razonSocial?: string;
@@ -72,12 +72,15 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
         <select
           id="filter-estado"
           value={estadoValue}
-          onChange={(e) =>
-            setFilters((f) => ({
-              ...f,
-              estadoActivo: e.target.value === "" ? undefined : e.target.value === "true",
-            }))
-          }
+          onChange={(e) => {
+            const estadoActivo =
+              e.target.value === "" ? undefined : e.target.value === "true";
+            const next = { ...filters, estadoActivo };
+            setFilters(next);
+            // El Estado aplica de inmediato (sin pulsar Buscar), conservando los
+            // demás filtros ya escritos.
+            onApply(normalize(next));
+          }}
           className={INPUT_CLS}
         >
           <option value="">Todos</option>
