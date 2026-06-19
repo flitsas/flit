@@ -44,6 +44,7 @@ app.UseAuthorization();
 
 app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
+app.MapPublicProcedureTypeEndpoints();
 app.MapTramitesInstanceEndpoints();
 
 app.Run();
