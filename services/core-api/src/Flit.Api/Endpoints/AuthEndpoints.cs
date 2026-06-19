@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,6 +37,47 @@ public static class AuthEndpoints
             }
         });
 
+        // HU #10169 AC1/AC2 — solicitud de recuperación. Siempre 202 genérico (anti-enumeración).
+        group.MapPost("/forgot-password", async (
+            [FromBody] ForgotPasswordRequest request,
+            ForgotPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            await handler.HandleAsync(new ForgotPasswordCommand(request.Email), cancellationToken);
+
+            return Results.Json(
+                new MessageResponse("Si el correo está registrado, enviaremos instrucciones de recuperación."),
+                statusCode: StatusCodes.Status202Accepted);
+        });
+
+        // HU #10169 — redención del token: fija la nueva contraseña.
+        group.MapPost("/reset-password", async (
+            [FromBody] ResetPasswordRequest request,
+            ResetPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await handler.HandleAsync(
+                    new ResetPasswordCommand(request.Token, request.NewPassword),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña actualizada correctamente."));
+            }
+            catch (InvalidResetTokenException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVALID_RESET_TOKEN", "El enlace de recuperación es inválido o expiró."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         group.MapGet("/me", (ClaimsPrincipal user) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -62,6 +105,12 @@ public static class AuthEndpoints
     }
 
     private sealed record LoginRequest(string Email, string Password);
+
+    private sealed record ForgotPasswordRequest(string Email);
+
+    private sealed record ResetPasswordRequest(string Token, string NewPassword);
+
+    private sealed record MessageResponse(string Message);
 
     private sealed record LoginResponse(string AccessToken, int ExpiresInSeconds, string TokenType);
 
