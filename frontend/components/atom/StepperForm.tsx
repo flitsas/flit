@@ -74,6 +74,8 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (step === 10 && !hash) {
       const h = Array.from({ length: 64 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+      // Genera el hash una sola vez al alcanzar el paso 10 (estado derivado del paso).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHash(h);
     }
   }, [step, hash]);

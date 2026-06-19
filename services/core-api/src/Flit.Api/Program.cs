@@ -1,13 +1,14 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
+using Flit.Admin.Application;
+using Flit.Api.Authorization;
 using Flit.Api.Endpoints;
 using Flit.Infrastructure;
-using Flit.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
 
@@ -18,74 +19,70 @@ if (string.IsNullOrWhiteSpace(coreConnStr))
 
 builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, builder.Environment);
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
+builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
+
+// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3).
+// Aditivo sobre AddApiSecurity: solo fija Events, sin alterar TokenValidationParameters.
+builder.Services.PostConfigure<JwtBearerOptions>(
+    JwtBearerDefaults.AuthenticationScheme,
+    options => options.Events = new JwtBearerEvents
     {
-        options.Events = new JwtBearerEvents
+        OnAuthenticationFailed = context =>
         {
-            OnAuthenticationFailed = context =>
+            if (context.Exception is SecurityTokenExpiredException)
             {
-                if (context.Exception is SecurityTokenExpiredException)
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(JsonSerializer.Serialize(new
                 {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    context.Response.ContentType = "application/json";
-                    var payload = JsonSerializer.Serialize(new
-                    {
-                        code = "SESSION_EXPIRED",
-                        message = "Session expired. Please sign in again.",
-                    });
-                    return context.Response.WriteAsync(payload);
-                }
+                    code = "SESSION_EXPIRED",
+                    message = "Session expired. Please sign in again.",
+                }));
+            }
 
-                return Task.CompletedTask;
-            },
-            OnChallenge = context =>
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            if (context.AuthenticateFailure is SecurityTokenExpiredException)
             {
-                if (context.AuthenticateFailure is SecurityTokenExpiredException)
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(JsonSerializer.Serialize(new
                 {
-                    context.HandleResponse();
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    context.Response.ContentType = "application/json";
-                    var payload = JsonSerializer.Serialize(new
-                    {
-                        code = "SESSION_EXPIRED",
-                        message = "Session expired. Please sign in again.",
-                    });
-                    return context.Response.WriteAsync(payload);
-                }
+                    code = "SESSION_EXPIRED",
+                    message = "Session expired. Please sign in again.",
+                }));
+            }
 
-                return Task.CompletedTask;
-            },
-        };
+            return Task.CompletedTask;
+        },
     });
 
-builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<JwtKeyMaterial>((options, keyMaterial) =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = keyMaterial.Issuer,
-            ValidateAudience = true,
-            ValidAudience = keyMaterial.Audience,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = keyMaterial.SigningKey,
-            ClockSkew = TimeSpan.FromSeconds(30),
-            NameClaimType = JwtRegisteredClaimNames.Sub,
-            RoleClaimType = "role_code",
-        };
-    });
-
-builder.Services.AddAuthorization();
+// Módulo Admin (HU #10189, RF02).
+builder.Services.AddAdminApplication();
+builder.Services.AddAdminInfrastructure();
 
 var app = builder.Build();
 
-await app.Services.InitializeInfrastructureAsync();
+// Migración + seed de datos de desarrollo: solo en dev local y bajo flag explícito.
+// Evita que los tests de integración (WebApplicationFactory) intenten conectar a PostgreSQL.
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Database:RunStartupMigrations"))
+{
+    await app.Services.InitializeInfrastructureAsync();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapAdminCompaniesEndpoints();
+app.MapAdminTransitOfficesEndpoints();
+app.MapTransfersEndpoints();
 
 app.Run();
+
+/// <summary>Punto de entrada expuesto para pruebas de integración (WebApplicationFactory).</summary>
+public partial class Program;

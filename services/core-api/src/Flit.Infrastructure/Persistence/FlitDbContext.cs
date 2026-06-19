@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,14 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<RoleGrant> RoleGrants => Set<RoleGrant>();
 
     public DbSet<UserRoleAssignment> UserRoleAssignments => Set<UserRoleAssignment>();
+
+    public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
+
+    public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();
+
+    public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
+
+    public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

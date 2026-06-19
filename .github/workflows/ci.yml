@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, staging,release]
   push:
-    branches: [develop]
+    branches: [develop, staging, release]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -33,13 +33,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Format check
-        run: pnpm -r format:check
+        run: pnpm -r --if-present format:check
 
       - name: Lint
-        run: pnpm -r lint
+        run: pnpm -r --if-present lint
 
       - name: Type check
-        run: pnpm -r typecheck
+        run: pnpm -r --if-present typecheck
 
       - name: Build
-        run: pnpm -r build
+        run: pnpm -r --if-present build

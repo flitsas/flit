@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Users,
   HelpCircle,
+  Building2,
   Bell,
   Sun,
   Moon,
@@ -193,6 +194,15 @@ export function Shell({
             {right.map((it) => (
               <DockBtn key={it.id} item={it} active={active === it.id} onClick={() => onNav(it.id)} dark={dark} />
             ))}
+            {/* Consola de Administración de Compañías (ruta aparte, gate SuperAdmin). */}
+            <DockBtn
+              item={{ label: "Compañías", icon: Building2 }}
+              active={false}
+              onClick={() => {
+                window.location.href = "/admin/companies";
+              }}
+              dark={dark}
+            />
           </div>
         </div>
       </main>
@@ -240,7 +250,7 @@ function DockBtn({
   onClick,
   dark,
 }: {
-  item: { id: ModuleId; label: string; icon: typeof LayoutGrid };
+  item: { label: string; icon: typeof LayoutGrid };
   active: boolean;
   onClick: () => void;
   dark: boolean;

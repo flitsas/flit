@@ -44,6 +44,10 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new("tenant_id", tenantId.ToString()),
             new("role_id", roleId.ToString()),
             new("role_code", roleCode),
+            // "role" es el RoleClaimType que exige la policy SuperAdmin del módulo Admin
+            // (HU #10189). Se emite además de "role_code" para que los tokens de login
+            // sean válidos para RequireRole sin acoplar ambos módulos.
+            new("role", roleCode),
         };
 
         foreach (var slug in permissionSlugs)

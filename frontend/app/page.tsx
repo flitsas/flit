@@ -16,7 +16,11 @@ export default function HomePage() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    // Hidratación desde localStorage tras el montaje (no disponible en SSR);
+    // el setState aquí es intencional y solo corre una vez al montar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAuthed(window.localStorage.getItem("flit:authed") === "1");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
 

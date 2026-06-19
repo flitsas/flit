@@ -18,9 +18,19 @@ jobs:
         with:
           node-version: '22'
       - name: Lint core-api OpenAPI
-        run: npx -y @redocly/cli@latest lint contracts/openapi/core-api.v1.yaml
+        run: |
+          if [ -f contracts/openapi/core-api.v1.yaml ]; then
+            npx -y @redocly/cli@latest lint contracts/openapi/core-api.v1.yaml
+          else
+            echo "::notice::contracts/openapi/core-api.v1.yaml aún no existe, omitido"
+          fi
       - name: Lint python-ml OpenAPI
-        run: npx -y @redocly/cli@latest lint contracts/openapi/python-ml.v1.yaml
+        run: |
+          if [ -f contracts/openapi/python-ml.v1.yaml ]; then
+            npx -y @redocly/cli@latest lint contracts/openapi/python-ml.v1.yaml
+          else
+            echo "::notice::contracts/openapi/python-ml.v1.yaml aún no existe, omitido"
+          fi
 
   validate-asyncapi:
     runs-on: ubuntu-latest
@@ -31,4 +41,9 @@ jobs:
         with:
           node-version: '22'
       - name: Validate events.v1.yaml
-        run: npx -y @asyncapi/cli@latest validate contracts/asyncapi/events.v1.yaml
+        run: |
+          if [ -f contracts/asyncapi/events.v1.yaml ]; then
+            npx -y @asyncapi/cli@latest validate contracts/asyncapi/events.v1.yaml
+          else
+            echo "::notice::contracts/asyncapi/events.v1.yaml aún no existe, omitido"
+          fi

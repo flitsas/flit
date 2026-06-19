@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Flit.Admin.Domain/Flit.Admin.Domain.csproj" />
+    <Project Path="src/Flit.Admin.Application/Flit.Admin.Application.csproj" />
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
@@ -8,5 +10,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
   </Folder>
 </Solution>

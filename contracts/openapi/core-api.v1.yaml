@@ -1,8 +1,27 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: 1.0.0
-  description: Contrato público core-api — carril Seguridad (HU #10168)
+  version: "1.0.0"
+  description: >
+    Contrato público de FLIT Core API (services/core-api). Cubre el carril de
+    Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
+    y el módulo Administrador de Compañías (HU #10189 — index paginado y
+    seguridad SuperAdmin).
+
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4002
+    description: Local (Gateway)
+
+tags:
+  - name: Auth
+    description: Autenticación y sesión (login, perfil del usuario).
+  - name: Admin · Compañías
+    description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Trámites · Traspaso
+    description: Radicación de traspasos vehiculares.
+
 paths:
   /api/v1/auth/login:
     post:
@@ -27,7 +46,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/auth/me:
     get:
       operationId: authGetCurrentUser
@@ -47,13 +66,441 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/admin/companies/index:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompaniesIndex
+      summary: Listado paginado de compañías (RF02)
+      description: >
+        Retorna el listado paginado de compañías registradas, ordenado por
+        fecha de creación descendente. Filtros opcionales e independientes.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nit
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial sobre el NIT (tax_id).
+        - name: razonSocial
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: estadoActivo
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: Filtra por estado activo/inactivo.
+        - name: fechaDesde
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite inferior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: fechaHasta
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite superior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/settings:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetSettings
+      summary: Configuración operativa actual del tenant (RF03, AC3)
+      description: >
+        Retorna la configuración operativa vigente del tenant. Requiere JWT con
+        rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Configuración operativa actual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe configuración para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyUpdateSettings
+      summary: Guardado atómico de configuración operativa + audit log (RF03/RF07–RF10, AC1/AC2)
+      description: >
+        Persiste de forma atómica (todo o nada) la configuración operativa del
+        tenant y genera una entrada de auditoría por cada campo modificado. Si la
+        validación falla (p. ej. notificationTarget fuera del enum) retorna 422 sin
+        persistir ni auditar. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantSettingsUpdate"
+      responses:
+        "200":
+          description: Configuración persistida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido. No se persiste ni se audita ningún cambio.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/whitelist:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetWhitelist
+      summary: Lista blanca de correos exentos de la regla de propiedad vehicular (RF05, AC6)
+      description: >
+        Retorna los correos activos exentos de la regla only_own_vehicles del tenant.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de correos exentos (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WhitelistEntry"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyAddWhitelist
+      summary: Alta masiva de correos en la lista blanca + audit log (RF05, AC4/AC5)
+      description: >
+        Da de alta de forma atómica uno o más correos en la lista blanca del tenant y
+        genera una entrada de auditoría por cada correo insertado. Los duplicados ya
+        existentes se omiten sin error (idempotente, 201 parcial). Si algún correo es
+        inválido retorna 422 con la lista de inválidos sin persistir ninguno (atómico).
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhitelistAddRequest"
+      responses:
+        "201":
+          description: Correos procesados. Devuelve insertados y omitidos (duplicados).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhitelistAddResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Uno o más correos inválidos. No se persiste ninguno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhitelistValidationErrorResponse"
+
+  /api/v1/internal/transfers/start:
+    post:
+      tags: [Trámites · Traspaso]
+      operationId: internalTransfersStart
+      summary: Stub de radicación de traspaso con interceptor de propiedad vehicular (RF04, AC1/AC2)
+      description: >
+        Endpoint mínimo que cablea el interceptor de propiedad vehicular: valida la
+        regla only_own_vehicles efectiva del trámite (snapshot si está in-flight, AC3)
+        contemplando la exención por lista blanca (AC2). Si el vehículo no es del
+        tenant y el usuario no está exento, retorna 422 con el mensaje de bloqueo
+        (AC1). Exige usuario autenticado (rol operador), no SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferStartRequest"
+      responses:
+        "200":
+          description: El traspaso puede iniciarse.
+        "401":
+          description: No autenticado (sin token JWT).
+        "422":
+          description: El interceptor bloquea el traspaso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesSearch
+      summary: Catálogo estático de organismos de tránsito con búsqueda (RF13, AC1)
+      description: >
+        Retorna el catálogo estático en memoria de organismos de tránsito. El parámetro
+        opcional `search` filtra por nombre o código (case-insensitive e insensible a
+        tildes). No consulta base de datos. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+          description: Término opcional de búsqueda (nombre o código).
+      responses:
+        "200":
+          description: Catálogo de organismos (filtrado si se informó `search`).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitOffice"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetTransitGrants
+      summary: Organismos de tránsito habilitados del tenant (RF13, AC5)
+      description: >
+        Retorna los ids de organismos de tránsito habilitados para el tenant.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de organismos habilitados (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyAddTransitGrant
+      summary: Habilita un organismo de tránsito para el tenant + audit log (RF13, AC2)
+      description: >
+        Habilita un organismo de tránsito (que debe existir en el catálogo estático)
+        para el tenant y genera una entrada de auditoría. Idempotente: si el grant ya
+        existe retorna 201 sin duplicar fila ni auditoría. Si el organismo no existe en
+        el catálogo retorna 422 sin persistir. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitGrantRequest"
+      responses:
+        "201":
+          description: Grant habilitado (alta nueva o idempotente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantCreatedResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: El organismo no existe en el catálogo. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId}:
+    delete:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyRemoveTransitGrant
+      summary: Deshabilita un organismo de tránsito del tenant + audit log (RF13, AC3)
+      description: >
+        Elimina el grant del organismo para el tenant y genera una entrada de auditoría.
+        Retorna 404 si el grant no existía. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+      responses:
+        "204":
+          description: Grant eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe el grant para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/audit-log:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetAuditLog
+      summary: Historial de auditoría de gobernanza paginado (AC4)
+      description: >
+        Retorna el historial de cambios de configuración del tenant ordenado por
+        `changedAt` descendente, paginado. Cada registro incluye el campo modificado,
+        el valor anterior/nuevo, el operador y el timestamp. Requiere JWT con rol
+        SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del historial de auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPageResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
   schemas:
     LoginRequest:
       type: object
@@ -98,7 +545,7 @@ components:
           type: array
           items:
             type: string
-    ErrorResponse:
+    AuthErrorResponse:
       type: object
       required: [code, message]
       properties:
@@ -106,3 +553,241 @@ components:
           type: string
         message:
           type: string
+    CompanyListItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nit: { type: string }
+        razonSocial: { type: string }
+        estadoActivo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, nit, razonSocial, estadoActivo, fechaCreacion]
+
+    CompanyPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyListItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    SwitchesMatricula:
+      type: object
+      properties:
+        allowInitialRegistration: { type: boolean }
+        allowMiscNewVehicles: { type: boolean }
+        onlyOwnVehicles: { type: boolean }
+      required: [allowInitialRegistration, allowMiscNewVehicles, onlyOwnVehicles]
+
+    TenantSettings:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
+          type: string
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
+          type: array
+          items: { type: string }
+      required:
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+
+    TenantSettingsUpdate:
+      type: object
+      properties:
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
+          type: string
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
+          type: array
+          items: { type: string }
+      required:
+        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+
+    ValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+      required: [field, message]
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+      required: [errors]
+
+    WhitelistEntry:
+      type: object
+      description: Correo activo de la lista blanca (AC6).
+      properties:
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        addedBy: { type: string, format: uuid, nullable: true }
+      required: [email, createdAt]
+
+    WhitelistAddRequest:
+      type: object
+      description: Alta masiva de correos exentos (AC4).
+      properties:
+        emails:
+          type: array
+          minItems: 1
+          items: { type: string, format: email }
+          description: Correos a exentar. Se normalizan a minúsculas y se deduplican.
+        reason:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: Motivo opcional de la excepción.
+      required: [emails]
+
+    WhitelistAddResponse:
+      type: object
+      description: Resultado del alta masiva (AC4).
+      properties:
+        added:
+          type: array
+          items: { type: string, format: email }
+          description: Correos insertados (uno por fila + una fila de auditoría).
+        skipped:
+          type: array
+          items: { type: string, format: email }
+          description: Correos omitidos por ya existir (idempotencia).
+      required: [added, skipped]
+
+    WhitelistValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    WhitelistValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhitelistValidationError"
+      required: [errors]
+
+    TransferStartRequest:
+      type: object
+      description: >
+        Payload del stub de radicación (AC1/AC2). onlyOwnVehicles es la política
+        efectiva ya resuelta (snapshot si in-flight, live si nuevo; AC3).
+      properties:
+        tenantId: { type: string, format: uuid }
+        vehicleIdentifier: { type: string, nullable: true }
+        userEmail: { type: string, format: email, nullable: true }
+        onlyOwnVehicles: { type: boolean }
+      required: [tenantId, onlyOwnVehicles]
+
+    TransitOffice:
+      type: object
+      description: Organismo de tránsito del catálogo estático (AC1).
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        departmentCode: { type: string }
+        cityCode: { type: string }
+      required: [id, code, name, departmentCode, cityCode]
+
+    TransitGrantRequest:
+      type: object
+      description: Habilitación de un organismo de tránsito a un tenant (AC2).
+      properties:
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Id del organismo a habilitar. Debe existir en el catálogo estático.
+      required: [transitOfficeId]
+
+    TransitGrantCreatedResponse:
+      type: object
+      description: Resultado del alta de un grant (AC2).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        created:
+          type: boolean
+          description: true si se creó el grant; false si ya existía (idempotente).
+      required: [transitOfficeId, created]
+
+    TransitGrantListResponse:
+      type: object
+      description: Organismos de tránsito habilitados del tenant (AC5).
+      properties:
+        transitOfficeIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [transitOfficeIds]
+
+    TransitGrantValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    TransitGrantValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitGrantValidationError"
+      required: [errors]
+
+    AuditLogEntry:
+      type: object
+      description: Entrada del historial de auditoría de gobernanza (AC4).
+      properties:
+        entityName: { type: string }
+        fieldName: { type: string }
+        oldValue: { type: string, nullable: true }
+        newValue: { type: string, nullable: true }
+        changedBy: { type: string, format: uuid, nullable: true }
+        changedAt: { type: string, format: date-time }
+      required: [entityName, fieldName, changedAt]
+
+    AuditLogPageResponse:
+      type: object
+      description: Página del historial de auditoría (AC4).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
