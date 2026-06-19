@@ -8,5 +8,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Tramites.Application.Tests/Flit.Tramites.Application.Tests.csproj" />
+    <Project Path="tests/Flit.Tramites.Domain.Tests/Flit.Tramites.Domain.Tests.csproj" />
   </Folder>
 </Solution>
