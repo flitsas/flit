@@ -74,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<SimularFirmaPortalHandler>();
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
+        services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
 
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();

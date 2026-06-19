@@ -34,6 +34,33 @@ internal static class ConsultationEndpoints
             };
         }).WithName("RunConsultation");
 
+        // Lookup dedicado de persona en RUNT (CONDUCTOR) para autopoblar el comprador. NO persiste.
+        // found:false también responde 200 (el frontend cae al ingreso manual).
+        group.MapPost("/instances/{id:guid}/runt-person", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RuntPersonLookupRequest request,
+            RuntPersonLookupHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(
+                id, tenantId.Value, request.DocumentType, request.DocumentNumber, ct);
+
+            return error switch
+            {
+                "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Se requiere documentType y documentNumber."),
+                "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "provider_not_found" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor RUNT conductor no está disponible."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("RuntPersonLookup");
+
         return app;
     }
 }
+
+/// <summary>Body de POST /instances/{id}/runt-person — documento a consultar en RUNT.</summary>
+internal sealed record RuntPersonLookupRequest(string? DocumentType, string? DocumentNumber);
