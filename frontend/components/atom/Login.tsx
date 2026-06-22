@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { setDevSuperAdminToken } from "@/lib/api/client";
+import Link from "next/link";
+import { loginUser } from "@/lib/api/auth";
+import { rememberEmail, storeToken } from "@/lib/auth/session";
 
 const logo = "/assets/logo-flit-white.svg";
-import { ShieldAlert, Lock, Mail, User as UserIcon, X, KeyRound } from "lucide-react";
-
-const VALID_USER = "admin@flit.io";
-const VALID_PASS = "atom2026";
-const VALID_2FA = "123456";
+import { ShieldAlert, Lock, Mail, User as UserIcon } from "lucide-react";
 
 function ParticlesCanvas() {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     let raf = 0;
     const resize = () => {
       canvas.width = canvas.offsetWidth * devicePixelRatio;
@@ -63,60 +62,51 @@ function ParticlesCanvas() {
   return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
 }
 
-export function Login({ onBypass }: { onBypass: () => void }) {
-  const [email, setEmail] = useState("");
+// Login real del diseño base (Feature #10113, HU #10172). Conserva el prototipo
+// (panel visual con partículas, branding) pero cablea la autenticación al backend:
+// loginUser() → JWT en cookie+storage → onAuthenticated(). El 2FA queda fuera de
+// alcance del Feature, así que el flujo es de un solo paso (credenciales).
+export function Login({
+  onAuthenticated,
+  defaultEmail = "",
+}: {
+  onAuthenticated: () => void;
+  defaultEmail?: string;
+}) {
+  const [email, setEmail] = useState(defaultEmail);
   const [pass, setPass] = useState("");
-  const [attempts, setAttempts] = useState(0);
   const [error, setError] = useState("");
-  const [phase, setPhase] = useState<"creds" | "2fa">("creds");
-  const [code, setCode] = useState("");
-  const [code2faError, setCode2faError] = useState("");
-  const [lockSeconds, setLockSeconds] = useState(0);
-  const [forgotOpen, setForgotOpen] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (lockSeconds <= 0) return;
-    const id = setInterval(() => setLockSeconds((s) => (s > 0 ? s - 1 : 0)), 1000);
-    return () => clearInterval(id);
-  }, [lockSeconds]);
-
-  useEffect(() => {
-    // Reinicia los intentos cuando expira el bloqueo temporal (reacción al timer).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (lockSeconds === 0 && attempts >= 3) setAttempts(0);
-  }, [lockSeconds, attempts]);
-
-  const locked = lockSeconds > 0;
-  const mm = String(Math.floor(lockSeconds / 60)).padStart(2, "0");
-  const ss = String(lockSeconds % 60).padStart(2, "0");
-
-  const submitCreds = (e: React.FormEvent) => {
+  async function submitCreds(e: React.FormEvent) {
     e.preventDefault();
-    if (locked) return;
-    // Acceso libre: cualquier email + cualquier contraseña pasan a 2FA.
     setError("");
-    setAttempts(0);
-    setPhase("2fa");
-  };
+    setBlocked(false);
 
-  const onCodeChange = (v: string) => {
-    const clean = v.replace(/\D/g, "").slice(0, 6);
-    setCode(clean);
-    setCode2faError("");
-    if (clean.length === 6) {
-      // Acceso libre: cualquier código de 6 dígitos otorga acceso.
-      setTimeout(() => {
-        // Transitorio (login real pendiente): emite un JWT SuperAdmin de dev para
-        // que el gate del middleware y las llamadas a la API funcionen. Solo en dev.
-        //if (process.env.NODE_ENV !== "production") {
-        setDevSuperAdminToken();
-        //}
-        onBypass();
-      }, 250);
+    if (!email.trim() || !pass) {
+      setError("Ingresa tu correo y contraseña.");
+      return;
     }
-  };
+
+    setLoading(true);
+    try {
+      const result = await loginUser(email.trim(), pass);
+      storeToken(result.accessToken);
+      rememberEmail(email.trim());
+      onAuthenticated();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 403) {
+        // Cuenta bloqueada temporalmente (HU #10170): panel de acceso restringido.
+        setBlocked(true);
+      } else {
+        setError("Correo o contraseña incorrectos.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
@@ -145,151 +135,82 @@ export function Login({ onBypass }: { onBypass: () => void }) {
               <UserIcon className="h-8 w-8 text-white" strokeWidth={2.2} />
             </div>
             <h1 className="text-2xl font-bold" style={{ color: "#557eff", fontFamily: "Poppins, sans-serif" }}>
-              {phase === "creds" ? "Iniciar Sesión" : "Verificación 2FA"}
+              Iniciar Sesión
             </h1>
           </div>
 
-          {locked ? (
-            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "#ff4e00", background: "rgba(255,78,0,0.06)" }}>
+          {blocked ? (
+            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "#ff4e00", background: "rgba(255,78,0,0.06)" }} role="alert">
               <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#ff4e00" }} />
               <div className="text-sm">
                 <p className="font-semibold" style={{ color: "#ff4e00" }}>Acceso Restringido</p>
-                <p className="text-slate-600 text-xs mt-1">Se han detectado 3 intentos fallidos. Acceso bloqueado temporalmente por seguridad.</p>
-                <p className="text-2xl mt-3" style={{ color: "#ff4e00", fontFamily: "JetBrains Mono, monospace" }}>{mm}:{ss}</p>
+                <p className="text-slate-600 text-xs mt-1">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
+                <button
+                  type="button"
+                  onClick={() => setBlocked(false)}
+                  className="text-xs mt-3 font-semibold transition hover:opacity-80"
+                  style={{ color: "#557eff" }}
+                >
+                  ← Volver a intentar
+                </button>
               </div>
             </div>
-          ) : phase === "creds" ? (
-            <form onSubmit={submitCreds} className="space-y-4 animate-fade-in">
+          ) : (
+            <form onSubmit={submitCreds} className="space-y-4 animate-fade-in" aria-label="Iniciar sesión" noValidate>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Usuario Corporativo</label>
+                <label htmlFor="login-email" className="text-xs font-medium text-slate-600 mb-1.5 block">Usuario Corporativo</label>
                 <div className="relative">
                   <Mail className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
                   <input
+                    id="login-email"
                     type="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@flit.io"
+                    aria-invalid={error ? true : undefined}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
-                    required
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Contraseña</label>
+                <label htmlFor="login-password" className="text-xs font-medium text-slate-600 mb-1.5 block">Contraseña</label>
                 <div className="relative">
                   <Lock className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
                   <input
+                    id="login-password"
                     type="password"
+                    autoComplete="current-password"
                     value={pass}
                     onChange={(e) => setPass(e.target.value)}
                     placeholder="••••••••"
+                    aria-invalid={error ? true : undefined}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
-                    required
                   />
                 </div>
-                <button type="button" onClick={() => { setForgotOpen(true); setForgotSent(false); }} className="text-xs mt-2 text-slate-500 hover:text-[#557eff] transition">
+                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-slate-500 hover:text-[#557eff] transition">
                   ¿Olvidó su contraseña?
-                </button>
+                </Link>
               </div>
 
               {error && (
-                <p className="text-xs flex items-center gap-2" style={{ color: "#ff4e00" }}>
+                <p role="alert" className="text-xs flex items-center gap-2" style={{ color: "#ff4e00" }}>
                   <ShieldAlert className="h-3.5 w-3.5" /> {error}
                 </p>
               )}
 
               <button
                 type="submit"
-                className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90"
+                disabled={loading}
+                className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                 style={{ background: "#557eff" }}
               >
-                Iniciar Sesión
+                {loading ? "Ingresando…" : "Iniciar Sesión"}
               </button>
             </form>
-          ) : (
-            <div className="space-y-5 animate-fade-in">
-              <div className="rounded-xl bg-[#557eff]/5 border border-[#557eff]/20 p-4 flex gap-3">
-                <KeyRound className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#557eff" }} />
-                <div className="text-xs text-slate-600 leading-relaxed">
-                  <p className="font-semibold text-slate-800 mb-1">Verificación de Identidad</p>
-                  Hemos enviado un código de seguridad de 6 dígitos a su correo corporativo registrado. Por favor ingréselo a continuación.
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Código de Verificación</label>
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => onCodeChange(e.target.value)}
-                  placeholder="000000"
-                  className="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-4 text-center text-2xl tracking-[0.6em] outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
-                  style={{ fontFamily: "JetBrains Mono, monospace" }}
-                />
-                {code2faError && (
-                  <p className="text-xs mt-2 flex items-center gap-2" style={{ color: "#ff4e00" }}>
-                    <ShieldAlert className="h-3.5 w-3.5" /> {code2faError}
-                  </p>
-                )}
-                <p className="text-[11px] text-slate-400 mt-3 text-center">
-                  El acceso se concederá automáticamente al ingresar el último dígito.
-                </p>
-              </div>
-
-              <button
-                onClick={() => { setPhase("creds"); setCode(""); setCode2faError(""); }}
-                className="text-xs text-slate-500 hover:text-[#557eff] transition w-full text-center"
-              >
-                ← Volver a credenciales
-              </button>
-            </div>
           )}
         </div>
       </div>
-
-      {/* Forgot password modal */}
-      {forgotOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in px-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800" style={{ fontFamily: "Poppins, sans-serif" }}>Recuperar contraseña</h3>
-                <p className="text-xs text-slate-500 mt-1">Ingrese su correo corporativo y recibirá instrucciones de recuperación.</p>
-              </div>
-              <button onClick={() => setForgotOpen(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {forgotSent ? (
-              <div className="rounded-xl p-4 text-sm" style={{ background: "rgba(0,219,213,0.08)", color: "#0a7d79" }}>
-                Hemos enviado las instrucciones a <span className="font-semibold">{forgotEmail}</span>. Revise su bandeja de entrada.
-              </div>
-            ) : (
-              <form
-                onSubmit={(e) => { e.preventDefault(); setForgotSent(true); }}
-                className="space-y-3"
-              >
-                <div className="relative">
-                  <Mail className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    type="email"
-                    required
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="usuario@flit.io"
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
-                  />
-                </div>
-                <button type="submit" className="w-full rounded-xl py-2.5 text-sm font-semibold text-white" style={{ background: "#557eff" }}>
-                  Enviar instrucciones
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -21,9 +21,6 @@ public interface IUserAccountRepository
     /// <summary>Hash de contraseña actual del usuario (para verificar el cambio voluntario), o null.</summary>
     Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken);
 
-    /// <summary>Usuario activo cuyo número de documento coincide (para "recordar usuario"), o null.</summary>
-    Task<PasswordRecoveryUser?> FindActiveByDocumentAsync(string documentNumber, CancellationToken cancellationToken);
-
     /// <summary>Reemplaza el hash de contraseña y fija el flag de cambio forzado.</summary>
     Task UpdatePasswordHashAsync(
         Guid userId,
