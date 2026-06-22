@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Power, PowerOff, Settings2 } from "lucide-react";
 import type { CompanyListItem } from "@/lib/api/types";
 
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
-// Estado, Fecha de creación + acción "Configurar". Paginación server-side: la
-// tabla solo emite el cambio de página vía onPageChange.
+// Estado, Fecha de creación + acciones "Activar/Desactivar" y "Configurar".
+// Paginación server-side: la tabla solo emite el cambio de página vía onPageChange.
 export interface CompanyListTableProps {
   items: CompanyListItem[];
   totalCount: number;
@@ -13,6 +13,8 @@ export interface CompanyListTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onConfigure: (tenantId: string) => void;
+  /** Solicita activar/desactivar la compañía (el contenedor muestra la confirmación). */
+  onToggleStatus: (company: CompanyListItem) => void;
 }
 
 export function CompanyListTable({
@@ -22,6 +24,7 @@ export function CompanyListTable({
   pageSize,
   onPageChange,
   onConfigure,
+  onToggleStatus,
 }: CompanyListTableProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -70,14 +73,33 @@ export function CompanyListTable({
                 {formatDate(c.fechaCreacion)}
               </td>
               <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
-                <button
-                  type="button"
-                  onClick={() => onConfigure(c.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                  style={{ background: "#557EFF" }}
-                >
-                  <Settings2 className="h-3 w-3" /> Configurar
-                </button>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(c)}
+                    aria-label={`${c.estadoActivo ? "Desactivar" : "Activar"} ${c.razonSocial}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
+                    style={{ background: c.estadoActivo ? "#FF4E00" : "#00DBD5" }}
+                  >
+                    {c.estadoActivo ? (
+                      <>
+                        <PowerOff className="h-3 w-3" /> Desactivar
+                      </>
+                    ) : (
+                      <>
+                        <Power className="h-3 w-3" /> Activar
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onConfigure(c.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
+                    style={{ background: "#557EFF" }}
+                  >
+                    <Settings2 className="h-3 w-3" /> Configurar
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

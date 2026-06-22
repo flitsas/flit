@@ -53,6 +53,16 @@ public interface IDocumentTypeRepository
         Guid documentTypeId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Tipos de trámite que referencian el documento, para enriquecer el 409 del soft-delete
+    /// con sus nombres. Best-effort: si algún trámite no resuelve (p. ej. catálogo sin la fila),
+    /// simplemente no aparece; la decisión de bloquear sigue dependiendo de
+    /// <see cref="HasActiveAssociationsAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<DocumentTypeAssociationRef>> GetAssociatedProcedureTypesAsync(
+        Guid documentTypeId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>True si el código ya existe (unicidad global); <paramref name="excludeId"/> excluye el propio en update.</summary>
     Task<bool> CodeExistsAsync(
         string code,

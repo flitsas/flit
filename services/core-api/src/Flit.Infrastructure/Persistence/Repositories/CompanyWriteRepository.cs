@@ -47,13 +47,42 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         _context.Tenants.Add(entity);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return new CompanyListItem
-        {
-            Id = entity.Id,
-            Nit = entity.TaxId,
-            RazonSocial = entity.LegalName,
-            EstadoActivo = entity.IsActive,
-            FechaCreacion = entity.CreatedAt,
-        };
+        return Project(entity);
     }
+
+    public async Task<CompanyListItem?> SetActiveAsync(
+        Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.Tenants
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        // Idempotente: solo persiste si cambia el estado (evita auditoría/row_version vacíos).
+        if (entity.IsActive != isActive)
+        {
+            entity.IsActive = isActive;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            entity.UpdatedBy = changedBy;
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Project(entity);
+    }
+
+    private static CompanyListItem Project(Tenant entity) => new()
+    {
+        Id = entity.Id,
+        Nit = entity.TaxId,
+        RazonSocial = entity.LegalName,
+        EstadoActivo = entity.IsActive,
+        FechaCreacion = entity.CreatedAt,
+    };
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Application.DocumentRequirements;
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
@@ -21,19 +22,56 @@ public static class AdminProcedureDocumentRequirementsEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/procedure-document-requirements")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Documentos por Trámite");
 
         // POST — asocia documento a trámite (AC1 → 201 / 422 / 404).
-        group.MapPost("/", CreateAsync).WithName("AdminProcedureDocumentRequirementCreate");
+        group.MapPost("/", CreateAsync)
+            .WithName("AdminProcedureDocumentRequirementCreate")
+            .WithSummary("Asocia un documento a un tipo de trámite")
+            .WithDescription("Crea la asociación (trámite, documento) con su orden default y obligatoriedad. "
+                + "404 si el trámite o el documento no existen; 422 si el documento está inactivo o el par ya existe. "
+                + "Requiere SuperAdmin.")
+            .Produces<ProcedureDocumentRequirementResponse>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET ?procedureTypeId={guid} — lista documentos del trámite (AC2 → 200 / 400).
-        group.MapGet("/", ListAsync).WithName("AdminProcedureDocumentRequirementList");
+        group.MapGet("/", ListAsync)
+            .WithName("AdminProcedureDocumentRequirementList")
+            .WithSummary("Lista los documentos de un tipo de trámite")
+            .WithDescription("Retorna las asociaciones del trámite ordenadas por orden default ascendente, "
+                + "enriquecidas con los datos del documento. 400 si falta procedureTypeId. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // PUT /{id} — actualiza orden/obligatoriedad (AC3 → 200 / 422 / 404).
-        group.MapPut("/{id:guid}", UpdateAsync).WithName("AdminProcedureDocumentRequirementUpdate");
+        group.MapPut("/{id:guid}", UpdateAsync)
+            .WithName("AdminProcedureDocumentRequirementUpdate")
+            .WithSummary("Actualiza orden y obligatoriedad de una asociación")
+            .WithDescription("Modifica únicamente el orden default y la obligatoriedad de la asociación. "
+                + "404 si no existe, 422 si el payload es inválido. Requiere SuperAdmin.")
+            .Produces<ProcedureDocumentRequirementResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // DELETE /{id} — borrado físico (AC4 → 204 / 409 / 404).
-        group.MapDelete("/{id:guid}", DeleteAsync).WithName("AdminProcedureDocumentRequirementDelete");
+        group.MapDelete("/{id:guid}", DeleteAsync)
+            .WithName("AdminProcedureDocumentRequirementDelete")
+            .WithSummary("Elimina la asociación documento↔trámite")
+            .WithDescription("Borra la asociación. 409 si el documento ya fue usado en trámites creados "
+                + "(snapshot inmutable), 404 si no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }

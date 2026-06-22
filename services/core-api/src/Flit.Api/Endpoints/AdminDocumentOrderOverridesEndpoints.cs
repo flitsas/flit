@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Application.DocumentOrderOverrides;
 using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
@@ -23,19 +24,58 @@ public static class AdminDocumentOrderOverridesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/document-order-overrides")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Órdenes documentales");
 
         // POST ?scope=OT|CLIENTE — crea el override (AC1/AC2 → 201 / 422 / 404 / 400).
-        group.MapPost("/", CreateAsync).WithName("AdminDocumentOrderOverrideCreate");
+        group.MapPost("/", CreateAsync)
+            .WithName("AdminDocumentOrderOverrideCreate")
+            .WithSummary("Crea un override de orden por OT o Cliente")
+            .WithDescription("Define un orden personalizado para un documento en un ámbito concreto. "
+                + "El query scope=OT|CLIENTE elige el ámbito; la referencia viaja en transitOfficeId o clienteId. "
+                + "400 si falta scope; 404 si trámite/documento/OT/cliente no existen; 422 si el payload es inválido. "
+                + "Requiere SuperAdmin.")
+            .Produces<DocumentOrderOverrideResponse>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET ?procedureTypeId&scope&transitOfficeId|clienteId — lista por scope (AC5 → 200 / 400).
-        group.MapGet("/", ListAsync).WithName("AdminDocumentOrderOverrideList");
+        group.MapGet("/", ListAsync)
+            .WithName("AdminDocumentOrderOverrideList")
+            .WithSummary("Lista overrides de orden por ámbito")
+            .WithDescription("Retorna los overrides de orden de un trámite para un ámbito (OT o CLIENTE). "
+                + "Requiere procedureTypeId, scope y la referencia del ámbito (transitOfficeId para OT, "
+                + "clienteId para CLIENTE); 400 si falta alguno. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // PUT /{id} — reordenamiento por arrastre: persiste el nuevo orden (→ 200 / 422 / 404).
-        group.MapPut("/{id:guid}", UpdateAsync).WithName("AdminDocumentOrderOverrideUpdate");
+        group.MapPut("/{id:guid}", UpdateAsync)
+            .WithName("AdminDocumentOrderOverrideUpdate")
+            .WithSummary("Actualiza el orden de un override")
+            .WithDescription("Persiste el nuevo valor de orden de un override (reordenamiento por arrastre). "
+                + "404 si no existe, 422 si el orden es inválido. Requiere SuperAdmin.")
+            .Produces<DocumentOrderOverrideResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // DELETE /{id} — borrado físico (AC6 → 204 / 404).
-        group.MapDelete("/{id:guid}", DeleteAsync).WithName("AdminDocumentOrderOverrideDelete");
+        group.MapDelete("/{id:guid}", DeleteAsync)
+            .WithName("AdminDocumentOrderOverrideDelete")
+            .WithSummary("Elimina un override de orden")
+            .WithDescription("Borra el override; el documento vuelve a heredar el orden por defecto del trámite. "
+                + "404 si no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }

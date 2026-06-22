@@ -32,7 +32,13 @@ public sealed class DeleteDocumentTypeHandler
 
         if (await _repository.HasActiveAssociationsAsync(command.Id, cancellationToken).ConfigureAwait(false))
         {
-            return DeleteDocumentTypeResult.HasAssociations;
+            // El bloqueo lo decide la existencia de asociaciones; los nombres de los trámites
+            // son enriquecimiento best-effort para el 409 accionable de la consola.
+            var associations = await _repository
+                .GetAssociatedProcedureTypesAsync(command.Id, cancellationToken)
+                .ConfigureAwait(false);
+
+            return DeleteDocumentTypeResult.HasAssociations(associations);
         }
 
         var deleted = await _repository

@@ -32,6 +32,17 @@ export function createCompany(body: CreateCompanyRequest): Promise<CompanyListIt
 }
 
 /**
+ * PUT /{tenantId}/status — activa/desactiva la compañía (#10118). Devuelve la compañía
+ * con su estado actualizado. Lanza ApiError 404 si el tenant no existe.
+ */
+export function setCompanyStatus(tenantId: string, estadoActivo: boolean): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${tenantId}/status`, {
+    method: "PUT",
+    body: { estadoActivo },
+  });
+}
+
+/**
  * GET /{tenantId}/settings — configuración operativa actual (AC2). Devuelve `null`
  * en 404 (compañía aún sin configurar): el caller muestra el formulario en blanco.
  */
