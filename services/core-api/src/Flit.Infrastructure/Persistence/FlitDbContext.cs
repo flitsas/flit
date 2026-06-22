@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence;
@@ -34,6 +35,20 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+
+    public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
+
+    public DbSet<ProcedureType> ProcedureTypes => Set<ProcedureType>();
+
+    public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
+
+    public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
+
+    public DbSet<ProcedureInstance> ProcedureInstances => Set<ProcedureInstance>();
+
+    public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

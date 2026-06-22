@@ -1,0 +1,58 @@
+using System.Text.RegularExpressions;
+
+namespace Flit.Admin.Application.DocumentTypes;
+
+/// <summary>
+/// Validación de los campos persistibles de un tipo de documento (POST/PUT, HU #10193).
+/// Devuelve el primer mensaje de error encontrado o <c>null</c> si el payload es válido.
+/// El endpoint traduce un error a HTTP 422 <c>{ error: "..." }</c>.
+/// </summary>
+public static partial class DocumentTypeValidator
+{
+    public const int CodeMaxLength = 50;
+    public const int NameMaxLength = 150;
+    public const int DescriptionMaxLength = 500;
+
+    /// <summary>Códigos: letras, números y guiones (alfanumérico + guion).</summary>
+    [GeneratedRegex("^[A-Za-z0-9-]+$")]
+    private static partial Regex CodeRegex();
+
+    /// <summary>
+    /// Valida código, nombre y descripción ya recortados (trim). Asume que la capa
+    /// de aplicación pasó cadenas vacías cuando el campo venía nulo/espacios.
+    /// </summary>
+    public static string? Validate(string code, string name, string? description)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return "El código es obligatorio.";
+        }
+
+        if (code.Length > CodeMaxLength)
+        {
+            return $"El código no puede superar {CodeMaxLength} caracteres.";
+        }
+
+        if (!CodeRegex().IsMatch(code))
+        {
+            return "El código solo permite letras, números y guiones.";
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "El nombre es obligatorio.";
+        }
+
+        if (name.Length > NameMaxLength)
+        {
+            return $"El nombre no puede superar {NameMaxLength} caracteres.";
+        }
+
+        if (description is { Length: > DescriptionMaxLength })
+        {
+            return $"La descripción no puede superar {DescriptionMaxLength} caracteres.";
+        }
+
+        return null;
+    }
+}
