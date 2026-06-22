@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  Briefcase,
   Building2,
   Calendar,
   Car,
@@ -11,10 +12,14 @@ import {
   Fuel,
   Gauge,
   Hash,
+  Layers,
   Lock,
   Palette,
   Search,
+  Shield,
   Tag,
+  Users,
+  Wrench,
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
@@ -371,7 +376,7 @@ export function TramiteWizard(props: Props) {
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={continueDisabled}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: '#557EFF' }}
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
                 Continuar
                 <ChevronRight className="h-3 w-3" />
@@ -401,11 +406,18 @@ const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
  * en field_values por la consulta del preflight. Solo se pinta lo presente.
  */
 const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
-  { key: 'vin', label: 'VIN / Chasis', icon: Hash },
+  { key: 'vin', label: 'VIN', icon: Hash },
   { key: 'vehicle_color', label: 'Color', icon: Palette },
   { key: 'vehicle_class', label: 'Clase', icon: Tag },
+  { key: 'vehicle_service', label: 'Servicio', icon: Briefcase },
   { key: 'vehicle_fuel', label: 'Combustible', icon: Fuel },
   { key: 'vehicle_engine_displacement', label: 'Cilindraje', icon: Gauge },
+  { key: 'vehicle_body_type', label: 'Carrocería', icon: Layers },
+  { key: 'vehicle_engine_number', label: 'Nº Motor', icon: Wrench },
+  { key: 'vehicle_chassis', label: 'Nº Chasis', icon: Hash },
+  { key: 'vehicle_series', label: 'Nº Serie', icon: Hash },
+  { key: 'vehicle_passengers', label: 'Pasajeros', icon: Users },
+  { key: 'vehicle_registration_date', label: 'Fecha matrícula', icon: Calendar },
   { key: 'transit_office_name', label: 'Organismo de tránsito', icon: Building2 },
 ];
 
@@ -425,6 +437,9 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   const line = byKey('vehicle_line');
   const year = byKey('vehicle_year');
   const estado = byKey('vehicle_state');
+  const soatVencimiento = byKey('soat_vencimiento');
+  const soatAseguradora = byKey('soat_aseguradora');
+  const rtmVencimiento = byKey('rtm_vencimiento');
 
   // Antes de consultar no hay datos del vehículo → no renderiza.
   const hasAny = [plate, vin, brand, line, year].some((v) => v !== '');
@@ -436,6 +451,8 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   const details = VEHICLE_DETAILS.map((d) => ({ ...d, value: byKey(d.key) })).filter(
     (d) => d.value !== '',
   );
+
+  const hasSoatRtm = soatVencimiento || soatAseguradora || rtmVencimiento;
 
   return (
     <div
@@ -525,6 +542,53 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Sección SOAT / RTM */}
+      {hasSoatRtm && (
+        <div
+          className="border-t px-4 py-3"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
+            Documentos del vehículo
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {(soatVencimiento || soatAseguradora) && (
+              <div
+                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase" style={{ color: '#557EFF' }}>
+                    SOAT
+                  </p>
+                  {soatVencimiento && (
+                    <p className="text-[11px] font-semibold">Vence: {soatVencimiento}</p>
+                  )}
+                  {soatAseguradora && (
+                    <p className="truncate text-[10px] opacity-60">{soatAseguradora}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {rtmVencimiento && (
+              <div
+                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase" style={{ color: '#8CC63F' }}>
+                    Tecno-mecánica
+                  </p>
+                  <p className="text-[11px] font-semibold">Vence: {rtmVencimiento}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
