@@ -104,6 +104,12 @@ app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous
 app.MapAuthEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminDocumentTypesEndpoints();
+app.MapAdminProcedureDocumentRequirementsEndpoints();
+app.MapAdminDocumentOrderOverridesEndpoints();
+app.MapAdminDocumentRequirementOverridesEndpoints();
+app.MapAdminResolvedDocumentMatrixEndpoints();
+app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();
 
 app.Run();

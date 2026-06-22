@@ -3,7 +3,13 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
+using Flit.Admin.Domain.DocumentOrderOverrides;
+using Flit.Admin.Domain.DocumentRequirementOverrides;
+using Flit.Admin.Domain.DocumentRequirements;
+using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Infrastructure;
@@ -28,6 +34,28 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + consulta de audit log.
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
+
+        // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
+        services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
+
+        // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
+        // (read-only). El guard de uso es ahora la implementación real (HU #10197).
+        services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();
+        services.AddScoped<IProcedureTypeCatalog, ProcedureTypeCatalog>();
+        services.AddScoped<IProcedureDocumentRequirementUsageGuard, ProcedureDocumentRequirementUsageGuard>();
+
+        // HU #10196 — overrides de orden documental (OT/Cliente) + catálogo de clientes
+        // (read-only) + resolutor de la matriz documental (precedencia Cliente > OT > Default).
+        services.AddScoped<IDocumentOrderOverrideRepository, DocumentOrderOverrideRepository>();
+        services.AddScoped<ITenantCatalog, TenantCatalog>();
+        services.AddScoped<IResolvedDocumentMatrixResolver, ResolvedDocumentMatrixResolver>();
+
+        // HU #10198 — overrides de obligatoriedad documental por OT (3 estados).
+        services.AddScoped<IDocumentRequirementOverrideRepository, DocumentRequirementOverrideRepository>();
+
+        // HU #10197 — instancias de trámite + snapshot documental inmutable.
+        services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        services.AddScoped<IProcedureDocumentSnapshotRepository, ProcedureDocumentSnapshotRepository>();
 
         return services;
     }

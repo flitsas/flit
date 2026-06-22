@@ -20,6 +20,7 @@ import {
   UserCog,
   KeyRound,
   LogOut,
+  FolderCog,
 } from "lucide-react";
 
 export type ModuleId =
@@ -75,9 +76,11 @@ export function Shell({
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Split dock into left (3) and right (3) around the FAB
-  const left = DOCK.slice(0, 3);
-  const right = DOCK.slice(3);
+  // Dock balanceado alrededor del FAB: 4 a la izquierda y 4 a la derecha.
+  // La derecha son los 2 últimos módulos del DOCK + las 2 consolas admin
+  // (Compañías y Documental), que se renderizan aparte por tener ruta propia.
+  const left = DOCK.slice(0, 4);
+  const right = DOCK.slice(4);
 
   return (
     <div
@@ -207,6 +210,15 @@ export function Shell({
               active={false}
               onClick={() => {
                 window.location.href = "/admin/companies";
+              }}
+              dark={dark}
+            />
+            {/* Consola de Gestión Documental (ruta aparte, gate SuperAdmin). */}
+            <DockBtn
+              item={{ label: "Documental", icon: FolderCog }}
+              active={false}
+              onClick={() => {
+                window.location.href = "/admin/documents";
               }}
               dark={dark}
             />

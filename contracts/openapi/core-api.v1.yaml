@@ -19,6 +19,18 @@ tags:
     description: Autenticación y sesión (login, perfil del usuario).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Admin · Documentos
+    description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
+  - name: Admin · Documentos por Trámite
+    description: Asociación de tipos de documento a tipos de trámite (rol SuperAdmin).
+  - name: Admin · Órdenes documentales
+    description: >
+      Overrides de orden documental por OT/Cliente y matriz documental resuelta
+      con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Trámites · Documentos
+    description: >
+      Alta de trámite con snapshot documental inmutable y lectura de los documentos
+      requeridos congelados al crear el trámite (cualquier JWT válido).
   - name: Trámites · Traspaso
     description: Radicación de traspasos vehiculares.
 
@@ -29,7 +41,6 @@ paths:
       tags: [Auth]
       security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
       summary: Login con email y contraseña
-      security: []
       requestBody:
         required: true
         content:
@@ -585,6 +596,778 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/document-types:
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeCreate
+      summary: Crea un tipo de documento (RF01)
+      description: >
+        Da de alta un tipo de documento en el catálogo maestro
+        (tramites.document_types) con estado activo. El código es único global.
+        El campo `obligatorio` se acepta pero no se persiste (la obligatoriedad
+        vive por trámite en procedure_document_requirements). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentTypeRequest"
+      responses:
+        "201":
+          description: Tipo de documento creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeList
+      summary: Listado paginado de tipos de documento (RF02)
+      description: >
+        Retorna el catálogo paginado ordenado por nombre ascendente. Por defecto
+        solo incluye activos. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: includeInactive
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Si es true incluye también los inactivos (soft-deleted).
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypePagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    put:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeUpdate
+      summary: Actualiza un tipo de documento (RF03)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentTypeRequest"
+      responses:
+        "200":
+          description: Tipo de documento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeDelete
+      summary: Baja lógica de un tipo de documento (RF04)
+      description: >
+        Soft-delete: marca is_active=false sin borrado físico. Si el tipo de
+        documento está referenciado en procedure_document_requirements retorna
+        409 y no se desactiva. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento desactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tiene asociaciones activas y no puede desactivarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types/{id}/reactivate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeReactivate
+      summary: Reactiva un tipo de documento desactivado
+      description: >
+        Contraparte del soft-delete: marca is_active=true para que el documento
+        vuelva al catálogo y pueda asociarse a trámites. Idempotente (reactivar uno
+        ya activo retorna 204). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento reactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/procedure-document-requirements:
+    post:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementCreate
+      summary: Asocia un documento a un tipo de trámite (RF05)
+      description: >
+        Crea la asociación (trámite, documento) con su orden default y
+        obligatoriedad. El tipo de trámite debe existir (404 si no), el tipo de
+        documento debe existir (404) y estar activo (422 si está inactivo), y el
+        par debe ser único (422 si duplicado). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureDocumentRequirementRequest"
+      responses:
+        "201":
+          description: Asociación creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite o el tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido, documento inactivo o par duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementList
+      summary: Lista los documentos de un tipo de trámite (RF06)
+      description: >
+        Retorna las asociaciones del trámite ordenadas por orden default
+        ascendente, enriquecidas con los datos del documento. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite cuyo catálogo de documentos se consulta.
+      responses:
+        "200":
+          description: Listado de asociaciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementList"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/procedure-document-requirements/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador de la asociación.
+    put:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementUpdate
+      summary: Actualiza la configuración de una asociación (RF07)
+      description: >
+        Modifica únicamente el orden default y la obligatoriedad. El par
+        (trámite, documento) es inmutable. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProcedureDocumentRequirementRequest"
+      responses:
+        "200":
+          description: Asociación actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementDelete
+      summary: Elimina una asociación (RF08)
+      description: >
+        Borrado físico de la asociación. Si está en uso en trámites activos
+        retorna 409 y no se elimina. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Asociación eliminada.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La asociación está en uso y no puede eliminarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-order-overrides:
+    post:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideCreate
+      summary: Crea un override de orden por OT o Cliente (RF09–RF16)
+      description: >
+        Registra un orden personalizado de un documento para un trámite a nivel de
+        Organismo de Tránsito (scope=OT, usa transitOfficeId) o de Cliente
+        (scope=CLIENTE, usa clienteId). El trámite debe existir (404), el documento
+        debe existir (404) y estar asociado al trámite (422), la referencia del scope
+        debe existir (404) y la tupla debe ser única (422). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentOrderOverrideRequest"
+      responses:
+        "201":
+          description: Override creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "400":
+          description: Falta o es inválido el parámetro scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o la referencia del scope no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido, documento no asociado, referencia faltante o duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideList
+      summary: Lista los overrides de una combinación trámite/scope (RF09–RF16)
+      description: >
+        Retorna los overrides de la combinación (trámite, scope, referencia) ordenados
+        por orden ascendente. Requiere transitOfficeId si scope=OT o clienteId si
+        scope=CLIENTE. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (obligatorio si scope=OT).
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (obligatorio si scope=CLIENTE).
+      responses:
+        "200":
+          description: Listado de overrides.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId, scope o la referencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-order-overrides/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del override.
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideUpdate
+      summary: Reordena un override (arrastre en la lista)
+      description: >
+        Actualiza únicamente el orden (sort_order) de un override existente. Lo usa el
+        reordenamiento por arrastre de la lista de overrides; la tupla (trámite, documento,
+        scope, referencia) no cambia, por lo que no hay conflicto de unicidad. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentOrderOverrideRequest"
+      responses:
+        "200":
+          description: Override actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido (negativo o fuera de rango).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideDelete
+      summary: Elimina un override de orden (RF11-12, RF15-16)
+      description: >
+        Borrado físico del override. Tras eliminarlo, la matriz resuelta vuelve al
+        nivel inmediatamente inferior (OT o Default). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Override eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-requirement-overrides:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideList
+      summary: Lista la obligatoriedad por OT de un trámite (HU #10198)
+      description: >
+        Retorna los overrides de obligatoriedad (REQUIRED / OPTIONAL / NOT_APPLICABLE) de un
+        trámite para un Organismo de Tránsito. Solo devuelve los documentos con override; los
+        no listados heredan el default del trámite. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: transitOfficeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito.
+      responses:
+        "200":
+          description: Listado de overrides de obligatoriedad.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId o transitOfficeId).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideSet
+      summary: Fija (o limpia) la obligatoriedad por OT de un documento (HU #10198)
+      description: >
+        Upsert por tupla natural (trámite, documento, OT). El documento debe existir (404) y
+        estar asociado al trámite (422); el OT debe existir (404). estado=REQUIRED|OPTIONAL|
+        NOT_APPLICABLE crea/actualiza el override (200); estado=DEFAULT limpia el override y
+        el documento vuelve a heredar el default del trámite (204). Granular solo para OT.
+        Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDocumentRequirementOverrideRequest"
+      responses:
+        "200":
+          description: Override creado o actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+        "204":
+          description: Override limpiado (estado=DEFAULT).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o el OT no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Estado inválido o documento no asociado al trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/resolved-document-matrix:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminResolvedDocumentMatrixGet
+      summary: Resuelve la matriz documental de un trámite (RF18)
+      description: >
+        Devuelve el orden final de cada documento del trámite aplicando la precedencia
+        Cliente > OT > Default. transitOfficeId y clienteId son opcionales: si no vienen,
+        ese nivel se omite. Un trámite existente sin documentos retorna 200 con data
+        vacío. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite a resolver.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (nivel OT) — opcional.
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (nivel CLIENTE) — opcional.
+      responses:
+        "200":
+          description: Matriz documental resuelta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedDocumentMatrix"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites:
+    post:
+      tags: [Trámites · Documentos]
+      operationId: tramitesCreate
+      summary: Crea un trámite y congela su snapshot documental (RF19)
+      description: >
+        Crea un trámite en estado draft y captura, en la misma transacción, un snapshot
+        inmutable de la matriz documental resuelta vigente (precedencia Cliente > OT >
+        Default). Si la generación del snapshot falla, toda la operación se revierte y no
+        queda trámite creado (500). Requiere JWT autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureInstanceRequest"
+      responses:
+        "201":
+          description: Trámite creado con su snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureInstanceResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El tipo de trámite o el cliente (tenant) no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Datos inválidos o número de referencia duplicado para el cliente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Falló la persistencia del trámite o del snapshot; operación revertida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/{tramiteId}/document-requirements:
+    get:
+      tags: [Trámites · Documentos]
+      operationId: tramitesGetDocumentRequirements
+      summary: Documentos requeridos del snapshot de un trámite (RF19)
+      description: >
+        Devuelve los documentos congelados en el snapshot del trámite, ordenados por el
+        orden capturado al crearlo (ordenResuelto asc). Los cambios posteriores en el
+        catálogo o los overrides no afectan la respuesta (inmutabilidad). Requiere JWT
+        autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tramiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del trámite (procedure_instance_id).
+      responses:
+        "200":
+          description: Documentos del snapshot del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotList"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El trámite no existe o no tiene snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -916,3 +1699,300 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    DocumentTypeResponse:
+      type: object
+      description: Tipo de documento del catálogo maestro (HU #10193).
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: Estado derivado de is_active (soft-delete).
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, codigo, nombre, estado, fechaCreacion]
+
+    DocumentTypePagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentTypeResponse"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateDocumentTypeRequest:
+      type: object
+      description: Payload de alta (AC1).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+        obligatorio:
+          type: boolean
+          nullable: true
+          description: >
+            Aceptado por el AC pero NO persistido en el catálogo; la obligatoriedad
+            vive por trámite en procedure_document_requirements (HU #10195).
+      required: [codigo, nombre]
+
+    UpdateDocumentTypeRequest:
+      type: object
+      description: Payload de actualización (AC3).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+      required: [codigo, nombre]
+
+    DocumentRef:
+      type: object
+      description: Datos del tipo de documento asociado (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+      required: [codigo, nombre, estado]
+
+    ProcedureDocumentRequirementResponse:
+      type: object
+      description: Asociación trámite ↔ documento (HU #10195).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+        documento:
+          $ref: "#/components/schemas/DocumentRef"
+      required: [id, procedureTypeId, documentTypeId, ordenDefault, obligatorio, documento]
+
+    ProcedureDocumentRequirementList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+      required: [data]
+
+    CreateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de alta de la asociación (AC1).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [procedureTypeId, documentTypeId, ordenDefault, obligatorio]
+
+    UpdateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de actualización de la asociación (AC3).
+      properties:
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [ordenDefault, obligatorio]
+
+    OverrideDocumentRef:
+      type: object
+      description: Datos mínimos del documento (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+      required: [codigo, nombre]
+
+    DocumentOrderOverrideResponse:
+      type: object
+      description: Override de orden documental por OT/Cliente (HU #10196).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        scope:
+          type: string
+          enum: [OT, CLIENTE]
+        scopeRefId:
+          type: string
+          format: uuid
+          description: transitOfficeId (scope OT) o clienteId (scope CLIENTE).
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+        documento:
+          $ref: "#/components/schemas/OverrideDocumentRef"
+      required: [id, procedureTypeId, documentTypeId, scope, scopeRefId, orden, documento]
+
+    DocumentOrderOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+      required: [data]
+
+    CreateDocumentOrderOverrideRequest:
+      type: object
+      description: >
+        Payload unificado de alta de override (AC1/AC2). El scope viaja como query;
+        según el scope se usa transitOfficeId (OT) o clienteId (CLIENTE).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Obligatorio si scope=OT.
+        clienteId:
+          type: string
+          format: uuid
+          description: Obligatorio si scope=CLIENTE.
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [procedureTypeId, documentTypeId, orden]
+
+    UpdateDocumentOrderOverrideRequest:
+      type: object
+      description: >
+        Payload del reordenamiento por arrastre de un override (HU #10198). Solo el orden
+        es mutable; la tupla del override no cambia.
+      properties:
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [orden]
+
+    DocumentRequirementState:
+      type: string
+      enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE]
+      description: >
+        Obligatoriedad de un documento para un OT: REQUIRED (obligatorio), OPTIONAL
+        (opcional) o NOT_APPLICABLE (no aplica → se oculta de la matriz de ese OT).
+
+    SetDocumentRequirementOverrideRequest:
+      type: object
+      description: >
+        Upsert por tupla natural (trámite, documento, OT) de la obligatoriedad por OT
+        (HU #10198). estado=DEFAULT limpia el override (hereda el default del trámite).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE, DEFAULT]
+      required: [procedureTypeId, documentTypeId, transitOfficeId, estado]
+
+    DocumentRequirementOverrideResponse:
+      type: object
+      description: Override de obligatoriedad por OT (HU #10198).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado: { $ref: "#/components/schemas/DocumentRequirementState" }
+        documento:
+          type: object
+          properties:
+            codigo: { type: string }
+            nombre: { type: string }
+          required: [codigo, nombre]
+      required: [id, procedureTypeId, documentTypeId, transitOfficeId, estado, documento]
+
+    DocumentRequirementOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+      required: [data]
+
+    ResolvedDocumentMatrixRow:
+      type: object
+      description: Fila de la matriz documental resuelta (RF18).
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer, minimum: 0, maximum: 32767 }
+        nivelAplicado:
+          type: string
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que ganó la precedencia.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ResolvedDocumentMatrix:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedDocumentMatrixRow"
+      required: [data]
+
+    CreateProcedureInstanceRequest:
+      type: object
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        transitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo de tránsito (nivel OT) — opcional, afecta la precedencia.
+        referenceNumber:
+          type: string
+          maxLength: 30
+          description: Número de referencia del trámite, único por cliente.
+        createdByUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario creador; si se omite, se resuelve del JWT (sub).
+      required: [procedureTypeId, tenantId, referenceNumber]
+
+    ProcedureInstanceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string, example: draft }
+        snapshotAt: { type: string, format: date-time }
+        documentCount: { type: integer, description: Documentos congelados en el snapshot. }
+      required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    ProcedureDocumentRequirementSnapshotRow:
+      type: object
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer }
+        nivelAplicado:
+          type: string
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que determinó el orden en el momento de creación.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ProcedureDocumentRequirementSnapshotList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotRow"
+      required: [data]
