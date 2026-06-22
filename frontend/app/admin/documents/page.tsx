@@ -9,6 +9,10 @@ import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { DocumentTypeListTable } from "@/components/admin/documents/DocumentTypeListTable";
 import { CreateDocumentTypeDialog } from "@/components/admin/documents/CreateDocumentTypeDialog";
 import {
+  DocumentInUseDialog,
+  type DocumentInUseProcedureType,
+} from "@/components/admin/documents/DocumentInUseDialog";
+import {
   createDocumentType,
   deactivateDocumentType,
   fetchDocumentTypes,
@@ -38,6 +42,11 @@ function DocumentsCatalog() {
   const [result, setResult] = useState<DocumentTypePagedResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DocumentType | null>(null);
+  // Documento que no se pudo desactivar por estar en uso (abre el modal emergente 409).
+  const [inUse, setInUse] = useState<{
+    documentName: string;
+    procedureTypes: DocumentInUseProcedureType[];
+  } | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -104,7 +113,13 @@ function DocumentsCatalog() {
       void load();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        show("El documento tiene asociaciones activas y no puede desactivarse.", "error");
+        // 409 accionable: el backend indica en qué trámites se usa. Se muestra en un modal
+        // persistente (no un toast efímero) para que el usuario no lo pase por alto.
+        const body = error.body as { procedureTypes?: DocumentInUseProcedureType[] } | null;
+        const procedureTypes = (body?.procedureTypes ?? []).filter(
+          (p): p is DocumentInUseProcedureType => Boolean(p?.codigo && p?.nombre),
+        );
+        setInUse({ documentName: documentType.nombre, procedureTypes });
       } else {
         show("No se pudo desactivar el documento.", "error");
       }
@@ -201,6 +216,14 @@ function DocumentsCatalog() {
         }
         onSaved={handleSaved}
       />
+
+      {inUse && (
+        <DocumentInUseDialog
+          documentName={inUse.documentName}
+          procedureTypes={inUse.procedureTypes}
+          onClose={() => setInUse(null)}
+        />
+      )}
     </main>
   );
 }

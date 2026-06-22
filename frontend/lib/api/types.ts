@@ -138,11 +138,13 @@ export class ApiValidationError extends Error {
   }
 }
 
-/** Error HTTP genérico que conserva el status para distinguir casos (p. ej. 404). */
+/** Error HTTP genérico que conserva el status y el cuerpo para distinguir casos (404, 409…). */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** Cuerpo JSON de la respuesta de error, si lo hubo (p. ej. el 409 con `procedureTypes`). */
+    public readonly body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";

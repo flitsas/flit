@@ -11,9 +11,10 @@ import {
   type CompanyFilters,
 } from "@/components/admin/companies/CompanyFiltersPanel";
 import { CompanyListTable } from "@/components/admin/companies/CompanyListTable";
+import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
 import { createCompany, fetchCompaniesIndex } from "@/lib/api/admin-companies";
-import type { CompanyPagedResult } from "@/lib/api/types";
+import type { CompanyListItem, CompanyPagedResult } from "@/lib/api/types";
 
 const PAGE_SIZE = 20;
 
@@ -35,6 +36,7 @@ function CompaniesList() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<CompanyPagedResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [toggleTarget, setToggleTarget] = useState<CompanyListItem | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -80,6 +82,21 @@ function CompaniesList() {
     void load();
   };
 
+  // Reemplaza la fila tocada con la compañía ya actualizada (update optimista local:
+  // evita recargar todo el listado solo por un cambio de estado).
+  const handleStatusConfirmed = (updated: CompanyListItem) => {
+    setResult((prev) =>
+      prev
+        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
+        : prev,
+    );
+    setToggleTarget(null);
+    show(
+      `Compañía «${updated.razonSocial}» ${updated.estadoActivo ? "activada" : "desactivada"}.`,
+      "success",
+    );
+  };
+
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button
@@ -123,6 +140,7 @@ function CompaniesList() {
               pageSize={result.pageSize}
               onPageChange={setPage}
               onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
+              onToggleStatus={setToggleTarget}
             />
           )}
         </UiStateBoundary>
@@ -134,6 +152,14 @@ function CompaniesList() {
         onCreate={createCompany}
         onCreated={(company) => handleCreated(company.razonSocial)}
       />
+
+      {toggleTarget && (
+        <CompanyStatusDialog
+          company={toggleTarget}
+          onClose={() => setToggleTarget(null)}
+          onConfirmed={handleStatusConfirmed}
+        />
+      )}
     </main>
   );
 }

@@ -34,6 +34,7 @@ describe("CompanyListTable (AC1)", () => {
         pageSize={20}
         onPageChange={vi.fn()}
         onConfigure={vi.fn()}
+        onToggleStatus={vi.fn()}
       />,
     );
 
@@ -58,6 +59,7 @@ describe("CompanyListTable (AC1)", () => {
         pageSize={20}
         onPageChange={onPageChange}
         onConfigure={vi.fn()}
+        onToggleStatus={vi.fn()}
       />,
     );
 
@@ -75,6 +77,7 @@ describe("CompanyListTable (AC1)", () => {
         pageSize={20}
         onPageChange={vi.fn()}
         onConfigure={vi.fn()}
+        onToggleStatus={vi.fn()}
       />,
     );
     expect(screen.getByRole("button", { name: /página anterior/i })).toBeDisabled();
@@ -90,9 +93,32 @@ describe("CompanyListTable (AC1)", () => {
         pageSize={20}
         onPageChange={vi.fn()}
         onConfigure={onConfigure}
+        onToggleStatus={vi.fn()}
       />,
     );
     fireEvent.click(screen.getAllByRole("button", { name: /configurar/i })[0]);
     expect(onConfigure).toHaveBeenCalledWith(items[0].id);
+  });
+
+  it("dispara onToggleStatus con la compañía al pulsar Activar/Desactivar", () => {
+    const onToggleStatus = vi.fn();
+    render(
+      <CompanyListTable
+        items={items}
+        totalCount={40}
+        page={1}
+        pageSize={20}
+        onPageChange={vi.fn()}
+        onConfigure={vi.fn()}
+        onToggleStatus={onToggleStatus}
+      />,
+    );
+
+    // La primera compañía está activa → botón "Desactivar"; la segunda inactiva → "Activar".
+    fireEvent.click(screen.getByRole("button", { name: /desactivar FLIT SAS/i }));
+    expect(onToggleStatus).toHaveBeenCalledWith(items[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: /activar Movilidad Antioquia/i }));
+    expect(onToggleStatus).toHaveBeenCalledWith(items[1]);
   });
 });

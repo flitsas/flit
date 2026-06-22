@@ -178,6 +178,20 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             .AsNoTracking()
             .AnyAsync(r => r.DocumentTypeId == documentTypeId, cancellationToken);
 
+    public async Task<IReadOnlyList<DocumentTypeAssociationRef>> GetAssociatedProcedureTypesAsync(
+        Guid documentTypeId,
+        CancellationToken cancellationToken = default) =>
+        // Subconsulta EXISTS sobre procedure_types: traduce a SQL en Postgres (a diferencia
+        // de Join+Distinct sobre el DTO) y cada trámite aparece una sola vez de forma natural.
+        await _context.ProcedureTypes
+            .AsNoTracking()
+            .Where(procedureType => _context.ProcedureDocumentRequirements
+                .Any(r => r.DocumentTypeId == documentTypeId && r.ProcedureTypeId == procedureType.Id))
+            .OrderBy(procedureType => procedureType.Name)
+            .Select(procedureType => new DocumentTypeAssociationRef(procedureType.Code, procedureType.Name))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     public Task<bool> CodeExistsAsync(
         string code,
         Guid? excludeId = null,

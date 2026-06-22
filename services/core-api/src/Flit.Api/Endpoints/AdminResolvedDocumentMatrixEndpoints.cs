@@ -17,10 +17,22 @@ public static class AdminResolvedDocumentMatrixEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/resolved-document-matrix")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Órdenes documentales");
 
         // GET ?procedureTypeId&transitOfficeId?&clienteId? — matriz resuelta (AC3/AC4 → 200 / 400 / 404).
-        group.MapGet("/", GetAsync).WithName("AdminResolvedDocumentMatrixGet");
+        group.MapGet("/", GetAsync)
+            .WithName("AdminResolvedDocumentMatrixGet")
+            .WithSummary("Resuelve la matriz documental por OT + Cliente")
+            .WithDescription("Calcula el orden y la obligatoriedad finales de los documentos de un trámite "
+                + "aplicando la precedencia Cliente > OT > Default. transitOfficeId y clienteId son opcionales "
+                + "(sin ellos resuelve solo el default). 400 si falta procedureTypeId, 404 si el trámite no existe. "
+                + "Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }

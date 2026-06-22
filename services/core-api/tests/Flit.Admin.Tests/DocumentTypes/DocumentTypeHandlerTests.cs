@@ -7,6 +7,9 @@ using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+// ProcedureType se reubicó al dominio del rework (#10128); el DbSet ProcedureTypes
+// ahora es de este tipo. Antes vivía en Persistence.Entities.Tramites.
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -254,6 +257,39 @@ public sealed class DocumentTypeHandlerTests
 
         await using var verify = NewContext(db);
         (await verify.DocumentTypes.SingleAsync(d => d.Id == id)).IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Delete_WithAssociations_IncludesTramiteNames_InResult()
+    {
+        var db = NewDbName();
+        var docId = Guid.NewGuid();
+        var procId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.DocumentTypes.Add(new DocumentType { Id = docId, Code = "RUT", Name = "Doc", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+            seed.ProcedureTypes.Add(new ProcedureType { Id = procId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+            seed.ProcedureDocumentRequirements.Add(new ProcedureDocumentRequirement
+            {
+                Id = Guid.NewGuid(),
+                ProcedureTypeId = procId,
+                DocumentTypeId = docId,
+                IsMandatory = true,
+                DefaultSortOrder = 0,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var act = NewContext(db);
+        var handler = new DeleteDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = docId });
+
+        result.Outcome.Should().Be(DeleteDocumentTypeOutcome.HasAssociations);
+        result.Associations.Should().ContainSingle();
+        result.Associations[0].Codigo.Should().Be("TRASPASO");
+        result.Associations[0].Nombre.Should().Be("Traspaso");
     }
 
     // ---------- Reactivación (contraparte del soft-delete) ----------

@@ -5,6 +5,7 @@ using Flit.Api.Endpoints;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
+using Flit.Api.OpenApi;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
@@ -86,6 +87,10 @@ builder.Services.AddAuthorizationBuilder()
 
 builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorizationHandler>();
 
+// Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
+// Development (más abajo), pero el generador se registra siempre para no divergir.
+builder.Services.AddFlitSwagger();
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -118,6 +123,14 @@ if (app.Configuration.GetValue("Database:AutoMigrate", true))
     // por eso identity.users quedaba vacía y no se podía iniciar sesión.
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
     await DevelopmentAuthSeeder.SeedAsync(db, hasher, app.Environment, CancellationToken.None);
+}
+
+// Swagger UI solo en Development: /swagger (doc en /swagger/v1/swagger.json). No se
+// expone en producción (la API es de borde tras el Gateway). Va antes de auth para que
+// la página de la UI sea accesible sin token; cada «Try it out» sí envía el JWT.
+if (app.Environment.IsDevelopment())
+{
+    app.UseFlitSwagger();
 }
 
 app.UseAuthentication();
