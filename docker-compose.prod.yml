@@ -65,9 +65,18 @@ services:
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
       # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
       Jwt__DevGenerate: "true"
-      Verifik__BearerToken: ${VERIFIK_API_TOKEN:-}
-      Verifik__BaseUrl: ${VERIFIK_BASE_URL:-https://api.verifik.co}
-      Verifik__TimeoutSeconds: ${VERIFIK_TIMEOUT_SECONDS:-30}
+      # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
+      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
+      # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.
+      VERIFIK_API_TOKEN: ${VERIFIK_API_TOKEN:-}
+      VERIFIK_BASE_URL: ${VERIFIK_BASE_URL:-https://api.verifik.co}
+      VERIFIK_TIMEOUT_SECONDS: ${VERIFIK_TIMEOUT_SECONDS:-30}
+      # Modos real|mock por proveedor (explícitos para un deploy determinista).
+      VERIFIK_VEHICLE_MODE: ${VERIFIK_VEHICLE_MODE:-real}
+      VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
+      VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
+      VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
+      INTEMPO_MODE: ${INTEMPO_MODE:-mock}
     ports:
       - "127.0.0.1:4003:4003"
     healthcheck:
