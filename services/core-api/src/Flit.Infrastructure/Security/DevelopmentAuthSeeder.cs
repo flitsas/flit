@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
@@ -31,10 +32,10 @@ public static class DevelopmentAuthSeeder
         // idempotente (ON CONFLICT / WHERE NOT EXISTS) y se ejecuta en CADA arranque en
         // Development → es self-healing: NO depende del gate de la migración HU10200_DevSeed,
         // que queda como no-op permanente si esa migración llegó a aplicarse fuera de Development.
-        await db.Database.ExecuteSqlRawAsync(EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
         // Mirror de traspaso: publica TRASPASO_STANDARD (modalidad "traspaso"). Mismo patrón
         // idempotente y env-gated en su migración (TramitesTraspasoDevSeed) → también self-healing.
-        await db.Database.ExecuteSqlRawAsync(EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
 
         if (await db.Users.AnyAsync(u => u.Email == DemoEmail, cancellationToken))
             return;
@@ -140,6 +141,31 @@ public static class DevelopmentAuthSeeder
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // Ejecuta un script SQL embebido crudo SIN pasar por el parser de format-string
+    // de ExecuteSqlRaw, que interpreta '{' como placeholder posicional ({0}) y revienta
+    // con FormatException ante literales jsonb como '{}'. Va por el DbConnection directo.
+    // Los seeds DEV son idempotentes (ON CONFLICT / WHERE NOT EXISTS), así que ejecutarlos
+    // fuera de la estrategia de reintentos es aceptable durante el arranque.
+    private static async Task ExecuteRawSqlScriptAsync(FlitDbContext db, string sql, CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        var wasClosed = connection.State != ConnectionState.Open;
+        if (wasClosed)
+            await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            if (wasClosed)
+                await connection.CloseAsync();
+        }
     }
 }
 
