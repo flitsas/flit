@@ -36,5 +36,8 @@ RUN pnpm --filter @flit/frontend build
 ENV NODE_ENV=production
 EXPOSE 4001
 
+RUN chown -R node:node /app
+USER node
+
 # next start sirve el build de produccion (sin HMR). Lee PORT/HOSTNAME del entorno.
 CMD ["pnpm", "--filter", "@flit/frontend", "start"]

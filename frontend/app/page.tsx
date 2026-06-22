@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { Login } from "@/components/atom/Login";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
@@ -9,47 +9,38 @@ import { Reportes } from "@/components/atom/modules/Reportes";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
-
-const AUTH_KEY = "flit:authed";
-
-// Store externo (localStorage) leído con useSyncExternalStore: sin setState síncrono en efectos
-// y sin desajuste de hidratación (el snapshot de servidor es siempre "no autenticado").
-const authStore = {
-  subscribe(callback: () => void) {
-    window.addEventListener("storage", callback);
-    window.addEventListener(AUTH_KEY, callback);
-    return () => {
-      window.removeEventListener("storage", callback);
-      window.removeEventListener(AUTH_KEY, callback);
-    };
-  },
-  getSnapshot() {
-    return window.localStorage.getItem(AUTH_KEY) === "1";
-  },
-  getServerSnapshot() {
-    return false;
-  },
-  set(value: boolean) {
-    if (value) window.localStorage.setItem(AUTH_KEY, "1");
-    else window.localStorage.removeItem(AUTH_KEY);
-    window.dispatchEvent(new Event(AUTH_KEY));
-  },
-};
+import { getToken } from "@/lib/api/client";
+import { clearToken, getRememberedEmail } from "@/lib/auth/session";
 
 export default function HomePage() {
-  const authed = useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
+  const [authed, setAuthed] = useState(false);
   const [module, setModule] = useState<ModuleId>("dashboard");
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    // La autenticación se deriva del JWT real (cookie/localStorage), no de un flag
+    // mock. El token solo está disponible en cliente; se lee tras el montaje.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAuthed(Boolean(getToken()));
+    setHydrated(true);
+  }, []);
+
+  function handleLogout() {
+    clearToken();
+    setAuthed(false);
+    setModule("dashboard");
+  }
+
+  if (!hydrated) {
+    return null;
+  }
 
   if (!authed) {
-    return <Login onBypass={() => authStore.set(true)} />;
+    return <Login onAuthenticated={() => setAuthed(true)} defaultEmail={getRememberedEmail()} />;
   }
 
   return (
-    <Shell active={module} onNav={setModule} onLogout={() => authStore.set(false)}>
+    <Shell active={module} onNav={setModule} onLogout={handleLogout}>
       {module === "dashboard" && <Dashboard onNewTramite={() => setModule("tramites")} />}
       {module === "tramites" && <Tramites />}
       {module === "reportes" && <Reportes />}

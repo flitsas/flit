@@ -16,7 +16,9 @@ internal sealed class ProcedureDocumentRequirementConfiguration
 {
     public void Configure(EntityTypeBuilder<ProcedureDocumentRequirement> builder)
     {
-        builder.ToTable("procedure_document_requirements", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (HU #10155); la entidad vive en el modelo
+        // EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("procedure_document_requirements", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

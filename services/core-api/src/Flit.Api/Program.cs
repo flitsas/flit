@@ -7,6 +7,8 @@ using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Security;
+using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -109,6 +111,13 @@ if (app.Configuration.GetValue("Database:AutoMigrate", true))
     {
         MigrationLog.NoPendingMigrations(logger);
     }
+
+    // Seed de datos de desarrollo (usuario demo para login: demo@flit.local / DemoPass1!).
+    // Idempotente (no recrea si ya existe) y no-op fuera de Development. Corre DESPUÉS de
+    // migrar para que existan las tablas de identity/security. Antes faltaba esta llamada,
+    // por eso identity.users quedaba vacía y no se podía iniciar sesión.
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    await DevelopmentAuthSeeder.SeedAsync(db, hasher, app.Environment, CancellationToken.None);
 }
 
 app.UseAuthentication();

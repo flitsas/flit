@@ -32,14 +32,6 @@ export function resetPassword(token: string, newPassword: string): Promise<void>
   });
 }
 
-/** POST /api/v1/auth/remember-username → 202 genérico. */
-export function rememberUsername(documentNumber: string): Promise<void> {
-  return apiFetch<void>("/api/v1/auth/remember-username", {
-    method: "POST",
-    body: { documentNumber },
-  });
-}
-
 /** PUT /api/v1/auth/change-password → 200 | 400 (política / actual incorrecta). */
 export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   return apiFetch<void>("/api/v1/auth/change-password", {

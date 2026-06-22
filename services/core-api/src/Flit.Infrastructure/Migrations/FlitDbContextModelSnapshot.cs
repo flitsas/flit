@@ -374,11 +374,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("display_name");
 
-                    b.Property<string>("DocumentNumber")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("document_number");
-
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -408,9 +403,6 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_users");
-
-                    b.HasIndex("DocumentNumber")
-                        .HasDatabaseName("ix_users_document_number");
 
                     b.HasIndex("Email")
                         .IsUnique()

@@ -3,7 +3,6 @@ using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
-using Flit.Modules.Security.Application.Auth.RememberUsername;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -122,19 +121,6 @@ public static class AuthEndpoints
             }
         }).RequireAuthorization();
 
-        // HU #10203 AC1/AC2 — recordar usuario por documento. Siempre 202 genérico.
-        group.MapPost("/remember-username", async (
-            [FromBody] RememberUsernameRequest request,
-            RememberUsernameHandler handler,
-            CancellationToken cancellationToken) =>
-        {
-            await handler.HandleAsync(new RememberUsernameCommand(request.DocumentNumber), cancellationToken);
-
-            return Results.Json(
-                new MessageResponse("Si el documento corresponde a una cuenta, enviaremos el usuario al correo registrado."),
-                statusCode: StatusCodes.Status202Accepted);
-        });
-
         // HU #10171 AC1/AC2 — cambio voluntario de contraseña del propio usuario autenticado.
         group.MapPut("/change-password", async (
             [FromBody] ChangePasswordRequest request,
@@ -207,8 +193,6 @@ public static class AuthEndpoints
     private sealed record AdminResetPasswordRequest(string Email);
 
     private sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
-
-    private sealed record RememberUsernameRequest(string DocumentNumber);
 
     private sealed record MessageResponse(string Message);
 

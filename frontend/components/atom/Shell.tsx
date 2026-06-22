@@ -147,7 +147,14 @@ export function Shell({
                 }}
               >
                 <MenuItem icon={UserCog} label="Actualización de la información" onClick={() => setMenuOpen(false)} />
-                <MenuItem icon={KeyRound} label="Cambio de contraseña" onClick={() => setMenuOpen(false)} />
+                <MenuItem
+                  icon={KeyRound}
+                  label="Cambio de contraseña"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    window.location.href = "/profile/change-password";
+                  }}
+                />
                 <div className="h-px my-1" style={{ background: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }} />
                 <MenuItem
                   icon={LogOut}

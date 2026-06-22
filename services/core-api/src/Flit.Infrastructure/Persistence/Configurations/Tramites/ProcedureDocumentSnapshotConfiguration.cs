@@ -17,7 +17,9 @@ internal sealed class ProcedureDocumentSnapshotConfiguration
 {
     public void Configure(EntityTypeBuilder<ProcedureDocumentSnapshot> builder)
     {
-        builder.ToTable("procedure_document_snapshots", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (HU #10155); la entidad vive en el modelo
+        // EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("procedure_document_snapshots", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

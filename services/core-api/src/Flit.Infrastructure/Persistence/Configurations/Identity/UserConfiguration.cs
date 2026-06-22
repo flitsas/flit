@@ -20,9 +20,6 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.DisplayName).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();
 
-        builder.Property(x => x.DocumentNumber).HasMaxLength(40);
-        builder.HasIndex(x => x.DocumentNumber).HasDatabaseName("ix_users_document_number");
-
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
     }

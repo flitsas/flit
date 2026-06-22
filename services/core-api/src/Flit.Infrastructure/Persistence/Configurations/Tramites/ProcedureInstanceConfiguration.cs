@@ -9,8 +9,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ProcedureInstance> builder)
     {
+        // DDL gestionado por migración SQL cruda (HU #10150); la entidad se excluye del
+        // snapshot/migraciones EF (evita drift y el 502 de arranque). Declaramos además los
+        // triggers porque el rework escribe la instancia con row_version como concurrency
+        // token: EF necesita conocerlos para emitir UPDATE compatible con triggers.
         builder.ToTable("procedure_instances", SchemaNames.Tramites, t =>
         {
+            t.ExcludeFromMigrations();
             t.HasTrigger("tr_procedure_instances_audit");
             t.HasTrigger("tr_procedure_instances_row_version");
         });
