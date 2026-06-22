@@ -307,6 +307,11 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     /// </summary>
     private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
+        // DEMO: toggle TRAMITES_DEMO_RELAX_DOCS afloja el gating estricto de documentos
+        // para recorrer la ruta de matrícula sin subir adjuntos. Deuda: re-endurecer.
+        if (DemoFlags.RelaxDocs)
+            return true;
+
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
