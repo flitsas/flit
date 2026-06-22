@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { setDevSuperAdminToken } from "@/lib/api/client";
 
 const logo = "/assets/logo-flit-white.svg";
 import { ShieldAlert, Lock, Mail, User as UserIcon, X, KeyRound } from "lucide-react";
@@ -108,7 +109,14 @@ export function Login({ onBypass }: { onBypass: () => void }) {
     setCode2faError("");
     if (clean.length === 6) {
       // Acceso libre: cualquier código de 6 dígitos otorga acceso.
-      setTimeout(() => onBypass(), 250);
+      setTimeout(() => {
+        // Transitorio (login real pendiente): emite un JWT SuperAdmin de dev para
+        // que el gate del middleware y las llamadas a la API funcionen. Solo en dev.
+        //if (process.env.NODE_ENV !== "production") {
+        setDevSuperAdminToken();
+        //}
+        onBypass();
+      }, 250);
     }
   };
 

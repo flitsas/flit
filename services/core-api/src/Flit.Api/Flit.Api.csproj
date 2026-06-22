@@ -9,11 +9,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
+    <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

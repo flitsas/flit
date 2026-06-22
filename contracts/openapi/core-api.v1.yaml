@@ -1,946 +1,1998 @@
 openapi: 3.0.3
 info:
-  title: FLIT Core API — Trámites Parametrización v1
-  description: |
-    Contrato OpenAPI v1 del motor de parametrización global SuperAdmin (Feature #10116)
-    y lectura runtime publicada (Feature #10128).
-
-    **Autenticación MVP:** header `X-Flit-SuperAdmin: true` en rutas `/api/v1/superadmin/*`.
-    Stub temporal hasta RBAC real (#10134). Ver ADR-0019.
-  version: 1.0.0
-  contact:
-    name: FLIT Evolution Team
+  title: FLIT Core API
+  version: "1.0.0"
+  description: >
+    Contrato público de FLIT Core API (services/core-api). Cubre el carril de
+    Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
+    y el módulo Administrador de Compañías (HU #10189 — index paginado y
+    seguridad SuperAdmin).
 
 servers:
-  - url: https://api.orca.flitsas.com
-    description: Gateway producción
-  - url: http://localhost:4003
-    description: Desarrollo local (Flit.Api)
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4002
+    description: Local (Gateway)
 
 tags:
-  - name: SuperAdmin — Procedure Types
-    description: CRUD y ciclo de vida de parametrizaciones globales
-  - name: SuperAdmin — Catalogs
-    description: Catálogos de aristas, fuentes externas y plantillas de consulta
-  - name: SuperAdmin — Validation
-    description: Validación de reglas de negocio antes de publicar
-  - name: Runtime — Procedure Configuration
-    description: |
-      Lectura de parametrización publicada. **Contrato estable** para consumo de Feature #10128.
-      No requiere autenticación SuperAdmin.
+  - name: Auth
+    description: Autenticación y sesión (login, perfil del usuario).
+  - name: Admin · Compañías
+    description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Admin · Documentos
+    description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
+  - name: Admin · Documentos por Trámite
+    description: Asociación de tipos de documento a tipos de trámite (rol SuperAdmin).
+  - name: Admin · Órdenes documentales
+    description: >
+      Overrides de orden documental por OT/Cliente y matriz documental resuelta
+      con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Trámites · Documentos
+    description: >
+      Alta de trámite con snapshot documental inmutable y lectura de los documentos
+      requeridos congelados al crear el trámite (cualquier JWT válido).
+  - name: Trámites · Traspaso
+    description: Radicación de traspasos vehiculares.
 
 paths:
-  /api/v1/superadmin/procedure-types:
-    get:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Listar parametrizaciones
-      operationId: listProcedureTypes
-      security:
-        - SuperAdminStub: []
-      parameters:
-        - $ref: '#/components/parameters/FamilyQuery'
-        - $ref: '#/components/parameters/PublicationStatusQuery'
-      responses:
-        '200':
-          description: Lista de resúmenes de tipos de trámite
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProcedureTypeSummary'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+  /api/v1/auth/login:
     post:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Crear parametrización en borrador
-      operationId: createProcedureType
-      security:
-        - SuperAdminStub: []
+      operationId: authLogin
+      tags: [Auth]
+      security: []          # endpoint público: no requiere JWT (satisface la regla security-defined)
+      summary: Login con email y contraseña
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateProcedureTypeRequest'
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        '201':
-          description: Parametrización creada
+        '200':
+          description: JWT emitido
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProcedureTypeSummary'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /api/v1/superadmin/procedure-types/{id}:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/me:
     get:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Obtener detalle agregado de parametrización
-      description: |
-        Retorna metadatos del tipo con árbol de conformación y pasos.
-        Consumidores deben usar los endpoints dedicados de conformation-rules/steps
-        para edición estructurada.
-      operationId: getProcedureType
+      operationId: authGetCurrentUser
+      tags: [Auth]
+      summary: Perfil del usuario autenticado
       security:
-        - SuperAdminStub: []
+        - bearerAuth: []
       responses:
         '200':
-          description: Detalle del tipo de trámite
+          description: Claims del token
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProcedureTypeDetail'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Actualizar metadatos (solo borrador)
-      operationId: updateProcedureType
-      security:
-        - SuperAdminStub: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProcedureTypeRequest'
-      responses:
-        '200':
-          description: Parametrización actualizada
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: No autenticado o sesión expirada
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProcedureTypeSummary'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-    delete:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Archivar o eliminar borrador
-      operationId: deleteProcedureType
-      security:
-        - SuperAdminStub: []
-      responses:
-        '204':
-          description: Eliminación/archivado exitoso (sin cuerpo)
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /api/v1/superadmin/procedure-types/{id}/publish:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/forgot-password:
     post:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Publicar parametrización válida
-      operationId: publishProcedureType
-      security:
-        - SuperAdminStub: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PublishProcedureTypeRequest'
-      responses:
-        '200':
-          description: Publicación exitosa
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProcedureTypeSummary'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          description: Validación de negocio fallida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ValidationResult'
-
-  /api/v1/superadmin/procedure-types/{id}/archive:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
-    post:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Archivar parametrización publicada
-      operationId: archiveProcedureType
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Archivado exitoso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProcedureTypeSummary'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /api/v1/superadmin/procedure-types/{id}/validate:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
-    post:
-      tags: [SuperAdmin — Validation]
-      summary: Validar reglas de negocio y campos mínimos
-      description: Ejecuta validaciones VIN/Placa, NIT/persona jurídica y cobertura de plantillas sin HTTP externo.
-      operationId: validateProcedureType
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Resultado de validación (puede ser isValid false)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ValidationResult'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/v1/superadmin/procedure-types/{id}/conformation-rules:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
-    get:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Obtener matriz de conformación (aristas)
-      operationId: getConformationRules
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Lista de reglas de conformación
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConformationRuleDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Reemplazar matriz de conformación (bulk upsert)
-      description: |
-        El cuerpo es un **array JSON en la raíz** (sin wrapper).
-        Ejemplo: `[{"procedureEntityCode":"VEHICLE","isActive":true,"sortOrder":1}]`
-      operationId: upsertConformationRules
-      security:
-        - SuperAdminStub: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/ConformationRuleInput'
-      responses:
-        '200':
-          description: Matriz actualizada
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConformationRuleDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-
-  /api/v1/superadmin/procedure-types/{id}/steps:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeId'
-    get:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Obtener árbol pasos → secciones → campos
-      operationId: getProcedureSteps
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Árbol del wizard
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProcedureStepDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [SuperAdmin — Procedure Types]
-      summary: Reemplazar árbol del wizard (bulk)
-      description: |
-        El cuerpo es un **array JSON en la raíz** (sin wrapper).
-        Campos con `isLocked=true` no pueden omitirse; intentarlo retorna 409.
-      operationId: upsertProcedureSteps
-      security:
-        - SuperAdminStub: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/ProcedureStepInput'
-      responses:
-        '200':
-          description: Árbol actualizado
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProcedureStepDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /api/v1/superadmin/procedure-entities:
-    get:
-      tags: [SuperAdmin — Catalogs]
-      summary: Catálogo de aristas (4 entidades)
-      operationId: listProcedureEntities
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Lista de entidades de procedimiento
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProcedureEntityDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /api/v1/superadmin/external-data-sources:
-    get:
-      tags: [SuperAdmin — Catalogs]
-      summary: Catálogo de fuentes externas
-      operationId: listExternalDataSources
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Lista de fuentes externas
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ExternalDataSourceDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /api/v1/superadmin/consultation-templates:
-    get:
-      tags: [SuperAdmin — Catalogs]
-      summary: Plantillas de consulta con campos mínimos
-      operationId: listConsultationTemplates
-      security:
-        - SuperAdminStub: []
-      responses:
-        '200':
-          description: Lista de plantillas de consulta
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConsultationTemplateDto'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /api/v1/superadmin/consultation-templates/{templateId}/apply-fields:
-    parameters:
-      - $ref: '#/components/parameters/ConsultationTemplateId'
-    post:
-      tags: [SuperAdmin — Catalogs]
-      summary: Sembrar campos locked en sección destino
-      description: |
-        Aplica los campos mínimos de la plantilla a la sección indicada.
-        Respuesta **200 sin cuerpo** en éxito (`Content-Length: 0`).
-      operationId: applyConsultationTemplateFields
-      security:
-        - SuperAdminStub: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplyTemplateFieldsRequest'
-      responses:
-        '200':
-          description: Campos sembrados exitosamente (sin cuerpo de respuesta)
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/v1/procedure-types/{code}/configuration:
-    parameters:
-      - $ref: '#/components/parameters/ProcedureTypeCode'
-    get:
-      tags: [Runtime — Procedure Configuration]
-      summary: Lectura de parametrización publicada (runtime #10128)
-      description: |
-        **Contrato estable v1** — Feature #10128.
-
-        Retorna solo tipos en estado `published`. Incluye `conformationRules` y `steps`
-        listos para instanciación runtime. Fuera del prefijo `/superadmin`; no requiere
-        header SuperAdmin.
-      operationId: getProcedureTypeConfiguration
+      operationId: authForgotPassword
+      tags: [Auth]
+      summary: Solicitar recuperación de contraseña (HU #10169, RF19)
       security: []
-      x-flit-stability: stable
-      x-flit-consumer-feature: '10128'
+      description: >
+        Genera un token de un solo uso y envía un correo con el enlace de
+        restablecimiento. Responde siempre 202 con un mensaje genérico, sin
+        revelar si el email está registrado (anti-enumeración, AC2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
       responses:
-        '200':
-          description: Configuración publicada del tipo de trámite
+        '202':
+          description: Solicitud aceptada (respuesta genérica).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProcedureTypeConfiguration'
-        '404':
-          description: Tipo no encontrado o no publicado
+                $ref: '#/components/schemas/MessageResponse'
+  /api/v1/auth/reset-password:
+    post:
+      operationId: authResetPassword
+      tags: [Auth]
+      summary: Restablecer contraseña con token de recuperación (HU #10169)
+      security: []
+      description: >
+        Valida el token vigente y fija la nueva contraseña. El token se invalida
+        tras su uso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Contraseña actualizada.
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Token inválido/expirado o contraseña débil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/admin/companies/index:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompaniesIndex
+      summary: Listado paginado de compañías (RF02)
+      description: >
+        Retorna el listado paginado de compañías registradas, ordenado por
+        fecha de creación descendente. Filtros opcionales e independientes.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nit
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial sobre el NIT (tax_id).
+        - name: razonSocial
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: estadoActivo
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: Filtra por estado activo/inactivo.
+        - name: fechaDesde
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite inferior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: fechaHasta
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite superior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies:
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyCreate
+      summary: Alta de compañía (#10118)
+      description: >
+        Crea una compañía (tenant) en identity.tenants. El código debe ser único.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCompanyRequest"
+      responses:
+        "201":
+          description: Compañía creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyListItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Datos inválidos (campos requeridos, longitudes, tipo o código duplicado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/settings:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetSettings
+      summary: Configuración operativa actual del tenant (RF03, AC3)
+      description: >
+        Retorna la configuración operativa vigente del tenant. Requiere JWT con
+        rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Configuración operativa actual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe configuración para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyUpdateSettings
+      summary: Guardado atómico de configuración operativa + audit log (RF03/RF07–RF10, AC1/AC2)
+      description: >
+        Persiste de forma atómica (todo o nada) la configuración operativa del
+        tenant y genera una entrada de auditoría por cada campo modificado. Si la
+        validación falla (p. ej. notificationTarget fuera del enum) retorna 422 sin
+        persistir ni auditar. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantSettingsUpdate"
+      responses:
+        "200":
+          description: Configuración persistida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido. No se persiste ni se audita ningún cambio.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/whitelist:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetWhitelist
+      summary: Lista blanca de correos exentos de la regla de propiedad vehicular (RF05, AC6)
+      description: >
+        Retorna los correos activos exentos de la regla only_own_vehicles del tenant.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de correos exentos (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WhitelistEntry"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyAddWhitelist
+      summary: Alta masiva de correos en la lista blanca + audit log (RF05, AC4/AC5)
+      description: >
+        Da de alta de forma atómica uno o más correos en la lista blanca del tenant y
+        genera una entrada de auditoría por cada correo insertado. Los duplicados ya
+        existentes se omiten sin error (idempotente, 201 parcial). Si algún correo es
+        inválido retorna 422 con la lista de inválidos sin persistir ninguno (atómico).
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhitelistAddRequest"
+      responses:
+        "201":
+          description: Correos procesados. Devuelve insertados y omitidos (duplicados).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhitelistAddResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Uno o más correos inválidos. No se persiste ninguno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhitelistValidationErrorResponse"
+
+  /api/v1/internal/transfers/start:
+    post:
+      tags: [Trámites · Traspaso]
+      operationId: internalTransfersStart
+      summary: Stub de radicación de traspaso con interceptor de propiedad vehicular (RF04, AC1/AC2)
+      description: >
+        Endpoint mínimo que cablea el interceptor de propiedad vehicular: valida la
+        regla only_own_vehicles efectiva del trámite (snapshot si está in-flight, AC3)
+        contemplando la exención por lista blanca (AC2). Si el vehículo no es del
+        tenant y el usuario no está exento, retorna 422 con el mensaje de bloqueo
+        (AC1). Exige usuario autenticado (rol operador), no SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferStartRequest"
+      responses:
+        "200":
+          description: El traspaso puede iniciarse.
+        "401":
+          description: No autenticado (sin token JWT).
+        "422":
+          description: El interceptor bloquea el traspaso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesSearch
+      summary: Catálogo estático de organismos de tránsito con búsqueda (RF13, AC1)
+      description: >
+        Retorna el catálogo estático en memoria de organismos de tránsito. El parámetro
+        opcional `search` filtra por nombre o código (case-insensitive e insensible a
+        tildes). No consulta base de datos. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+          description: Término opcional de búsqueda (nombre o código).
+      responses:
+        "200":
+          description: Catálogo de organismos (filtrado si se informó `search`).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitOffice"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetTransitGrants
+      summary: Organismos de tránsito habilitados del tenant (RF13, AC5)
+      description: >
+        Retorna los ids de organismos de tránsito habilitados para el tenant.
+        Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de organismos habilitados (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyAddTransitGrant
+      summary: Habilita un organismo de tránsito para el tenant + audit log (RF13, AC2)
+      description: >
+        Habilita un organismo de tránsito (que debe existir en el catálogo estático)
+        para el tenant y genera una entrada de auditoría. Idempotente: si el grant ya
+        existe retorna 201 sin duplicar fila ni auditoría. Si el organismo no existe en
+        el catálogo retorna 422 sin persistir. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitGrantRequest"
+      responses:
+        "201":
+          description: Grant habilitado (alta nueva o idempotente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantCreatedResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: El organismo no existe en el catálogo. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitGrantValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId}:
+    delete:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyRemoveTransitGrant
+      summary: Deshabilita un organismo de tránsito del tenant + audit log (RF13, AC3)
+      description: >
+        Elimina el grant del organismo para el tenant y genera una entrada de auditoría.
+        Retorna 404 si el grant no existía. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+      responses:
+        "204":
+          description: Grant eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe el grant para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/audit-log:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetAuditLog
+      summary: Historial de auditoría de gobernanza paginado (AC4)
+      description: >
+        Retorna el historial de cambios de configuración del tenant ordenado por
+        `changedAt` descendente, paginado. Cada registro incluye el campo modificado,
+        el valor anterior/nuevo, el operador y el timestamp. Requiere JWT con rol
+        SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del historial de auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPageResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types:
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeCreate
+      summary: Crea un tipo de documento (RF01)
+      description: >
+        Da de alta un tipo de documento en el catálogo maestro
+        (tramites.document_types) con estado activo. El código es único global.
+        El campo `obligatorio` se acepta pero no se persiste (la obligatoriedad
+        vive por trámite en procedure_document_requirements). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentTypeRequest"
+      responses:
+        "201":
+          description: Tipo de documento creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeList
+      summary: Listado paginado de tipos de documento (RF02)
+      description: >
+        Retorna el catálogo paginado ordenado por nombre ascendente. Por defecto
+        solo incluye activos. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: includeInactive
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Si es true incluye también los inactivos (soft-deleted).
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypePagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    put:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeUpdate
+      summary: Actualiza un tipo de documento (RF03)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentTypeRequest"
+      responses:
+        "200":
+          description: Tipo de documento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTypeResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido o código duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeDelete
+      summary: Baja lógica de un tipo de documento (RF04)
+      description: >
+        Soft-delete: marca is_active=false sin borrado físico. Si el tipo de
+        documento está referenciado en procedure_document_requirements retorna
+        409 y no se desactiva. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento desactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tiene asociaciones activas y no puede desactivarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-types/{id}/reactivate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tipo de documento.
+    post:
+      tags: [Admin · Documentos]
+      operationId: adminDocumentTypeReactivate
+      summary: Reactiva un tipo de documento desactivado
+      description: >
+        Contraparte del soft-delete: marca is_active=true para que el documento
+        vuelva al catálogo y pueda asociarse a trámites. Idempotente (reactivar uno
+        ya activo retorna 204). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Tipo de documento reactivado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/procedure-document-requirements:
+    post:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementCreate
+      summary: Asocia un documento a un tipo de trámite (RF05)
+      description: >
+        Crea la asociación (trámite, documento) con su orden default y
+        obligatoriedad. El tipo de trámite debe existir (404 si no), el tipo de
+        documento debe existir (404) y estar activo (422 si está inactivo), y el
+        par debe ser único (422 si duplicado). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureDocumentRequirementRequest"
+      responses:
+        "201":
+          description: Asociación creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite o el tipo de documento no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido, documento inactivo o par duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementList
+      summary: Lista los documentos de un tipo de trámite (RF06)
+      description: >
+        Retorna las asociaciones del trámite ordenadas por orden default
+        ascendente, enriquecidas con los datos del documento. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite cuyo catálogo de documentos se consulta.
+      responses:
+        "200":
+          description: Listado de asociaciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementList"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/procedure-document-requirements/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador de la asociación.
+    put:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementUpdate
+      summary: Actualiza la configuración de una asociación (RF07)
+      description: >
+        Modifica únicamente el orden default y la obligatoriedad. El par
+        (trámite, documento) es inmutable. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProcedureDocumentRequirementRequest"
+      responses:
+        "200":
+          description: Asociación actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Documentos por Trámite]
+      operationId: adminProcedureDocumentRequirementDelete
+      summary: Elimina una asociación (RF08)
+      description: >
+        Borrado físico de la asociación. Si está en uso en trámites activos
+        retorna 409 y no se elimina. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Asociación eliminada.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La asociación no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La asociación está en uso y no puede eliminarse.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-order-overrides:
+    post:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideCreate
+      summary: Crea un override de orden por OT o Cliente (RF09–RF16)
+      description: >
+        Registra un orden personalizado de un documento para un trámite a nivel de
+        Organismo de Tránsito (scope=OT, usa transitOfficeId) o de Cliente
+        (scope=CLIENTE, usa clienteId). El trámite debe existir (404), el documento
+        debe existir (404) y estar asociado al trámite (422), la referencia del scope
+        debe existir (404) y la tupla debe ser única (422). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentOrderOverrideRequest"
+      responses:
+        "201":
+          description: Override creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "400":
+          description: Falta o es inválido el parámetro scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o la referencia del scope no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido, documento no asociado, referencia faltante o duplicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideList
+      summary: Lista los overrides de una combinación trámite/scope (RF09–RF16)
+      description: >
+        Retorna los overrides de la combinación (trámite, scope, referencia) ordenados
+        por orden ascendente. Requiere transitOfficeId si scope=OT o clienteId si
+        scope=CLIENTE. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [OT, CLIENTE] }
+          description: Ámbito del override.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (obligatorio si scope=OT).
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (obligatorio si scope=CLIENTE).
+      responses:
+        "200":
+          description: Listado de overrides.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId, scope o la referencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-order-overrides/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del override.
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideUpdate
+      summary: Reordena un override (arrastre en la lista)
+      description: >
+        Actualiza únicamente el orden (sort_order) de un override existente. Lo usa el
+        reordenamiento por arrastre de la lista de overrides; la tupla (trámite, documento,
+        scope, referencia) no cambia, por lo que no hay conflicto de unicidad. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentOrderOverrideRequest"
+      responses:
+        "200":
+          description: Override actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Orden inválido (negativo o fuera de rango).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentOrderOverrideDelete
+      summary: Elimina un override de orden (RF11-12, RF15-16)
+      description: >
+        Borrado físico del override. Tras eliminarlo, la matriz resuelta vuelve al
+        nivel inmediatamente inferior (OT o Default). Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Override eliminado.
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El override no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/document-requirement-overrides:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideList
+      summary: Lista la obligatoriedad por OT de un trámite (HU #10198)
+      description: >
+        Retorna los overrides de obligatoriedad (REQUIRED / OPTIONAL / NOT_APPLICABLE) de un
+        trámite para un Organismo de Tránsito. Solo devuelve los documentos con override; los
+        no listados heredan el default del trámite. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite.
+        - name: transitOfficeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito.
+      responses:
+        "200":
+          description: Listado de overrides de obligatoriedad.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideList"
+        "400":
+          description: Faltan parámetros obligatorios (procedureTypeId o transitOfficeId).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminDocumentRequirementOverrideSet
+      summary: Fija (o limpia) la obligatoriedad por OT de un documento (HU #10198)
+      description: >
+        Upsert por tupla natural (trámite, documento, OT). El documento debe existir (404) y
+        estar asociado al trámite (422); el OT debe existir (404). estado=REQUIRED|OPTIONAL|
+        NOT_APPLICABLE crea/actualiza el override (200); estado=DEFAULT limpia el override y
+        el documento vuelve a heredar el default del trámite (204). Granular solo para OT.
+        Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDocumentRequirementOverrideRequest"
+      responses:
+        "200":
+          description: Override creado o actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+        "204":
+          description: Override limpiado (estado=DEFAULT).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite, el documento o el OT no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Estado inválido o documento no asociado al trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/resolved-document-matrix:
+    get:
+      tags: [Admin · Órdenes documentales]
+      operationId: adminResolvedDocumentMatrixGet
+      summary: Resuelve la matriz documental de un trámite (RF18)
+      description: >
+        Devuelve el orden final de cada documento del trámite aplicando la precedencia
+        Cliente > OT > Default. transitOfficeId y clienteId son opcionales: si no vienen,
+        ese nivel se omite. Un trámite existente sin documentos retorna 200 con data
+        vacío. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: procedureTypeId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: Tipo de trámite a resolver.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Organismo de tránsito (nivel OT) — opcional.
+        - name: clienteId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente/tenant (nivel CLIENTE) — opcional.
+      responses:
+        "200":
+          description: Matriz documental resuelta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedDocumentMatrix"
+        "400":
+          description: Falta el parámetro procedureTypeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tipo de trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites:
+    post:
+      tags: [Trámites · Documentos]
+      operationId: tramitesCreate
+      summary: Crea un trámite y congela su snapshot documental (RF19)
+      description: >
+        Crea un trámite en estado draft y captura, en la misma transacción, un snapshot
+        inmutable de la matriz documental resuelta vigente (precedencia Cliente > OT >
+        Default). Si la generación del snapshot falla, toda la operación se revierte y no
+        queda trámite creado (500). Requiere JWT autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcedureInstanceRequest"
+      responses:
+        "201":
+          description: Trámite creado con su snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureInstanceResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El tipo de trámite o el cliente (tenant) no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Datos inválidos o número de referencia duplicado para el cliente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Falló la persistencia del trámite o del snapshot; operación revertida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/{tramiteId}/document-requirements:
+    get:
+      tags: [Trámites · Documentos]
+      operationId: tramitesGetDocumentRequirements
+      summary: Documentos requeridos del snapshot de un trámite (RF19)
+      description: >
+        Devuelve los documentos congelados en el snapshot del trámite, ordenados por el
+        orden capturado al crearlo (ordenResuelto asc). Los cambios posteriores en el
+        catálogo o los overrides no afectan la respuesta (inmutabilidad). Requiere JWT
+        autenticado (no SuperAdmin).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tramiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del trámite (procedure_instance_id).
+      responses:
+        "200":
+          description: Documentos del snapshot del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotList"
+        "401":
+          description: No autenticado (sin token JWT).
+        "404":
+          description: El trámite no existe o no tiene snapshot documental.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   securitySchemes:
-    SuperAdminStub:
-      type: apiKey
-      in: header
-      name: X-Flit-SuperAdmin
-      description: |
-        MVP stub SuperAdmin. El valor debe ser exactamente `true`.
-        Reemplazado por JWT/RBAC en Feature #10134.
-
-  parameters:
-    ProcedureTypeId:
-      name: id
-      in: path
-      required: true
-      description: Identificador UUID del tipo de trámite
-      schema:
-        type: string
-        format: uuid
-    ConsultationTemplateId:
-      name: templateId
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    ProcedureTypeCode:
-      name: code
-      in: path
-      required: true
-      description: Código único del tipo de trámite (ej. MI_ESTANDAR)
-      schema:
-        type: string
-        maxLength: 50
-    FamilyQuery:
-      name: family
-      in: query
-      required: false
-      schema:
-        $ref: '#/components/schemas/ProcedureFamily'
-    PublicationStatusQuery:
-      name: publicationStatus
-      in: query
-      required: false
-      schema:
-        $ref: '#/components/schemas/PublicationStatus'
-
-  responses:
-    BadRequest:
-      description: Solicitud inválida
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-    Forbidden:
-      description: Acceso denegado — header X-Flit-SuperAdmin ausente o inválido
-    NotFound:
-      description: Recurso no encontrado
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-    Conflict:
-      description: Conflicto de estado o concurrencia
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-    UnprocessableEntity:
-      description: Regla de negocio no satisfecha
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
   schemas:
-    ProcedureFamily:
-      type: string
-      enum: [MATRICULAS, TRASPASO, OTROS]
-
-    PublicationStatus:
-      type: string
-      enum: [draft, published, archived]
-
-    ProcedureEntityCode:
-      type: string
-      enum: [VEHICLE, OWNER, BUYER, LESSEE]
-
-    FieldType:
-      type: string
-      enum: [text, number, select, radio, checkbox, date]
-
-    ValidationErrorCode:
-      type: string
-      enum:
-        - MISSING_CONFORMATION
-        - MISSING_REQUIRED_FIELD
-        - LOCKED_FIELD_REMOVED
-        - VIN_PLATE_RULE
-        - NIT_PERSON_TYPE
-        - INCOMPLETE_CONSULTATION_FIELDS
-
-    ProcedureTypeSummary:
+    LoginRequest:
       type: object
-      required: [id, code, name, family, publicationStatus, isActive]
+      required: [email, password]
       properties:
-        id:
+        email:
           type: string
-          format: uuid
-        code:
+          format: email
+        password:
           type: string
-          maxLength: 50
-        name:
-          type: string
-          maxLength: 150
-        family:
-          $ref: '#/components/schemas/ProcedureFamily'
-        publicationStatus:
-          $ref: '#/components/schemas/PublicationStatus'
-        isActive:
-          type: boolean
-        publishedAt:
-          type: string
-          format: date-time
-          nullable: true
-
-    CreateProcedureTypeRequest:
+          format: password
+    LoginResponse:
       type: object
-      required: [family, code, name]
+      required: [accessToken, expiresInSeconds, tokenType]
       properties:
-        family:
-          $ref: '#/components/schemas/ProcedureFamily'
-        code:
+        accessToken:
           type: string
-          maxLength: 50
-        name:
-          type: string
-          maxLength: 150
-        description:
-          type: string
-          nullable: true
-
-    UpdateProcedureTypeRequest:
-      type: object
-      required: [name, isActive]
-      properties:
-        name:
-          type: string
-          maxLength: 150
-        description:
-          type: string
-          nullable: true
-        isActive:
-          type: boolean
-
-    PublishProcedureTypeRequest:
-      type: object
-      properties:
-        force:
-          type: boolean
-          default: false
-          description: Reservado; MVP siempre valida antes de publicar
-
-    ProcedureTypeDetail:
-      allOf:
-        - $ref: '#/components/schemas/ProcedureTypeSummary'
-        - type: object
-          properties:
-            description:
-              type: string
-              nullable: true
-            conformationRules:
-              type: array
-              items:
-                $ref: '#/components/schemas/ConformationRuleDto'
-            steps:
-              type: array
-              items:
-                $ref: '#/components/schemas/ProcedureStepDto'
-
-    ProcedureTypeConfiguration:
-      type: object
-      required: [id, code, name, family, conformationRules, steps]
-      description: Payload estable de lectura runtime (#10128)
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        name:
-          type: string
-        family:
-          $ref: '#/components/schemas/ProcedureFamily'
-        publishedAt:
-          type: string
-          format: date-time
-          nullable: true
-        conformationRules:
-          type: array
-          items:
-            $ref: '#/components/schemas/ConformationRuleDto'
-        steps:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProcedureStepDto'
-
-    ConformationRuleInput:
-      type: object
-      required: [procedureEntityCode, isActive, sortOrder]
-      properties:
-        procedureEntityCode:
-          $ref: '#/components/schemas/ProcedureEntityCode'
-        isActive:
-          type: boolean
-        sortOrder:
+        expiresInSeconds:
           type: integer
           format: int32
-        validationProfile:
+        tokenType:
           type: string
-          nullable: true
-          description: JSON serializado como string; default "{}"
-
-    ConformationRuleDto:
+          example: Bearer
+    CurrentUserResponse:
       type: object
+      required: [userId, email, tenantId, roleId, permissions]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        tenantId:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+        roleCode:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    AuthErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          format: password
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    CompanyListItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nit: { type: string }
+        razonSocial: { type: string }
+        estadoActivo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, nit, razonSocial, estadoActivo, fechaCreacion]
+
+    CompanyPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyListItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateCompanyRequest:
+      type: object
+      properties:
+        razonSocial: { type: string, maxLength: 255, description: Razón social (legal_name). }
+        nit: { type: string, maxLength: 20, description: NIT (tax_id). }
+        code: { type: string, maxLength: 32, description: Código único del tenant. }
+        tenantType:
+          type: string
+          enum: [RENTING, CONCESIONARIO, FLIT]
+        estadoActivo: { type: boolean, default: true, description: Estado activo inicial. }
+      required: [razonSocial, nit, code, tenantType]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    SwitchesMatricula:
+      type: object
+      properties:
+        allowInitialRegistration: { type: boolean }
+        allowMiscNewVehicles: { type: boolean }
+        onlyOwnVehicles: { type: boolean }
+      required: [allowInitialRegistration, allowMiscNewVehicles, onlyOwnVehicles]
+
+    TenantSettings:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
+          type: string
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
+          type: array
+          items: { type: string }
       required:
-        - id
-        - procedureEntityCode
-        - procedureEntityName
-        - isActive
-        - sortOrder
-        - validationProfile
-      properties:
-        id:
-          type: string
-          format: uuid
-        procedureEntityCode:
-          $ref: '#/components/schemas/ProcedureEntityCode'
-        procedureEntityName:
-          type: string
-        isActive:
-          type: boolean
-        sortOrder:
-          type: integer
-          format: int32
-        validationProfile:
-          type: string
-          description: JSON serializado como string (ej. "{}")
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
 
-    FormFieldItem:
+    TenantSettingsUpdate:
       type: object
-      required: [fieldKey, label, fieldType, isRequired, isLocked]
       properties:
-        fieldKey:
+        switchesMatricula:
+          $ref: "#/components/schemas/SwitchesMatricula"
+        baulFirmasActivo: { type: boolean }
+        enrutamientoSMTP:
           type: string
-        label:
+          enum: [FLIT_SMTP, TENANT_API]
+        notificationTarget:
           type: string
-        fieldType:
-          $ref: '#/components/schemas/FieldType'
-        isRequired:
-          type: boolean
-        sortOrder:
-          type: integer
-          format: int32
-        isLocked:
-          type: boolean
-          readOnly: true
-        lockReason:
-          type: string
-          nullable: true
-        consultationTemplateId:
-          type: string
-          format: uuid
-          nullable: true
-        validationSchema:
-          type: string
-          description: JSON serializado como string (ej. "{}")
-        options:
-          type: string
-          nullable: true
-          description: JSON serializado como string (ej. '["CC","NIT"]')
-
-    FormFieldDto:
-      allOf:
-        - $ref: '#/components/schemas/FormFieldItem'
-        - type: object
-          required: [id, sortOrder, validationSchema]
-          properties:
-            id:
-              type: string
-              format: uuid
-
-    FormFieldInput:
-      type: object
-      required: [fieldKey, label, fieldType, isRequired, sortOrder]
-      properties:
-        fieldKey:
-          type: string
-        label:
-          type: string
-        fieldType:
-          type: string
-        isRequired:
-          type: boolean
-        sortOrder:
-          type: integer
-          format: int32
-        options:
-          type: string
-          nullable: true
-        validationSchema:
-          type: string
-          nullable: true
-        defaultValue:
-          type: string
-          nullable: true
-
-    ProcedureSectionDto:
-      type: object
-      required: [id, code, title, sortOrder, layout, formFields]
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        title:
-          type: string
-        sortOrder:
-          type: integer
-          format: int32
-        layout:
-          type: string
-        formFields:
+          enum: [COMPRADOR, RADICADOR, NINGUNO]
+        metodosRecaudo:
           type: array
-          items:
-            $ref: '#/components/schemas/FormFieldDto'
-
-    ProcedureSectionInput:
-      type: object
-      required: [code, title, sortOrder, formFields]
-      properties:
-        code:
-          type: string
-        title:
-          type: string
-        sortOrder:
-          type: integer
-          format: int32
-        layout:
-          type: string
-          nullable: true
-        formFields:
-          type: array
-          items:
-            $ref: '#/components/schemas/FormFieldInput'
-
-    ProcedureStepDto:
-      type: object
-      required: [id, code, title, sortOrder, isActive, sections]
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        title:
-          type: string
-        sortOrder:
-          type: integer
-          format: int32
-        isActive:
-          type: boolean
-        sections:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProcedureSectionDto'
-
-    ProcedureStepInput:
-      type: object
-      required: [code, title, sortOrder, isActive, sections]
-      properties:
-        code:
-          type: string
-        title:
-          type: string
-        sortOrder:
-          type: integer
-          format: int32
-        isActive:
-          type: boolean
-        sections:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProcedureSectionInput'
+          items: { type: string }
+      required:
+        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
 
     ValidationError:
       type: object
-      required: [code, message, path]
       properties:
-        code:
-          $ref: '#/components/schemas/ValidationErrorCode'
-        message:
-          type: string
-        path:
-          type: string
+        field: { type: string }
+        message: { type: string }
+      required: [field, message]
 
-    ValidationResult:
+    ValidationErrorResponse:
       type: object
-      required: [isValid, errors]
       properties:
-        isValid:
-          type: boolean
         errors:
           type: array
           items:
-            $ref: '#/components/schemas/ValidationError'
+            $ref: "#/components/schemas/ValidationError"
+      required: [errors]
 
-    ProcedureEntityDto:
+    WhitelistEntry:
       type: object
-      required: [id, code, name, sortOrder, isActive]
+      description: Correo activo de la lista blanca (AC6).
       properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          $ref: '#/components/schemas/ProcedureEntityCode'
-        name:
-          type: string
-        sortOrder:
-          type: integer
-          format: int32
-        isActive:
-          type: boolean
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        addedBy: { type: string, format: uuid, nullable: true }
+      required: [email, createdAt]
 
-    ExternalDataSourceDto:
+    WhitelistAddRequest:
       type: object
-      required: [id, code, name, authType, isActive]
+      description: Alta masiva de correos exentos (AC4).
       properties:
-        id:
+        emails:
+          type: array
+          minItems: 1
+          items: { type: string, format: email }
+          description: Correos a exentar. Se normalizan a minúsculas y se deduplican.
+        reason:
           type: string
-          format: uuid
-        code:
-          type: string
-        name:
-          type: string
-        authType:
-          type: string
-        isActive:
-          type: boolean
-
-    ConsultationTemplateDto:
-      type: object
-      required: [id, code, name, entityScope, requiredFieldKeys, isActive]
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        name:
-          type: string
-        entityScope:
-          type: string
-          enum: [vehicle, actor]
-        personType:
-          type: string
-          enum: [natural, juridical]
           nullable: true
-        requiredFieldKeys:
+          maxLength: 500
+          description: Motivo opcional de la excepción.
+      required: [emails]
+
+    WhitelistAddResponse:
+      type: object
+      description: Resultado del alta masiva (AC4).
+      properties:
+        added:
+          type: array
+          items: { type: string, format: email }
+          description: Correos insertados (uno por fila + una fila de auditoría).
+        skipped:
+          type: array
+          items: { type: string, format: email }
+          description: Correos omitidos por ya existir (idempotencia).
+      required: [added, skipped]
+
+    WhitelistValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    WhitelistValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhitelistValidationError"
+      required: [errors]
+
+    TransferStartRequest:
+      type: object
+      description: >
+        Payload del stub de radicación (AC1/AC2). onlyOwnVehicles es la política
+        efectiva ya resuelta (snapshot si in-flight, live si nuevo; AC3).
+      properties:
+        tenantId: { type: string, format: uuid }
+        vehicleIdentifier: { type: string, nullable: true }
+        userEmail: { type: string, format: email, nullable: true }
+        onlyOwnVehicles: { type: boolean }
+      required: [tenantId, onlyOwnVehicles]
+
+    TransitOffice:
+      type: object
+      description: Organismo de tránsito del catálogo estático (AC1).
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        departmentCode: { type: string }
+        cityCode: { type: string }
+      required: [id, code, name, departmentCode, cityCode]
+
+    TransitGrantRequest:
+      type: object
+      description: Habilitación de un organismo de tránsito a un tenant (AC2).
+      properties:
+        transitOfficeId:
           type: string
-          description: JSON array serializado como string (ej. '["plate_or_vin"]')
-        isActive:
+          format: uuid
+          description: Id del organismo a habilitar. Debe existir en el catálogo estático.
+      required: [transitOfficeId]
+
+    TransitGrantCreatedResponse:
+      type: object
+      description: Resultado del alta de un grant (AC2).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        created:
           type: boolean
+          description: true si se creó el grant; false si ya existía (idempotente).
+      required: [transitOfficeId, created]
 
-    ApplyTemplateFieldsRequest:
+    TransitGrantListResponse:
       type: object
-      required: [procedureTypeId, sectionId]
+      description: Organismos de tránsito habilitados del tenant (AC5).
       properties:
-        procedureTypeId:
+        transitOfficeIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [transitOfficeIds]
+
+    TransitGrantValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    TransitGrantValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitGrantValidationError"
+      required: [errors]
+
+    AuditLogEntry:
+      type: object
+      description: Entrada del historial de auditoría de gobernanza (AC4).
+      properties:
+        entityName: { type: string }
+        fieldName: { type: string }
+        oldValue: { type: string, nullable: true }
+        newValue: { type: string, nullable: true }
+        changedBy: { type: string, format: uuid, nullable: true }
+        changedAt: { type: string, format: date-time }
+      required: [entityName, fieldName, changedAt]
+
+    AuditLogPageResponse:
+      type: object
+      description: Página del historial de auditoría (AC4).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    DocumentTypeResponse:
+      type: object
+      description: Tipo de documento del catálogo maestro (HU #10193).
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: Estado derivado de is_active (soft-delete).
+        fechaCreacion: { type: string, format: date-time }
+      required: [id, codigo, nombre, estado, fechaCreacion]
+
+    DocumentTypePagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentTypeResponse"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateDocumentTypeRequest:
+      type: object
+      description: Payload de alta (AC1).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+        obligatorio:
+          type: boolean
+          nullable: true
+          description: >
+            Aceptado por el AC pero NO persistido en el catálogo; la obligatoriedad
+            vive por trámite en procedure_document_requirements (HU #10195).
+      required: [codigo, nombre]
+
+    UpdateDocumentTypeRequest:
+      type: object
+      description: Payload de actualización (AC3).
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+          description: Código único (letras, números y guiones).
+        nombre: { type: string, maxLength: 150 }
+        descripcion: { type: string, nullable: true, maxLength: 500 }
+      required: [codigo, nombre]
+
+    DocumentRef:
+      type: object
+      description: Datos del tipo de documento asociado (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+      required: [codigo, nombre, estado]
+
+    ProcedureDocumentRequirementResponse:
+      type: object
+      description: Asociación trámite ↔ documento (HU #10195).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+        documento:
+          $ref: "#/components/schemas/DocumentRef"
+      required: [id, procedureTypeId, documentTypeId, ordenDefault, obligatorio, documento]
+
+    ProcedureDocumentRequirementList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementResponse"
+      required: [data]
+
+    CreateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de alta de la asociación (AC1).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [procedureTypeId, documentTypeId, ordenDefault, obligatorio]
+
+    UpdateProcedureDocumentRequirementRequest:
+      type: object
+      description: Payload de actualización de la asociación (AC3).
+      properties:
+        ordenDefault: { type: integer, minimum: 0, maximum: 32767 }
+        obligatorio: { type: boolean }
+      required: [ordenDefault, obligatorio]
+
+    OverrideDocumentRef:
+      type: object
+      description: Datos mínimos del documento (join a document_types).
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+      required: [codigo, nombre]
+
+    DocumentOrderOverrideResponse:
+      type: object
+      description: Override de orden documental por OT/Cliente (HU #10196).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        scope:
+          type: string
+          enum: [OT, CLIENTE]
+        scopeRefId:
           type: string
           format: uuid
-        sectionId:
+          description: transitOfficeId (scope OT) o clienteId (scope CLIENTE).
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+        documento:
+          $ref: "#/components/schemas/OverrideDocumentRef"
+      required: [id, procedureTypeId, documentTypeId, scope, scopeRefId, orden, documento]
+
+    DocumentOrderOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentOrderOverrideResponse"
+      required: [data]
+
+    CreateDocumentOrderOverrideRequest:
+      type: object
+      description: >
+        Payload unificado de alta de override (AC1/AC2). El scope viaja como query;
+        según el scope se usa transitOfficeId (OT) o clienteId (CLIENTE).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId:
           type: string
           format: uuid
+          description: Obligatorio si scope=OT.
+        clienteId:
+          type: string
+          format: uuid
+          description: Obligatorio si scope=CLIENTE.
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [procedureTypeId, documentTypeId, orden]
 
-    ProblemDetails:
+    UpdateDocumentOrderOverrideRequest:
       type: object
-      description: RFC 7807 Problem Details (ASP.NET Core Results.Problem)
+      description: >
+        Payload del reordenamiento por arrastre de un override (HU #10198). Solo el orden
+        es mutable; la tupla del override no cambia.
       properties:
-        type:
+        orden: { type: integer, minimum: 0, maximum: 32767 }
+      required: [orden]
+
+    DocumentRequirementState:
+      type: string
+      enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE]
+      description: >
+        Obligatoriedad de un documento para un OT: REQUIRED (obligatorio), OPTIONAL
+        (opcional) o NOT_APPLICABLE (no aplica → se oculta de la matriz de ese OT).
+
+    SetDocumentRequirementOverrideRequest:
+      type: object
+      description: >
+        Upsert por tupla natural (trámite, documento, OT) de la obligatoriedad por OT
+        (HU #10198). estado=DEFAULT limpia el override (hereda el default del trámite).
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado:
           type: string
-          format: uri
-        title:
+          enum: [REQUIRED, OPTIONAL, NOT_APPLICABLE, DEFAULT]
+      required: [procedureTypeId, documentTypeId, transitOfficeId, estado]
+
+    DocumentRequirementOverrideResponse:
+      type: object
+      description: Override de obligatoriedad por OT (HU #10198).
+      properties:
+        id: { type: string, format: uuid }
+        procedureTypeId: { type: string, format: uuid }
+        documentTypeId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid }
+        estado: { $ref: "#/components/schemas/DocumentRequirementState" }
+        documento:
+          type: object
+          properties:
+            codigo: { type: string }
+            nombre: { type: string }
+          required: [codigo, nombre]
+      required: [id, procedureTypeId, documentTypeId, transitOfficeId, estado, documento]
+
+    DocumentRequirementOverrideList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentRequirementOverrideResponse"
+      required: [data]
+
+    ResolvedDocumentMatrixRow:
+      type: object
+      description: Fila de la matriz documental resuelta (RF18).
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer, minimum: 0, maximum: 32767 }
+        nivelAplicado:
           type: string
-        status:
-          type: integer
-        detail:
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que ganó la precedencia.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ResolvedDocumentMatrix:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedDocumentMatrixRow"
+      required: [data]
+
+    CreateProcedureInstanceRequest:
+      type: object
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        transitOfficeId:
           type: string
-        traceId:
+          format: uuid
+          nullable: true
+          description: Organismo de tránsito (nivel OT) — opcional, afecta la precedencia.
+        referenceNumber:
           type: string
+          maxLength: 30
+          description: Número de referencia del trámite, único por cliente.
+        createdByUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario creador; si se omite, se resuelve del JWT (sub).
+      required: [procedureTypeId, tenantId, referenceNumber]
+
+    ProcedureInstanceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string, example: draft }
+        snapshotAt: { type: string, format: date-time }
+        documentCount: { type: integer, description: Documentos congelados en el snapshot. }
+      required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    ProcedureDocumentRequirementSnapshotRow:
+      type: object
+      properties:
+        documentTypeId: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        obligatorio: { type: boolean }
+        ordenResuelto: { type: integer }
+        nivelAplicado:
+          type: string
+          enum: [CLIENTE, OT, DEFAULT]
+          description: Nivel que determinó el orden en el momento de creación.
+      required: [documentTypeId, codigo, nombre, obligatorio, ordenResuelto, nivelAplicado]
+
+    ProcedureDocumentRequirementSnapshotList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotRow"
+      required: [data]

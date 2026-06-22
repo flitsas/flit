@@ -14,7 +14,7 @@
     <!-- Web -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
 
     <!-- Observabilidad (ADR-0002 §2 Decision 9). 1.15.x es la actual estable sin CVEs (CVE en 1.10.x corregido en 1.11+). -->
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
@@ -38,6 +38,7 @@
     <!-- Identity (MVP Fase 2 - ADR-0006). JWT manual sin OpenIddict por R1 AOT spike pendiente. -->
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.2.1" />
     <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.2.1" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
     <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
 
     <!-- Recibos PDF (MVP Fase 11). QuestPDF 2024.10+ tiene mejor soporte
@@ -60,6 +61,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.1" />
     <PackageVersion Include="Npgsql" Version="10.0.0" />
 
     <!-- Pin transitivo para anular vulnerabilidades conocidas en dependencias indirectas.
@@ -79,7 +81,7 @@
     <PackageVersion Include="FluentValidation" Version="11.10.0" />
 
     <!-- DI abstractions para librerías que exponen AddXxx() sin depender de ASP.NET. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
