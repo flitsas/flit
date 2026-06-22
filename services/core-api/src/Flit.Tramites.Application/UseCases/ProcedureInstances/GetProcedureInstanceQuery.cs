@@ -4,7 +4,7 @@ using Flit.Tramites.Domain.Repositories;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed record ProcedureInstanceFieldValueDto(
-    Guid FormFieldId,
+    Guid? FormFieldId,
     string FieldKey,
     string? ValueText,
     string? ValueJson,

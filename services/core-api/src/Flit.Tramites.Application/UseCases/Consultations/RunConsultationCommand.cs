@@ -113,7 +113,8 @@ public sealed class RunConsultationHandler(
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
                     ProcedureInstanceId = instance.Id,
-                    FormFieldId = Guid.Empty,
+                    // Valor "loose": derivado de consulta, no atado a un form_field.
+                    FormFieldId = null,
                     FieldKey = field.FieldKey,
                     ValueText = field.ValueText,
                     ValueJson = field.ValueJson,

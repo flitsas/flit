@@ -105,8 +105,10 @@ public sealed class PatchFieldValuesTests
     }
 
     [Fact]
-    public async Task HandleAsync_Draft_NewField_UnknownFieldKey_ReturnsUnknownField()
+    public async Task HandleAsync_Draft_NewField_NonFormKey_PersistsAsLooseValue()
     {
+        // Claves de sistema/consulta (p.ej. transit_office_code del organismo M5) no son
+        // form_fields: deben persistir como valor "loose" con FormFieldId = null, NO rechazarse.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
@@ -115,12 +117,20 @@ public sealed class PatchFieldValuesTests
         _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
 
         var request = new PatchFieldValuesRequest(
-            [new FieldValueInput(null, "ghost", "x", null)]);
+            [new FieldValueInput(null, "transit_office_code", "11001000", null)]);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
 
-        error.Should().Be("unknown_field");
-        result.Should().BeNull();
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_code"
+            && f.ValueText == "11001000"
+            && f.FormFieldId == null);
+        result!.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_code" && f.FormFieldId == null);
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceFieldValue>(f =>
+            f.FieldKey == "transit_office_code" && f.FormFieldId == null));
+        await _repo.Received(1).SaveChangesAsync(ct);
     }
 
     [Fact]

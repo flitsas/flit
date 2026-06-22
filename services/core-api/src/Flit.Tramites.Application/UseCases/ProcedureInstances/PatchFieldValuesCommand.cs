@@ -47,9 +47,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
                 var formFieldId = item.FormFieldId;
                 if (formFieldId is null || formFieldId == Guid.Empty)
                 {
+                    // Si no resuelve a un form_field (p.ej. claves de sistema/consulta como
+                    // transit_office_*), se persiste como valor "loose" con FormFieldId = null
+                    // en vez de rechazar con "unknown_field".
                     formFieldId = await repo.GetFormFieldIdByKeyAsync(instance.ProcedureTypeId, item.FieldKey, ct);
-                    if (formFieldId is null)
-                        return (null, "unknown_field");
                 }
 
                 var fieldValue = new ProcedureInstanceFieldValue
@@ -57,7 +58,7 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
                     ProcedureInstanceId = id,
-                    FormFieldId = formFieldId.Value,
+                    FormFieldId = formFieldId,
                     FieldKey = item.FieldKey,
                     ValueText = item.ValueText,
                     ValueJson = item.ValueJson,

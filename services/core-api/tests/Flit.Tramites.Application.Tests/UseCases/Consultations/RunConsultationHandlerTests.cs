@@ -124,11 +124,13 @@ public sealed class RunConsultationHandlerTests
         _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_VEHICLE", ct)
             .Returns(Template("RUNT_VEHICLE", """{"provider":"verifik"}"""));
 
+        // vehicle_brand es una clave NO-form (loose, derivada de consulta): debe persistir
+        // con FormFieldId = null sin violar la FK (bug #1 del fix loose field-values).
         var providerResult = new ConsultationResult(
             "verifik",
             "green",
             [new ConsultationCheck("estado_vehiculo", "Estado", "ok", "verifik", null)],
-            [new HydratedField("plate", "ABC123", null), new HydratedField("vin", "1HGCM82633A004352", null)]);
+            [new HydratedField("plate", "ABC123", null), new HydratedField("vehicle_brand", "TOYOTA", null)]);
         var provider = new FakeProvider("verifik", providerResult);
         _registry.Resolve("verifik").Returns(provider);
 
@@ -138,7 +140,9 @@ public sealed class RunConsultationHandlerTests
         result.Should().BeSameAs(providerResult);
 
         instance.FieldValues.Should().Contain(f => f.FieldKey == "plate" && f.ValueText == "ABC123" && f.Source == "consultation");
-        instance.FieldValues.Should().Contain(f => f.FieldKey == "vin" && f.ValueText == "1HGCM82633A004352" && f.Source == "consultation");
+        instance.FieldValues.Should().Contain(f => f.FieldKey == "vehicle_brand" && f.ValueText == "TOYOTA" && f.Source == "consultation");
+        // Valores hidratados desde consulta son "loose": no atados a un form_field.
+        instance.FieldValues.Should().OnlyContain(f => f.FormFieldId == null);
 
         // La instancia está trackeada: el change tracker persiste los adds vía
         // SaveChangesAsync. UpdateAsync marcaría el grafo Modified y los nuevos

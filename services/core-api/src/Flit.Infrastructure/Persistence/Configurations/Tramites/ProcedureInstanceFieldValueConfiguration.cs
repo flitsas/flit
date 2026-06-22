@@ -24,6 +24,9 @@ internal sealed class ProcedureInstanceFieldValueConfiguration : IEntityTypeConf
         builder.Property(x => x.Source).HasMaxLength(20).IsRequired().HasDefaultValue("user");
         builder.Property(x => x.CreatedAt).IsRequired();
 
+        // Nullable: valores "loose" derivados de consulta/sistema no se atan a un form_field.
+        builder.Property(x => x.FormFieldId).IsRequired(false);
+
         builder.HasIndex(x => new { x.ProcedureInstanceId, x.FieldKey })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instance_field_values_instance_key");
