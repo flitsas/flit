@@ -17,7 +17,9 @@ internal sealed class DocumentRequirementOverrideConfiguration
 {
     public void Configure(EntityTypeBuilder<DocumentRequirementOverride> builder)
     {
-        builder.ToTable("document_requirement_overrides", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (HU #10198); la entidad vive en el modelo
+        // EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("document_requirement_overrides", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

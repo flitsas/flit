@@ -15,7 +15,9 @@ internal sealed class ProcedureInstanceConfiguration
 {
     public void Configure(EntityTypeBuilder<ProcedureInstance> builder)
     {
-        builder.ToTable("procedure_instances", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (HU #10150); la entidad vive en el modelo
+        // EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("procedure_instances", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

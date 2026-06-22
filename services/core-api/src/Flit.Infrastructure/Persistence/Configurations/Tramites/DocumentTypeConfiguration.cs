@@ -13,7 +13,9 @@ internal sealed class DocumentTypeConfiguration : IEntityTypeConfiguration<Docum
 {
     public void Configure(EntityTypeBuilder<DocumentType> builder)
     {
-        builder.ToTable("document_types", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (HU #10155); la entidad vive en el modelo
+        // EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("document_types", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

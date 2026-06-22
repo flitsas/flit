@@ -17,7 +17,9 @@ internal sealed class DocumentOrderOverrideConfiguration
 {
     public void Configure(EntityTypeBuilder<DocumentOrderOverride> builder)
     {
-        builder.ToTable("document_order_overrides", SchemaNames.Tramites);
+        // DDL gestionado por migración SQL cruda (linaje documental, HU #10155); la entidad
+        // vive en el modelo EF solo para consultas y se excluye del snapshot/migraciones EF.
+        builder.ToTable("document_order_overrides", SchemaNames.Tramites, t => t.ExcludeFromMigrations());
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
