@@ -30,7 +30,12 @@ using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
+using Flit.Admin.Application.OtProfile;
+using Flit.Admin.Application.OtProfile.GetOtProfile;
+using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
+using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
@@ -100,6 +105,12 @@ public static class DependencyInjection
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureDocumentRequirementsHandler>();
+
+        // HU #10215 — perfil OT, modo Dashboard/QX y feature flags.
+        services.AddScoped<GetOtProfileHandler>();
+        services.AddScoped<UpdateOtProfileHandler>();
+        services.AddScoped<UpdateOtFeatureFlagHandler>();
+        services.AddScoped<IQuipuxReadOnlyGuard, QuipuxReadOnlyGuard>();
 
         return services;
     }

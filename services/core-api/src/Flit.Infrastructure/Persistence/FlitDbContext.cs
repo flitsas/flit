@@ -38,6 +38,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
+    public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
+
+    public DbSet<OtFeatureFlagEntity> OtFeatureFlags => Set<OtFeatureFlagEntity>();
+
     // ── Admin / parametrización documental (develop, HU #10193–#10198) ─────────
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 

@@ -19,4 +19,16 @@ public static class AdminAuthorization
 
     /// <summary>Mensaje de error 403 cuando falta el rol SuperAdmin (AC3).</summary>
     public const string ForbiddenMessage = "Acceso restringido: se requiere rol SuperAdmin";
+
+    /// <summary>Nombre de la policy que exige rol ot_admin (HU #10215).</summary>
+    public const string OtAdminPolicy = "OtAdmin";
+
+    /// <summary>Valor del claim de rol para administrador OT.</summary>
+    public const string OtAdminRole = "ot_admin";
+
+    /// <summary>Mensaje de error 403 cuando falta el rol ot_admin.</summary>
+    public const string OtAdminForbiddenMessage = "Acceso restringido: se requiere rol ot_admin";
+
+    /// <summary>Claim JWT del tenant autenticado.</summary>
+    public const string TenantIdClaimType = "tenant_id";
 }

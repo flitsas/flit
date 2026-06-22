@@ -7,6 +7,7 @@ using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
@@ -58,6 +59,10 @@ public static class AdminInfrastructureExtensions
         // AdminProcedureInstanceRepository (opera sobre la entidad canónica del runtime).
         services.AddScoped<IProcedureInstanceRepository, AdminProcedureInstanceRepository>();
         services.AddScoped<IProcedureDocumentSnapshotRepository, ProcedureDocumentSnapshotRepository>();
+
+        // HU #10215 — perfil OT y feature flags.
+        services.AddScoped<IOtProfileRepository, OtProfileRepository>();
+        services.AddScoped<IOtFeatureFlagRepository, OtFeatureFlagRepository>();
 
         return services;
     }

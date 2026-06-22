@@ -143,6 +143,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminOtEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
