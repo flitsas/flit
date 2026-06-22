@@ -59,3 +59,11 @@ export function adminBlockUser(email: string, days: number): Promise<void> {
     body: { email, days },
   });
 }
+
+/** POST /api/v1/auth/activate → 200 | 400 (INVITATION_INVALID | WEAK_PASSWORD). */
+export function activateAccount(token: string, password: string): Promise<void> {
+  return apiFetch<void>("/api/v1/auth/activate", {
+    method: "POST",
+    body: { token, password },
+  });
+}
