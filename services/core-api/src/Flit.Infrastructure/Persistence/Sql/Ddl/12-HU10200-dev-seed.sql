@@ -7,34 +7,34 @@
 -- Re-ejecutable sin efectos secundarios.
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. Tenant DEV (identity.tenants) — FK destino de procedure_instances.tenant_id
---    Columnas NOT NULL reales: name, nit (UNIQUE), slug (UNIQUE, CHECK
---    '^[a-z0-9]+(-[a-z0-9]+)*$'). status default 'active' (CHECK active|inactive|
---    suspended). NO existen code/legal_name/tax_id/tenant_type/is_active.
+-- 1. Tenant DEV (identity.tenants) — FK destino de procedure_instances.tenant_id.
+--    Esquema (post-merge develop): code, legal_name, tax_id, tenant_type, is_active,
+--    created_at, row_version (default 0). Code/tax_id distintos del tenant 'DEMO' que
+--    siembra DevelopmentAuthSeeder para no colisionar con sus UNIQUE.
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO identity.tenants (id, name, nit, slug, status, created_at)
+INSERT INTO identity.tenants (id, code, legal_name, tax_id, tenant_type, is_active, created_at)
 VALUES (
     '11111111-1111-1111-1111-111111111111',
+    'FLITDEV',
     'Flit Dev Tenant',
     '900000000-0',
-    'flit-dev',
-    'active',
+    'standard',
+    true,
     now()
 )
 ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. User DEV (identity.users) — FK destino de procedure_instances.created_by_user_id.
---    Columnas NOT NULL reales: tenant_id (uuid), email (citext UNIQUE).
---    El estado es account_state (default 'inactive', CHECK active|inactive|
---    temp_blocked|permanent_blocked) → usamos 'active'. NO existen display_name
---    ni status. El user dev referencia el tenant dev en tenant_id.
+--    Esquema (post-merge develop): email (UNIQUE), display_name, status, created_at,
+--    row_version (default 0). NO existe tenant_id en users (no es tenant-scoped a nivel
+--    de tabla); el vínculo tenant↔trámite vive en procedure_instances.
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO identity.users (id, tenant_id, email, account_state, created_at)
+INSERT INTO identity.users (id, email, display_name, status, created_at)
 VALUES (
     '22222222-2222-2222-2222-222222222222',
-    '11111111-1111-1111-1111-111111111111',
     'dev@flitsas.io',
+    'Usuario Dev',
     'active',
     now()
 )
