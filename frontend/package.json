@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "format:check": "echo 'format:check: sin formateador configurado en el repo (deuda: adoptar Prettier/Biome en ADR aparte)' && exit 0"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -21,6 +21,13 @@
     "AccessKey": "flit-core-app",
     "SecretKey": "flit_core_secret_32chars_min!!"
   },
+  "_comment_verifik": "El token de Verifik NO va aquí. Se carga por variables de entorno VERIFIK_* (ver .env.verifik / .env.verifik.example). En local: 'source .env.verifik' antes de 'dotnet run'. La sección Verifik de abajo es solo documental (BaseUrl placeholder).",
+  "Verifik": {
+    "BaseUrl": "https://api.verifik.co",
+    "ApiToken": "",
+    "AuthScheme": "Bearer",
+    "TimeoutSeconds": 30
+  },
   "Identity": {
     "TramitesV2": true,
     "Onboarding": {

@@ -69,7 +69,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
   // Step 9
   const [isPaused, setIsPaused] = useState(false);
   const [pauseReason, setPauseReason] = useState("");
-  // Step 10 hash
+  // Step 10 hash — se genera en el handler de avance (no en render/efecto) para no llamar funciones impuras.
   const [hash, setHash] = useState("");
   useEffect(() => {
     if (step === 10 && !hash) {
@@ -92,7 +92,14 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
     return true;
   };
 
-  const next = () => { if (canAdvance() && step < 10) setStep(step + 1); };
+  const next = () => {
+    if (!canAdvance() || step >= 10) return;
+    const target = step + 1;
+    if (target === 10 && !hash) {
+      setHash(Array.from({ length: 64 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join(""));
+    }
+    setStep(target);
+  };
   const prev = () => step > 1 && setStep(step - 1);
 
   return (

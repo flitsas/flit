@@ -54,7 +54,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IDocumentRequirementOverrideRepository, DocumentRequirementOverrideRepository>();
 
         // HU #10197 — instancias de trámite + snapshot documental inmutable.
-        services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // Tras el merge del rework (#10128) la implementación vive en
+        // AdminProcedureInstanceRepository (opera sobre la entidad canónica del runtime).
+        services.AddScoped<IProcedureInstanceRepository, AdminProcedureInstanceRepository>();
         services.AddScoped<IProcedureDocumentSnapshotRepository, ProcedureDocumentSnapshotRepository>();
 
         return services;

@@ -1,13 +1,14 @@
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Domain.ProcedureSnapshots;
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Services;
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Flit.Admin.Tests.ProcedureSnapshots;
@@ -254,7 +255,7 @@ public sealed class CreateProcedureInstanceHandlerTests
             new ProcedureTypeCatalog(ctx),
             new TenantCatalog(ctx),
             new ResolvedDocumentMatrixResolver(ctx),
-            new ProcedureInstanceRepository(ctx));
+            new AdminProcedureInstanceRepository(ctx));
 
     private static string NewDbName() => $"flit-tramite-{Guid.NewGuid()}";
 

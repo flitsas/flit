@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Schemas;
+using Flit.Tramites.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

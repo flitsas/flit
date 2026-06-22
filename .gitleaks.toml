@@ -21,6 +21,8 @@ paths = [
   '''(^|/)node_modules/''',
   '''(^|/)dist/''',
   '''(^|/)build/''',
+  '''(^|/)frontend/\.next/''',
+  '''\.env\.verifik$''',
   '''pnpm-lock\.yaml$''',
   '''package-lock\.json$''',
 ]

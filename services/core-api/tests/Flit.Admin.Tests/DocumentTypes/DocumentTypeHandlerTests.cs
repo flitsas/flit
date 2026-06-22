@@ -7,6 +7,9 @@ using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+// ProcedureType se reubicó al dominio del rework (#10128); el DbSet ProcedureTypes
+// ahora es de este tipo. Antes vivía en Persistence.Entities.Tramites.
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

@@ -1,0 +1,148 @@
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Catalog;
+using FluentAssertions;
+using NSubstitute;
+using Xunit;
+
+namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
+
+/// <summary>
+/// Cableado del estado real del paso FUR (Slice 7) en el wizard server-driven:
+/// matrícula paso 5 (fur, sin firma) y traspaso paso 6 (biométrica + firma + FUR).
+/// </summary>
+public sealed class WizardFurStateTests
+{
+    private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
+    private readonly GetWizardStateHandler _handler;
+
+    public WizardFurStateTests()
+    {
+        _handler = new GetWizardStateHandler(_repo);
+    }
+
+    private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000001",
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = modalidad,
+            TipologiaCodigo = tipologia,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
+        new()
+        {
+            Id = Guid.NewGuid(), Parte = parte, Estado = BiometricEstados.Aprobado,
+            Nombre = "X", TipoDoc = "CC", Documento = "1", Email = "x@y.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceSignature Firma(string parte) =>
+        new()
+        {
+            Id = Guid.NewGuid(), Parte = parte, DocTipo = SignatureDocTipos.Compraventa,
+            Estado = SignatureEstados.Firmada,
+            SolicitadoAt = DateTimeOffset.UtcNow, FirmadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceAttachment Fur() =>
+        new()
+        {
+            Id = Guid.NewGuid(), Tipo = "fur", Filename = "fur.txt", Mimetype = "text/plain",
+            StoragePath = "x/fur", Source = "system", UploadedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceAttachment Doc(string tipo) =>
+        new() { Id = Guid.NewGuid(), Tipo = tipo, Filename = $"{tipo}.pdf", StoragePath = $"x/{tipo}", UploadedAt = DateTimeOffset.UtcNow };
+
+    /// <summary>Satisface el checklist obligatorio de traspaso (3 docs por adjunto + 3 ítems manuales).</summary>
+    private static void CompletarDocsTraspaso(ProcedureInstance instance)
+    {
+        instance.Attachments.Add(Doc("compraventa"));
+        instance.Attachments.Add(Doc("impronta"));
+        instance.Attachments.Add(Doc("soat"));
+        instance.ChecklistEstado = "{\"rtm\":true,\"paz_salvo\":true,\"cedulas\":true}";
+    }
+
+    private void Setup(ProcedureInstance instance) =>
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+    // ── Matrícula paso 5 (fur) — sin firma ───────────────────────────────────────
+
+    [Fact]
+    public async Task Matricula_NoFur_Step5IncompleteWithFurPendiente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(Base("matricula_inicial"));
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var s5 = result!.Steps.Single(s => s.Index == 5);
+        s5.Status.Should().Be("incomplete");
+        s5.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
+        s5.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
+    }
+
+    [Fact]
+    public async Task Matricula_FurGenerated_Step5Complete()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Attachments.Add(Fur());
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 5).Status.Should().Be("complete");
+    }
+
+    // ── Traspaso paso 6 (fur) — biométrica + firma + FUR ─────────────────────────
+
+    [Fact]
+    public async Task Traspaso_PartialState_Step6EmitsRemainingReasons()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.BiometricValidations.Add(Bio("comprador"));
+        instance.BiometricValidations.Add(Bio("vendedor"));
+        // firma + fur faltan
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var s6 = result!.Steps.Single(s => s.Index == 6);
+        s6.Status.Should().Be("incomplete");
+        s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteBiometria);
+        s6.Reasons.Should().Contain(GetWizardStateHandler.PendienteFirma);
+        s6.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
+    }
+
+    [Fact]
+    public async Task Traspaso_FullState_Step6FlipsComplete()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.BiometricValidations.Add(Bio("comprador"));
+        instance.BiometricValidations.Add(Bio("vendedor"));
+        instance.Signatures.Add(Firma("comprador"));
+        instance.Signatures.Add(Firma("vendedor"));
+        CompletarDocsTraspaso(instance);
+        instance.Attachments.Add(Fur());
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var s6 = result!.Steps.Single(s => s.Index == 6);
+        s6.Status.Should().Be("complete");
+        s6.Reasons.Should().BeEmpty();
+    }
+}

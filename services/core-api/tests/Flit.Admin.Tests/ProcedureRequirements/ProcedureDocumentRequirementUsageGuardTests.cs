@@ -1,7 +1,8 @@
 using Flit.Admin.Domain.ProcedureSnapshots;
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Services;
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

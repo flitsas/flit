@@ -2,12 +2,17 @@ using System.Text.Json;
 using Flit.Admin.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints;
+using Flit.Api.Endpoints.Public;
+using Flit.Api.Endpoints.SuperAdmin;
+using Flit.Api.Endpoints.Tramites;
 using Flit.Api.OpenApi;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -23,6 +28,9 @@ if (string.IsNullOrWhiteSpace(coreConnStr))
 }
 
 builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, builder.Environment);
+
+// Runtime de trámites (rework #10128): casos de uso de instancias/wizard/consultas.
+builder.Services.AddTramitesApplication();
 
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
@@ -69,6 +77,15 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();
 builder.Services.AddAdminInfrastructure();
+
+// Policy "SuperAdminOnly" (por header X-Flit-SuperAdmin) del SuperAdmin de
+// parametrización del rework de trámites (#10184/#10185). Es aditiva a la policy
+// "SuperAdmin" (rol JWT) que registra AddApiSecurity: nombres distintos, no chocan.
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("SuperAdminOnly", policy =>
+        policy.Requirements.Add(new SuperAdminRequirement()));
+
+builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorizationHandler>();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -123,6 +140,7 @@ app.UseAuthorization();
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 
+// ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
@@ -133,6 +151,24 @@ app.MapAdminDocumentRequirementOverridesEndpoints();
 app.MapAdminResolvedDocumentMatrixEndpoints();
 app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();
+
+// ── Runtime de trámites (rework #10128) ───────────────────────────────────────
+app.MapSuperAdminEndpoints();
+app.MapPublicProcedureEndpoints();
+app.MapPublicProcedureTypeEndpoints();
+app.MapPublicBiometricaEndpoints();
+app.MapPublicPortalEndpoints();
+app.MapTramitesInstanceEndpoints();
+app.MapTramitesActorEndpoints();
+app.MapTramitesAttachmentEndpoints();
+app.MapTramitesParticipantEndpoints();
+app.MapTramitesBiometricaEndpoints();
+app.MapTramitesFirmaEndpoints();
+app.MapTramitesFurEndpoints();
+app.MapConsultationEndpoints();
+app.MapTramitesCommercialEndpoints();
+app.MapTramitesPreflightEndpoints();
+app.MapTramitesWizardEndpoints();
 
 app.Run();
 

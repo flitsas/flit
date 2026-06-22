@@ -1,12 +1,13 @@
-using Flit.Admin.Application.DocumentRequirements;
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
 using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
+using Flit.Admin.Application.DocumentRequirements;
 using Flit.Admin.Domain.DocumentRequirements;
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

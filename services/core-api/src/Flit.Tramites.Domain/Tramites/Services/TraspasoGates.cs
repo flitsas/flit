@@ -1,0 +1,234 @@
+using System;
+using System.Collections.Generic;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
+
+namespace Flit.Tramites.Domain.Tramites.Services;
+
+/// <summary>
+/// Gates del wizard de TRASPASO (6 pasos), puros (sin IO). Paridad <c>traspaso-gates.ts</c> de Johan.
+/// Fuente única de verdad de "paso completo / puede avanzar / inmutabilidad de pasos cerrados",
+/// reutilizada luego por API (checks server-side) y UI (sidebar + Continuar).
+/// </summary>
+public static class TraspasoGates
+{
+    public const int TotalPasos = 6;
+
+    /// <summary>Claves de datos asociadas a cada paso (para detectar modificación de pasos cerrados).</summary>
+    public static readonly IReadOnlyDictionary<int, IReadOnlyList<string>> PasoDataKeys =
+        new Dictionary<int, IReadOnlyList<string>>
+        {
+            [2] = ["paz_salvo_impuesto", "impuesto_consulta"],
+            [3] = ["vendedor", "runt_vendedor"],
+            [4] = ["comprador", "runt_comprador", "simit_comprador"],
+            [5] = ["comercial"],
+        };
+
+    /// <summary>Paso N (1–6) completado → puede avanzar a N+1. Paridad <c>pasoTraspasoCompleto</c>.</summary>
+    public static GateResult PasoCompleto(int paso, TraspasoGateContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        bool forzar = ctx.ForzarContinuar;
+
+        switch (paso)
+        {
+            case 1:
+                return ctx.TramiteRadicado
+                    ? GateResult.Allowed
+                    : GateResult.Block("sin_radicado", "Radica el trámite antes de continuar");
+
+            case 2:
+                if (PreflightBloquea(ctx.Preflight, forzar))
+                    return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
+                if (ImpuestoGateBloquea(ctx.Preflight, ctx.PazSalvoImpuestoVerificado, forzar))
+                    return GateResult.Block("impuesto_pendiente", "Confirma paz y salvo de impuesto vehicular antes de continuar");
+                return GateResult.Allowed;
+
+            case 3:
+                if (!ParteCompleta(ctx.Vendedor))
+                    return GateResult.Block("vendedor_incompleto", "Completa nombre, documento y email del vendedor");
+                if (!RuntConsultado(ctx.RuntVendedor, ctx.Vendedor?.Documento))
+                    return GateResult.Block("runt_vendedor", "Consulta RUNT del vendedor antes de continuar");
+                return GateResult.Allowed;
+
+            case 4:
+                if (!ParteCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
+                    return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
+                return SimitCompradorGate(ctx, forzar);
+
+            case 5:
+                return ValidarComercial(ctx);
+
+            case 6:
+                if (!ctx.DocumentosObligatoriosCompletos)
+                    return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
+                return GateResult.Allowed;
+
+            default:
+                return GateResult.Block("paso_invalido", "Paso inválido");
+        }
+    }
+
+    /// <summary>Máximo paso alcanzable según datos (1–6). Paridad <c>maxPasoTraspasoAlcanzable</c>.</summary>
+    public static int MaxPasoAlcanzable(TraspasoGateContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        if (!ctx.TramiteRadicado)
+            return 1;
+
+        for (int p = 1; p <= TotalPasos; p++)
+        {
+            if (!PasoCompleto(p, ctx).Ok)
+                return p;
+        }
+        return TotalPasos;
+    }
+
+    /// <summary>Puede avanzar desde el paso actual (botón Continuar). Paridad <c>puedeAvanzarDesdePasoTraspaso</c>.</summary>
+    public static GateResult PuedeAvanzar(int pasoActual, TraspasoGateContext ctx) =>
+        PasoCompleto(pasoActual, ctx);
+
+    /// <summary>
+    /// Puede navegar al paso destino (sidebar). Retroceder siempre permitido si hay trámite.
+    /// Paridad <c>puedeIrAPasoTraspaso</c>.
+    /// </summary>
+    public static GateResult PuedeIrAPaso(int pasoActual, int targetPaso, TraspasoGateContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        if (targetPaso < 1 || targetPaso > TotalPasos)
+            return GateResult.Block("paso_invalido", "Paso inválido");
+        if (targetPaso == 1)
+            return GateResult.Allowed;
+        if (!ctx.TramiteRadicado)
+            return GateResult.Block("sin_tramite", "Radica el trámite primero");
+        if (targetPaso <= pasoActual)
+            return GateResult.Allowed;
+
+        for (int p = pasoActual; p < targetPaso; p++)
+        {
+            var r = PasoCompleto(p, ctx);
+            if (!r.Ok)
+                return r;
+        }
+        return GateResult.Allowed;
+    }
+
+    /// <summary>Paso ya validado y cerrado → solo lectura. Paridad <c>pasoTraspasoSoloLectura</c>.</summary>
+    public static bool PasoSoloLectura(int paso, TraspasoGateContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        if (!ctx.TramiteRadicado || paso < 1 || paso > TotalPasos)
+            return false;
+        return paso < MaxPasoAlcanzable(ctx);
+    }
+
+    /// <summary>
+    /// Rechaza una modificación que toque datos de pasos ya cerrados
+    /// (&lt; <paramref name="maxPasoEditable"/>). Paridad <c>detectarModificacionPasosCerradosTraspaso</c>.
+    /// </summary>
+    /// <param name="maxPasoEditable">Máximo paso aún editable (típicamente <see cref="MaxPasoAlcanzable"/>).</param>
+    /// <param name="clavesModificadas">Claves de datos que el PATCH pretende modificar (ver <see cref="PasoDataKeys"/>).</param>
+    /// <param name="pasoPatch">Paso desde el que se emite el PATCH (6 = anexos, permite paz/salvo).</param>
+    public static GateResult DetectarModificacionPasosCerrados(
+        int maxPasoEditable,
+        IReadOnlyCollection<string> clavesModificadas,
+        int? pasoPatch = null)
+    {
+        ArgumentNullException.ThrowIfNull(clavesModificadas);
+        var keys = new HashSet<string>(clavesModificadas);
+        bool paso6Docs = pasoPatch == 6;
+
+        for (int p = 2; p < maxPasoEditable && p <= TotalPasos; p++)
+        {
+            if (!PasoDataKeys.TryGetValue(p, out var pasoKeys))
+                continue;
+
+            foreach (var k in pasoKeys)
+            {
+                if (!keys.Contains(k))
+                    continue;
+                if (paso6Docs && p == 2 && k == "paz_salvo_impuesto")
+                    continue;
+                return GateResult.Block(
+                    "paso_cerrado",
+                    $"El paso {p} está cerrado. No puedes modificar datos ya validados.");
+            }
+        }
+
+        return GateResult.Allowed;
+    }
+
+    /// <summary>Gate de generación del FUR: exige biometría de ambas partes salvo forzar. Paridad <c>gateFurTraspaso</c>.</summary>
+    public static GateResult GateFur(BiometriaSnapshot? biometria, bool forzarContinuar)
+    {
+        if (forzarContinuar)
+            return GateResult.Allowed;
+        if (biometria is { Vendedor: true, Comprador: true })
+            return GateResult.Allowed;
+        return GateResult.Block(
+            "biometria_pendiente",
+            "Valida la biométrica de vendedor y comprador antes de generar el FUR");
+    }
+
+    /// <summary>Valida el paso comercial (valor de venta &gt; 0). Paridad <c>validateTraspasoComercial</c>.</summary>
+    public static GateResult ValidarComercial(TraspasoGateContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        return ctx.ValorVenta > 0
+            ? GateResult.Allowed
+            : GateResult.Block("comercial_valor", "Ingresa un valor de venta mayor a cero antes de continuar");
+    }
+
+    private static GateResult SimitCompradorGate(TraspasoGateContext ctx, bool forzar)
+    {
+        if (forzar)
+            return GateResult.Allowed;
+
+        var doc = TramiteDocumento.Normalizar(ctx.Comprador?.Documento);
+        if (string.IsNullOrEmpty(doc))
+            return GateResult.Block("comprador_doc", "Documento del comprador requerido");
+
+        var simit = ctx.SimitComprador;
+        if (simit is not { Consultado: true })
+            return GateResult.Block("simit_pendiente", "Consulta SIMIT del comprador obligatoria antes de continuar");
+        if (TramiteDocumento.Normalizar(simit.Documento) != doc)
+            return GateResult.Block("simit_doc", "La consulta SIMIT no corresponde al documento del comprador");
+        if (simit.TotalComparendos > 0)
+            return GateResult.Block("simit_multas", "El comprador tiene comparendos SIMIT pendientes");
+
+        return GateResult.Allowed;
+    }
+
+    private static bool PreflightBloquea(PreflightSnapshot? preflight, bool forzar)
+    {
+        if (forzar)
+            return false;
+        return preflight?.Overall == "red";
+    }
+
+    private static bool ImpuestoGateBloquea(PreflightSnapshot? preflight, bool pazSalvoVerificado, bool forzar)
+    {
+        if (forzar)
+            return false;
+        if (preflight is not { ImpuestoVehicularUnknown: true })
+            return false;
+        return !pazSalvoVerificado;
+    }
+
+    private static bool ParteCompleta(ParteDatos? parte) =>
+        parte is not null &&
+        !string.IsNullOrWhiteSpace(parte.Nombre) &&
+        !string.IsNullOrWhiteSpace(parte.Documento) &&
+        TramiteDocumento.EmailValido(parte.Email);
+
+    private static bool RuntConsultado(RuntSnapshot? runt, string? documentoParte)
+    {
+        if (runt is not { Consultado: true })
+            return false;
+        var doc = TramiteDocumento.Normalizar(documentoParte);
+        if (string.IsNullOrEmpty(doc))
+            return false;
+        return TramiteDocumento.Normalizar(runt.Documento) == doc;
+    }
+}

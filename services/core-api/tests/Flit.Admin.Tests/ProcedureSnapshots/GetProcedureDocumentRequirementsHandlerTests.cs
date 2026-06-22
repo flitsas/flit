@@ -1,8 +1,9 @@
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Flit.Admin.Domain.ProcedureSnapshots;
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -93,7 +94,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
     // ---------- Helpers ----------
 
     private static GetProcedureDocumentRequirementsHandler Handler(FlitDbContext ctx) =>
-        new(new ProcedureInstanceRepository(ctx), new ProcedureDocumentSnapshotRepository(ctx));
+        new(new AdminProcedureInstanceRepository(ctx), new ProcedureDocumentSnapshotRepository(ctx));
 
     private static string NewDbName() => $"flit-tramite-get-{Guid.NewGuid()}";
 

@@ -105,6 +105,13 @@ backend/dotnet/src/FLIT.Traspasos.Api/data/tramite-files/
 # JetBrains Junie — generado por sync-agents (symlink en Linux; ignorar drift)
 .junie/
 
+# Trámites — adjuntos subidos en runtime (disk attachment storage)
+services/core-api/src/Flit.Api/uploads/
+
+# Material de contexto/insumos locales (docs, imágenes de referencia y muestra
+# real Verifik con PII). Untracked a propósito: nada de context/ se commitea.
+context/
+
 # Cursor — solo el estado/evidencias de trabajo local (NO ignorar agents/rules/skills/workflows/docs, que sí se comparten)
 .cursor/state/
 

@@ -1,5 +1,17 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## SuperAdmin parametrización (dev local)
+
+Las peticiones del módulo Trámites → Parametrización usan rutas relativas `/api/v1/...`.
+Next.js las reescribe a `core-api` vía `next.config.ts` (sin CORS en el browser).
+
+**Requisito:** levantar ambos servicios (dejar `NEXT_PUBLIC_API_URL` vacío o sin definir):
+
+```bash
+pnpm run dev:core-api   # http://localhost:4003
+pnpm run dev:frontend   # http://localhost:3000
+```
+
 ## Getting Started
 
 First, run the development server:

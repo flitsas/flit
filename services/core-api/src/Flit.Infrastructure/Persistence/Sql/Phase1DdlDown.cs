@@ -81,4 +81,51 @@ internal static class Phase1DdlDown
         DROP TABLE IF EXISTS analytics.user_productivity_daily CASCADE;
         DROP TABLE IF EXISTS analytics.procedure_metrics_daily CASCADE;
         """;
+
+    /// <summary>
+    /// Rollback de HU #10151 (Revisión) — DDL incremental.
+    /// Revierte: form_fields (G3), procedure_types (G2), procedure_steps/sections (A16),
+    /// consultation_templates y triggers. NO toca el DDL original (Hu10151).
+    /// AC5: reversible sin afectar la migración base 20260617230200.
+    /// </summary>
+    public const string Hu10151Revision = """
+        -- G3: Revertir columnas de form_fields
+        ALTER TABLE tramites.form_fields
+            DROP CONSTRAINT IF EXISTS fk_form_fields_consultation_templates;
+        DROP INDEX IF EXISTS tramites.ix_form_fields_consultation_template_id;
+        ALTER TABLE tramites.form_fields
+            DROP COLUMN IF EXISTS is_locked,
+            DROP COLUMN IF EXISTS lock_reason,
+            DROP COLUMN IF EXISTS consultation_template_id,
+            DROP COLUMN IF EXISTS row_version;
+        DROP TRIGGER IF EXISTS tr_form_fields_row_version ON tramites.form_fields;
+        DROP TRIGGER IF EXISTS tr_form_fields_audit ON tramites.form_fields;
+
+        -- A16: Revertir triggers de procedure_sections
+        DROP TRIGGER IF EXISTS tr_procedure_sections_row_version ON tramites.procedure_sections;
+        DROP TRIGGER IF EXISTS tr_procedure_sections_audit ON tramites.procedure_sections;
+        ALTER TABLE tramites.procedure_sections DROP COLUMN IF EXISTS row_version;
+
+        -- A16: Revertir triggers de procedure_steps
+        DROP TRIGGER IF EXISTS tr_procedure_steps_row_version ON tramites.procedure_steps;
+        DROP TRIGGER IF EXISTS tr_procedure_steps_audit ON tramites.procedure_steps;
+        ALTER TABLE tramites.procedure_steps DROP COLUMN IF EXISTS row_version;
+
+        -- G2: Revertir columnas de procedure_types
+        ALTER TABLE tramites.procedure_types
+            DROP CONSTRAINT IF EXISTS ck_procedure_types_publication_status;
+        DROP TRIGGER IF EXISTS tr_procedure_types_row_version ON tramites.procedure_types;
+        DROP TRIGGER IF EXISTS tr_procedure_types_audit ON tramites.procedure_types;
+        ALTER TABLE tramites.procedure_types
+            DROP COLUMN IF EXISTS publication_status,
+            DROP COLUMN IF EXISTS published_at,
+            DROP COLUMN IF EXISTS published_by,
+            DROP COLUMN IF EXISTS row_version;
+
+        -- A16: Revertir trigger de external_data_sources
+        DROP TRIGGER IF EXISTS tr_external_data_sources_audit ON tramites.external_data_sources;
+
+        -- G1: Eliminar tabla consultation_templates (y sus triggers/índices)
+        DROP TABLE IF EXISTS tramites.consultation_templates CASCADE;
+        """;
 }

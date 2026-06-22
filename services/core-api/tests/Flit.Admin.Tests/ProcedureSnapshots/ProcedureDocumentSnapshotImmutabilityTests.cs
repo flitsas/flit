@@ -1,10 +1,11 @@
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
-using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Services;
+using Flit.Tramites.Domain.Entities;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -79,10 +80,10 @@ public sealed class ProcedureDocumentSnapshotImmutabilityTests
             new ProcedureTypeCatalog(ctx),
             new TenantCatalog(ctx),
             new ResolvedDocumentMatrixResolver(ctx),
-            new ProcedureInstanceRepository(ctx));
+            new AdminProcedureInstanceRepository(ctx));
 
     private static GetProcedureDocumentRequirementsHandler GetHandler(FlitDbContext ctx) =>
-        new(new ProcedureInstanceRepository(ctx), new ProcedureDocumentSnapshotRepository(ctx));
+        new(new AdminProcedureInstanceRepository(ctx), new ProcedureDocumentSnapshotRepository(ctx));
 
     private static string NewDbName() => $"flit-tramite-immut-{Guid.NewGuid()}";
 

@@ -110,3 +110,29 @@ DROP TRIGGER IF EXISTS tr_procedure_instance_status_history_audit ON tramites.pr
 CREATE TRIGGER tr_procedure_instance_status_history_audit AFTER INSERT OR UPDATE OR DELETE ON tramites.procedure_instance_status_history
   FOR EACH ROW EXECUTE FUNCTION public.trg_audit_log();
 
+-- AC2: field_values inmutables si la instancia padre no está en 'draft'.
+-- Lógica específica del módulo trámites, por eso la función vive en el schema tramites
+-- (a diferencia de las genéricas public.trg_row_version / public.trg_audit_log).
+-- El flujo normal NO se rompe: una instancia recién creada está en 'draft', así que el
+-- INSERT inicial de field_values pasa; el bloqueo sólo aplica una vez la instancia
+-- abandona 'draft' (submitted/completed/etc.), volviendo inmutables sus valores.
+CREATE OR REPLACE FUNCTION tramites.trg_field_value_immutable() RETURNS trigger AS $$
+DECLARE v_status varchar(20);
+BEGIN
+  SELECT status INTO v_status FROM tramites.procedure_instances
+    WHERE id = COALESCE(NEW.procedure_instance_id, OLD.procedure_instance_id);
+  -- Borrado en cascada: el padre ya fue eliminado (v_status NULL) → permitir
+  IF v_status IS NULL THEN
+    RETURN OLD;
+  END IF;
+  IF v_status IS DISTINCT FROM 'draft' THEN
+    RAISE EXCEPTION 'procedure_instance_field_values son inmutables cuando la instancia está en estado % (solo draft permite cambios)', v_status
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END; $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS tr_procedure_instance_field_values_immutable ON tramites.procedure_instance_field_values;
+CREATE TRIGGER tr_procedure_instance_field_values_immutable
+  BEFORE INSERT OR UPDATE OR DELETE ON tramites.procedure_instance_field_values
+  FOR EACH ROW EXECUTE FUNCTION tramites.trg_field_value_immutable();
+
