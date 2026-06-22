@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Infrastructure.Persistence.Sql;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -23,6 +24,17 @@ public static class DevelopmentAuthSeeder
     {
         if (!environment.IsDevelopment())
             return;
+
+        // Seed DEV de Operación: tenant 11111111 + user 22222222 + publicación de
+        // MATRICULA_NUEVA. Estos IDs son destino de las FK de procedure_instances
+        // (tenant_id, created_by_user_id); sin ellos, crear un trámite falla. El SQL es
+        // idempotente (ON CONFLICT / WHERE NOT EXISTS) y se ejecuta en CADA arranque en
+        // Development → es self-healing: NO depende del gate de la migración HU10200_DevSeed,
+        // que queda como no-op permanente si esa migración llegó a aplicarse fuera de Development.
+        await db.Database.ExecuteSqlRawAsync(EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
+        // Mirror de traspaso: publica TRASPASO_STANDARD (modalidad "traspaso"). Mismo patrón
+        // idempotente y env-gated en su migración (TramitesTraspasoDevSeed) → también self-healing.
+        await db.Database.ExecuteSqlRawAsync(EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
 
         if (await db.Users.AnyAsync(u => u.Email == DemoEmail, cancellationToken))
             return;
