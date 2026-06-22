@@ -2,7 +2,6 @@ using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
-using Flit.Modules.Security.Application.Auth.RememberUsername;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,7 +16,6 @@ public static class SecurityApplicationExtensions
         services.AddScoped<ResetPasswordHandler>();
         services.AddScoped<AdminResetPasswordHandler>();
         services.AddScoped<ChangePasswordHandler>();
-        services.AddScoped<RememberUsernameHandler>();
         return services;
     }
 }

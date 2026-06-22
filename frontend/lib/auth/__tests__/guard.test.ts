@@ -4,7 +4,7 @@
 // Uso de ejemplo:
 //   const { allowed } = evaluateAdminAccess(makeToken({ role: "SuperAdmin" }));
 import { describe, expect, it } from "vitest";
-import { evaluateAdminAccess, FORBIDDEN_PATH } from "../guard";
+import { evaluateAdminAccess, evaluateLoginAccess, FORBIDDEN_PATH, HOME_PATH } from "../guard";
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
@@ -40,5 +40,32 @@ describe("evaluateAdminAccess (AC6)", () => {
     const decision = evaluateAdminAccess("no-es-un-jwt");
     expect(decision.allowed).toBe(false);
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+});
+
+describe("evaluateLoginAccess (sesión activa → dashboard)", () => {
+  const future = Math.floor(Date.now() / 1000) + 3600;
+  const past = Math.floor(Date.now() / 1000) - 3600;
+
+  it("redirige al dashboard cuando hay sesión activa (token vigente)", () => {
+    const decision = evaluateLoginAccess(makeToken({ sub: "u1", exp: future }));
+    expect(decision.redirect).toBe(true);
+    expect(decision.redirectTo).toBe(HOME_PATH);
+  });
+
+  it("permite el login cuando no hay token", () => {
+    const decision = evaluateLoginAccess(undefined);
+    expect(decision.redirect).toBe(false);
+    expect(decision.redirectTo).toBeUndefined();
+  });
+
+  it("permite el login cuando el token expiró", () => {
+    const decision = evaluateLoginAccess(makeToken({ sub: "u1", exp: past }));
+    expect(decision.redirect).toBe(false);
+  });
+
+  it("permite el login cuando el token está malformado", () => {
+    const decision = evaluateLoginAccess("no-es-un-jwt");
+    expect(decision.redirect).toBe(false);
   });
 });
