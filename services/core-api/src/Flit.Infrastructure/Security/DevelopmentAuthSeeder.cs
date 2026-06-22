@@ -96,8 +96,12 @@ public static class DevelopmentAuthSeeder
         {
             Id = roleId,
             TenantId = tenantId,
-            Code = "demo_admin",
-            Name = "Administrador Demo",
+            // El claim "role" del JWT se emite con este Code (RsaJwtTokenIssuer) y la policy
+            // del módulo Admin exige RequireRole("SuperAdmin") (AdminAuthorization.SuperAdminRole).
+            // Debe ser exactamente "SuperAdmin" para que el usuario demo acceda a la consola
+            // de administración (compañías, OT, documental).
+            Code = "SuperAdmin",
+            Name = "Super Administrador",
             IsSystem = true,
             CreatedAt = now,
             RowVersion = 0,
