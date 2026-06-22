@@ -108,6 +108,7 @@ backend/dotnet/src/FLIT.Traspasos.Api/data/tramite-files/
 # Trámites — adjuntos subidos en runtime (disk attachment storage)
 services/core-api/src/Flit.Api/uploads/
 
-# Muestra real de respuesta Verifik (contiene PII, no commitear)
-context/verifik-vin-real-sample.json
+# Material de contexto/insumos locales (docs, imágenes de referencia y muestra
+# real Verifik con PII). Untracked a propósito: nada de context/ se commitea.
+context/
 
