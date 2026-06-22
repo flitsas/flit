@@ -112,3 +112,9 @@ services/core-api/src/Flit.Api/uploads/
 # real Verifik con PII). Untracked a propósito: nada de context/ se commitea.
 context/
 
+# Cursor — solo el estado/evidencias de trabajo local (NO ignorar agents/rules/skills/workflows/docs, que sí se comparten)
+.cursor/state/
+
+# Instrucciones locales de Claude Code (no van al repo)
+CLAUDE.md
+
