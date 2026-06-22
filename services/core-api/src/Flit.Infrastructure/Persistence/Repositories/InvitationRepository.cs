@@ -36,4 +36,16 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
 
         return entity.Id;
     }
+
+    public async Task<PendingInvitation?> FindPendingByTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken)
+    {
+        var entity = await db.UserInvitations
+            .Where(x => x.TokenHash == tokenHash && x.Status == "pending")
+            .Select(x => new PendingInvitation(x.Id, x.TenantId, x.Email, x.RoleId, x.InvitedBy))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return entity;
+    }
 }

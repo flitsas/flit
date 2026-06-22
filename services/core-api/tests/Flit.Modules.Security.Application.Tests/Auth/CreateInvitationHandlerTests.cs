@@ -1,7 +1,9 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Flit.Modules.Security.Application.Tests.Auth;
@@ -11,6 +13,7 @@ public sealed class CreateInvitationHandlerTests
     private readonly IInvitationRepository _repo = Substitute.For<IInvitationRepository>();
     private readonly ISecureTokenGenerator _tokenGen = Substitute.For<ISecureTokenGenerator>();
     private readonly IEmailSender _email = Substitute.For<IEmailSender>();
+    private readonly ILogger<CreateInvitationHandler> _logger = Substitute.For<ILogger<CreateInvitationHandler>>();
     private readonly InvitationOptions _options = new() { ActivateUrlBase = "http://localhost:3000/invite/activate" };
     private readonly CreateInvitationHandler _handler;
 
@@ -22,7 +25,7 @@ public sealed class CreateInvitationHandlerTests
 
     public CreateInvitationHandlerTests()
     {
-        _handler = new CreateInvitationHandler(_repo, _tokenGen, _email, _options);
+        _handler = new CreateInvitationHandler(_repo, _tokenGen, _email, _options, _logger);
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-abc", "hash-abc"));
         _repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>())
             .Returns(InvitationId);
@@ -41,6 +44,7 @@ public sealed class CreateInvitationHandlerTests
 
         result.InvitationId.Should().Be(InvitationId);
         result.Email.Should().Be(Email);
+        result.EmailSent.Should().BeTrue();
         await _repo.Received(1).CreateAsync(
             Arg.Is<UserInvitationData>(d =>
                 d.TenantId == TenantId &&
@@ -52,6 +56,24 @@ public sealed class CreateInvitationHandlerTests
         await _email.Received(1).SendAsync(
             Arg.Is<EmailMessage>(m => m.ToEmail == Email && m.HtmlBody.Contains("raw-token-abc")),
             Arg.Any<CancellationToken>());
+    }
+
+    // AC2 HU #10176 — fallo proveedor email → invitación creada pending, EmailSent=false, sin excepción
+    [Fact]
+    public async Task HandleAsync_EmailSenderThrows_InvitationRemainingPendingAndEmailSentFalse()
+    {
+        _repo.RoleExistsInTenantAsync(TenantId, RoleId, Arg.Any<CancellationToken>()).Returns(true);
+        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("SMTP host unreachable"));
+
+        var result = await _handler.HandleAsync(
+            new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+            CancellationToken.None);
+
+        result.InvitationId.Should().Be(InvitationId);
+        result.EmailSent.Should().BeFalse();
+        await _repo.Received(1).CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>());
     }
 
     // AC2 — invitación pending para mismo email+tenant → 409 INVITATION_ALREADY_PENDING

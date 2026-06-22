@@ -6,4 +6,4 @@ public sealed record CreateInvitationCommand(
     Guid RoleId,
     Guid InvitedBy);
 
-public sealed record InvitationCreatedResult(Guid InvitationId, string Email);
+public sealed record InvitationCreatedResult(Guid InvitationId, string Email, bool EmailSent = true);

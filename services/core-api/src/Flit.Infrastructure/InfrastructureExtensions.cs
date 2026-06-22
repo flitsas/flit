@@ -69,8 +69,9 @@ public static class InfrastructureExtensions
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 
-        // Invitaciones (HU #10175): repo y opciones de activación.
+        // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();
+        services.AddScoped<IUserActivationRepository, UserActivationRepository>();
         var invitationOptions = configuration
             .GetSection(InvitationOptions.SectionName)
             .Get<InvitationOptions>() ?? new InvitationOptions();

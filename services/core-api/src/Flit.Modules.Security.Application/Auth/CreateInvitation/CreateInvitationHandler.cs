@@ -1,12 +1,14 @@
 using Flit.Modules.Security.Domain.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Security.Application.Auth.CreateInvitation;
 
-public sealed class CreateInvitationHandler(
+public sealed partial class CreateInvitationHandler(
     IInvitationRepository invitationRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
-    InvitationOptions options)
+    InvitationOptions options,
+    ILogger<CreateInvitationHandler> logger)
 {
     public async Task<InvitationCreatedResult> HandleAsync(
         CreateInvitationCommand command,
@@ -37,10 +39,24 @@ public sealed class CreateInvitationHandler(
             "Invitación a FLIT — Activa tu cuenta",
             BuildHtmlBody(link));
 
-        await emailSender.SendAsync(message, cancellationToken);
+        var emailSent = true;
+        try
+        {
+            await emailSender.SendAsync(message, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // AC2 HU #10176 — fallo retryable: la invitación persiste pending; el admin puede reintentar.
+            LogEmailFailed(logger, invitationId, ex);
+            emailSent = false;
+        }
 
-        return new InvitationCreatedResult(invitationId, email);
+        return new InvitationCreatedResult(invitationId, email, emailSent);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, Exception ex);
 
     private static string BuildActivateLink(string activateUrlBase, string rawToken)
     {
