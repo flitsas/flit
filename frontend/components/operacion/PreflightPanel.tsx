@@ -15,6 +15,9 @@ interface Props {
   onRun: () => void;
   riesgoAceptado: boolean;
   onToggleRiesgo: (v: boolean) => void;
+  // El disparo de la consulta puede vivir fuera del panel (p. ej. junto al campo
+  // VIN en matrícula). En ese caso el panel es solo presentacional (semáforo).
+  showRunButton?: boolean;
 }
 
 const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> = {
@@ -54,6 +57,7 @@ export function PreflightPanel({
   onRun,
   riesgoAceptado,
   onToggleRiesgo,
+  showRunButton = true,
 }: Props) {
   const hasResult = !!snapshot?.overall;
   const overall = snapshot?.overall;
@@ -83,16 +87,18 @@ export function PreflightPanel({
               {ov.label}
             </span>
           )}
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={loading}
-            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Consultar RUNT y SIMIT"
-          >
-            {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
-          </button>
+          {showRunButton && (
+            <button
+              type="button"
+              onClick={onRun}
+              disabled={loading}
+              className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              aria-label="Consultar RUNT y SIMIT"
+            >
+              {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+            </button>
+          )}
         </div>
       </div>
 

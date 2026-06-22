@@ -1,7 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import {
+  Building2,
+  Calendar,
+  Car,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Fuel,
+  Gauge,
+  Hash,
+  Lock,
+  Palette,
+  Search,
+  Tag,
+} from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { PreflightPanel } from './PreflightPanel';
@@ -382,63 +396,66 @@ export function TramiteWizard(props: Props) {
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
- * Grupos de atributos del vehículo hidratados por el backend en field_values
- * tras la consulta (origen RUNT). Solo se pinta lo presente; nada de proveedor.
+ * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
+ * modelo). Cada uno con su icono para una grilla legible. Origen RUNT, hidratados
+ * en field_values por la consulta del preflight. Solo se pinta lo presente.
  */
-const VEHICLE_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
-  {
-    title: 'Identificación',
-    fields: [
-      { key: 'plate', label: 'Placa' },
-      { key: 'vin', label: 'VIN' },
-    ],
-  },
-  {
-    title: 'Características',
-    fields: [
-      { key: 'vehicle_brand', label: 'Marca' },
-      { key: 'vehicle_line', label: 'Línea' },
-      { key: 'vehicle_year', label: 'Modelo' },
-      { key: 'vehicle_color', label: 'Color' },
-      { key: 'vehicle_class', label: 'Clase' },
-      { key: 'vehicle_fuel', label: 'Combustible' },
-      { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
-    ],
-  },
-  {
-    title: 'Tránsito',
-    fields: [
-      { key: 'transit_office_name', label: 'Organismo de tránsito' },
-      { key: 'vehicle_state', label: 'Estado del vehículo' },
-    ],
-  },
+const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
+  { key: 'vin', label: 'VIN / Chasis', icon: Hash },
+  { key: 'vehicle_color', label: 'Color', icon: Palette },
+  { key: 'vehicle_class', label: 'Clase', icon: Tag },
+  { key: 'vehicle_fuel', label: 'Combustible', icon: Fuel },
+  { key: 'vehicle_engine_displacement', label: 'Cilindraje', icon: Gauge },
+  { key: 'transit_office_name', label: 'Organismo de tránsito', icon: Building2 },
 ];
 
 /**
  * Tarjeta "Datos del vehículo · RUNT". Lee los field_values frescos de la
- * instancia y muestra una fila por atributo presente, agrupado. Reusa la
- * convención de cards de operación (rounded-2xl + borde #DFE5ED).
+ * instancia (hidratados por la consulta del preflight) y los presenta con un
+ * hero (placa + marca/línea/modelo + estado) y una grilla de atributos con
+ * iconos. Solo se pinta lo presente; nada de proveedor.
  */
 function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   const byKey = (key: string) =>
-    fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+    fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 
-  const groups = VEHICLE_GROUPS.map((g) => ({
-    title: g.title,
-    rows: g.fields
-      .map((f) => ({ label: f.label, value: byKey(f.key) }))
-      .filter((r) => r.value.trim() !== ''),
-  })).filter((g) => g.rows.length > 0);
+  const plate = byKey('plate');
+  const vin = byKey('vin');
+  const brand = byKey('vehicle_brand');
+  const line = byKey('vehicle_line');
+  const year = byKey('vehicle_year');
+  const estado = byKey('vehicle_state');
 
-  if (groups.length === 0) return null;
+  // Antes de consultar no hay datos del vehículo → no renderiza.
+  const hasAny = [plate, vin, brand, line, year].some((v) => v !== '');
+  if (!hasAny) return null;
+
+  const title = [brand, line].filter((v) => v !== '').join(' ') || 'Vehículo';
+  const estadoActivo = /activo/i.test(estado);
+
+  const details = VEHICLE_DETAILS.map((d) => ({ ...d, value: byKey(d.key) })).filter(
+    (d) => d.value !== '',
+  );
 
   return (
     <div
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
       style={{ borderColor: '#DFE5ED' }}
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="text-sm font-bold">Datos del vehículo</h4>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between gap-3 border-b px-4 py-3"
+        style={{ borderColor: '#DFE5ED' }}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className="grid h-7 w-7 place-items-center rounded-lg"
+            style={{ background: 'rgba(85,126,255,0.10)' }}
+          >
+            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+          </span>
+          <h4 className="text-sm font-bold">Datos del vehículo</h4>
+        </div>
         <span
           className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
           style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
@@ -446,23 +463,70 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
           RUNT
         </span>
       </div>
-      <div className="space-y-4">
-        {groups.map((g) => (
-          <div key={g.title}>
-            <p className="text-[10px] font-semibold uppercase opacity-60 mb-1.5">
-              {g.title}
+
+      {/* Hero: placa + marca/línea/modelo + estado */}
+      <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+        {plate && (
+          <div
+            className="rounded-xl border-2 px-4 py-2 text-center"
+            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+          >
+            <p className="text-[9px] font-semibold uppercase opacity-50">Placa</p>
+            <p
+              className="font-mono text-lg font-extrabold tracking-widest"
+              style={{ color: '#557EFF' }}
+            >
+              {plate}
             </p>
-            <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              {g.rows.map((r) => (
-                <div key={r.label} className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[11px] opacity-60 shrink-0">{r.label}</dt>
-                  <dd className="text-xs font-semibold text-right">{r.value}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
-        ))}
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-bold">{title}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {year && (
+              <span className="inline-flex items-center gap-1 text-[11px] opacity-70">
+                <Calendar className="h-3 w-3" /> Modelo {year}
+              </span>
+            )}
+            {estado && (
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                style={
+                  estadoActivo
+                    ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
+                    : { background: 'rgba(154,165,177,0.15)', color: '#9AA5B1' }
+                }
+              >
+                {estado}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Grilla de atributos */}
+      {details.length > 0 && (
+        <div
+          className="grid gap-px border-t sm:grid-cols-2"
+          style={{ borderColor: '#DFE5ED', background: '#DFE5ED' }}
+        >
+          {details.map((d) => {
+            const Icon = d.icon;
+            return (
+              <div
+                key={d.key}
+                className="flex items-center gap-2.5 bg-white px-4 py-2.5 dark:bg-[#0B0F14]"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-40" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase opacity-50">{d.label}</p>
+                  <p className="truncate text-xs font-semibold">{d.value}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -565,17 +629,12 @@ function ConsultaStep({
     setError(null);
     setPersisting(true);
     try {
-      // 1) Persistir identificador → 2) consulta RUNT del vehículo (hidrata
-      // marca/línea/color/etc. en field_values) → 3) preflight (semáforo) →
-      // 4) recargar la instancia para pintar la tarjeta "Datos del vehículo · RUNT".
+      // UNA sola consulta a Verifik: 1) persistir identificador → 2) preflight,
+      // que con la MISMA respuesta del RUNT compone el semáforo Y hidrata los
+      // atributos del vehículo en field_values → 3) recargar la instancia para
+      // pintar la tarjeta "Datos del vehículo". (Antes se hacían dos consultas:
+      // una dedicada de datos + el preflight; el preflight ya trae ambos.)
       await tramitesClient.patchFieldValues(instanceId, items);
-      // La consulta de datos es independiente del semáforo: si falla, igual
-      // seguimos con el pre-vuelo para no bloquear el avance.
-      try {
-        await tramitesClient.runConsultation(instanceId, 'RUNT_VEHICLE');
-      } catch {
-        /* hidratación best-effort */
-      }
       await onRunPreflight();
       await loadInstance();
     } catch (err) {
@@ -588,83 +647,117 @@ function ConsultaStep({
   const inputClass =
     'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
 
+  const loading = preflightLoading || persisting;
+  const hasResult = !!preflight?.overall;
+
+  // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
+  // (unificación de estilos pedida). Disparo único de la consulta.
+  const consultButton = (
+    <button
+      type="button"
+      onClick={() => void handleRun()}
+      disabled={loading}
+      className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      aria-label="Consultar RUNT"
+    >
+      <Search className="h-3.5 w-3.5" />
+      {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+    </button>
+  );
+
   return (
     <div className="space-y-4">
-      <p className="text-xs opacity-70">
-        {isVin
-          ? 'Ingresa el VIN del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'
-          : 'Ingresa la placa y el propietario del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'}
-      </p>
-
       {isVin ? (
-        <div className="max-w-sm">
-          <label htmlFor="consulta-vin" className="text-xs font-semibold mb-1.5 block">
-            VIN
-          </label>
-          <input
-            id="consulta-vin"
-            type="text"
-            value={vin}
-            onChange={(e) => setVin(e.target.value)}
-            className={inputClass}
-            style={{ borderColor: '#DFE5ED' }}
-            placeholder="Ej. 9BWZZZ377VT004251"
-          />
+        <div
+          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <h4 className="text-sm font-bold">Consulta de vehículo</h4>
+          <p className="mt-0.5 text-xs opacity-60">
+            Ingresa el VIN para consultar los datos del vehículo en el RUNT.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="consulta-vin"
+              type="text"
+              value={vin}
+              onChange={(e) => setVin(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleRun();
+              }}
+              className={`${inputClass} sm:flex-1`}
+              style={{ borderColor: '#DFE5ED' }}
+              placeholder="Número VIN…"
+              aria-label="Número VIN"
+            />
+            {consultButton}
+          </div>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 max-w-xl">
-          <div>
-            <label htmlFor="consulta-plate" className="text-xs font-semibold mb-1.5 block">
-              Placa
-            </label>
-            <input
-              id="consulta-plate"
-              type="text"
-              value={plate}
-              onChange={(e) => setPlate(e.target.value)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-              placeholder="Ej. ABC123"
-            />
+        <div
+          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <h4 className="text-sm font-bold">Consulta de vehículo</h4>
+          <p className="mt-0.5 text-xs opacity-60">
+            Ingresa la placa y el propietario para consultar los datos del RUNT.
+          </p>
+          <div className="mt-3 grid max-w-xl gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
+                Placa
+              </label>
+              <input
+                id="consulta-plate"
+                type="text"
+                value={plate}
+                onChange={(e) => setPlate(e.target.value)}
+                className={inputClass}
+                style={{ borderColor: '#DFE5ED' }}
+                placeholder="Ej. ABC123"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="consulta-owner-doc-type"
+                className="mb-1.5 block text-xs font-semibold"
+              >
+                Tipo documento propietario
+              </label>
+              <select
+                id="consulta-owner-doc-type"
+                value={ownerDocType}
+                onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
+                className={inputClass}
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                {DOC_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label
+                htmlFor="consulta-owner-doc-number"
+                className="mb-1.5 block text-xs font-semibold"
+              >
+                Número documento propietario
+              </label>
+              <input
+                id="consulta-owner-doc-number"
+                type="text"
+                value={ownerDocNumber}
+                onChange={(e) => setOwnerDocNumber(e.target.value)}
+                className={inputClass}
+                style={{ borderColor: '#DFE5ED' }}
+                placeholder="Ej. 1020304050"
+              />
+            </div>
           </div>
-          <div>
-            <label
-              htmlFor="consulta-owner-doc-type"
-              className="text-xs font-semibold mb-1.5 block"
-            >
-              Tipo documento propietario
-            </label>
-            <select
-              id="consulta-owner-doc-type"
-              value={ownerDocType}
-              onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-            >
-              {DOC_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label
-              htmlFor="consulta-owner-doc-number"
-              className="text-xs font-semibold mb-1.5 block"
-            >
-              Número documento propietario
-            </label>
-            <input
-              id="consulta-owner-doc-number"
-              type="text"
-              value={ownerDocNumber}
-              onChange={(e) => setOwnerDocNumber(e.target.value)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-              placeholder="Ej. 1020304050"
-            />
-          </div>
+          <div className="mt-4">{consultButton}</div>
         </div>
       )}
 
@@ -679,15 +772,16 @@ function ConsultaStep({
         </p>
       )}
 
+      <VehicleDataCard fieldValues={fieldValues} />
+
       <PreflightPanel
         snapshot={preflight}
-        loading={preflightLoading || persisting}
+        loading={loading}
         onRun={() => void handleRun()}
         riesgoAceptado={false}
         onToggleRiesgo={() => {}}
+        showRunButton={false}
       />
-
-      <VehicleDataCard fieldValues={fieldValues} />
     </div>
   );
 }
