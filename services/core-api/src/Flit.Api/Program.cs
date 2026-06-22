@@ -91,6 +91,20 @@ builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorization
 // Development (más abajo), pero el generador se registra siempre para no divergir.
 builder.Services.AddFlitSwagger();
 
+// CORS: el frontend (Next.js) corre en otro origen (localhost:3000 en dev) y el
+// navegador bloquea las llamadas cross-origin sin esta política. Los orígenes son
+// configurables vía Cors:AllowedOrigins; en dev se asume el frontend local.
+const string FrontendCorsPolicy = "flit-frontend-cors";
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:3000", "http://localhost:4001"];
+builder.Services.AddCors(options => options.AddPolicy(
+    FrontendCorsPolicy,
+    policy => policy
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()));
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -133,6 +147,8 @@ if (app.Environment.IsDevelopment())
     app.UseFlitSwagger();
 }
 
+app.UseCors(FrontendCorsPolicy);
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -142,6 +158,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
+app.MapSecurityEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminDocumentTypesEndpoints();
