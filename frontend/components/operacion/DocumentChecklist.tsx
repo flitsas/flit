@@ -9,6 +9,12 @@ import type {
 
 interface Props {
   instanceId: string | null;
+  /**
+   * Notifica al contenedor (wizard) que los documentos cambiaron, para que
+   * re-consulte su estado de gating. Sin esto, el wizard no se entera de que
+   * el checklist quedó completo y "Continuar" no se habilita.
+   */
+  onChanged?: () => void;
 }
 
 /** MIME permitidos por el contrato. */
@@ -166,7 +172,7 @@ function DocumentSlot({
  * la tipología) y los adjuntos, marca ✓ los satisfechos, valida mime/tamaño
  * antes de subir y resume "faltan N obligatorios / completo".
  */
-export function DocumentChecklist({ instanceId }: Props) {
+export function DocumentChecklist({ instanceId, onChanged }: Props) {
   const { state, upload, remove, clearError } =
     useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipo, deletingId } = state;
@@ -253,8 +259,16 @@ export function DocumentChecklist({ instanceId }: Props) {
                 attachment={attachment}
                 uploading={uploadingTipo === tipo}
                 deleting={!!attachment && deletingId === attachment.id}
-                onUpload={(file) => void upload(tipo, file)}
-                onRemove={(id) => void remove(id)}
+                onUpload={(file) =>
+                  void upload(tipo, file).then((ok) => {
+                    if (ok) onChanged?.();
+                  })
+                }
+                onRemove={(id) =>
+                  void remove(id).then((ok) => {
+                    if (ok) onChanged?.();
+                  })
+                }
               />
             );
           })}

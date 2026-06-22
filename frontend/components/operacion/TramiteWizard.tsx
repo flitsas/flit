@@ -749,7 +749,7 @@ function StepBody({
       );
 
     case 'documentos':
-      return <DocumentChecklist instanceId={instanceId} />;
+      return <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} />;
 
     case 'comprador':
       return (
