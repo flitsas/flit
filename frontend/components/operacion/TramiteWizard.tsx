@@ -519,6 +519,8 @@ function ConsultaStep({
   // Rehidrata los inputs desde los field_values guardados de la instancia.
   useEffect(() => {
     if (!instanceId) return;
+    // Rehidratación al montar: los setState ocurren tras el await (no síncronos).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInstance().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
@@ -563,10 +565,17 @@ function ConsultaStep({
     setError(null);
     setPersisting(true);
     try {
-      // 1) Persistir identificador → 2) preflight (el backend hidrata los datos
-      // del vehículo en field_values) → 3) recargar la instancia para pintar la
-      // tarjeta "Datos del vehículo · RUNT" con los valores frescos.
+      // 1) Persistir identificador → 2) consulta RUNT del vehículo (hidrata
+      // marca/línea/color/etc. en field_values) → 3) preflight (semáforo) →
+      // 4) recargar la instancia para pintar la tarjeta "Datos del vehículo · RUNT".
       await tramitesClient.patchFieldValues(instanceId, items);
+      // La consulta de datos es independiente del semáforo: si falla, igual
+      // seguimos con el pre-vuelo para no bloquear el avance.
+      try {
+        await tramitesClient.runConsultation(instanceId, 'RUNT_VEHICLE');
+      } catch {
+        /* hidratación best-effort */
+      }
       await onRunPreflight();
       await loadInstance();
     } catch (err) {

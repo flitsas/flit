@@ -142,6 +142,8 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, onSubmitted }: 
   }, [instanceId]);
 
   useEffect(() => {
+    // Carga al montar: setDetail ocurre tras el await (no es setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDetail();
   }, [loadDetail]);
 
@@ -166,6 +168,8 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, onSubmitted }: 
   const [autoOpened, setAutoOpened] = useState(false);
   useEffect(() => {
     if (!detail || autoOpened) return;
+    // Auto-abrir una sola vez al cargar el detalle; el guard `autoOpened` evita el bucle.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!organismoSelected) setOrganismoModalOpen(true);
     setAutoOpened(true);
   }, [detail, organismoSelected, autoOpened]);
@@ -469,6 +473,8 @@ function ExpedienteSection({
     }
   }, [instanceId]);
   useEffect(() => {
+    // Carga al montar: setDocs ocurre tras el await (no es setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDocs();
   }, [loadDocs]);
 

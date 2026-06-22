@@ -91,6 +91,9 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
   }, []);
 
   useEffect(() => {
+    // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
+    // ocurren tras el await (no es setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, refreshKey]);
 
