@@ -119,7 +119,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstances
             .CountAsync(x => x.TenantId == tenantId && x.CreatedAt.Year == year, ct);
 
-    public async Task<bool> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct)
+    public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct)
     {
         await db.ProcedureInstances.AddAsync(instance, ct);
 
@@ -129,7 +129,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             try
             {
                 await db.SaveChangesAsync(ct);
-                return true;
+                return AddProcedureInstanceOutcome.Created;
             }
             catch (DbUpdateException ex) when (IsReferenceUniqueViolation(ex))
             {
@@ -137,9 +137,15 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 // EF deja la entidad marcada como Added tras el fallo, así que el siguiente SaveChanges
                 // reintenta el mismo insert con la nueva referencia.
             }
+            catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
+            {
+                // tenant_id / created_by_user_id / procedure_type_id inexistente: no tiene sentido
+                // reintentar. Se traduce a 422 en el handler/endpoint (antes burbujeaba como 500).
+                return AddProcedureInstanceOutcome.ReferencedEntityMissing;
+            }
         }
 
-        return false;
+        return AddProcedureInstanceOutcome.ReferenceConflict;
     }
 
     /// <summary>MAX(seq) + 1 por (tenant, year) parseando el sufijo D6 de las referencias existentes.</summary>
@@ -166,6 +172,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && pg.ConstraintName == ReferenceUniqueConstraint;
+
+    private static bool IsForeignKeyViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.ForeignKeyViolation;
 
     public async Task<Guid?> GetFormFieldIdByKeyAsync(Guid procedureTypeId, string fieldKey, CancellationToken ct)
     {

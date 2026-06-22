@@ -101,11 +101,13 @@ public sealed class CreateProcedureInstanceHandler(
             ChangedBy = request.CreatedByUserId
         });
 
-        var saved = await repo.AddWithUniqueReferenceAsync(instance, year, ct);
-        if (!saved)
-            return (null, "reference_conflict");
-
-        return (ToSummary(instance), null);
+        var outcome = await repo.AddWithUniqueReferenceAsync(instance, year, ct);
+        return outcome switch
+        {
+            AddProcedureInstanceOutcome.ReferenceConflict => (null, "reference_conflict"),
+            AddProcedureInstanceOutcome.ReferencedEntityMissing => (null, "invalid_reference"),
+            _ => (ToSummary(instance), null),
+        };
     }
 
     internal static ProcedureInstanceSummary ToSummary(ProcedureInstance e) =>

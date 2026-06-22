@@ -74,10 +74,11 @@ public interface IProcedureInstanceRepository
     /// Inserta la instancia generando un <c>ReferenceNumber</c> único con formato
     /// <c>TRM-{year}-{seq:D6}</c> a partir de MAX(seq) + 1 por (tenant, year). Si el insert
     /// colisiona contra el constraint <c>uq_procedure_instances_tenant_reference</c> (creaciones
-    /// concurrentes), regenera el siguiente seq y reintenta. Devuelve <c>false</c> si se agotan
-    /// los reintentos (mapear a <c>reference_conflict</c> / 409).
+    /// concurrentes), regenera el siguiente seq y reintenta. Si una FK no existe
+    /// (tenant/usuario/tipo) devuelve <c>ReferencedEntityMissing</c> (→ 422); si se agotan los
+    /// reintentos de referencia devuelve <c>ReferenceConflict</c> (→ 409).
     /// </summary>
-    Task<bool> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct = default);
+    Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct = default);
 
     /// <summary>
     /// Resuelve el <c>FormField.Id</c> de un <paramref name="fieldKey"/> dentro del grafo

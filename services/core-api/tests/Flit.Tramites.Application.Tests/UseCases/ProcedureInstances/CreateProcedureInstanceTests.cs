@@ -28,7 +28,7 @@ public sealed class CreateProcedureInstanceTests
                 var instance = call.Arg<ProcedureInstance>();
                 var year = call.ArgAt<int>(1);
                 instance.ReferenceNumber = $"TRM-{year}-{seq:D6}";
-                return Task.FromResult(true);
+                return Task.FromResult(AddProcedureInstanceOutcome.Created);
             });
     }
 
@@ -128,11 +128,36 @@ public sealed class CreateProcedureInstanceTests
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
         _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(false));
+            .Returns(Task.FromResult(AddProcedureInstanceOutcome.ReferenceConflict));
 
         var (result, error) = await _sut.HandleAsync(Request(), ct);
 
         error.Should().Be("reference_conflict");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ForeignKeyMissing_ReturnsInvalidReference()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "X",
+            Name = "X",
+            Family = "matriculas",
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
+        // tenant_id / created_by_user_id inexistente: el repo traduce la FK violation a
+        // ReferencedEntityMissing → el handler responde "invalid_reference" (422, no 500).
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(AddProcedureInstanceOutcome.ReferencedEntityMissing));
+
+        var (result, error) = await _sut.HandleAsync(Request(), ct);
+
+        error.Should().Be("invalid_reference");
         result.Should().BeNull();
     }
 
