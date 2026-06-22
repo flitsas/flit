@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
+using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
@@ -12,6 +13,7 @@ using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
+using Flit.Admin.Domain.Companies;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,47 +31,123 @@ public static class AdminCompaniesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Compañías");
 
         // GET /api/v1/admin/companies/index — listado paginado con filtros (#10189 AC1, AC2).
         group.MapGet("/index", ListCompaniesAsync)
-            .WithName("AdminCompaniesIndex");
+            .WithName("AdminCompaniesIndex")
+            .WithSummary("Lista compañías paginadas")
+            .WithDescription("Listado paginado de compañías con filtros opcionales por NIT, razón social, "
+                + "estado y rango de fechas de creación. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // POST /api/v1/admin/companies — alta de compañía (botón "Crear compañía", #10118).
         group.MapPost("", CreateCompanyAsync)
-            .WithName("AdminCompanyCreate");
+            .WithName("AdminCompanyCreate")
+            .WithSummary("Crea una compañía")
+            .WithDescription("Da de alta una compañía B2B (tenant). 422 con detalle por campo si la validación "
+                + "falla (NIT/razón social/duplicados). Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // PUT /api/v1/admin/companies/{tenantId}/status — activa/desactiva la compañía (#10118).
+        group.MapPut("/{tenantId:guid}/status", SetStatusAsync)
+            .WithName("AdminCompanySetStatus")
+            .WithSummary("Activa o desactiva una compañía")
+            .WithDescription("Cambia el estado activo/inactivo de la compañía "
+                + "(identity.tenants.is_active). Idempotente; 404 si la compañía no existe. Requiere SuperAdmin.")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
         group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
-            .WithName("AdminCompanyGetSettings");
+            .WithName("AdminCompanyGetSettings")
+            .WithSummary("Obtiene la configuración operativa del tenant")
+            .WithDescription("Retorna la configuración operativa de la compañía. 404 si el tenant no tiene "
+                + "configuración. Requiere SuperAdmin.")
+            .Produces<TenantSettingsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         // PUT /api/v1/admin/companies/{tenantId}/settings — guardado atómico + audit (#10190 AC1/AC2).
         group.MapPut("/{tenantId:guid}/settings", UpdateSettingsAsync)
-            .WithName("AdminCompanyUpdateSettings");
+            .WithName("AdminCompanyUpdateSettings")
+            .WithSummary("Actualiza la configuración operativa del tenant")
+            .WithDescription("Guardado atómico de la configuración operativa con registro de auditoría. "
+                + "422 con detalle por campo si la validación falla. Requiere SuperAdmin.")
+            .Produces<TenantSettingsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // POST /api/v1/admin/companies/{tenantId}/whitelist — alta masiva + audit (#10191 AC4/AC5).
         group.MapPost("/{tenantId:guid}/whitelist", AddWhitelistAsync)
-            .WithName("AdminCompanyAddWhitelist");
+            .WithName("AdminCompanyAddWhitelist")
+            .WithSummary("Agrega correos a la whitelist del tenant")
+            .WithDescription("Alta masiva de correos exentos; devuelve los insertados y los omitidos "
+                + "(duplicados). 422 con detalle por campo si la validación falla. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/companies/{tenantId}/whitelist — lista de correos exentos (#10191 AC6).
         group.MapGet("/{tenantId:guid}/whitelist", GetWhitelistAsync)
-            .WithName("AdminCompanyGetWhitelist");
+            .WithName("AdminCompanyGetWhitelist")
+            .WithSummary("Lista los correos de la whitelist del tenant")
+            .WithDescription("Retorna los correos exentos configurados para la compañía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // POST /api/v1/admin/companies/{tenantId}/transit-grants — habilita OT + audit (#10192 AC2).
         group.MapPost("/{tenantId:guid}/transit-grants", AddTransitGrantAsync)
-            .WithName("AdminCompanyAddTransitGrant");
+            .WithName("AdminCompanyAddTransitGrant")
+            .WithSummary("Habilita un Organismo de Tránsito para el tenant")
+            .WithDescription("Concede acceso de la compañía a un OT (idempotente: 201 tanto en alta nueva "
+                + "como si el grant ya existía). 422 si la validación falla. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // DELETE /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId} — deshabilita OT (#10192 AC3).
         group.MapDelete("/{tenantId:guid}/transit-grants/{transitOfficeId:guid}", RemoveTransitGrantAsync)
-            .WithName("AdminCompanyRemoveTransitGrant");
+            .WithName("AdminCompanyRemoveTransitGrant")
+            .WithSummary("Deshabilita un Organismo de Tránsito del tenant")
+            .WithDescription("Revoca el acceso de la compañía a un OT. 204 si se eliminó, 404 si el grant "
+                + "no existía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         // GET /api/v1/admin/companies/{tenantId}/transit-grants — OT habilitados del tenant (#10192 AC5).
         group.MapGet("/{tenantId:guid}/transit-grants", GetTransitGrantsAsync)
-            .WithName("AdminCompanyGetTransitGrants");
+            .WithName("AdminCompanyGetTransitGrants")
+            .WithSummary("Lista los OT habilitados del tenant")
+            .WithDescription("Retorna los Organismos de Tránsito habilitados para la compañía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // GET /api/v1/admin/companies/{tenantId}/audit-log — historial de gobernanza paginado (#10192 AC4).
         group.MapGet("/{tenantId:guid}/audit-log", GetAuditLogAsync)
-            .WithName("AdminCompanyGetAuditLog");
+            .WithName("AdminCompanyGetAuditLog")
+            .WithSummary("Lista el historial de auditoría del tenant")
+            .WithDescription("Historial de gobernanza (cambios de settings, whitelist y grants) paginado. "
+                + "Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         return app;
     }
@@ -120,6 +198,31 @@ public static class AdminCompaniesEndpoints
             : Results.Json(
                 new CompanyValidationErrorResponse(result.Errors),
                 statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> SetStatusAsync(
+        Guid tenantId,
+        SetCompanyStatusRequest request,
+        HttpContext httpContext,
+        [FromServices] SetCompanyStatusHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(
+                new SetCompanyStatusCommand
+                {
+                    TenantId = tenantId,
+                    EstadoActivo = request.EstadoActivo,
+                    ChangedBy = ResolveUserId(httpContext.User),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            SetCompanyStatusOutcome.Updated => Results.Ok(result.Company),
+            _ => Results.NotFound(new { error = $"No existe la compañía {tenantId}." }),
+        };
     }
 
     private static async Task<IResult> GetSettingsAsync(

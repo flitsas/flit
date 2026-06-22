@@ -13,6 +13,9 @@
   <ItemGroup>
     <!-- Web -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <!-- Swagger/OpenAPI vivo de core-api (UI solo en Development). 10.2.x alinea con net10
+         y trae Microsoft.OpenApi 2.x. Reflexión: solo carga en Flit.Api (PublishAot=false). -->
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.2" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
 

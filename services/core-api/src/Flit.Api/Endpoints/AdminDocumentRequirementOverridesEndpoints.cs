@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Application.DocumentRequirementOverrides;
 using Flit.Admin.Application.DocumentRequirementOverrides.ListDocumentRequirementOverrides;
 using Flit.Admin.Application.DocumentRequirementOverrides.SetDocumentRequirementOverride;
 using Flit.Api.Authorization;
@@ -22,13 +23,34 @@ public static class AdminDocumentRequirementOverridesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/document-requirement-overrides")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Órdenes documentales");
 
         // GET ?procedureTypeId&transitOfficeId — overrides de obligatoriedad del trámite/OT.
-        group.MapGet("/", ListAsync).WithName("AdminDocumentRequirementOverrideList");
+        group.MapGet("/", ListAsync)
+            .WithName("AdminDocumentRequirementOverrideList")
+            .WithSummary("Lista la obligatoriedad por OT de un trámite")
+            .WithDescription("Retorna los overrides de obligatoriedad (REQUIRED / OPTIONAL / NOT_APPLICABLE) "
+                + "configurados para un trámite en un Organismo de Tránsito. Requiere procedureTypeId y "
+                + "transitOfficeId; 400 si falta alguno. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // PUT — upsert por tupla natural (estado=DEFAULT limpia) → 200 / 204 / 422 / 404.
-        group.MapPut("/", SetAsync).WithName("AdminDocumentRequirementOverrideSet");
+        group.MapPut("/", SetAsync)
+            .WithName("AdminDocumentRequirementOverrideSet")
+            .WithSummary("Define o limpia la obligatoriedad de un documento por OT")
+            .WithDescription("Upsert por tupla natural (trámite, documento, OT). estado=REQUIRED/OPTIONAL/"
+                + "NOT_APPLICABLE fija el override (200); estado=DEFAULT lo limpia y devuelve 204. "
+                + "404 si trámite/documento/OT no existen; 422 si el payload es inválido. Requiere SuperAdmin.")
+            .Produces<DocumentRequirementOverrideResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         return app;
     }

@@ -16,4 +16,15 @@ public interface ICompanyWriteRepository
     /// fecha de creación generados). El llamador (handler) ya validó los datos.
     /// </summary>
     Task<CompanyListItem> CreateAsync(NewCompany company, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Activa o desactiva la compañía (<c>identity.tenants.is_active</c>) y devuelve su
+    /// proyección de listado actualizada, o <c>null</c> si el tenant no existe. Idempotente:
+    /// si ya está en el estado pedido no escribe. Los triggers de BD registran la auditoría.
+    /// </summary>
+    Task<CompanyListItem?> SetActiveAsync(
+        Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default);
 }

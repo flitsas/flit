@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using Flit.Admin.Application.DocumentTypes;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Domain.DocumentTypes;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,22 +23,64 @@ public static class AdminDocumentTypesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/document-types")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Documentos");
 
         // POST /api/v1/admin/document-types — alta (AC1 → 201 / 422).
-        group.MapPost("/", CreateAsync).WithName("AdminDocumentTypeCreate");
+        group.MapPost("/", CreateAsync)
+            .WithName("AdminDocumentTypeCreate")
+            .WithSummary("Crea un tipo de documento")
+            .WithDescription("Da de alta un tipo de documento en el catálogo maestro. "
+                + "Valida código y nombre; 422 si el payload es inválido o el código ya existe. Requiere SuperAdmin.")
+            .Produces<DocumentTypeResponse>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/document-types — listado paginado por nombre asc (AC2 → 200).
-        group.MapGet("/", ListAsync).WithName("AdminDocumentTypeList");
+        group.MapGet("/", ListAsync)
+            .WithName("AdminDocumentTypeList")
+            .WithSummary("Lista tipos de documento")
+            .WithDescription("Listado paginado del catálogo, ordenado por nombre ascendente. "
+                + "Por defecto solo activos; usa includeInactive=true para incluir los desactivados. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // PUT /api/v1/admin/document-types/{id} — actualización (AC3 → 200 / 422 / 404).
-        group.MapPut("/{id:guid}", UpdateAsync).WithName("AdminDocumentTypeUpdate");
+        group.MapPut("/{id:guid}", UpdateAsync)
+            .WithName("AdminDocumentTypeUpdate")
+            .WithSummary("Actualiza un tipo de documento")
+            .WithDescription("Modifica código y nombre de un tipo de documento existente. "
+                + "404 si no existe, 422 si el payload es inválido. Requiere SuperAdmin.")
+            .Produces<DocumentTypeResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // DELETE /api/v1/admin/document-types/{id} — soft-delete (AC4/AC6 → 204 / 409 / 404).
-        group.MapDelete("/{id:guid}", DeleteAsync).WithName("AdminDocumentTypeDelete");
+        group.MapDelete("/{id:guid}", DeleteAsync)
+            .WithName("AdminDocumentTypeDelete")
+            .WithSummary("Desactiva un tipo de documento (soft-delete)")
+            .WithDescription("Marca el documento como inactivo. 409 si está asociado a algún trámite "
+                + "(no se puede desactivar en uso), 404 si no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         // POST /api/v1/admin/document-types/{id}/reactivate — reactivación (→ 204 / 404).
-        group.MapPost("/{id:guid}/reactivate", ReactivateAsync).WithName("AdminDocumentTypeReactivate");
+        group.MapPost("/{id:guid}/reactivate", ReactivateAsync)
+            .WithName("AdminDocumentTypeReactivate")
+            .WithSummary("Reactiva un tipo de documento desactivado")
+            .WithDescription("Contraparte del soft-delete: vuelve a marcar el documento como activo. "
+                + "Idempotente (reactivar uno ya activo retorna 204), 404 si no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }
@@ -122,7 +166,8 @@ public static class AdminDocumentTypesEndpoints
         {
             DeleteDocumentTypeOutcome.Deleted => Results.NoContent(),
             DeleteDocumentTypeOutcome.HasAssociations => Results.Json(
-                new ErrorResponse(DeleteDocumentTypeResult.HasAssociationsMessage),
+                new AssociationsErrorResponse(
+                    DeleteDocumentTypeResult.HasAssociationsMessage, result.Associations),
                 statusCode: StatusCodes.Status409Conflict),
             _ => Results.NotFound(new ErrorResponse($"No existe el tipo de documento {id}.")),
         };
@@ -157,6 +202,14 @@ public static class AdminDocumentTypesEndpoints
         return Guid.TryParse(raw, out var id) ? id : null;
     }
 
-    /// <summary>Cuerpo de error simple: <c>{ error: "mensaje" }</c> (422 / 404 / 409).</summary>
+    /// <summary>Cuerpo de error simple: <c>{ error: "mensaje" }</c> (422 / 404).</summary>
     private sealed record ErrorResponse(string Error);
+
+    /// <summary>
+    /// Cuerpo 409 del soft-delete bloqueado: el mensaje canónico (AC6) + la lista de trámites
+    /// que usan el documento, para que la consola muestre dónde está en uso (mensaje accionable).
+    /// </summary>
+    private sealed record AssociationsErrorResponse(
+        string Error,
+        IReadOnlyList<DocumentTypeAssociationRef> ProcedureTypes);
 }
