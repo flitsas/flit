@@ -1,7 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Flit.Api.Endpoints.Public;
@@ -27,17 +26,19 @@ internal static class PublicBiometricaEndpoints
         }).WithName("GetPublicBiometric").AllowAnonymous();
 
         // POST completar con las 3 fotos (multipart/form-data). Antiforgery deshabilitado (público).
+        // Los archivos se leen del IFormFileCollection por nombre de campo en vez de exponerlos
+        // como parámetros [FromForm] IFormFile: Swashbuckle 10.x no soporta esa combinación y
+        // aborta la generación de TODO /swagger/v1/swagger.json. Con IFormFileCollection el
+        // binding (y el contrato multipart) se mantienen idénticos y el swagger genera bien.
         app.MapPost("/api/v1/public/biometric/{token}", async (
             string token,
-            IFormFile? rostro,
-            [FromForm(Name = "cedula_frontal")] IFormFile? cedulaFrontal,
-            [FromForm(Name = "cedula_reverso")] IFormFile? cedulaReverso,
+            IFormFileCollection files,
             CompletarBiometriaHandler handler,
             CancellationToken ct) =>
         {
-            await using var sRostro = rostro?.OpenReadStream();
-            await using var sFrontal = cedulaFrontal?.OpenReadStream();
-            await using var sReverso = cedulaReverso?.OpenReadStream();
+            await using var sRostro = files["rostro"]?.OpenReadStream();
+            await using var sFrontal = files["cedula_frontal"]?.OpenReadStream();
+            await using var sReverso = files["cedula_reverso"]?.OpenReadStream();
 
             var input = new CompletarBiometriaInput(sRostro, sFrontal, sReverso);
             var (result, error) = await handler.HandleAsync(token, input, ct);
