@@ -84,6 +84,7 @@ export function DocumentsSection() {
   useEffect(() => {
     if (tab !== "precedence") return;
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga bajo demanda al cambiar pestaña
     void loadPrecedence(c.signal);
     return () => c.abort();
   }, [tab, loadPrecedence]);
@@ -91,6 +92,7 @@ export function DocumentsSection() {
   useEffect(() => {
     if (tab !== "tags") return;
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga bajo demanda al cambiar pestaña
     void loadTags(c.signal);
     return () => c.abort();
   }, [tab, loadTags]);

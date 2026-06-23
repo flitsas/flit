@@ -37,7 +37,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
         {
             TenantId = TenantA,
             ProcedureTypeId = ProcedureType,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Should().HaveCount(2);
         result.Data[0].DocumentName.Should().Be("SOAT");
@@ -68,7 +68,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
                     new OtDocumentPrecedenceOrderRequest { DocumentTypeId = DocB, SortOrder = 1 },
                 ],
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(UpdateOtDocumentPrecedenceStatus.Updated);
         result.Data[0].DocumentTypeId.Should().Be(DocB);
@@ -94,13 +94,13 @@ public sealed class OtDocumentPrecedenceHandlerTests
                 Name = "Urgente",
                 Color = "#FF0000",
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtDocumentTagStatus.Created);
         result.Tag!.Color.Should().Be("#FF0000");
 
         await using var verify = NewContext(db);
-        var entity = await verify.OtDocumentTags.SingleAsync();
+        var entity = await verify.OtDocumentTags.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         entity.TenantId.Should().Be(TenantA);
         entity.Code.Should().Be("URGENTE");
     }
@@ -121,7 +121,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
                 Name = "Bad color",
                 Color = "FF0000",
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtDocumentTagStatus.ValidationFailed);
         result.Errors.Should().Contain(e => e.Field == "color" && e.Message == "INVALID_HEX_COLOR");
@@ -142,7 +142,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
                 Color = "#FF0000",
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -156,7 +156,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
                 Name = "Otro",
                 Color = "#00FF00",
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtDocumentTagStatus.DuplicateCode);
     }
@@ -185,12 +185,12 @@ public sealed class OtDocumentPrecedenceHandlerTests
                 Color = "#222222",
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var listTags = new ListOtDocumentTagsHandler(new OtDocumentTagRepository(ctx));
-        var tagsA = await listTags.HandleAsync(new ListOtDocumentTagsQuery { TenantId = TenantA });
+        var tagsA = await listTags.HandleAsync(new ListOtDocumentTagsQuery { TenantId = TenantA }, TestContext.Current.CancellationToken);
         tagsA.Data.Should().ContainSingle().Which.Code.Should().Be("A");
 
         var listPrec = new ListOtDocumentPrecedenceHandler(new OtDocumentPrecedenceRepository(ctx));
@@ -201,7 +201,7 @@ public sealed class OtDocumentPrecedenceHandlerTests
         {
             TenantId = TenantA,
             ProcedureTypeId = ProcedureType,
-        });
+        }, TestContext.Current.CancellationToken);
         precA.Data.Should().ContainSingle().Which.DocumentTypeId.Should().Be(DocA);
     }
 

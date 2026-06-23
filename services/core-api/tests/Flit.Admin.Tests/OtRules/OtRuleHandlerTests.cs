@@ -50,14 +50,14 @@ public sealed class OtRuleHandlerTests
                 Logic = OtRuleConstants.LogicAnd,
                 Action = new OtRuleActionRequest { Type = OtRuleConstants.ActionBlock },
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtRuleStatus.Created);
         result.Rule!.IsEnabled.Should().BeTrue();
         result.Rule.Name.Should().Be("Bloqueo por deuda");
 
         await using var verify = NewContext(db);
-        var entity = await verify.OtFeatureFlags.SingleAsync();
+        var entity = await verify.OtFeatureFlags.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         entity.FlagKey.Should().StartWith(OtRuleConstants.FlagKeyPrefix);
         entity.IsEnabled.Should().BeTrue();
         entity.Config.Should().Contain("Bloqueo por deuda");
@@ -109,7 +109,7 @@ public sealed class OtRuleHandlerTests
                 Config = """{"name":"Bloqueo por deuda","conditions":[{"field":"deuda_pendiente","op":"eq","value":true}],"logic":"AND","action":{"type":"bloquear"}}""",
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -120,13 +120,13 @@ public sealed class OtRuleHandlerTests
             RuleId = ruleId,
             ChangedBy = ChangedBy,
             Request = new UpdateOtRuleRequest { IsEnabled = false },
-        });
+        }, TestContext.Current.CancellationToken);
 
         updateResult.Status.Should().Be(UpdateOtRuleStatus.Updated);
         updateResult.Rule!.IsEnabled.Should().BeFalse();
 
         var repo = new OtRuleRepository(ctx);
-        var enabled = await repo.ListEnabledByTenantAsync(TenantA);
+        var enabled = await repo.ListEnabledByTenantAsync(TenantA, TestContext.Current.CancellationToken);
         enabled.Should().BeEmpty();
     }
 
@@ -159,12 +159,12 @@ public sealed class OtRuleHandlerTests
                     QueueName = "prioritaria",
                 },
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtRuleStatus.Created);
 
         await using var verify = NewContext(db);
-        var entity = await verify.OtFeatureFlags.SingleAsync();
+        var entity = await verify.OtFeatureFlags.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         entity.Config.Should().Contain("prioritaria");
         entity.Config.Should().Contain("cola_especial");
     }

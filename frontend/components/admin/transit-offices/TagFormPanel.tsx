@@ -25,6 +25,7 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir panel lateral
     setCode("");
     setName("");
     setColor("#FF0000");

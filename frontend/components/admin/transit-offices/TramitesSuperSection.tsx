@@ -72,6 +72,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API con AbortController
     void loadProfile(controller.signal);
     return () => controller.abort();
   }, [loadProfile]);
@@ -81,6 +82,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       return;
     }
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga encadenada tras perfil OT
     void loadProcedures(controller.signal);
     return () => controller.abort();
   }, [profileStatus, loadProcedures]);

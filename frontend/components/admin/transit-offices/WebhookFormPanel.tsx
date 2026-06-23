@@ -32,6 +32,7 @@ export function WebhookFormPanel({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir panel lateral
     setEventType(editing?.eventType ?? OT_WEBHOOK_EVENT_TYPES[0].value);
     setTargetUrl(editing?.targetUrl ?? "");
     setSecret("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { GripVertical } from "lucide-react";
 import type { OtDocumentPrecedenceItem } from "@/lib/api/types-ot";
 
@@ -8,6 +8,20 @@ export interface DocumentPrecedenceListProps {
   items: OtDocumentPrecedenceItem[];
   onReorder: (items: OtDocumentPrecedenceItem[]) => Promise<void>;
   disabled?: boolean;
+}
+
+function reorderList(
+  list: OtDocumentPrecedenceItem[],
+  from: number,
+  to: number,
+): OtDocumentPrecedenceItem[] {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
+    return list;
+  }
+  const next = [...list];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next.map((item, index) => ({ ...item, sort_order: index + 1 }));
 }
 
 /** Lista reordenable con DnD y teclado WCAG (HU #10224 AC2–AC3). */
@@ -24,6 +38,7 @@ export function DocumentPrecedenceList({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincronizar orden tras respuesta API
     setOrder(items);
   }, [items]);
 
@@ -37,19 +52,9 @@ export function DocumentPrecedenceList({
     }
   };
 
-  const applyReorder = (from: number, to: number) => {
-    if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) {
-      return order;
-    }
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    return next.map((item, index) => ({ ...item, sort_order: index + 1 }));
-  };
-
   const onDrop = (targetIndex: number) => {
     if (dragIndex === null || disabled || saving) return;
-    const next = applyReorder(dragIndex, targetIndex);
+    const next = reorderList(order, dragIndex, targetIndex);
     setOrder(next);
     setDragIndex(null);
     void commitOrder(next);
@@ -69,13 +74,13 @@ export function DocumentPrecedenceList({
 
     if (event.key === "ArrowUp" && index > 0) {
       event.preventDefault();
-      setOrder((prev) => applyReorder(index, index - 1));
+      setOrder((prev) => reorderList(prev, index, index - 1));
       setKeyboardIndex(index - 1);
       setPendingKeyboard(true);
     }
     if (event.key === "ArrowDown" && index < order.length - 1) {
       event.preventDefault();
-      setOrder((prev) => applyReorder(index, index + 1));
+      setOrder((prev) => reorderList(prev, index, index + 1));
       setKeyboardIndex(index + 1);
       setPendingKeyboard(true);
     }

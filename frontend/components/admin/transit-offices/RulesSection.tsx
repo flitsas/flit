@@ -31,6 +31,7 @@ export function RulesSection() {
 
   useEffect(() => {
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API con AbortController
     void loadRules(c.signal);
     return () => c.abort();
   }, [loadRules]);

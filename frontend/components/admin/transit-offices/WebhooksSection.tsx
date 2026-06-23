@@ -83,6 +83,7 @@ export function WebhooksSection() {
 
   useEffect(() => {
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API con AbortController
     void loadWebhooks(c.signal);
     return () => c.abort();
   }, [loadWebhooks]);
@@ -90,6 +91,7 @@ export function WebhooksSection() {
   useEffect(() => {
     if (tab !== "logs") return;
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga bitácora al cambiar filtros/página
     void loadLogs(c.signal, logPage);
     return () => c.abort();
   }, [tab, loadLogs, logPage]);
