@@ -1,5 +1,9 @@
+"use client";
+
 import { useState } from "react";
 import { Plus, Search, X, Building2, Users, Shield } from "lucide-react";
+import { createInvitation } from "@/lib/api/security";
+import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 
 const USERS = [
@@ -37,6 +41,11 @@ export function Usuarios() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("equipo");
   const [list, setList] = useState(USERS);
+  const [pendingInvites, setPendingInvites] = useState<{ email: string }[]>([]);
+
+  function handleInviteSuccess(email: string) {
+    setPendingInvites((prev) => [...prev, { email }]);
+  }
 
   return (
     <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
@@ -120,6 +129,20 @@ export function Usuarios() {
                     <button onClick={() => setList((L) => L.map((x, j) => j === i ? { ...x, a: !x.a } : x))} className="w-10 h-5 rounded-full relative transition" style={{ background: u.a ? "#00DBD5" : "#DFE5ED" }}>
                       <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all" style={{ left: u.a ? "calc(100% - 18px)" : "2px" }} />
                     </button>
+                  </div>
+                </div>
+              ))}
+              {pendingInvites.map((inv) => (
+                <div key={inv.email} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED", opacity: 0.8 }}>
+                  <div className="col-span-4">
+                    <p className="font-semibold italic opacity-60">Invitación pendiente</p>
+                    <p className="text-[10px] opacity-60">{inv.email}</p>
+                  </div>
+                  <div className="col-span-2 opacity-40">—</div>
+                  <div className="col-span-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: "#F9AC00" }}>Pendiente</span></div>
+                  <div className="col-span-3 opacity-40">—</div>
+                  <div className="col-span-1 flex justify-end">
+                    <div className="w-10 h-5 rounded-full" style={{ background: "#DFE5ED" }} />
                   </div>
                 </div>
               ))}
@@ -221,12 +244,43 @@ export function Usuarios() {
         </div>
       )}
 
-      {open && <InviteModal onClose={() => setOpen(false)} />}
+      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} />}
     </div>
   );
 }
 
-function InviteModal({ onClose }: { onClose: () => void }) {
+function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (email: string) => void }) {
+  const [email, setEmail] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [selectedRole, setSelectedRole] = useState(0);
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [invitedEmail, setInvitedEmail] = useState("");
+
+  const isDone = status === "done" || status === "done_no_email";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setStatus("loading");
+    try {
+      const result = await createInvitation(email.trim(), roleId.trim());
+      setInvitedEmail(result.email);
+      setStatus(result.emailSent ? "done" : "done_no_email");
+      onSuccess(result.email);
+    } catch (err) {
+      const s = (err as ApiError).status;
+      setError(
+        s === 409
+          ? "Ya existe una invitación pendiente para este correo."
+          : s === 404
+            ? "El rol especificado no existe en el tenant."
+            : "No se pudo enviar la invitación. Inténtalo de nuevo."
+      );
+      setStatus("idle");
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
       <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
@@ -237,32 +291,92 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           </div>
           <button onClick={onClose}><X className="h-5 w-5" /></button>
         </div>
-        <div className="space-y-3">
-          <input placeholder="Nombre completo" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
-          <input placeholder="correo@flitsas.com" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
-          <div>
-            <p className="text-xs font-semibold mb-2">Rol del usuario</p>
-            <div className="grid grid-cols-2 gap-2">
-              {["Administrador", "Gestor", "Operador", "Visualizador"].map((r, i) => (
-                <label key={r} className="flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer" style={{ borderColor: "#DFE5ED" }}>
-                  <input type="radio" name="rol" defaultChecked={i === 0} /> {r}
-                </label>
-              ))}
+
+        {isDone ? (
+          <div className="space-y-3">
+            <div className="rounded-xl p-3 border" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
+              <p className="text-sm font-semibold" style={{ color: "#00DBD5" }}>Invitación enviada</p>
+              <p className="text-xs opacity-70 mt-0.5">Se enviaron instrucciones de activación a <strong>{invitedEmail}</strong>.</p>
+              {status === "done_no_email" && (
+                <p className="text-xs mt-1.5 font-medium" style={{ color: "#F9AC00" }}>
+                  El correo no pudo entregarse. El administrador puede reintentar más tarde.
+                </p>
+              )}
             </div>
-          </div>
-          <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
-            <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
-            <div className="flex items-center gap-2 text-xs">
-              {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
-                <span key={step} className="flex items-center gap-1">
-                  <span className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold text-white" style={{ background: i === 0 ? "#00DBD5" : "#DFE5ED", color: i === 0 ? "#fff" : "#162744" }}>{i + 1}</span>
-                  <span className={i === 0 ? "font-semibold" : "opacity-60"}>{step}</span>
-                </span>
-              ))}
+            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
+              <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
+              <div className="flex items-center gap-2 text-xs">
+                {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
+                  <span key={step} className="flex items-center gap-1">
+                    <span className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold" style={{ background: i === 0 ? "#00DBD5" : "#DFE5ED", color: i === 0 ? "#fff" : "#162744" }}>{i + 1}</span>
+                    <span className={i === 0 ? "font-semibold" : "opacity-60"}>{step}</span>
+                  </span>
+                ))}
+              </div>
             </div>
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>Cerrar</button>
           </div>
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>Enviar Instrucciones</button>
-        </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="correo@empresa.com"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              style={{ borderColor: "#DFE5ED" }}
+            />
+            <div>
+              <p className="text-xs font-semibold mb-2">Rol del usuario</p>
+              <div className="grid grid-cols-2 gap-2">
+                {["Administrador", "Gestor", "Operador", "Visualizador"].map((r, i) => (
+                  <label
+                    key={r}
+                    className="flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition"
+                    style={{ borderColor: selectedRole === i ? "#557EFF" : "#DFE5ED" }}
+                  >
+                    <input type="radio" name="rol" checked={selectedRole === i} onChange={() => setSelectedRole(i)} /> {r}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] opacity-60 mb-1">ID de rol (UUID del tenant)</p>
+              <input
+                type="text"
+                required
+                value={roleId}
+                onChange={(e) => setRoleId(e.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className="w-full text-xs px-3 py-2.5 rounded-xl border bg-transparent outline-none font-mono focus:border-[#557EFF]"
+                style={{ borderColor: "#DFE5ED" }}
+              />
+            </div>
+            {error && (
+              <p className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
+            )}
+            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
+              <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
+              <div className="flex items-center gap-2 text-xs">
+                {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
+                  <span key={step} className="flex items-center gap-1">
+                    <span className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold" style={{ background: i === 0 ? "#00DBD5" : "#DFE5ED", color: i === 0 ? "#fff" : "#162744" }}>{i + 1}</span>
+                    <span className={i === 0 ? "font-semibold" : "opacity-60"}>{step}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={status === "loading"}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition"
+              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            >
+              {status === "loading" ? "Enviando…" : "Enviar Instrucciones"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

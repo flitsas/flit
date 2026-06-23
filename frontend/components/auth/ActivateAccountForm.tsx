@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/api/types";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
+  "w-full bg-white border border-[#DFE5ED] rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
 
 export function ActivateAccountForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -27,9 +27,9 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
   if (done) {
     return (
       <div role="status" className="space-y-4">
-        <p className="text-sm text-slate-700">Tu cuenta fue activada correctamente.</p>
+        <p className="text-sm" style={{ color: "#162744" }}>Tu cuenta fue activada correctamente.</p>
         <Link
-          href="/login"
+          href="/"
           className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
           style={{ background: "#557eff" }}
         >
@@ -83,7 +83,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs opacity-50" style={{ color: "#162744" }}>{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
         <label htmlFor="ac-confirm" className="block text-sm font-medium text-[#162744] mb-1">
