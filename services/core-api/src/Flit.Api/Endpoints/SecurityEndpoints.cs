@@ -35,7 +35,7 @@ public static class SecurityEndpoints
 
                 return Results.Created(
                     $"/api/v1/security/invitations/{result.InvitationId}",
-                    new InvitationCreatedResponse(result.InvitationId, result.Email));
+                    new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
             }
             catch (RoleNotFoundException)
             {
@@ -56,7 +56,7 @@ public static class SecurityEndpoints
 
     private sealed record CreateInvitationRequest(string Email, Guid RoleId);
 
-    private sealed record InvitationCreatedResponse(Guid InvitationId, string Email);
+    private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
     private sealed record ErrorResponse(string Code, string Message);
 }

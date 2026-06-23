@@ -39,7 +39,11 @@ public static class InfrastructureExtensions
                 })
             .UseSnakeCaseNamingConvention()
             .EnableSensitiveDataLogging(false)
-            .EnableDetailedErrors(false));
+            .EnableDetailedErrors(false)
+            // HU10175: UserInvitation se crea con SQL crudo en HU10147_Invitations; el snapshot
+            // no la registra, así que EF lanza PendingModelChangesWarning. Se ignora porque
+            // la tabla existe y la migración ya fue aplicada vía SQL.
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
