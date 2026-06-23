@@ -12,6 +12,7 @@ internal static class SuperAdminEndpointExtensions
 
         ProcedureTypeEndpoints.Map(group);
         CatalogEndpoints.Map(group);
+        SecurityModulesEndpoints.Map(group);
 
         return app;
     }

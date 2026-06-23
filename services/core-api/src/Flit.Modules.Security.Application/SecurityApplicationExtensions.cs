@@ -5,6 +5,7 @@ using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
+using Flit.Modules.Security.Application.Modules;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -20,6 +21,14 @@ public static class SecurityApplicationExtensions
         services.AddScoped<ChangePasswordHandler>();
         services.AddScoped<CreateInvitationHandler>();
         services.AddScoped<ActivateAccountHandler>();
+
+        // HU #10161 — CRUD módulos dinámicos Super Admin
+        services.AddScoped<CreateModuleHandler>();
+        services.AddScoped<UpdateModuleHandler>();
+        services.AddScoped<DeactivateModuleHandler>();
+        services.AddScoped<DeleteModuleHandler>();
+        services.AddScoped<ListModulesHandler>();
+
         return services;
     }
 }

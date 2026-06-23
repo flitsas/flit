@@ -11,8 +11,14 @@ internal sealed class SecurityModuleConfiguration : IEntityTypeConfiguration<Sec
     {
         builder.ToTable("modules", SchemaNames.Security);
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(500);
+        builder.Property(x => x.IsActive).HasDefaultValue(true);
+        builder.Property(x => x.CreatedAt).IsRequired();
+        builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
+        builder.Ignore(x => x.PermissionCount);
     }
 }
 
