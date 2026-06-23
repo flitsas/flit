@@ -32,6 +32,24 @@ export interface RbacPermission {
   isActive: boolean;
 }
 
+export interface RbacRole {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissionCount: number;
+  createdAt: string;
+}
+
+export interface CompanyItem {
+  id: string;
+  nit: string;
+  razonSocial: string;
+  estadoActivo: boolean;
+}
+
 /** Same-origin relative paths; Next.js rewrites proxy to core-api in dev. */
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -144,4 +162,21 @@ export const superadminClient = {
     request<void>(`/api/v1/superadmin/permissions/${id}/deactivate`, { method: 'PATCH' }),
   deletePermission: (id: string) =>
     request<void>(`/api/v1/superadmin/permissions/${id}`, { method: 'DELETE' }),
+
+  // Roles RBAC (SuperAdmin scope — tenantId requerido)
+  listRoles: (tenantId: string) =>
+    request<RbacRole[]>(`/api/v1/superadmin/roles?tenantId=${tenantId}`),
+  createRole: (body: { tenantId: string; code: string; name: string; description?: string }) =>
+    request<{ id: string }>('/api/v1/superadmin/roles', { method: 'POST', body: JSON.stringify(body) }),
+  deleteRole: (id: string) =>
+    request<void>(`/api/v1/superadmin/roles/${id}`, { method: 'DELETE' }),
+  setRolePermissions: (id: string, tenantId: string, permissionIds: string[]) =>
+    request<unknown>(`/api/v1/superadmin/roles/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ tenantId, permissionIds }),
+    }),
+
+  // Compañías (para el picker de tenant en gestión de roles)
+  listCompanies: () =>
+    request<{ data: CompanyItem[] }>('/api/v1/admin/companies/index'),
 };

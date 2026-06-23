@@ -2,9 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, X } from "lucide-react";
-import { superadminClient, RbacModule, RbacPermission } from "@/lib/api/superadmin-client";
+import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem } from "@/lib/api/superadmin-client";
+
+const RBAC_TABS = [
+  { id: "modules", label: "Módulos y Permisos" },
+  { id: "roles", label: "Roles por Tenant" },
+] as const;
+type RbacTabId = (typeof RBAC_TABS)[number]["id"];
 
 export function RbacAdmin() {
+  const [activeTab, setActiveTab] = useState<RbacTabId>("modules");
+
+  // ── Módulos ──
   const [modules, setModules] = useState<RbacModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,22 +91,41 @@ export function RbacAdmin() {
           >
             ← Volver
           </button>
-          <h1 className="text-2xl font-bold">RBAC — Módulos y Permisos</h1>
+          <h1 className="text-2xl font-bold">RBAC — Administración</h1>
           <p className="text-xs opacity-60 mt-0.5">
-            Gestiona el catálogo de módulos y sus permisos granulares.
+            Gestiona módulos, permisos y roles del sistema.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModule(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          <Plus className="h-4 w-4" /> Nuevo módulo
-        </button>
+        {activeTab === "modules" && (
+          <button
+            onClick={() => setShowCreateModule(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            <Plus className="h-4 w-4" /> Nuevo módulo
+          </button>
+        )}
       </div>
 
-      {/* Tabla de módulos */}
-      <div
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-[#DFE5ED]">
+        {RBAC_TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className="relative px-4 py-2.5 text-xs font-semibold transition"
+            style={{ color: activeTab === t.id ? "#557EFF" : "#162744", opacity: activeTab === t.id ? 1 : 0.6 }}
+          >
+            {t.label}
+            {activeTab === t.id && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Pestaña Módulos y Permisos ── */}
+      {activeTab === "modules" && <div
         className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden"
         style={{ borderColor: "#DFE5ED" }}
       >
@@ -231,7 +259,10 @@ export function RbacAdmin() {
               )}
             </div>
           ))}
-      </div>
+      </div>}
+
+      {/* ── Pestaña Roles por Tenant ── */}
+      {activeTab === "roles" && <RolesTab />}
 
       {/* Modal crear módulo */}
       {showCreateModule && (
@@ -260,6 +291,191 @@ export function RbacAdmin() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function RolesTab() {
+  const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+  const [roles, setRoles] = useState<RbacRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [showCreateRole, setShowCreateRole] = useState(false);
+
+  useEffect(() => {
+    superadminClient.listCompanies()
+      .then((r) => setCompanies(r.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTenantId) { setRoles([]); return; }
+    setRolesLoading(true);
+    setRolesError(null);
+    superadminClient.listRoles(selectedTenantId)
+      .then(setRoles)
+      .catch(() => setRolesError("Error al cargar roles."))
+      .finally(() => setRolesLoading(false));
+  }, [selectedTenantId]);
+
+  async function handleDeleteRole(id: string) {
+    try {
+      await superadminClient.deleteRole(id);
+      setRoles((r) => r.filter((x) => x.id !== id));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("ROLE_SYSTEM_LOCKED")) alert("No se puede eliminar: es un rol de sistema.");
+      else if (msg.includes("ROLE_HAS_ACTIVE_USERS")) alert("No se puede eliminar: tiene usuarios activos asignados.");
+      else alert("Error al eliminar el rol.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Selector de tenant */}
+      <div className="flex items-center gap-3">
+        <label htmlFor="tenant-picker" className="text-sm font-semibold shrink-0">Tenant:</label>
+        <select
+          id="tenant-picker"
+          value={selectedTenantId}
+          onChange={(e) => setSelectedTenantId(e.target.value)}
+          className="text-sm px-3 py-2 rounded-xl border bg-white outline-none focus:border-[#557EFF]"
+          style={{ borderColor: "#DFE5ED", minWidth: 280 }}
+        >
+          <option value="">— Selecciona una compañía —</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
+          ))}
+        </select>
+        {selectedTenantId && (
+          <button
+            onClick={() => setShowCreateRole(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            <Plus className="h-4 w-4" /> Nuevo rol
+          </button>
+        )}
+      </div>
+
+      {/* Tabla de roles */}
+      {!selectedTenantId && (
+        <div className="py-12 text-center text-sm opacity-60">Selecciona una compañía para ver sus roles.</div>
+      )}
+      {selectedTenantId && (
+        <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden" style={{ borderColor: "#DFE5ED" }}>
+          <div className="grid px-4 py-2.5 text-[10px] font-semibold uppercase" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px", background: "#DFE5ED", color: "#162744" }}>
+            <div>Código</div>
+            <div>Nombre</div>
+            <div>Descripción</div>
+            <div className="text-center">Permisos</div>
+            <div className="text-center">Sistema</div>
+            <div className="text-right">Acciones</div>
+          </div>
+          {rolesLoading && <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>}
+          {!rolesLoading && rolesError && <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{rolesError}</div>}
+          {!rolesLoading && !rolesError && roles.length === 0 && (
+            <div className="py-12 text-center text-sm opacity-60">No hay roles. Crea el primero.</div>
+          )}
+          {!rolesLoading && !rolesError && roles.map((r) => (
+            <div key={r.id} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px", borderColor: "#DFE5ED" }}>
+              <div className="font-mono opacity-80">{r.code}</div>
+              <div className="font-semibold">{r.name}</div>
+              <div className="opacity-70">{r.description ?? "—"}</div>
+              <div className="text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
+              <div className="text-center">
+                {r.isSystem ? (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-white" style={{ background: "#557EFF" }}>Sistema</span>
+                ) : (
+                  <span className="opacity-40">—</span>
+                )}
+              </div>
+              <div className="flex justify-end">
+                {!r.isSystem && (
+                  <button
+                    onClick={() => handleDeleteRole(r.id)}
+                    aria-label={`Eliminar rol ${r.name}`}
+                    className="p-1.5 rounded-lg transition hover:opacity-80"
+                    style={{ color: "#FF4E00" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showCreateRole && selectedTenantId && (
+        <CreateRoleModal
+          tenantId={selectedTenantId}
+          onClose={() => setShowCreateRole(false)}
+          onCreated={() => {
+            setShowCreateRole(false);
+            superadminClient.listRoles(selectedTenantId).then(setRoles).catch(() => {});
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateRoleModal({
+  tenantId, onClose, onCreated,
+}: {
+  tenantId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await superadminClient.createRole({ tenantId, code: code.trim(), name: name.trim(), description: description.trim() || undefined });
+      onCreated();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe en el tenant." : "Error al crear el rol.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
+        <div className="flex items-start justify-between mb-4">
+          <h3 className="text-lg font-bold">Nuevo rol</h3>
+          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
+            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="admin_tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+          </div>
+          <div>
+            <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
+            <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrador Tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+          </div>
+          <div>
+            <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
+            <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Acceso completo a la configuración del tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+          </div>
+          {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+            {busy ? "Creando…" : "Crear rol"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
