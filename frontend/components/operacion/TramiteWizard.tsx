@@ -383,7 +383,6 @@ export function TramiteWizard(props: Props) {
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
-                onSubmitted={() => setSubmitted(true)}
                 actorsRef={actorsFormRef}
               />
             </div>
@@ -913,7 +912,6 @@ function StepBody({
   preflightLoading,
   onRunPreflight,
   onRefresh,
-  onSubmitted,
   actorsRef,
 }: {
   step: WizardStep;
@@ -923,7 +921,6 @@ function StepBody({
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
-  onSubmitted: () => void;
   actorsRef: RefObject<ActorsFormHandle | null>;
 }) {
   switch (step.key) {
@@ -1021,7 +1018,6 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
-            onSubmitted={onSubmitted}
           />
         </div>
       );
