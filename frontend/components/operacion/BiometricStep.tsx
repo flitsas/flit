@@ -14,6 +14,12 @@ interface Props {
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras simular/refrescar (server-driven). */
   onRefresh?: () => void;
+  /**
+   * Oculta el párrafo introductorio cuando el contenedor ya describe el paso
+   * (paso `identidad`: el h2 + subtítulo del wizard lo cubren). En `fur` NO se
+   * oculta: ahí la biométrica es una subsección dentro de "Generar FUR".
+   */
+  hideIntro?: boolean;
 }
 
 /** Partes que requieren biométrica por modalidad. */
@@ -34,7 +40,7 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
  * verde con "Identidad verificada — {score}/100". El status/gating lo decide el
  * wizard server-driven: este paso solo refresca tras simular.
  */
-export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
+export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = false }: Props) {
   const partes = partesFor(modalidad);
 
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
@@ -71,10 +77,14 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs opacity-70">
-          Validación de identidad de cada parte. La biométrica real llegará en una
-          iteración futura; por ahora puedes simular la validación de cada parte.
-        </p>
+        {hideIntro ? (
+          <span />
+        ) : (
+          <p className="text-xs opacity-70">
+            Validación de identidad de cada parte. La biométrica real llegará en una
+            iteración futura; por ahora puedes simular la validación de cada parte.
+          </p>
+        )}
         <button
           type="button"
           onClick={() => void handleRefresh()}

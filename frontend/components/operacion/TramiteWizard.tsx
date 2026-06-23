@@ -72,6 +72,22 @@ const STATUS_BADGE: Record<
   locked: { bg: '#EEF1F5', color: '#9AA5B1' },
 };
 
+/**
+ * Subtítulo descriptivo por paso, mostrado UNA sola vez bajo el `h2` (título
+ * canónico del paso = `activeStep.label`). Centraliza aquí el copy de ayuda que
+ * antes vivía duplicado en los `h4` internos de cada hijo; al subirlo evitamos
+ * el doble título (uno en la shell, otro en el box). Keys sin entrada no pintan
+ * subtítulo. El paso `fur` conserva su intro propia (actúa como subsección).
+ */
+const STEP_SUBTITLE: Record<string, string> = {
+  consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
+  consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
+  documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
+  comercial: 'Valor de la venta, causal e impuestos del traspaso.',
+  identidad:
+    'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
+};
+
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
 function StepMarker({ status, index }: { status: WizardStepStatus; index: number }) {
   const s = STATUS_BADGE[status];
@@ -386,7 +402,14 @@ export function TramiteWizard(props: Props) {
             </p>
           ) : (
             <div className="space-y-6">
-              <h2 className="text-base font-bold">{activeStep.label}</h2>
+              <div>
+                <h2 className="text-base font-bold">{activeStep.label}</h2>
+                {STEP_SUBTITLE[activeStep.key] && (
+                  <p className="mt-1 text-xs opacity-60">
+                    {STEP_SUBTITLE[activeStep.key]}
+                  </p>
+                )}
+              </div>
               <StepBody
                 step={activeStep}
                 modalidad={modalidad}
@@ -799,11 +822,7 @@ function ConsultaStep({
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
           style={{ borderColor: '#DFE5ED' }}
         >
-          <h4 className="text-sm font-bold">Consulta de vehículo</h4>
-          <p className="mt-0.5 text-xs opacity-60">
-            Ingresa el VIN para consultar los datos del vehículo en el RUNT.
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               id="consulta-vin"
               type="text"
@@ -825,11 +844,7 @@ function ConsultaStep({
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
           style={{ borderColor: '#DFE5ED' }}
         >
-          <h4 className="text-sm font-bold">Consulta de vehículo</h4>
-          <p className="mt-0.5 text-xs opacity-60">
-            Ingresa la placa y el propietario para consultar los datos del RUNT.
-          </p>
-          <div className="mt-3 grid max-w-xl gap-4 sm:grid-cols-2">
+          <div className="grid max-w-xl gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
                 Placa
@@ -969,7 +984,10 @@ function StepBody({
       );
 
     case 'documentos':
-      return <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} />;
+      // hideHeader: el título/descripción del paso ya los pinta el h2 + subtítulo.
+      return (
+        <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
+      );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
     // posición del árbol; sin key, React reusa la instancia al cambiar de paso y
@@ -1003,15 +1021,21 @@ function StepBody({
       );
 
     case 'comercial':
-      return <CommercialForm instanceId={instanceId} onSaved={onRefresh} />;
+      // hideHeader: el h2 + subtítulo ya cubren el título del paso.
+      return (
+        <CommercialForm instanceId={instanceId} onSaved={onRefresh} hideHeader />
+      );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
+    // hideIntro: el h2 + subtítulo ya describen el paso (en `fur` la intro se
+    // conserva porque ahí la biométrica es una subsección, no el título).
     case 'identidad':
       return (
         <BiometricStep
           instanceId={instanceId}
           modalidad={modalidad}
           onRefresh={onRefresh}
+          hideIntro
         />
       );
 

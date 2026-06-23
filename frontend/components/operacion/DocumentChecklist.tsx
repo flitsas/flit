@@ -15,6 +15,11 @@ interface Props {
    * el checklist quedó completo y "Continuar" no se habilita.
    */
   onChanged?: () => void;
+  /**
+   * Oculta el título "Documentos requeridos" y su descripción cuando el contenedor
+   * ya pinta el título del paso (el wizard lo hace con su h2 + subtítulo).
+   */
+  hideHeader?: boolean;
 }
 
 /** MIME permitidos por el contrato. */
@@ -172,7 +177,7 @@ function DocumentSlot({
  * la tipología) y los adjuntos, marca ✓ los satisfechos, valida mime/tamaño
  * antes de subir y resume "faltan N obligatorios / completo".
  */
-export function DocumentChecklist({ instanceId, onChanged }: Props) {
+export function DocumentChecklist({ instanceId, onChanged, hideHeader = false }: Props) {
   const { state, upload, remove, clearError } =
     useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipo, deletingId } = state;
@@ -191,13 +196,17 @@ export function DocumentChecklist({ instanceId, onChanged }: Props) {
       aria-label="Documentos del trámite"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-bold">Documentos requeridos</h4>
-          <p className="text-[11px] opacity-60">
-            Adjunta los documentos que exige el trámite ({ALLOWED_LABEL}, máx
-            20 MB).
-          </p>
-        </div>
+        {hideHeader ? (
+          <div />
+        ) : (
+          <div>
+            <h4 className="text-sm font-bold">Documentos requeridos</h4>
+            <p className="text-[11px] opacity-60">
+              Adjunta los documentos que exige el trámite ({ALLOWED_LABEL}, máx
+              20 MB).
+            </p>
+          </div>
+        )}
         {checklist && (
           <span
             className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"

@@ -650,14 +650,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       aria-label="Captura de actores del trámite"
       noValidate
     >
-      <div className="mb-3">
-        <h4 className="text-sm font-bold">Actores del trámite</h4>
-        <p className="text-[11px] opacity-60">
-          {modalidad === 'matricula_inicial'
-            ? 'Registra los datos del comprador (propietario inicial).'
-            : 'Registra los datos del vendedor y del comprador.'}
-        </p>
-      </div>
+      {/* Embebido en el wizard el título del paso lo pinta la shell (h2); aquí el
+          h4 sería un segundo título redundante, así que se omite. */}
+      {!embeddedInWizard && (
+        <div className="mb-3">
+          <h4 className="text-sm font-bold">Actores del trámite</h4>
+          <p className="text-[11px] opacity-60">
+            {modalidad === 'matricula_inicial'
+              ? 'Registra los datos del comprador (propietario inicial).'
+              : 'Registra los datos del vendedor y del comprador.'}
+          </p>
+        </div>
+      )}
 
       {errorBanner}
 

@@ -11,6 +11,11 @@ interface Props {
   instanceId: string | null;
   /** Se invoca tras un guardado exitoso (la shell refresca el wizard). */
   onSaved?: () => void;
+  /**
+   * Oculta el título "Datos comerciales" y su descripción cuando el contenedor
+   * ya pinta el título del paso (el wizard lo hace con su h2 + subtítulo).
+   */
+  hideHeader?: boolean;
 }
 
 const CAUSAL_OPTIONS: { value: CommercialCausal; label: string }[] = [
@@ -42,7 +47,7 @@ function numberOrNull(v: string): number | null {
  * impuesto, derechos, método de pago). Carga/guarda vía el cliente; el envío
  * exitoso dispara `onSaved` para que la shell re-consulte el wizard.
  */
-export function CommercialForm({ instanceId, onSaved }: Props) {
+export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Props) {
   const [data, setData] = useState<CommercialData>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -101,12 +106,14 @@ export function CommercialForm({ instanceId, onSaved }: Props) {
       aria-label="Datos comerciales del trámite"
       noValidate
     >
-      <div className="mb-3">
-        <h4 className="text-sm font-bold">Datos comerciales</h4>
-        <p className="text-[11px] opacity-60">
-          Valor de la venta, causal e impuestos del traspaso.
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="mb-3">
+          <h4 className="text-sm font-bold">Datos comerciales</h4>
+          <p className="text-[11px] opacity-60">
+            Valor de la venta, causal e impuestos del traspaso.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div
