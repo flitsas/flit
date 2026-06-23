@@ -1,12 +1,14 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed class SubmitProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
-    IProcedureTypeRepository typeRepo)
+    IProcedureTypeRepository typeRepo,
+    IProcedureStateChangeNotifier stateChangeNotifier)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -53,6 +55,15 @@ public sealed class SubmitProcedureInstanceHandler(
         // detecta el cambio de estado de la instancia y el status_history nuevo (INSERT). NO se
         // llama Update(): marcaría el status_history nuevo como Modified → UPDATE de 0 filas.
         await repo.SaveChangesAsync(ct);
+
+        await stateChangeNotifier.NotifyAsync(
+            new ProcedureStateChangeEvent(
+                tenantId,
+                id,
+                ProcedureInstanceStatus.Draft,
+                ProcedureInstanceStatus.Submitted,
+                now),
+            ct).ConfigureAwait(false);
 
         return (CreateProcedureInstanceHandler.ToSummary(instance), null);
     }

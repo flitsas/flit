@@ -34,6 +34,9 @@ using Flit.Admin.Application.OtProfile;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
+using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
+using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
+using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
@@ -111,6 +114,11 @@ public static class DependencyInjection
         services.AddScoped<UpdateOtProfileHandler>();
         services.AddScoped<UpdateOtFeatureFlagHandler>();
         services.AddScoped<IQuipuxReadOnlyGuard, QuipuxReadOnlyGuard>();
+
+        // HU #10216 — webhooks OT y bitácora API.
+        services.AddScoped<CreateOtWebhookHandler>();
+        services.AddScoped<UpdateOtWebhookHandler>();
+        services.AddScoped<ListOtApiLogsHandler>();
 
         return services;
     }

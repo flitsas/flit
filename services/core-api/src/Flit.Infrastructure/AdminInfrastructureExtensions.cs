@@ -8,6 +8,9 @@ using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.OtProfile;
+using Flit.Admin.Domain.OtWebhooks;
+using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
@@ -63,6 +66,18 @@ public static class AdminInfrastructureExtensions
         // HU #10215 — perfil OT y feature flags.
         services.AddScoped<IOtProfileRepository, OtProfileRepository>();
         services.AddScoped<IOtFeatureFlagRepository, OtFeatureFlagRepository>();
+
+        // HU #10216 — webhooks OT, bitácora API y dispatch de cambios de estado.
+        services.AddScoped<IOtWebhookSubscriptionRepository, OtWebhookSubscriptionRepository>();
+        services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
+        services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
+        services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
+        services.AddScoped<IProcedureStateChangeNotifier, OtWebhookProcedureStateChangeNotifier>();
+
+        services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
 
         return services;
     }

@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -17,7 +18,10 @@ public sealed class SubmitProcedureInstanceTests
 
     public SubmitProcedureInstanceTests()
     {
-        _sut = new SubmitProcedureInstanceHandler(_repo, _typeRepo);
+        _sut = new SubmitProcedureInstanceHandler(
+            _repo,
+            _typeRepo,
+            NullProcedureStateChangeNotifier.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>

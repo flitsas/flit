@@ -43,6 +43,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<OtFeatureFlagEntity> OtFeatureFlags => Set<OtFeatureFlagEntity>();
 
+    public DbSet<OtWebhookSubscriptionEntity> OtWebhookSubscriptions => Set<OtWebhookSubscriptionEntity>();
+
+    public DbSet<OtApiCallLogEntity> OtApiCallLogs => Set<OtApiCallLogEntity>();
+
     // ── Admin / parametrización documental (develop, HU #10193–#10198) ─────────
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
