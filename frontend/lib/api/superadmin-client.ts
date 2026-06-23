@@ -11,6 +11,27 @@ import type {
   ConsultationTemplate,
 } from './types/procedure-parametrization';
 
+export interface RbacModule {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  permissionCount: number;
+  createdAt: string;
+}
+
+export interface RbacPermission {
+  id: string;
+  moduleId: string;
+  slug: string;
+  name: string;
+  action: string;
+  description: string | null;
+  isActive: boolean;
+}
+
 /** Same-origin relative paths; Next.js rewrites proxy to core-api in dev. */
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -103,4 +124,24 @@ export const superadminClient = {
       `/api/v1/superadmin/consultation-templates/${templateId}/apply-fields`,
       { method: 'POST', body: JSON.stringify(payload) },
     ),
+
+  // Módulos RBAC
+  listModules: () =>
+    request<RbacModule[]>('/api/v1/superadmin/modules'),
+  createModule: (body: { code: string; name: string; description?: string; sortOrder?: number }) =>
+    request<RbacModule>('/api/v1/superadmin/modules', { method: 'POST', body: JSON.stringify(body) }),
+  deactivateModule: (id: string) =>
+    request<void>(`/api/v1/superadmin/modules/${id}/deactivate`, { method: 'PATCH' }),
+  deleteModule: (id: string) =>
+    request<void>(`/api/v1/superadmin/modules/${id}`, { method: 'DELETE' }),
+
+  // Permisos RBAC
+  listPermissions: (moduleId: string) =>
+    request<RbacPermission[]>(`/api/v1/superadmin/permissions?moduleId=${moduleId}`),
+  createPermission: (body: { moduleId: string; slug: string; name: string; action?: string; description?: string }) =>
+    request<RbacPermission>('/api/v1/superadmin/permissions', { method: 'POST', body: JSON.stringify(body) }),
+  deactivatePermission: (id: string) =>
+    request<void>(`/api/v1/superadmin/permissions/${id}/deactivate`, { method: 'PATCH' }),
+  deletePermission: (id: string) =>
+    request<void>(`/api/v1/superadmin/permissions/${id}`, { method: 'DELETE' }),
 };

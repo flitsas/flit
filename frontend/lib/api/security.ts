@@ -16,6 +16,16 @@ export interface TenantUser {
   createdAt: string | null;
 }
 
+export interface TenantRole {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissionCount: number;
+  createdAt: string;
+}
+
 /** POST /api/v1/security/invitations → 201 | 404 (rol) | 409 (pending duplicado). */
 export async function createInvitation(
   email: string,
@@ -36,4 +46,17 @@ export async function createInvitation(
 /** GET /api/v1/security/users → lista de usuarios del tenant. */
 export async function getUsers(): Promise<TenantUser[]> {
   return apiFetch<TenantUser[]>("/api/v1/security/users");
+}
+
+/** GET /api/v1/security/roles */
+export async function getRoles(): Promise<TenantRole[]> {
+  return apiFetch<TenantRole[]>("/api/v1/security/roles");
+}
+
+/** PUT /api/v1/security/users/{userId}/role */
+export async function assignRole(userId: string, roleId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/users/${userId}/role`, {
+    method: "PUT",
+    body: { roleId },
+  });
 }

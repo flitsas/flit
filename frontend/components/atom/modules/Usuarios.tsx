@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Search, X, Building2, Users, Shield } from "lucide-react";
-import { createInvitation, getUsers, TenantUser } from "@/lib/api/security";
+import { createInvitation, getUsers, getRoles, assignRole, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 
@@ -12,9 +12,6 @@ const COMPANIES = [
   { name: "Transito Sabaneta", nit: "890.111.222-3", estado: "Suspendida", plan: "Básico", users: 12 },
   { name: "Operador Valle", nit: "890.333.444-5", estado: "En prueba", plan: "Trial", users: 6 },
 ];
-
-const PERMISSIONS = ["Trámites", "Reportes", "Validaciones", "Usuarios", "Admin OT", "Documentos"];
-const ROLES = ["Super Admin", "Admin Tenant", "Gestor", "Auditor"];
 
 const TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
@@ -42,6 +39,8 @@ export function Usuarios() {
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<TenantRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
 
   async function loadUsers() {
     setLoading(true);
@@ -56,8 +55,21 @@ export function Usuarios() {
     }
   }
 
+  async function loadRoles() {
+    setRolesLoading(true);
+    try {
+      const data = await getRoles();
+      setRoles(data);
+    } catch {
+      // silencioso — roles son opcionales para el dropdown
+    } finally {
+      setRolesLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadUsers();
+    loadRoles();
   }, []);
 
   function handleInviteSuccess() {
@@ -78,11 +90,7 @@ export function Usuarios() {
             <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#557EFF" }}>
               <Plus className="h-4 w-4" /> Nueva compañía
             </button>
-          ) : (
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#557EFF" }}>
-              <Plus className="h-4 w-4" /> Nuevo rol
-            </button>
-          )
+          ) : null
         }
       />
 
@@ -99,7 +107,7 @@ export function Usuarios() {
             >
               <Icon className="h-3.5 w-3.5" />
               {t.label}
-              {active && <span className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full" style={{ background: "#557EFF" }} />}
+              {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />}
             </button>
           );
         })}
@@ -107,48 +115,31 @@ export function Usuarios() {
 
       {tab === "usuarios" && (
         <>
-          <div className="grid grid-cols-4 gap-3 shrink-0">
-            {[
-              ["Total Usuarios", 250, "#557EFF"],
-              ["Usuarios Activos", 240, "#00DBD5"],
-              ["Usuarios inactivos", 10, "#FF4E00"],
-              ["Súper admin", 5, "#162744"],
-            ].map(([l, v, c]) => (
-              <div key={l as string} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-                <p className="text-[11px] opacity-70 font-medium">{l as string}</p>
-                <p className="text-3xl font-bold mt-1" style={{ color: c as string }}>{v as number}</p>
-              </div>
-            ))}
-          </div>
           <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-white dark:bg-[#0B0F14] max-w-md shrink-0" style={{ borderColor: "#DFE5ED" }}>
             <Search className="h-4 w-4 opacity-60" />
-            <input placeholder="Buscar por nombre, correo..." className="flex-1 bg-transparent outline-none text-xs" />
+            <input placeholder="Buscar por nombre o correo..." className="flex-1 bg-transparent outline-none text-xs" />
           </div>
+
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl" style={{ background: "#DFE5ED", color: "#162744" }}>
+            <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
               <div className="col-span-4">Usuario</div>
               <div className="col-span-2">Rol</div>
               <div className="col-span-2">Estado</div>
-              <div className="col-span-3">Fecha creación</div>
-              <div className="col-span-1 text-right"></div>
+              <div className="col-span-3">Fecha</div>
+              <div className="col-span-1" />
             </div>
+
             <div className="flex-1 overflow-y-auto space-y-2 pt-2">
               {loading && (
-                <div className="flex justify-center py-12">
-                  <span className="text-sm opacity-60">Cargando usuarios…</span>
-                </div>
+                <div className="py-12 text-center text-sm opacity-60">Cargando usuarios…</div>
               )}
               {!loading && error && (
-                <div className="text-sm text-center py-12" style={{ color: "#FF4E00" }}>
-                  Error al cargar usuarios. Intenta de nuevo.
-                </div>
+                <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{error}</div>
               )}
               {!loading && !error && users.length === 0 && (
-                <div className="text-sm text-center py-12 opacity-60">
-                  No hay usuarios en el tenant.
-                </div>
+                <div className="py-12 text-center text-sm opacity-60">No hay usuarios en este tenant. Invita al primero.</div>
               )}
-              {!loading && !error && users.length > 0 && users.map((u) => {
+              {!loading && !error && users.map((u) => {
                 const badge = STATUS_BADGE[u.status];
                 return (
                   <div key={u.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
@@ -156,7 +147,19 @@ export function Usuarios() {
                       <p className="font-semibold">{u.fullName}</p>
                       <p className="text-[10px] opacity-60">{u.email}</p>
                     </div>
-                    <div className="col-span-2 opacity-80">{u.role ?? "—"}</div>
+                    <div className="col-span-2">
+                      {u.status !== "pending" ? (
+                        <RoleDropdown
+                          userId={u.id}
+                          currentRoleName={u.role}
+                          roles={roles}
+                          rolesLoading={rolesLoading}
+                          onAssigned={loadUsers}
+                        />
+                      ) : (
+                        <span className="opacity-60">—</span>
+                      )}
+                    </div>
                     <div className="col-span-2">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: badge.color }}>
                         {badge.label}
@@ -168,51 +171,43 @@ export function Usuarios() {
                 );
               })}
             </div>
-            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">Mostrando {users.length} usuario{users.length !== 1 ? "s" : ""}</p>
+            {!loading && !error && users.length > 0 && (
+              <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
+                Mostrando {users.length} usuario{users.length !== 1 ? "s" : ""}
+              </p>
+            )}
           </div>
         </>
       )}
 
       {tab === "roles" && (
         <div className="flex-1 min-h-0 flex flex-col gap-3">
-          <div className="grid grid-cols-4 gap-3 shrink-0">
-            {[
-              ["Super Admin", "12/12", "#00DBD5"],
-              ["Admin Tenant", "9/12", "#557EFF"],
-              ["Gestor", "6/12", "#F9AC00"],
-              ["Auditor", "4/12", "#162744"],
-            ].map(([role, scope, color]) => (
-              <div key={role as string} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-                <p className="text-xs font-semibold">{role as string}</p>
-                <p className="text-[10px] font-semibold mt-1" style={{ color: color as string }}>{scope as string} permisos</p>
-                <div className="h-2 rounded-full mt-2 overflow-hidden" style={{ background: "#DFE5ED" }}>
-                  <div className="h-full" style={{ width: scope === "12/12" ? "100%" : scope === "9/12" ? "75%" : scope === "6/12" ? "50%" : "34%", background: color as string }} />
-                </div>
+          {rolesLoading ? (
+            <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
+          ) : roles.length === 0 ? (
+            <div className="py-12 text-center text-sm opacity-60">
+              No hay roles configurados para este tenant. Contacta al Super Admin.
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
+                <div className="col-span-2">Código</div>
+                <div className="col-span-4">Nombre</div>
+                <div className="col-span-4">Descripción</div>
+                <div className="col-span-2 text-center">Permisos</div>
               </div>
-            ))}
-          </div>
-          <div className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-            <div className="grid px-4 py-2.5 text-[10px] font-semibold uppercase shrink-0" style={{ gridTemplateColumns: `180px repeat(${ROLES.length}, 1fr)`, background: "#DFE5ED", color: "#162744" }}>
-              <div>Módulo</div>
-              {ROLES.map((r) => <div key={r} className="text-center">{r}</div>)}
+              <div className="flex-1 overflow-y-auto space-y-2 pt-2">
+                {roles.map((r) => (
+                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
+                    <div className="col-span-2 font-mono opacity-80">{r.code}</div>
+                    <div className="col-span-4 font-semibold">{r.name}</div>
+                    <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
+                    <div className="col-span-2 text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {PERMISSIONS.map((perm) => (
-                <div key={perm} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: `180px repeat(${ROLES.length}, 1fr)`, borderColor: "#DFE5ED" }}>
-                  <div className="font-medium">{perm}</div>
-                  {ROLES.map((role, i) => (
-                    <div key={role} className="flex justify-center">
-                      <input type="checkbox" defaultChecked={i === 0 || (i === 1 && perm !== "Admin OT")} className="h-4 w-4 accent-[#557EFF]" />
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-3 border-t flex justify-end gap-2 shrink-0" style={{ borderColor: "#DFE5ED" }}>
-              <button className="px-4 py-2 rounded-xl text-xs font-medium border" style={{ borderColor: "#DFE5ED" }}>Descartar</button>
-              <button className="px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: "#557EFF" }}>Guardar permisos</button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -265,15 +260,70 @@ export function Usuarios() {
         </div>
       )}
 
-      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} />}
+      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} />}
     </div>
   );
 }
 
-function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function RoleDropdown({
+  userId, currentRoleName, roles, rolesLoading, onAssigned,
+}: {
+  userId: string;
+  currentRoleName: string | null;
+  roles: TenantRole[];
+  rolesLoading: boolean;
+  onAssigned: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const roleId = e.target.value;
+    if (!roleId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await assignRole(userId, roleId);
+      onAssigned();
+    } catch {
+      setErr("Error al asignar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <select
+        aria-label="Asignar rol"
+        value=""
+        onChange={handleChange}
+        disabled={busy || rolesLoading || roles.length === 0}
+        className="text-[11px] rounded-lg border px-2 py-1 bg-transparent outline-none"
+        style={{ borderColor: "#DFE5ED", minWidth: 100 }}
+      >
+        <option value="" disabled>
+          {busy ? "Asignando…" : (currentRoleName ?? "Sin rol ▾")}
+        </option>
+        {roles.map((r) => (
+          <option key={r.id} value={r.id}>{r.name}</option>
+        ))}
+      </select>
+      {err && <span className="text-[10px]" style={{ color: "#FF4E00" }} role="alert">{err}</span>}
+    </div>
+  );
+}
+
+function InviteModal({
+  onClose, onSuccess, roles,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  roles: TenantRole[];
+}) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [selectedRole, setSelectedRole] = useState(0);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
   const [invitedEmail, setInvitedEmail] = useState("");
@@ -285,7 +335,11 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     setError(null);
     setStatus("loading");
     try {
-      const result = await createInvitation(email.trim(), fullName.trim());
+      const result = await createInvitation(
+        email.trim(),
+        fullName.trim(),
+        selectedRoleId || undefined,
+      );
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
       onSuccess();
@@ -308,9 +362,9 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold">Invitar usuario</h3>
-            <p className="text-xs opacity-70 mt-0.5">Asigna el acceso y permiso para colaborar dentro de FLIT.</p>
+            <p className="text-xs opacity-70 mt-0.5">Asigna el acceso para colaborar dentro de FLIT.</p>
           </div>
-          <button onClick={onClose}><X className="h-5 w-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
 
         {isDone ? (
@@ -339,40 +393,51 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="text"
-              required
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Juan Pérez"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
-            />
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="correo@empresa.com"
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
-            />
             <div>
-              <p className="text-xs font-semibold mb-2">Rol del usuario</p>
-              <div className="grid grid-cols-2 gap-2">
-                {["Administrador", "Gestor", "Operador", "Visualizador"].map((r, i) => (
-                  <label
-                    key={r}
-                    className="flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition"
-                    style={{ borderColor: selectedRole === i ? "#557EFF" : "#DFE5ED" }}
-                  >
-                    <input type="radio" name="rol" checked={selectedRole === i} onChange={() => setSelectedRole(i)} /> {r}
-                  </label>
-                ))}
-              </div>
+              <label htmlFor="invite-name" className="text-xs font-semibold block mb-1">Nombre completo *</label>
+              <input
+                id="invite-name"
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Juan Pérez"
+                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                style={{ borderColor: "#DFE5ED" }}
+              />
             </div>
+            <div>
+              <label htmlFor="invite-email" className="text-xs font-semibold block mb-1">Correo electrónico *</label>
+              <input
+                id="invite-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="correo@empresa.com"
+                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                style={{ borderColor: "#DFE5ED" }}
+              />
+            </div>
+            {roles.length > 0 && (
+              <div>
+                <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
+                <select
+                  id="invite-role"
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                  style={{ borderColor: "#DFE5ED" }}
+                >
+                  <option value="">Sin rol asignado</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {error && (
-              <p className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
+              <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
             )}
             <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
               <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
