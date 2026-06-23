@@ -7,6 +7,7 @@ using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.Permissions;
+using Flit.Modules.Security.Application.Roles;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -35,6 +36,12 @@ public static class SecurityApplicationExtensions
         services.AddScoped<DeactivatePermissionHandler>();
         services.AddScoped<DeletePermissionHandler>();
         services.AddScoped<ListPermissionsHandler>();
+
+        // HU #10163 — CRUD roles y asociación de permisos Super Admin
+        services.AddScoped<CreateRoleHandler>();
+        services.AddScoped<DeleteRoleHandler>();
+        services.AddScoped<SetRolePermissionsHandler>();
+        services.AddScoped<ListRolesHandler>();
 
         return services;
     }
