@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
   </ItemGroup>
 
   <ItemGroup>
