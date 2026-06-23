@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Login } from "@/components/atom/Login";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
@@ -13,9 +14,20 @@ import { getToken } from "@/lib/api/client";
 import { clearToken, getRememberedEmail } from "@/lib/auth/session";
 
 export default function HomePage() {
+  const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [module, setModule] = useState<ModuleId>("dashboard");
   const [hydrated, setHydrated] = useState(false);
+
+  // Track B — Trámites vive en /tramites (ruta propia). El dock y el CTA del
+  // dashboard navegan allá; los demás módulos siguen por setState en esta SPA.
+  const handleNav = (m: ModuleId) => {
+    if (m === "tramites") {
+      router.push("/tramites");
+      return;
+    }
+    setModule(m);
+  };
 
   useEffect(() => {
     // La autenticación se deriva del JWT real (cookie/localStorage), no de un flag
@@ -40,8 +52,8 @@ export default function HomePage() {
   }
 
   return (
-    <Shell active={module} onNav={setModule} onLogout={handleLogout}>
-      {module === "dashboard" && <Dashboard onNewTramite={() => setModule("tramites")} />}
+    <Shell active={module} onNav={handleNav} onLogout={handleLogout}>
+      {module === "dashboard" && <Dashboard onNewTramite={() => router.push("/tramites")} />}
       {module === "tramites" && <Tramites />}
       {module === "reportes" && <Reportes />}
       {module === "validaciones" && <Validaciones />}

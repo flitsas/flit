@@ -45,18 +45,22 @@ import type {
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
- * modalidad/pasos/status. Por eso solo necesita saber CÓMO crear la instancia.
+ * modalidad/pasos/status. Por eso solo necesita saber CÓMO obtener la instancia.
  *
- * - Entrada por modalidad (M0): `modalidad` + `title` (etiqueta para el header).
+ * - Instancia existente (Track B): `existingInstanceId` — el wizard opera sobre
+ *   un draft ya creado (ruta /tramites/[instanceId]). NO crea nada.
+ * - Entrada por modalidad (M0): `modalidad` + `title` — crea la instancia draft
+ *   al montar. Se conserva para los tests legacy de auto-create.
  * - Entrada legacy por tipo publicado: `configuration` + `procedureTypeId`.
  *
- * Exactamente una de las dos vías debe estar presente.
+ * Exactamente una de las tres vías debe estar presente.
  */
 type Props = {
   onExit: () => void;
 } & (
-  | { modalidad: WizardModalidad; title: string; configuration?: undefined; procedureTypeId?: undefined }
-  | { configuration: ProcedureConfiguration; procedureTypeId: string; modalidad?: undefined; title?: undefined }
+  | { existingInstanceId: string; modalidad?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined }
+  | { modalidad: WizardModalidad; title: string; existingInstanceId?: undefined; configuration?: undefined; procedureTypeId?: undefined }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined }
 );
 
 const STATUS_BADGE: Record<
@@ -96,12 +100,11 @@ function StepMarker({ status, index }: { status: WizardStepStatus; index: number
  * `refresh()` para re-consultar el estado autoritativo.
  */
 export function TramiteWizard(props: Props) {
-  const { configuration, procedureTypeId, modalidad: entryModalidad, title, onExit } = props;
+  const { configuration, procedureTypeId, modalidad: entryModalidad, title, existingInstanceId, onExit } = props;
   const { state, start } = useProcedureInstance();
-  const instanceId = state.instanceId;
-
-  // Header: por modalidad usamos `title`; legacy usa configuration.name.
-  const headerTitle = title ?? configuration?.name ?? 'Trámite';
+  // Con instancia existente (Track B) no se crea nada: el id viene por prop.
+  // En las vías de auto-create el id lo produce `start()` → state.instanceId.
+  const instanceId = existingInstanceId ?? state.instanceId;
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
@@ -113,15 +116,17 @@ export function TramiteWizard(props: Props) {
   // que `start()` corra UNA sola vez por entrada.
   const startedForRef = useRef<string | null>(null);
 
-  // Crea la instancia draft al montar (una sola vez por entrada).
+  // Crea la instancia draft al montar (una sola vez por entrada). Si ya existe
+  // (existingInstanceId), NO crea: el wizard solo hidrata el draft vía GET /wizard.
   useEffect(() => {
+    if (existingInstanceId) return;
     if (startedForRef.current === startKey) return;
     startedForRef.current = startKey;
     void start(
       entryModalidad ? { modalidad: entryModalidad } : { procedureTypeId: procedureTypeId! },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startKey]);
+  }, [startKey, existingInstanceId]);
 
   const {
     wizard,
@@ -145,8 +150,15 @@ export function TramiteWizard(props: Props) {
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
 
-  const modalidad: WizardModalidad = wizard?.modalidad ?? 'matricula_inicial';
+  const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
+
+  // Header: por modalidad usamos `title`; legacy usa configuration.name; con
+  // instancia existente derivamos la etiqueta de la modalidad server-driven.
+  const headerTitle =
+    title ??
+    configuration?.name ??
+    (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
 
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.

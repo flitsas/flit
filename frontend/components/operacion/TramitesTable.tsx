@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   InstanceStatus,
@@ -73,6 +74,7 @@ interface TramitesTableProps {
 }
 
 export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
+  const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,46 +176,50 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           {items.map((item) => {
             const chip = estadoChip(item.estado);
             return (
-              <li
-                key={item.id}
-                className="grid items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)]"
-                style={{ gridTemplateColumns: GRID_COLS }}
-              >
-                <div className="min-w-0">
-                  <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-                    {item.placa ?? '—'}
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/tramites/${item.id}`)}
+                  className="w-full grid items-center text-left bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  style={{ gridTemplateColumns: GRID_COLS }}
+                  aria-label={`Abrir trámite ${item.referenceNumber}`}
+                >
+                  <span className="min-w-0">
+                    <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
+                      {item.placa ?? '—'}
+                    </span>
+                    <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
+                      {item.referenceNumber}
+                    </span>
                   </span>
-                  <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-                    {item.referenceNumber}
+                  <span className="block text-[#162744] dark:text-white/90 truncate">
+                    {item.compradorNombre ?? '—'}
                   </span>
-                </div>
-                <div className="text-[#162744] dark:text-white/90 truncate">
-                  {item.compradorNombre ?? '—'}
-                </div>
-                <div className="font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
-                  {item.vin ?? '—'}
-                </div>
-                <div className="text-[#162744]/90 dark:text-white/80 truncate">
-                  {vehiculo(item)}
-                </div>
-                <div className="font-mono text-xs text-[#162744]/70 dark:text-white/60">
-                  {item.pasoActual}/{item.totalPasos}
-                </div>
-                <div>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
-                    style={{
-                      background: chip.bg,
-                      color: chip.color,
-                      borderColor: chip.border,
-                    }}
-                  >
-                    {chip.label}
+                  <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
+                    {item.vin ?? '—'}
                   </span>
-                </div>
-                <div className="font-mono text-xs text-[#162744]/70 dark:text-white/60 text-right">
-                  {shortDate(item.createdAt)}
-                </div>
+                  <span className="block text-[#162744]/90 dark:text-white/80 truncate">
+                    {vehiculo(item)}
+                  </span>
+                  <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+                    {item.pasoActual}/{item.totalPasos}
+                  </span>
+                  <span className="block">
+                    <span
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
+                      style={{
+                        background: chip.bg,
+                        color: chip.color,
+                        borderColor: chip.border,
+                      }}
+                    >
+                      {chip.label}
+                    </span>
+                  </span>
+                  <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60 text-right">
+                    {shortDate(item.createdAt)}
+                  </span>
+                </button>
               </li>
             );
           })}

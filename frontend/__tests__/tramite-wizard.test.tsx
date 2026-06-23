@@ -149,6 +149,19 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
   });
 });
 
+describe('TramiteWizard — instancia existente (Track B)', () => {
+  it('con existingInstanceId NO crea instancia y carga el wizard de ese id', async () => {
+    render(<TramiteWizard existingInstanceId="inst-99" onExit={() => {}} />);
+
+    // El wizard server-driven se hidrata con el id de la URL...
+    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
+    expect(stepButtons).toHaveLength(5);
+    expect(mocks.getWizardState).toHaveBeenCalledWith('inst-99', expect.anything());
+    // ...y NO dispara un POST /instances (F5 reabre, no re-crea).
+    expect(mocks.createInstance).not.toHaveBeenCalled();
+  });
+});
+
 describe('TramiteWizard — status y reasons traducidos', () => {
   it('traduce los códigos de reason a copy amigable', async () => {
     renderWizard();
