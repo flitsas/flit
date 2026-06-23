@@ -1,17 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, X, Building2, Users, Shield } from "lucide-react";
-import { createInvitation } from "@/lib/api/security";
+import { createInvitation, getUsers, TenantUser } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
-
-const USERS = [
-  { n: "Mateo Ruiz Gil", e: "mateo@flit.io", r: "Súper Admin", a: true, la: "21/05/2026 06:00 p.m." },
-  { n: "Juan Pérez", e: "juan@tenant.com", r: "Gestor", a: true, la: "21/05/2026 03:12 p.m." },
-  { n: "Sonia Cadavid Ríos", e: "sonicr@tenant.com", r: "Súper Admin", a: false, la: "21/05/2026 06:00 p.m." },
-  { n: "Laura Bedoya Ríos", e: "labedo@tenant.com", r: "Auditor", a: true, la: "21/05/2026 06:00 p.m." },
-];
 
 const COMPANIES = [
   { name: "FLIT SAS", nit: "900.123.456-7", estado: "Activa", plan: "Enterprise", users: 250 },
@@ -24,7 +17,7 @@ const PERMISSIONS = ["Trámites", "Reportes", "Validaciones", "Usuarios", "Admin
 const ROLES = ["Super Admin", "Admin Tenant", "Gestor", "Auditor"];
 
 const TABS = [
-  { id: "equipo", label: "Equipo", icon: Users },
+  { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
   { id: "companias", label: "Compañías", icon: Building2 },
 ] as const;
@@ -37,14 +30,38 @@ const BADGE: Record<string, string> = {
   "En prueba": "#F9AC00",
 };
 
+const STATUS_BADGE: Record<TenantUser["status"], { color: string; label: string }> = {
+  active: { color: "#00DBD5", label: "Activo" },
+  inactive: { color: "#FF4E00", label: "Inactivo" },
+  pending: { color: "#F9AC00", label: "Pendiente" },
+};
+
 export function Usuarios() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<TabId>("equipo");
-  const [list, setList] = useState(USERS);
-  const [pendingInvites, setPendingInvites] = useState<{ email: string }[]>([]);
+  const [tab, setTab] = useState<TabId>("usuarios");
+  const [users, setUsers] = useState<TenantUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleInviteSuccess(email: string) {
-    setPendingInvites((prev) => [...prev, { email }]);
+  async function loadUsers() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getUsers();
+      setUsers(data);
+    } catch {
+      setError("Error al cargar usuarios.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  function handleInviteSuccess() {
+    loadUsers();
   }
 
   return (
@@ -53,9 +70,9 @@ export function Usuarios() {
         title="Administración de usuarios y permisos"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         right={
-          tab === "equipo" ? (
+          tab === "usuarios" ? (
             <button onClick={() => setOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
-              <Plus className="h-4 w-4" /> Invitar Colaborador
+              <Plus className="h-4 w-4" /> Invitar usuario
             </button>
           ) : tab === "companias" ? (
             <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#557EFF" }}>
@@ -88,7 +105,7 @@ export function Usuarios() {
         })}
       </div>
 
-      {tab === "equipo" && (
+      {tab === "usuarios" && (
         <>
           <div className="grid grid-cols-4 gap-3 shrink-0">
             {[
@@ -112,42 +129,46 @@ export function Usuarios() {
               <div className="col-span-4">Usuario</div>
               <div className="col-span-2">Rol</div>
               <div className="col-span-2">Estado</div>
-              <div className="col-span-3">Último acceso</div>
-              <div className="col-span-1 text-right">Activo</div>
+              <div className="col-span-3">Fecha creación</div>
+              <div className="col-span-1 text-right"></div>
             </div>
             <div className="flex-1 overflow-y-auto space-y-2 pt-2">
-              {list.map((u, i) => (
-                <div key={u.e} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
-                  <div className="col-span-4">
-                    <p className="font-semibold">{u.n}</p>
-                    <p className="text-[10px] opacity-60">{u.e}</p>
-                  </div>
-                  <div className="col-span-2 opacity-80">{u.r}</div>
-                  <div className="col-span-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: u.a ? "#00DBD5" : "#FF4E00" }}>{u.a ? "Activo" : "Inactivo"}</span></div>
-                  <div className="col-span-3 opacity-70">{u.la}</div>
-                  <div className="col-span-1 flex justify-end">
-                    <button onClick={() => setList((L) => L.map((x, j) => j === i ? { ...x, a: !x.a } : x))} className="w-10 h-5 rounded-full relative transition" style={{ background: u.a ? "#00DBD5" : "#DFE5ED" }}>
-                      <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all" style={{ left: u.a ? "calc(100% - 18px)" : "2px" }} />
-                    </button>
-                  </div>
+              {loading && (
+                <div className="flex justify-center py-12">
+                  <span className="text-sm opacity-60">Cargando usuarios…</span>
                 </div>
-              ))}
-              {pendingInvites.map((inv) => (
-                <div key={inv.email} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED", opacity: 0.8 }}>
-                  <div className="col-span-4">
-                    <p className="font-semibold italic opacity-60">Invitación pendiente</p>
-                    <p className="text-[10px] opacity-60">{inv.email}</p>
-                  </div>
-                  <div className="col-span-2 opacity-40">—</div>
-                  <div className="col-span-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: "#F9AC00" }}>Pendiente</span></div>
-                  <div className="col-span-3 opacity-40">—</div>
-                  <div className="col-span-1 flex justify-end">
-                    <div className="w-10 h-5 rounded-full" style={{ background: "#DFE5ED" }} />
-                  </div>
+              )}
+              {!loading && error && (
+                <div className="text-sm text-center py-12" style={{ color: "#FF4E00" }}>
+                  Error al cargar usuarios. Intenta de nuevo.
                 </div>
-              ))}
+              )}
+              {!loading && !error && users.length === 0 && (
+                <div className="text-sm text-center py-12 opacity-60">
+                  No hay usuarios en el tenant.
+                </div>
+              )}
+              {!loading && !error && users.length > 0 && users.map((u) => {
+                const badge = STATUS_BADGE[u.status];
+                return (
+                  <div key={u.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
+                    <div className="col-span-4">
+                      <p className="font-semibold">{u.fullName}</p>
+                      <p className="text-[10px] opacity-60">{u.email}</p>
+                    </div>
+                    <div className="col-span-2 opacity-80">{u.role ?? "—"}</div>
+                    <div className="col-span-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: badge.color }}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="col-span-3 opacity-70">{u.createdAt ?? "—"}</div>
+                    <div className="col-span-1" />
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">Mostrando {list.length} de 250  «  1 2 ... 10  »</p>
+            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">Mostrando {users.length} usuario{users.length !== 1 ? "s" : ""}</p>
           </div>
         </>
       )}
@@ -249,9 +270,9 @@ export function Usuarios() {
   );
 }
 
-function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (email: string) => void }) {
+function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [email, setEmail] = useState("");
-  const [roleId, setRoleId] = useState("");
+  const [fullName, setFullName] = useState("");
   const [selectedRole, setSelectedRole] = useState(0);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -264,10 +285,10 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     setError(null);
     setStatus("loading");
     try {
-      const result = await createInvitation(email.trim(), roleId.trim());
+      const result = await createInvitation(email.trim(), fullName.trim());
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
-      onSuccess(result.email);
+      onSuccess();
     } catch (err) {
       const s = (err as ApiError).status;
       setError(
@@ -286,7 +307,7 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
       <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold">Invitar colaborador</h3>
+            <h3 className="text-lg font-bold">Invitar usuario</h3>
             <p className="text-xs opacity-70 mt-0.5">Asigna el acceso y permiso para colaborar dentro de FLIT.</p>
           </div>
           <button onClick={onClose}><X className="h-5 w-5" /></button>
@@ -319,6 +340,15 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             <input
+              type="text"
+              required
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Juan Pérez"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+              style={{ borderColor: "#DFE5ED" }}
+            />
+            <input
               type="email"
               required
               value={email}
@@ -340,18 +370,6 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
                   </label>
                 ))}
               </div>
-            </div>
-            <div>
-              <p className="text-[10px] opacity-60 mb-1">ID de rol (UUID del tenant)</p>
-              <input
-                type="text"
-                required
-                value={roleId}
-                onChange={(e) => setRoleId(e.target.value)}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                className="w-full text-xs px-3 py-2.5 rounded-xl border bg-transparent outline-none font-mono focus:border-[#557EFF]"
-                style={{ borderColor: "#DFE5ED" }}
-              />
             </div>
             {error && (
               <p className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>

@@ -12,8 +12,9 @@ public sealed class UserActivationRepository(FlitDbContext db) : IUserActivation
         {
             Id = Guid.CreateVersion7(),
             Email = data.Email,
-            DisplayName = data.Email,
+            DisplayName = string.IsNullOrWhiteSpace(data.FullName) ? data.Email : data.FullName,
             Status = "active",
+            HomeTenantId = data.TenantId,
             CreatedAt = data.ActivatedAt,
         };
         db.Users.Add(user);
@@ -28,16 +29,19 @@ public sealed class UserActivationRepository(FlitDbContext db) : IUserActivation
             CreatedAt = data.ActivatedAt,
         });
 
-        db.UserRoleAssignments.Add(new UserRoleAssignment
+        if (data.RoleId.HasValue)
         {
-            Id = Guid.CreateVersion7(),
-            TenantId = data.TenantId,
-            UserId = user.Id,
-            RoleId = data.RoleId,
-            AssignedAt = data.ActivatedAt,
-            AssignedBy = data.InvitedBy,
-            CreatedAt = data.ActivatedAt,
-        });
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = data.TenantId,
+                UserId = user.Id,
+                RoleId = data.RoleId.Value,
+                AssignedAt = data.ActivatedAt,
+                AssignedBy = data.InvitedBy,
+                CreatedAt = data.ActivatedAt,
+            });
+        }
 
         // Track invitation update through Change Tracker → single atomic SaveChanges
         var invitation = await db.UserInvitations.FindAsync([data.InvitationId], cancellationToken);

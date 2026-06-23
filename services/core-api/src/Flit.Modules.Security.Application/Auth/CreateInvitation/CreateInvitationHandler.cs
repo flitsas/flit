@@ -16,10 +16,13 @@ public sealed partial class CreateInvitationHandler(
     {
         var email = command.Email?.Trim() ?? string.Empty;
 
-        var roleExists = await invitationRepository.RoleExistsInTenantAsync(
-            command.TenantId, command.RoleId, cancellationToken);
-        if (!roleExists)
-            throw new RoleNotFoundException();
+        if (command.RoleId.HasValue)
+        {
+            var roleExists = await invitationRepository.RoleExistsInTenantAsync(
+                command.TenantId, command.RoleId.Value, cancellationToken);
+            if (!roleExists)
+                throw new RoleNotFoundException();
+        }
 
         var hasPending = await invitationRepository.ExistsPendingAsync(
             command.TenantId, email, cancellationToken);
@@ -29,7 +32,7 @@ public sealed partial class CreateInvitationHandler(
         var token = tokenGenerator.Generate();
 
         var invitationId = await invitationRepository.CreateAsync(
-            new UserInvitationData(command.TenantId, email, command.RoleId, token.TokenHash, command.InvitedBy),
+            new UserInvitationData(command.TenantId, email, command.FullName, command.RoleId, token.TokenHash, command.InvitedBy),
             cancellationToken);
 
         var link = BuildActivateLink(options.ActivateUrlBase, token.RawToken);
@@ -37,7 +40,7 @@ public sealed partial class CreateInvitationHandler(
             email,
             email,
             "Invitación a FLIT — Activa tu cuenta",
-            BuildHtmlBody(link));
+            BuildHtmlBody(command.FullName, link));
 
         LogActivationLinkDev(logger, link);
 
@@ -48,7 +51,6 @@ public sealed partial class CreateInvitationHandler(
         }
         catch (Exception ex)
         {
-            // AC2 HU #10176 — fallo retryable: la invitación persiste pending; el admin puede reintentar.
             LogEmailFailed(logger, invitationId, ex);
             emailSent = false;
         }
@@ -70,7 +72,8 @@ public sealed partial class CreateInvitationHandler(
         return $"{activateUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
     }
 
-    private static string BuildHtmlBody(string link) => $"""
+    private static string BuildHtmlBody(string fullName, string link) => $"""
+        <p>Hola {System.Net.WebUtility.HtmlEncode(fullName)},</p>
         <p>Has sido invitado a unirte a FLIT.</p>
         <p>Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:</p>
         <p><a href="{link}">Activar mi cuenta</a></p>

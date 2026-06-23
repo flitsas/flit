@@ -23,6 +23,7 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
             Id = Guid.CreateVersion7(),
             TenantId = invitation.TenantId,
             Email = invitation.Email,
+            FullName = invitation.FullName,
             RoleId = invitation.RoleId,
             TokenHash = invitation.TokenHash,
             Status = "pending",
@@ -43,9 +44,21 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
     {
         var entity = await db.UserInvitations
             .Where(x => x.TokenHash == tokenHash && x.Status == "pending")
-            .Select(x => new PendingInvitation(x.Id, x.TenantId, x.Email, x.RoleId, x.InvitedBy))
+            .Select(x => new PendingInvitation(x.Id, x.TenantId, x.Email, x.FullName, x.RoleId, x.InvitedBy))
             .FirstOrDefaultAsync(cancellationToken);
 
         return entity;
+    }
+
+    public async Task<IReadOnlyList<PendingInvitationSummary>> ListPendingByTenantAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        return await db.UserInvitations
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Status == "pending")
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new PendingInvitationSummary(x.Id, x.Email, x.FullName, x.CreatedAt))
+            .ToListAsync(cancellationToken);
     }
 }

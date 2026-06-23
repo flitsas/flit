@@ -24,7 +24,10 @@ public sealed class ActivateAccountHandlerTests
     private const string ValidPassword = "FlitPass1!";
 
     private readonly PendingInvitation _pendingInvitation = new(
-        InvitationId, TenantId, "invited@flit.local", RoleId, InvitedBy);
+        InvitationId, TenantId, "invited@flit.local", "Usuario Invitado", RoleId, InvitedBy);
+
+    private readonly PendingInvitation _pendingInvitationNoRole = new(
+        InvitationId, TenantId, "invited@flit.local", "Usuario Sin Rol", null, InvitedBy);
 
     public ActivateAccountHandlerTests()
     {
@@ -33,7 +36,7 @@ public sealed class ActivateAccountHandlerTests
         _hasher.Hash(ValidPassword).Returns("hashed-password");
     }
 
-    // AC1 — token válido, contraseña correcta → usuario creado e invitación aceptada
+    // AC1 — token válido, contraseña correcta, con rol → usuario creado e invitación aceptada
     [Fact]
     public async Task HandleAsync_ValidTokenAndPassword_ActivatesAccount()
     {
@@ -49,9 +52,29 @@ public sealed class ActivateAccountHandlerTests
             Arg.Is<ActivationData>(d =>
                 d.InvitationId == InvitationId &&
                 d.Email == "invited@flit.local" &&
+                d.FullName == "Usuario Invitado" &&
                 d.TenantId == TenantId &&
                 d.RoleId == RoleId &&
                 d.PasswordHash == "hashed-password"),
+            Arg.Any<CancellationToken>());
+    }
+
+    // AC: token válido, sin rol → usuario creado sin role assignment
+    [Fact]
+    public async Task HandleAsync_ValidTokenWithNoRole_ActivatesAccountWithoutRole()
+    {
+        _invitationRepo.FindPendingByTokenHashAsync(TokenHash, Arg.Any<CancellationToken>())
+            .Returns(_pendingInvitationNoRole);
+
+        var result = await _handler.HandleAsync(
+            new ActivateAccountCommand(RawToken, ValidPassword),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        await _activationRepo.Received(1).ActivateAsync(
+            Arg.Is<ActivationData>(d =>
+                d.InvitationId == InvitationId &&
+                d.RoleId == null),
             Arg.Any<CancellationToken>());
     }
 

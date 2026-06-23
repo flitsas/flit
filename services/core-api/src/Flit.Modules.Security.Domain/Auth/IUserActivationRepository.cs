@@ -8,8 +8,9 @@ public interface IUserActivationRepository
 public sealed record ActivationData(
     Guid InvitationId,
     string Email,
+    string FullName,
     string PasswordHash,
     Guid TenantId,
-    Guid RoleId,
+    Guid? RoleId,
     Guid InvitedBy,
     DateTimeOffset ActivatedAt);

@@ -13,7 +13,7 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
         var user = await db.Users
             .AsNoTracking()
             .Where(u => u.DeletedAt == null && EF.Functions.ILike(u.Email, normalizedEmail))
-            .Select(u => new { u.Id, u.Email, u.Status })
+            .Select(u => new { u.Id, u.Email, u.Status, u.HomeTenantId })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (user is null)
@@ -35,7 +35,9 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             select new { a.TenantId, a.RoleId, RoleCode = r.Code }
         ).FirstOrDefaultAsync(cancellationToken);
 
-        if (assignment is null)
+        // Users without a role assignment can still log in if they have a home tenant
+        var tenantId = assignment?.TenantId ?? user.HomeTenantId;
+        if (tenantId is null)
             return null;
 
         var now = DateTimeOffset.UtcNow;
@@ -43,18 +45,22 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             .AsNoTracking()
             .AnyAsync(
                 s => s.UserId == user.Id
-                     && s.TenantId == assignment.TenantId
+                     && s.TenantId == tenantId
                      && s.DeletedAt == null
                      && s.StartsAt <= now
                      && s.EndsAt >= now,
                 cancellationToken);
 
-        var permissionSlugs = await (
-            from rp in db.RoleGrants.AsNoTracking()
-            join p in db.RbacActions.AsNoTracking() on rp.PermissionId equals p.Id
-            where rp.RoleId == assignment.RoleId && p.IsActive
-            select p.Slug
-        ).ToListAsync(cancellationToken);
+        var permissionSlugs = new List<string>();
+        if (assignment is not null)
+        {
+            permissionSlugs = await (
+                from rp in db.RoleGrants.AsNoTracking()
+                join p in db.RbacActions.AsNoTracking() on rp.PermissionId equals p.Id
+                where rp.RoleId == assignment.RoleId && p.IsActive
+                select p.Slug
+            ).ToListAsync(cancellationToken);
+        }
 
         return new UserAuthSnapshot
         {
@@ -63,9 +69,9 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             Status = user.Status,
             PasswordHash = credential.PasswordHash,
             MustChangePassword = credential.MustChangePassword,
-            TenantId = assignment.TenantId,
-            RoleId = assignment.RoleId,
-            RoleCode = assignment.RoleCode,
+            TenantId = tenantId.Value,
+            RoleId = assignment?.RoleId ?? Guid.Empty,
+            RoleCode = assignment?.RoleCode ?? string.Empty,
             PermissionSlugs = permissionSlugs,
             IsTemporarilySuspended = isSuspended,
         };
