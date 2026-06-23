@@ -18,6 +18,11 @@ internal sealed class VerifikConsultationProvider(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    // Respiro antes del reintento: la primera llamada (aunque falle por timeout/504)
+    // CALIENTA el caché de Verifik, que en frío proxya el RUNT en vivo. Un breve
+    // descanso le da margen a poblarlo antes del segundo intento.
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
+
     private readonly VerifikOptions _options = options.Value;
 
     public string Key => "verifik";
@@ -70,7 +75,30 @@ internal sealed class VerifikConsultationProvider(
         return SendAsync(url, ct);
     }
 
+    /// <summary>
+    /// Envía la consulta con un reintento único ante fallos TRANSITORIOS (timeout del
+    /// HttpClient, 5xx del gateway de Verifik, error de red). El RUNT en frío puede
+    /// tardar &gt;60s o devolver 504; pero la primera llamada deja el dato cacheado en
+    /// Verifik, así que el segundo intento suele resolver en 2–5s. Los fallos
+    /// DEFINITIVOS (404 vehículo no encontrado, auth, JSON inválido) NO se reintentan.
+    /// </summary>
     private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
+    {
+        var (result, transient) = await SendOnceAsync(url, ct);
+        if (!transient)
+            return result;
+
+        await Task.Delay(RetryDelay, ct);
+
+        var (retryResult, _) = await SendOnceAsync(url, ct);
+        return retryResult;
+    }
+
+    /// <summary>
+    /// Un intento de consulta. Devuelve el resultado y si el fallo fue transitorio
+    /// (merece reintento). Nunca lanza salvo cancelación del caller.
+    /// </summary>
+    private async Task<(ConsultationResult Result, bool Transient)> SendOnceAsync(string url, CancellationToken ct)
     {
         try
         {
@@ -84,16 +112,21 @@ internal sealed class VerifikConsultationProvider(
             using var response = await http.SendAsync(request, ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
-                return VehicleNotFound();
+                return (VehicleNotFound(), false);
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable($"Verifik respondió {(int)response.StatusCode}");
+            {
+                // 5xx (502/503/504) = el gateway de Verifik no obtuvo respuesta del RUNT:
+                // transitorio, vale la pena reintentar. 4xx (auth/bad request) es definitivo.
+                var transient = (int)response.StatusCode >= 500;
+                return (ProviderUnavailable($"Verifik respondió {(int)response.StatusCode}"), transient);
+            }
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikVehicleResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable("Respuesta vacía de Verifik");
+                return (ProviderUnavailable("Respuesta vacía de Verifik"), false);
 
-            return VerifikResultMapper.MapVehicle(payload);
+            return (VerifikResultMapper.MapVehicle(payload), false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -101,15 +134,17 @@ internal sealed class VerifikConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable("Timeout consultando Verifik");
+            // Timeout del HttpClient (no cancelación del caller): transitorio.
+            return (ProviderUnavailable("Timeout consultando Verifik"), true);
         }
         catch (HttpRequestException ex)
         {
-            return ProviderUnavailable($"Error de red consultando Verifik: {ex.Message}");
+            // Error de red (DNS/conexión/reset): transitorio.
+            return (ProviderUnavailable($"Error de red consultando Verifik: {ex.Message}"), true);
         }
         catch (JsonException)
         {
-            return ProviderUnavailable("No se pudo interpretar la respuesta de Verifik");
+            return (ProviderUnavailable("No se pudo interpretar la respuesta de Verifik"), false);
         }
     }
 

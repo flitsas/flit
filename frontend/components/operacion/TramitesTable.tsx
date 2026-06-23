@@ -1,17 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { TramitesListToolbar } from './TramitesListToolbar';
 import type {
   InstanceStatus,
   InstanceSummary,
+  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Slice M6 — tabla de "Trámites en curso". Lista las instancias del tenant
- * (GET /instances) en el mismo estilo "card rows on solid header" que la grilla
- * maestra. Se refresca al montar y cada vez que cambia `refreshKey` (el padre lo
- * incrementa al volver del wizard tras "Enviar a tránsito").
+ * Track A — vista completa del listado de "Trámites en curso": toolbar de
+ * filtros (búsqueda + modalidad + estado) + tabla. Lista las instancias del
+ * tenant (GET /instances) y filtra client-side sobre el array (máx ~200 del
+ * backend). Cada fila navega al wizard de la instancia; las acciones explícitas
+ * (Continuar/Ver) llevan al mismo destino. Se refresca al montar, al pulsar
+ * Actualizar y cada vez que cambia `refreshKey`.
  */
 
 const estadoChip = (
@@ -65,7 +70,40 @@ function vehiculo(item: InstanceSummary): string {
   return text || '—';
 }
 
-const GRID_COLS = '1.1fr 1.4fr 1.3fr 1.4fr 0.7fr 1.1fr 0.9fr';
+const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
+  matricula_inicial: 'Matrícula',
+  traspaso: 'Traspaso',
+};
+
+/**
+ * Nombres de paso por modalidad, alineados con TipologiaMatrizCatalog. Solo
+ * presentación: `pasoActual`/`totalPasos` se usan tal cual los entrega el API
+ * (no se corrige backend en este track). El label es STEP_LABELS[modalidad]
+ * [pasoActual - 1], o '—' si el índice no existe.
+ */
+const STEP_LABELS: Record<WizardModalidad, string[]> = {
+  matricula_inicial: [
+    'Consulta VIN',
+    'Documentos',
+    'Comprador',
+    'Identidad',
+    'Generar FUR',
+  ],
+  traspaso: [
+    'Consulta VIN/Placa',
+    'Documentos / Preflight',
+    'Vendedor',
+    'Comprador',
+    'Datos comerciales',
+    'Generar FUR',
+  ],
+};
+
+function stepLabel(item: InstanceSummary): string {
+  return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
+}
+
+const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 0.9fr 1fr';
 
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
@@ -73,9 +111,15 @@ interface TramitesTableProps {
 }
 
 export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
+  const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filtros client-side.
+  const [search, setSearch] = useState('');
+  const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
+  const [estado, setEstado] = useState<'' | InstanceStatus>('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +141,103 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     void load();
   }, [load, refreshKey]);
 
+  // Filtrado en cadena: búsqueda → modalidad → estado.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((item) => {
+      if (q) {
+        const haystack = [
+          item.placa,
+          item.vin,
+          item.referenceNumber,
+          item.compradorNombre,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (modalidad && item.modalidad !== modalidad) return false;
+      if (estado && item.estado !== estado) return false;
+      return true;
+    });
+  }, [items, search, modalidad, estado]);
+
+  const hasActiveFilters =
+    search.trim() !== '' || modalidad !== '' || estado !== '';
+
+  const clearFilters = () => {
+    setSearch('');
+    setModalidad('');
+    setEstado('');
+  };
+
+  const heading = (
+    <h2 className="mb-3 text-sm font-bold">
+      Trámites en curso
+      {!loading && !error && (
+        <span className="opacity-60"> ({items.length})</span>
+      )}
+    </h2>
+  );
+
+  return (
+    <section
+      className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
+      style={{ borderColor: '#DFE5ED' }}
+    >
+      {heading}
+
+      <div className="flex flex-col gap-3">
+        <TramitesListToolbar
+          search={search}
+          onSearchChange={setSearch}
+          modalidad={modalidad}
+          onModalidadChange={setModalidad}
+          estado={estado}
+          onEstadoChange={setEstado}
+          onRefresh={() => void load()}
+          onClearFilters={clearFilters}
+          loading={loading}
+          totalCount={items.length}
+          filteredCount={filtered.length}
+        />
+
+        <TableBody
+          loading={loading}
+          error={error}
+          items={items}
+          filtered={filtered}
+          hasActiveFilters={hasActiveFilters}
+          onRetry={() => void load()}
+          onClearFilters={clearFilters}
+          onOpen={(id) => router.push(`/tramites/${id}`)}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** Cuerpo de la tabla: maneja los 4 estados (cargando/error/vacío/datos). */
+function TableBody({
+  loading,
+  error,
+  items,
+  filtered,
+  hasActiveFilters,
+  onRetry,
+  onClearFilters,
+  onOpen,
+}: {
+  loading: boolean;
+  error: string | null;
+  items: InstanceSummary[];
+  filtered: InstanceSummary[];
+  hasActiveFilters: boolean;
+  onRetry: () => void;
+  onClearFilters: () => void;
+  onOpen: (id: string) => void;
+}) {
   if (loading) {
     return (
       <div
@@ -124,7 +265,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
         <p className="text-sm font-bold">Error al cargar trámites</p>
         <p className="text-xs opacity-60 max-w-xs">{error}</p>
         <button
-          onClick={() => void load()}
+          onClick={onRetry}
           className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
           style={{ borderColor: '#557EFF', color: '#557EFF' }}
           aria-label="Reintentar cargar trámites"
@@ -135,6 +276,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     );
   }
 
+  // Vacío sin filtros: no hay ningún trámite todavía.
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
@@ -147,9 +289,31 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     );
   }
 
+  // Vacío con filtros: hay trámites pero ninguno coincide.
+  if (filtered.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+        <p className="text-sm font-bold">Sin resultados</p>
+        <p className="text-xs opacity-60 max-w-xs">
+          Ningún trámite coincide con la búsqueda o los filtros aplicados.
+        </p>
+        {hasActiveFilters && (
+          <button
+            onClick={onClearFilters}
+            className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            aria-label="Limpiar filtros"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[820px]">
+      <div className="min-w-[1040px]">
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
@@ -164,61 +328,123 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           <div>Comprador</div>
           <div>VIN</div>
           <div>Vehículo</div>
+          <div>Modalidad</div>
           <div>Paso</div>
           <div>Estado</div>
-          <div className="text-right">Creado</div>
+          <div>Creado</div>
+          <div className="text-right">Acciones</div>
         </div>
 
         {/* Rows */}
         <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
-          {items.map((item) => {
-            const chip = estadoChip(item.estado);
-            return (
-              <li
-                key={item.id}
-                className="grid items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)]"
-                style={{ gridTemplateColumns: GRID_COLS }}
-              >
-                <div className="min-w-0">
-                  <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-                    {item.placa ?? '—'}
-                  </span>
-                  <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-                    {item.referenceNumber}
-                  </span>
-                </div>
-                <div className="text-[#162744] dark:text-white/90 truncate">
-                  {item.compradorNombre ?? '—'}
-                </div>
-                <div className="font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
-                  {item.vin ?? '—'}
-                </div>
-                <div className="text-[#162744]/90 dark:text-white/80 truncate">
-                  {vehiculo(item)}
-                </div>
-                <div className="font-mono text-xs text-[#162744]/70 dark:text-white/60">
-                  {item.pasoActual}/{item.totalPasos}
-                </div>
-                <div>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
-                    style={{
-                      background: chip.bg,
-                      color: chip.color,
-                      borderColor: chip.border,
-                    }}
-                  >
-                    {chip.label}
-                  </span>
-                </div>
-                <div className="font-mono text-xs text-[#162744]/70 dark:text-white/60 text-right">
-                  {shortDate(item.createdAt)}
-                </div>
-              </li>
-            );
-          })}
+          {filtered.map((item) => (
+            <TramiteRow key={item.id} item={item} onOpen={onOpen} />
+          ))}
         </ul>
       </div>
     </div>
+  );
+}
+
+/** Fila de trámite: clickable (abre el wizard) + acción explícita Continuar/Ver. */
+function TramiteRow({
+  item,
+  onOpen,
+}: {
+  item: InstanceSummary;
+  onOpen: (id: string) => void;
+}) {
+  const chip = estadoChip(item.estado);
+  const isDraft = item.estado === 'draft';
+  const actionLabel = isDraft ? 'Continuar' : 'Ver';
+
+  return (
+    <li>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(item.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpen(item.id);
+          }
+        }}
+        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        style={{ gridTemplateColumns: GRID_COLS }}
+        aria-label={`Abrir trámite ${item.referenceNumber}`}
+      >
+        <span className="min-w-0">
+          <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
+            {item.placa ?? '—'}
+          </span>
+          <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
+            {item.referenceNumber}
+          </span>
+        </span>
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.compradorNombre ?? '—'}
+        </span>
+        <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
+          {item.vin ?? '—'}
+        </span>
+        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
+          {vehiculo(item)}
+        </span>
+        <span className="block">
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+            style={{
+              background: 'rgba(85,126,255,0.08)',
+              color: '#557eff',
+              borderColor: 'rgba(85,126,255,0.25)',
+            }}
+          >
+            {MODALIDAD_SHORT[item.modalidad]}
+          </span>
+        </span>
+        <span className="block min-w-0">
+          <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+            {item.pasoActual}/{item.totalPasos}
+          </span>
+          <span className="block text-[10px] text-[#162744]/60 dark:text-white/50 truncate">
+            {stepLabel(item)}
+          </span>
+        </span>
+        <span className="block">
+          <span
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
+            style={{
+              background: chip.bg,
+              color: chip.color,
+              borderColor: chip.border,
+            }}
+          >
+            {chip.label}
+          </span>
+        </span>
+        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          {shortDate(item.createdAt)}
+        </span>
+        <span className="flex justify-end">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(item.id);
+            }}
+            className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
+            style={
+              isDraft
+                ? { background: 'linear-gradient(135deg,#557EFF,#00DBD5)', color: '#fff' }
+                : { border: '1px solid #DFE5ED', color: '#162744' }
+            }
+            aria-label={`${actionLabel} trámite ${item.referenceNumber}`}
+          >
+            {actionLabel}
+          </button>
+        </span>
+      </div>
+    </li>
   );
 }

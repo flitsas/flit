@@ -113,11 +113,40 @@ public sealed class WizardStateHandlerTests
 
     // ── Pasos diferidos (biométrica / firma) ──────────────────────────────────
 
+    // Cascada: en una instancia vacía los pasos diferidos NO son alcanzables → locked
+    // (no se puede saltar a Identidad sin Comprador). Solo cuando el flujo llega a ellos
+    // se evalúan con sus reasons diferidas.
+
     [Fact]
-    public async Task Get_Matricula_DeferredStepsAreIncompleteWithReasons()
+    public async Task Get_Matricula_EmptyInstance_DeferredStepsLocked()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("matricula_inicial"));
+        Setup(Base("matricula_inicial")); // maxAlcanzable = 1 (sin VIN).
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var identidad = result!.Steps.Single(s => s.Index == 4);
+        identidad.Status.Should().Be("locked");
+        identidad.Reasons.Should().BeEmpty();
+
+        var fur = result.Steps.Single(s => s.Index == 5);
+        fur.Status.Should().Be("locked");
+        fur.Reasons.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Get_Matricula_IdentidadReachable_IncompleteWithBiometriaReason()
+    {
+        // Pasos 1-3 completos (VIN, docs, comprador+RUNT) → Identidad (4) alcanzable y,
+        // sin biométrica aprobada, incomplete con 'pendiente_biometria'. FUR (5) aún no
+        // alcanzable (requiere Identidad) → locked.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -125,19 +154,35 @@ public sealed class WizardStateHandlerTests
         identidad.Status.Should().Be("incomplete");
         identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
 
-        // FUR matrícula (Slice 7): completa al GENERAR el FUR; NO requiere firma. Sin FUR generado
-        // el paso queda incomplete con 'fur_pendiente' (antes diferido con 'pendiente_firma').
-        var fur = result.Steps.Single(s => s.Index == 5);
-        fur.Status.Should().Be("incomplete");
-        fur.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
-        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
+        result.Steps.Single(s => s.Index == 5).Status.Should().Be("locked");
     }
 
     [Fact]
-    public async Task Get_Traspaso_FurStepDefersBiometricAndFirma()
+    public async Task Get_Traspaso_EmptyInstance_FurStepLocked()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("traspaso"));
+        Setup(Base("traspaso")); // maxAlcanzable = 3 (radicado + validación ok, vendedor pendiente).
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var fur = result!.Steps.Single(s => s.Index == 6);
+        fur.Status.Should().Be("locked");
+        fur.Reasons.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_FurReachable_DefersBiometricAndFirma()
+    {
+        // Pasos 1-5 completos → FUR (6) alcanzable. Sin biométrica/firma/FUR generado →
+        // incomplete con las razones diferidas (biométrica + firma).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+        Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 

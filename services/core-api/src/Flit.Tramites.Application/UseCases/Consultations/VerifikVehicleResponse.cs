@@ -83,6 +83,33 @@ public sealed class VerifikInformacionGeneral
     /// <summary>Cilindraje tolerante al typo: prioriza la forma correcta.</summary>
     [JsonIgnore]
     public string? CilindrajeNormalizado => Cilindraje ?? Cilidraje;
+
+    [JsonPropertyName("tipoServicio")]
+    public string? TipoServicio { get; set; }
+
+    [JsonPropertyName("tipoCarroceria")]
+    public string? TipoCarroceria { get; set; }
+
+    [JsonPropertyName("noChasis")]
+    public string? NoChasis { get; set; }
+
+    [JsonPropertyName("noMotor")]
+    public string? NoMotor { get; set; }
+
+    [JsonPropertyName("noSerie")]
+    public string? NoSerie { get; set; }
+
+    [JsonPropertyName("pasajerosSentados")]
+    public string? PasajerosSentados { get; set; }
+
+    [JsonPropertyName("pesoBruto")]
+    public string? PesoBruto { get; set; }
+
+    [JsonPropertyName("noEjes")]
+    public string? NoEjes { get; set; }
+
+    [JsonPropertyName("fechaMatricula")]
+    public string? FechaMatricula { get; set; }
 }
 
 public sealed class VerifikSoat
@@ -92,6 +119,9 @@ public sealed class VerifikSoat
 
     [JsonPropertyName("fechaVencimiento")]
     public string? FechaVencimiento { get; set; }
+
+    [JsonPropertyName("entidadExpideSoat")]
+    public string? EntidadExpideSoat { get; set; }
 }
 
 public sealed class VerifikTecnomecanica

@@ -17,7 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Flit.Tramites.Domain\Flit.Tramites.Domain.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
