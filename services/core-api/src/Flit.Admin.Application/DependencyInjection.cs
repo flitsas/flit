@@ -45,6 +45,7 @@ using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.DeleteOtDocumentTag;
 using Flit.Admin.Application.OtDocumentTags.ListOtDocumentTags;
 using Flit.Admin.Application.OtRules;
 using Flit.Admin.Application.OtRules.CreateOtRule;
@@ -149,6 +150,7 @@ public static class DependencyInjection
         services.AddScoped<ListOtDocumentPrecedenceHandler>();
         services.AddScoped<UpdateOtDocumentPrecedenceHandler>();
         services.AddScoped<CreateOtDocumentTagHandler>();
+        services.AddScoped<DeleteOtDocumentTagHandler>();
         services.AddScoped<ListOtDocumentTagsHandler>();
 
         return services;

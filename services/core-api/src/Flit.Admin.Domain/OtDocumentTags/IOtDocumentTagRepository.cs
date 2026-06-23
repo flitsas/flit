@@ -19,4 +19,9 @@ public interface IOtDocumentTagRepository
         string color,
         Guid? createdBy,
         CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(
+        Guid tenantId,
+        Guid tagId,
+        CancellationToken cancellationToken = default);
 }

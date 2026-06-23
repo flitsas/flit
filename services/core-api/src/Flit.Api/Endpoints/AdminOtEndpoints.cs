@@ -9,6 +9,7 @@ using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags;
 using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.DeleteOtDocumentTag;
 using Flit.Admin.Application.OtDocumentTags.ListOtDocumentTags;
 using Flit.Admin.Application.OtRules;
 using Flit.Admin.Application.OtRules.CreateOtRule;
@@ -187,6 +188,14 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapDelete("/document-tags/{id:guid}", DeleteDocumentTagAsync)
+            .WithName("AdminOtDeleteDocumentTag")
+            .WithSummary("Elimina una etiqueta documental OT")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }
@@ -705,5 +714,31 @@ public static class AdminOtEndpoints
             cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = result.Data });
+    }
+
+    private static async Task<IResult> DeleteDocumentTagAsync(
+        Guid id,
+        HttpContext httpContext,
+        DeleteOtDocumentTagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new DeleteOtDocumentTagCommand
+        {
+            TenantId = tenantId,
+            TagId = id,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            DeleteOtDocumentTagStatus.NotFound => Results.NotFound(new { error = "Etiqueta no encontrada" }),
+            _ => Results.NoContent(),
+        };
     }
 }

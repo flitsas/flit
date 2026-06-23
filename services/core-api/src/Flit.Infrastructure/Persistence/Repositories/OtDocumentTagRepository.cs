@@ -72,6 +72,29 @@ internal sealed class OtDocumentTagRepository : IOtDocumentTagRepository
             },
             cancellationToken).ConfigureAwait(false);
 
+    public async Task<bool> DeleteAsync(
+        Guid tenantId,
+        Guid tagId,
+        CancellationToken cancellationToken = default) =>
+        await ExecuteInTenantScopeAsync(
+            tenantId,
+            async () =>
+            {
+                var entity = await _context.OtDocumentTags
+                    .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Id == tagId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null)
+                {
+                    return false;
+                }
+
+                _context.OtDocumentTags.Remove(entity);
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken).ConfigureAwait(false);
+
     private static OtDocumentTag Map(OtDocumentTagEntity entity) => new()
     {
         Id = entity.Id,
