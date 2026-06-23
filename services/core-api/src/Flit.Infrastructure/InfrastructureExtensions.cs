@@ -11,6 +11,7 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
@@ -80,6 +81,9 @@ public static class InfrastructureExtensions
 
         // HU #10163 — CRUD roles y asociación de permisos Super Admin
         services.AddScoped<IRoleRepository, RoleRepository>();
+
+        // HU #10164 — Asignación única de rol por usuario tenant
+        services.AddScoped<IUserRoleAssignmentRepository, UserRoleAssignmentRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();
