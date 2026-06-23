@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>
