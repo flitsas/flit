@@ -1415,6 +1415,106 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/biometric:
+    post:
+      operationId: iniciarProcedureInstanceBiometric
+      tags: [Tramites, Identidad]
+      summary: Iniciar validación de identidad de una parte (HU #10233)
+      description: >
+        Inicia la validación biométrica/de identidad de una parte del trámite. El proveedor depende del
+        flag de configuración `Biometrics:Provider`: con `mock` devuelve un magic-link (flujo de 3 fotos);
+        con `kyverum` delega la captura a Kyverum Verify y devuelve la `captureUrl` (la validación queda
+        `en_proceso` hasta que Kyverum notifique vía webhook). Requiere instancia en estado `draft`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IniciarBiometriaInput"
+      responses:
+        "201":
+          description: >
+            Validación creada. El cuerpo varía según el proveedor: `IniciarKyverumVerifyResult`
+            (kyverum) o el resultado del magic-link (mock).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarKyverumVerifyResult"
+        "400":
+          description: Datos incompletos o parte inválida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La instancia no está en draft o ya existe una validación activa para la parte.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor de identidad rechazó la solicitud (error definitivo, AC7).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio, AC7).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/webhooks/kyverum-verify/{validationId}:
+    post:
+      operationId: kyverumVerifyWebhook
+      tags: [Identidad]
+      summary: Webhook de resultado de Kyverum Verify (HU #10233)
+      security: []          # público: la credencial es la firma HMAC del cuerpo
+      description: >
+        Recibe la notificación de resultado de una validación de Kyverum. El `validationId` (nuestro id)
+        viaja en el path porque el cuerpo del webhook no lo repite; se registra en la `webhookUrl` al
+        crear la validación. La autenticidad se valida con la firma HMAC-SHA256 del cuerpo crudo en el
+        header `x-kv-signature` con formato `sha256=<hex>` (firma inválida ⇒ 401, sin cambios).
+        Idempotente: una validación ya resuelta devuelve 200 sin re-aplicar.
+      parameters:
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de la validación FLIT (correlación).
+        - name: x-kv-signature
+          in: header
+          required: true
+          schema: { type: string }
+          description: "sha256=<hex>, hex = HMAC_SHA256(webhookSecret, cuerpo crudo)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KyverumWebhookPayload"
+      responses:
+        "200":
+          description: Webhook procesado (o ya procesado — idempotente).
+        "400":
+          description: Cuerpo del webhook inválido.
+        "401":
+          description: Firma HMAC inválida (sin cambios en BD).
+        "404":
+          description: Validación no encontrada.
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2067,3 +2167,96 @@ components:
           items:
             $ref: "#/components/schemas/ProcedureDocumentRequirementSnapshotRow"
       required: [data]
+
+    # ── Validación de identidad / Kyverum Verify (HU #10233) ──────────────────
+    IniciarBiometriaInput:
+      type: object
+      required: [nombre, tipoDoc, documento, email]
+      properties:
+        parte:
+          type: string
+          enum: [comprador, vendedor]
+          nullable: true
+          description: Parte del trámite (vacío/null en matrícula inicial).
+        nombre: { type: string }
+        tipoDoc: { type: string, example: CC }
+        documento: { type: string }
+        email: { type: string, format: email }
+    BiometricValidationDto:
+      type: object
+      required: [id, estado, intentos, maxIntentos, expiresAt, expired, provider]
+      properties:
+        id: { type: string, format: uuid }
+        parte: { type: string, nullable: true }
+        nombre: { type: string }
+        tipoDoc: { type: string }
+        documento: { type: string }
+        email: { type: string }
+        estado:
+          type: string
+          enum: [enviado, en_proceso, aprobado, rechazado, expirado]
+        intentos: { type: integer }
+        maxIntentos: { type: integer }
+        score: { type: integer, nullable: true }
+        expiresAt: { type: string, format: date-time }
+        validadoAt: { type: string, format: date-time, nullable: true }
+        expired: { type: boolean }
+        provider:
+          type: string
+          enum: [mock, kyverum]
+          description: Proveedor de la validación (HU #10233).
+        captureUrl:
+          type: string
+          nullable: true
+          description: URL de captura de Kyverum. Solo presente con provider=kyverum y estado=en_proceso (AC9).
+    IniciarKyverumVerifyResult:
+      type: object
+      required: [validation, captureUrl]
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          description: URL que abre el participante para completar la validación en Kyverum.
+    KyverumWebhookPayload:
+      type: object
+      required: [evento, data]
+      properties:
+        evento:
+          type: string
+          enum: [validation.completed, validation.rejected]
+        requestId:
+          type: string
+          format: uuid
+        deliveryId:
+          type: string
+          format: uuid
+        ts:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [aprobado]
+          properties:
+            aprobado:
+              type: boolean
+              description: true = identidad aprobada; false = rechazada.
+            closedAt:
+              type: string
+              format: date-time
+            subjects:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  rol: { type: string }
+                  documento: { type: string }
+                  status: { type: string, enum: [aprobado, rechazado] }
+                  score: { type: integer }
+                  firmaSerie: { type: string }
+                  coincidencias:
+                    type: object
+                    properties:
+                      documento: { type: boolean }
+                      nombre: { type: boolean }

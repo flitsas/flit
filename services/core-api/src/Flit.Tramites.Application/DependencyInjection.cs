@@ -53,6 +53,11 @@ public static class DependencyInjection
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
 
+        // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
+        // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
+        services.AddScoped<IniciarKyverumVerifyHandler>();
+        services.AddScoped<KyverumWebhookHandler>();
+
         // Firma electrónica + FUR (Slice 7, mock). El proveedor de firma y el generador de
         // documentos son MOCKs swappables (contract-first, igual que el scorer biométrico):
         // se reemplazan por ZapSign / generador PDF real sin tocar los handlers.

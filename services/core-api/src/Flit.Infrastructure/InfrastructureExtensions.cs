@@ -1,9 +1,12 @@
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Kyverum;
+using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
+using Flit.Tramites.Application.Identity;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
@@ -52,6 +55,7 @@ public static class InfrastructureExtensions
 
         AddAttachmentStorage(services, configuration, environment);
         AddConsultationProviders(services, configuration);
+        AddIdentityValidation(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -200,6 +204,48 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
+    }
+
+    private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #10233 — Kyverum Verify. Config primero (appsettings/`Kyverum__*`), fallback a env crudas
+        // KYVERUM_* (mismo patrón que Verifik). La API key y el secreto del webhook NUNCA se loguean.
+        string? Cfg(string key, string env) =>
+            configuration[key] ?? Environment.GetEnvironmentVariable(env);
+
+        // Feature flag de proveedor (AC4): mock por defecto ⇒ no rompe la regresión Slice 6.
+        var biometrics = new BiometricsProviderOptions
+        {
+            Provider = Cfg("Biometrics:Provider", "BIOMETRICS_PROVIDER") ?? Flit.Tramites.Domain.Entities.BiometricProviders.Mock,
+        };
+        services.AddSingleton(biometrics);
+
+        services.Configure<KyverumOptions>(o =>
+        {
+            o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
+            o.ApiKey = Cfg("Kyverum:ApiKey", "KYVERUM_API_KEY") ?? "";
+            o.AuthScheme = Cfg("Kyverum:AuthScheme", "KYVERUM_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("Kyverum:TimeoutSeconds", "KYVERUM_TIMEOUT_SECONDS"), out var t) ? t : 30;
+            o.WebhookCallbackUrl = Cfg("Kyverum:WebhookCallbackUrl", "KYVERUM_WEBHOOK_CALLBACK_URL") ?? "";
+        });
+
+        services.AddHttpClient<IKyverumVerifyClient, KyverumVerifyClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
+        services.AddDataProtection();
+        services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+
+        // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).
+        var messaging = Cfg("Messaging:IdentityValidation", "MESSAGING_IDENTITY_VALIDATION") ?? "inprocess";
+        if (string.Equals(messaging, "rabbitmq", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IIdentityValidationEventPublisher, RabbitMqIdentityValidationEventPublisher>();
+        else
+            services.AddScoped<IIdentityValidationEventPublisher, InProcessIdentityValidationEventDispatcher>();
     }
 
     public static async Task InitializeInfrastructureAsync(

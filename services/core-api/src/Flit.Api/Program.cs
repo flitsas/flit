@@ -175,6 +175,7 @@ app.MapSuperAdminEndpoints();
 app.MapPublicProcedureEndpoints();
 app.MapPublicProcedureTypeEndpoints();
 app.MapPublicBiometricaEndpoints();
+app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
