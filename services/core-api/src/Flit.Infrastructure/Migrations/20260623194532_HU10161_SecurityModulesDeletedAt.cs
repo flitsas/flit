@@ -42,56 +42,17 @@ namespace Flit.Infrastructure.Migrations
                 oldClrType: typeof(Guid),
                 oldType: "uuid");
 
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "created_at",
-                schema: "security",
-                table: "modules",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTimeOffset(new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)));
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "created_by",
-                schema: "security",
-                table: "modules",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "deleted_at",
-                schema: "security",
-                table: "modules",
-                type: "timestamp with time zone",
-                nullable: true);
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "deleted_by",
-                schema: "security",
-                table: "modules",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.AddColumn<long>(
-                name: "row_version",
-                schema: "security",
-                table: "modules",
-                type: "bigint",
-                nullable: false,
-                defaultValue: 0L);
-
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "updated_at",
-                schema: "security",
-                table: "modules",
-                type: "timestamp with time zone",
-                nullable: true);
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "updated_by",
-                schema: "security",
-                table: "modules",
-                type: "uuid",
-                nullable: true);
+            // Use IF NOT EXISTS because SchemaBootstrap.cs (HU10146) already created
+            // created_at/created_by/updated_at/updated_by on this table.
+            migrationBuilder.Sql(@"
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00+00';
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS created_by uuid NULL;
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS deleted_at timestamp with time zone NULL;
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS deleted_by uuid NULL;
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS row_version bigint NOT NULL DEFAULT 0;
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NULL;
+                ALTER TABLE security.modules ADD COLUMN IF NOT EXISTS updated_by uuid NULL;
+            ");
         }
 
         /// <inheritdoc />

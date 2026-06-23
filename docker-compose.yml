@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -38,17 +38,16 @@ services:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
+      args:
+        # NEXT_PUBLIC_* se bake en build-time. Apunta al backend expuesto en el host.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:4003
     container_name: flit-frontend-dev
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://localhost:4003
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/frontend/node_modules
-      - /app/frontend/.next
+      NODE_ENV: production
+      # Para Next.js rewrites server-side: la red interna Docker.
+      CORE_API_ORIGIN: http://backend:8081
     depends_on:
       - backend
 
