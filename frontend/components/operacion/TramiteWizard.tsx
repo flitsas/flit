@@ -33,6 +33,7 @@ import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
@@ -185,8 +186,8 @@ export function TramiteWizard(props: Props) {
   // re-saltar en cada refresh posterior (p.ej. tras "Guardar y continuar").
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { show } = useToast();
   // Guardar+continuar de los pasos de actores: la shell dispara save() vía ref.
   const actorsFormRef = useRef<ActorsFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
@@ -269,46 +270,22 @@ export function TramiteWizard(props: Props) {
     setSubmitError(null);
     try {
       await tramitesClient.submitInstance(instanceId);
-      setSubmitted(true);
+      // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato
+      // (onExit redirige a /tramites; el ToastProvider del layout no se desmonta).
+      show(
+        modalidad === 'traspaso'
+          ? 'Traspaso enviado a tránsito correctamente.'
+          : 'Matrícula inicial enviada a tránsito correctamente.',
+        'success',
+      );
+      onExit();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'Error al enviar el trámite',
       );
-    } finally {
       setSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div className="w-full grid place-items-center px-6 py-16">
-        <div
-          className="max-w-md w-full rounded-3xl p-8 bg-white dark:bg-[#0B0F14] border text-center"
-          style={{ borderColor: '#DFE5ED' }}
-          role="status"
-          aria-live="polite"
-        >
-          <div
-            className="h-16 w-16 mx-auto rounded-full grid place-items-center mb-4"
-            style={{ background: 'rgba(0,219,213,0.15)' }}
-          >
-            <Check className="h-8 w-8" style={{ color: '#00DBD5' }} aria-hidden="true" />
-          </div>
-          <h2 className="text-xl font-bold">¡Trámite enviado!</h2>
-          <p className="text-xs opacity-70 mt-2">
-            El trámite {headerTitle} fue radicado correctamente.
-          </p>
-          <button
-            onClick={onExit}
-            className="w-full mt-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-          >
-            Volver a Operación
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const isLast = steps.length > 0 && activeIndex === steps.length - 1;
   // Pasos de captura de actores: el footer "Continuar" guarda y luego avanza,

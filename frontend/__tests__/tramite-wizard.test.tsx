@@ -36,6 +36,13 @@ vi.mock('@/lib/api/tramites-client', () => ({
   DEV_USER_ID: 'user-dev',
 }));
 
+// El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para
+// no exigir <ToastProvider> en cada render y poder asertar el mensaje.
+const toastShow = vi.hoisted(() => vi.fn());
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: toastShow }),
+}));
+
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 const CONFIG: ProcedureConfiguration = {
@@ -326,21 +333,30 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
   });
 
-  it('Finalizar habilitado cuando canSubmit', async () => {
+  it('Finalizar envía, dispara toast de éxito y vuelve al listado (sin pantalla intermedia)', async () => {
     mocks.getWizardState.mockResolvedValue({
       ...TRASPASO_WIZARD,
       canSubmit: true,
       blockers: [],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     });
+    const onExit = vi.fn();
     const user = userEvent.setup();
-    renderWizard();
+    render(
+      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
+    );
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
     const finish = screen.getByRole('button', { name: /Finalizar/ });
     expect(finish).toBeEnabled();
     await user.click(finish);
+
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    // Toast de éxito + redirección inmediata (onExit), sin pantalla intermedia.
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/enviado a tránsito/i), 'success');
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('¡Trámite enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Volver a Operación' })).not.toBeInTheDocument();
   });
 });
 

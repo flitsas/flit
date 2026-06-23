@@ -6,6 +6,7 @@ import { List } from 'lucide-react';
 import { Login } from '@/components/atom/Login';
 import { Shell, type ModuleId } from '@/components/atom/Shell';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
+import { ToastProvider } from '@/components/admin/Toast';
 import { getToken } from '@/lib/api/client';
 import { clearToken, getRememberedEmail } from '@/lib/auth/session';
 
@@ -58,6 +59,10 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
   }
 
   return (
+    // ToastProvider envuelve todas las rutas /tramites/*: el layout no se
+    // desmonta al ir de /tramites/[id] → /tramites, así el toast de "enviado a
+    // tránsito" sigue visible tras la redirección que dispara Finalizar.
+    <ToastProvider>
     <Shell active="tramites" onNav={handleNav} onLogout={handleLogout}>
       <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
         {!immersive && (
@@ -85,5 +90,6 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
         {children}
       </div>
     </Shell>
+    </ToastProvider>
   );
 }
