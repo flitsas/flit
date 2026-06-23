@@ -7,8 +7,6 @@ namespace Flit.Infrastructure.Persistence.Sql;
 internal static class SchemaBootstrap
 {
     public const string Up = """
-        CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
         CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid
         LANGUAGE sql
         VOLATILE
