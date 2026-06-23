@@ -37,6 +37,10 @@ using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
+using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
+using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
@@ -119,6 +123,12 @@ public static class DependencyInjection
         services.AddScoped<CreateOtWebhookHandler>();
         services.AddScoped<UpdateOtWebhookHandler>();
         services.AddScoped<ListOtApiLogsHandler>();
+
+        // HU #10217 — trámites de clientes OT (tenant admin).
+        services.AddScoped<ListOtClientProceduresHandler>();
+        services.AddScoped<GetOtClientProcedureHandler>();
+        services.AddScoped<ApproveOtClientProcedureHandler>();
+        services.AddScoped<RejectOtClientProcedureHandler>();
 
         return services;
     }

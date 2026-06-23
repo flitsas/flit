@@ -1,4 +1,9 @@
 using System.Security.Claims;
+using Flit.Admin.Application.OtClientProcedures;
+using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
+using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
@@ -12,8 +17,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoints de administración OT — perfil, modo Dashboard/QX, feature flags (HU #10215)
-/// y webhooks / bitácora API (HU #10216).
+/// Endpoints de administración OT — perfil, modo Dashboard/QX, feature flags (HU #10215),
+/// webhooks / bitácora API (HU #10216) y trámites de clientes tenant admin (HU #10217).
 /// El tenant se resuelve exclusivamente del claim JWT <c>tenant_id</c> (AC5).
 /// </summary>
 public static class AdminOtEndpoints
@@ -73,6 +78,40 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/client-procedures", ListClientProceduresAsync)
+            .WithName("AdminOtListClientProcedures")
+            .WithSummary("Lista trámites de clientes con grant vigente hacia el OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/client-procedures/{id:guid}", GetClientProcedureAsync)
+            .WithName("AdminOtGetClientProcedure")
+            .WithSummary("Obtiene un trámite de cliente si el OT tiene grant vigente")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/client-procedures/{id:guid}/approve", ApproveClientProcedureAsync)
+            .WithName("AdminOtApproveClientProcedure")
+            .WithSummary("Aprueba un trámite pending_ot de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapPost("/client-procedures/{id:guid}/reject", RejectClientProcedureAsync)
+            .WithName("AdminOtRejectClientProcedure")
+            .WithSummary("Rechaza un trámite pending_ot con motivo obligatorio")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         return app;
     }
@@ -262,5 +301,126 @@ public static class AdminOtEndpoints
             page = result.Page,
             pageSize = result.PageSize,
         });
+    }
+
+    private static async Task<IResult> ListClientProceduresAsync(
+        HttpContext httpContext,
+        ListOtClientProceduresHandler handler,
+        string? status,
+        Guid? procedureTypeId,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = tenantId,
+            Status = status,
+            ProcedureTypeId = procedureTypeId,
+            Page = page,
+            PageSize = pageSize,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            data = result.Data,
+            totalCount = result.TotalCount,
+            page = result.Page,
+            pageSize = result.PageSize,
+        });
+    }
+
+    private static async Task<IResult> GetClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        GetOtClientProcedureHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new GetOtClientProcedureQuery
+        {
+            OtTenantId = tenantId,
+            ProcedureInstanceId = id,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            GetOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            _ => Results.Ok(result.Procedure),
+        };
+    }
+
+    private static async Task<IResult> ApproveClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        ApproveOtClientProcedureHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
+        {
+            OtTenantId = tenantId,
+            ProcedureInstanceId = id,
+            ApprovedBy = ResolveUserId(httpContext.User),
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            ApproveOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            ApproveOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            _ => Results.Ok(result.Procedure),
+        };
+    }
+
+    private static async Task<IResult> RejectClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        RejectOtClientProcedureRequest request,
+        RejectOtClientProcedureHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = tenantId,
+            ProcedureInstanceId = id,
+            RejectedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            RejectOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            RejectOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            RejectOtClientProcedureStatus.ValidationFailed => Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(result.Procedure),
+        };
     }
 }

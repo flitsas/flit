@@ -9,6 +9,7 @@ using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtWebhooks;
+using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
@@ -78,6 +79,9 @@ public static class AdminInfrastructureExtensions
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
+
+        // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
+        services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();
 
         return services;
     }
