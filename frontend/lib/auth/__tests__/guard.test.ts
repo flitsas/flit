@@ -50,6 +50,14 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.allowed).toBe(true);
   });
 
+  it("permite ot_admin en listado /admin/transit-offices (HU #10236)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "ot_admin" }),
+      "/admin/transit-offices",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
   it("deniega ot_admin fuera de /admin/transit-offices", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "ot_admin" }),
