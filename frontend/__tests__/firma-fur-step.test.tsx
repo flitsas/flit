@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   generarFur: vi.fn(),
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
+  listBiometric: vi.fn(),
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
   downloadAttachment: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     generarFur: mocks.generarFur,
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
+    listBiometric: mocks.listBiometric,
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
     downloadAttachment: mocks.downloadAttachment,
@@ -112,6 +114,7 @@ beforeEach(() => {
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.getAttachments.mockResolvedValue([]);
   mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
+  mocks.listBiometric.mockResolvedValue([]);
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'submitted' });
   mocks.downloadAttachment.mockResolvedValue({
@@ -284,28 +287,40 @@ describe('FirmaFurStep — descarga de documentos', () => {
   });
 });
 
-describe('FirmaFurStep — enviar a tránsito', () => {
-  it('envía y muestra la confirmación', async () => {
-    const onSubmitted = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onSubmitted={onSubmitted} />,
-    );
-    await screen.findByRole('region', { name: 'Envío a tránsito' });
-    await user.click(screen.getByRole('button', { name: 'Enviar a tránsito' }));
-    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith(INSTANCE));
-    expect(await screen.findByText('Enviado a tránsito')).toBeInTheDocument();
-    expect(onSubmitted).toHaveBeenCalled();
+describe('FirmaFurStep — sin envío duplicado en el paso', () => {
+  it('NO renderiza la sección de envío a tránsito (el submit vive en Finalizar)', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByRole('region', { name: 'Participantes del portal' });
+    expect(screen.queryByRole('region', { name: 'Envío a tránsito' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar a tránsito' })).not.toBeInTheDocument();
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+  });
+});
+
+describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
+  it('muestra el resumen de la matrícula con el estado de la instancia', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const resumen = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
+    expect(within(resumen).getByText('Borrador (en preparación)')).toBeInTheDocument();
   });
 
-  it('mapea el 409 documentos_incompletos al copy correcto', async () => {
-    mocks.submitInstance.mockRejectedValue(new Error('409 Conflict: documentos_incompletos'));
+  it('el expediente digital alterna entre las pestañas Vehículo / Comprador / Documentos', async () => {
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Envío a tránsito' });
-    await user.click(screen.getByRole('button', { name: 'Enviar a tránsito' }));
-    expect(
-      await screen.findByText(/Faltan documentos obligatorios/),
-    ).toBeInTheDocument();
+    const visor = await screen.findByRole('region', { name: 'Expediente digital' });
+    // Pestaña por defecto: Vehículo.
+    expect(within(visor).getByText('Especificaciones técnicas')).toBeInTheDocument();
+    await user.click(within(visor).getByRole('tab', { name: 'Comprador' }));
+    expect(within(visor).getByText('Datos del comprador')).toBeInTheDocument();
+    await user.click(within(visor).getByRole('tab', { name: 'Documentos' }));
+    expect(within(visor).getByText('No se han cargado documentos.')).toBeInTheDocument();
+  });
+
+  it('la línea de tiempo muestra el vacío cuando no hay historial de estado', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const timeline = await screen.findByRole('region', {
+      name: 'Línea de tiempo del expediente',
+    });
+    expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
   });
 });

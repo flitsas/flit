@@ -4,6 +4,7 @@
 // viven en el wizard/hook. La consulta real (RUNT/SIMIT) se cablea en #10201;
 // por ahora el hook alimenta un snapshot stub.
 
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   PreflightCheckStatus,
   PreflightSnapshot,
@@ -15,6 +16,9 @@ interface Props {
   onRun: () => void;
   riesgoAceptado: boolean;
   onToggleRiesgo: (v: boolean) => void;
+  // El disparo de la consulta puede vivir fuera del panel (p. ej. junto al campo
+  // VIN en matrícula). En ese caso el panel es solo presentacional (semáforo).
+  showRunButton?: boolean;
 }
 
 const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> = {
@@ -54,7 +58,11 @@ export function PreflightPanel({
   onRun,
   riesgoAceptado,
   onToggleRiesgo,
+  showRunButton = true,
 }: Props) {
+  // En solo lectura nunca se ofrece el disparo de la consulta (Track C).
+  const readOnly = useWizardReadOnly();
+  const canRun = showRunButton && !readOnly;
   const hasResult = !!snapshot?.overall;
   const overall = snapshot?.overall;
   const checks = snapshot?.checks ?? [];
@@ -83,16 +91,18 @@ export function PreflightPanel({
               {ov.label}
             </span>
           )}
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={loading}
-            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Consultar RUNT y SIMIT"
-          >
-            {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
-          </button>
+          {canRun && (
+            <button
+              type="button"
+              onClick={onRun}
+              disabled={loading}
+              className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              aria-label="Consultar RUNT y SIMIT"
+            >
+              {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -158,7 +168,8 @@ export function PreflightPanel({
             type="checkbox"
             checked={riesgoAceptado}
             onChange={(e) => onToggleRiesgo(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00]"
+            disabled={readOnly}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00] disabled:opacity-60"
           />
           <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
             Asumo el riesgo de rechazo en el organismo de tránsito y deseo

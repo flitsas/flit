@@ -1,21 +1,45 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  Briefcase,
+  Building2,
+  Calendar,
+  Car,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Fuel,
+  Gauge,
+  Hash,
+  Layers,
+  Lock,
+  Palette,
+  Search,
+  Shield,
+  Tag,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { PreflightPanel } from './PreflightPanel';
-import { ActorsForm } from './ActorsForm';
+import { ActorsForm, type ActorsFormHandle } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
+import { canNavigateToStep, frontierIndex } from './wizard-navigation';
+import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
   FieldValue,
   FieldValueInput,
+  InstanceStatus,
   PreflightSnapshot,
   ProcedureConfiguration,
   WizardModalidad,
@@ -25,18 +49,22 @@ import type {
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
- * modalidad/pasos/status. Por eso solo necesita saber CÓMO crear la instancia.
+ * modalidad/pasos/status. Por eso solo necesita saber CÓMO obtener la instancia.
  *
- * - Entrada por modalidad (M0): `modalidad` + `title` (etiqueta para el header).
+ * - Instancia existente (Track B): `existingInstanceId` — el wizard opera sobre
+ *   un draft ya creado (ruta /tramites/[instanceId]). NO crea nada.
+ * - Entrada por modalidad (M0): `modalidad` + `title` — crea la instancia draft
+ *   al montar. Se conserva para los tests legacy de auto-create.
  * - Entrada legacy por tipo publicado: `configuration` + `procedureTypeId`.
  *
- * Exactamente una de las dos vías debe estar presente.
+ * Exactamente una de las tres vías debe estar presente.
  */
 type Props = {
   onExit: () => void;
 } & (
-  | { modalidad: WizardModalidad; title: string; configuration?: undefined; procedureTypeId?: undefined }
-  | { configuration: ProcedureConfiguration; procedureTypeId: string; modalidad?: undefined; title?: undefined }
+  | { existingInstanceId: string; modalidad?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined }
+  | { modalidad: WizardModalidad; title: string; existingInstanceId?: undefined; configuration?: undefined; procedureTypeId?: undefined }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined }
 );
 
 const STATUS_BADGE: Record<
@@ -46,6 +74,22 @@ const STATUS_BADGE: Record<
   complete: { bg: '#8CC63F', color: '#fff' },
   incomplete: { bg: '#DFE5ED', color: '#162744' },
   locked: { bg: '#EEF1F5', color: '#9AA5B1' },
+};
+
+/**
+ * Subtítulo descriptivo por paso, mostrado UNA sola vez bajo el `h2` (título
+ * canónico del paso = `activeStep.label`). Centraliza aquí el copy de ayuda que
+ * antes vivía duplicado en los `h4` internos de cada hijo; al subirlo evitamos
+ * el doble título (uno en la shell, otro en el box). Keys sin entrada no pintan
+ * subtítulo. El paso `fur` conserva su intro propia (actúa como subsección).
+ */
+const STEP_SUBTITLE: Record<string, string> = {
+  consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
+  consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
+  documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
+  comercial: 'Valor de la venta, causal e impuestos del traspaso.',
+  identidad:
+    'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
 
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
@@ -76,12 +120,32 @@ function StepMarker({ status, index }: { status: WizardStepStatus; index: number
  * `refresh()` para re-consultar el estado autoritativo.
  */
 export function TramiteWizard(props: Props) {
-  const { configuration, procedureTypeId, modalidad: entryModalidad, title, onExit } = props;
+  const { configuration, procedureTypeId, modalidad: entryModalidad, title, existingInstanceId, onExit } = props;
   const { state, start } = useProcedureInstance();
-  const instanceId = state.instanceId;
+  // Con instancia existente (Track B) no se crea nada: el id viene por prop.
+  // En las vías de auto-create el id lo produce `start()` → state.instanceId.
+  const instanceId = existingInstanceId ?? state.instanceId;
 
-  // Header: por modalidad usamos `title`; legacy usa configuration.name.
-  const headerTitle = title ?? configuration?.name ?? 'Trámite';
+  // Modo solo lectura (Track C): un trámite que ya salió de `draft` (enviado a
+  // tránsito, en revisión, etc.) es solo visualización. Se deriva del estado de
+  // la instancia existente; los trámites nuevos siempre arrancan editables.
+  const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
+  useEffect(() => {
+    if (!existingInstanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(existingInstanceId)
+      .then((d) => {
+        if (active) setInstanceStatus(d.status ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [existingInstanceId]);
+  // Solo lectura cuando conocemos un estado y NO es draft. Si el estado aún no
+  // se resolvió (o el backend no lo devuelve), se asume editable.
+  const readOnly = !!instanceStatus && instanceStatus !== 'draft';
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
@@ -93,15 +157,17 @@ export function TramiteWizard(props: Props) {
   // que `start()` corra UNA sola vez por entrada.
   const startedForRef = useRef<string | null>(null);
 
-  // Crea la instancia draft al montar (una sola vez por entrada).
+  // Crea la instancia draft al montar (una sola vez por entrada). Si ya existe
+  // (existingInstanceId), NO crea: el wizard solo hidrata el draft vía GET /wizard.
   useEffect(() => {
+    if (existingInstanceId) return;
     if (startedForRef.current === startKey) return;
     startedForRef.current = startKey;
     void start(
       entryModalidad ? { modalidad: entryModalidad } : { procedureTypeId: procedureTypeId! },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startKey]);
+  }, [startKey, existingInstanceId]);
 
   const {
     wizard,
@@ -114,22 +180,65 @@ export function TramiteWizard(props: Props) {
   } = useWizard(instanceId);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  // Reanudar (Track B): al abrir una instancia existente queremos caer en el
+  // paso donde quedó el usuario (la frontera), no en el paso 1. Este ref marca
+  // que ya inicializamos el paso desde el primer `steps` del server, para NO
+  // re-saltar en cada refresh posterior (p.ej. tras "Guardar y continuar").
+  const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { show } = useToast();
+  // Guardar+continuar de los pasos de actores: la shell dispara save() vía ref.
+  const actorsFormRef = useRef<ActorsFormHandle>(null);
+  const [continuing, setContinuing] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
 
-  const modalidad: WizardModalidad = wizard?.modalidad ?? 'matricula_inicial';
+  const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Header: por modalidad usamos `title`; legacy usa configuration.name; con
+  // instancia existente derivamos la etiqueta de la modalidad server-driven.
+  const headerTitle =
+    title ??
+    configuration?.name ??
+    (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
+
+  // Navegación en cascada: solo a pasos completos o a la frontera (primer
+  // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
-    const target = steps[index];
-    if (!target || target.status === 'locked') return;
+    if (!canNavigateToStep(steps, index, readOnly)) return;
     setActiveIndex(index);
   };
+
+  // Reanudar en el paso donde quedó el usuario: cuando los pasos llegan del
+  // server por primera vez para una instancia existente, posiciona el paso
+  // activo en la frontera (primer incompleto; o el último si todo está
+  // completo). Solo una vez (ref): en creación nueva la frontera es el paso 1,
+  // y en refreshes posteriores no debe re-saltar.
+  useEffect(() => {
+    if (stepInitializedRef.current) return;
+    if (steps.length === 0) return;
+    stepInitializedRef.current = true;
+    if (existingInstanceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveIndex(frontierIndex(steps));
+    }
+  }, [steps, existingInstanceId]);
+
+  // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
+  // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
+  // En solo lectura no hay edición que regrese gates, así que no reposiciona.
+  useEffect(() => {
+    if (readOnly) return;
+    if (steps.length === 0) return;
+    if (!canNavigateToStep(steps, activeIndex)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveIndex(frontierIndex(steps));
+    }
+  }, [steps, activeIndex, readOnly]);
 
   const runPreflight = async () => {
     if (!instanceId) return;
@@ -161,53 +270,65 @@ export function TramiteWizard(props: Props) {
     setSubmitError(null);
     try {
       await tramitesClient.submitInstance(instanceId);
-      setSubmitted(true);
+      // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato
+      // (onExit redirige a /tramites; el ToastProvider del layout no se desmonta).
+      show(
+        modalidad === 'traspaso'
+          ? 'Traspaso enviado a tránsito correctamente.'
+          : 'Matrícula inicial enviada a tránsito correctamente.',
+        'success',
+      );
+      onExit();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'Error al enviar el trámite',
       );
-    } finally {
       setSubmitting(false);
     }
   };
 
-  if (submitted) {
-    return (
-      <div className="h-full w-full grid place-items-center px-6 pb-24">
-        <div
-          className="max-w-md w-full rounded-3xl p-8 bg-white dark:bg-[#0B0F14] border text-center"
-          style={{ borderColor: '#DFE5ED' }}
-          role="status"
-          aria-live="polite"
-        >
-          <div
-            className="h-16 w-16 mx-auto rounded-full grid place-items-center mb-4"
-            style={{ background: 'rgba(0,219,213,0.15)' }}
-          >
-            <Check className="h-8 w-8" style={{ color: '#00DBD5' }} aria-hidden="true" />
-          </div>
-          <h2 className="text-xl font-bold">¡Trámite enviado!</h2>
-          <p className="text-xs opacity-70 mt-2">
-            El trámite {headerTitle} fue radicado correctamente.
-          </p>
-          <button
-            onClick={onExit}
-            className="w-full mt-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-          >
-            Volver a Operación
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const isLast = steps.length > 0 && activeIndex === steps.length - 1;
+  // Pasos de captura de actores: el footer "Continuar" guarda y luego avanza,
+  // así que se habilita aunque el paso aún esté incomplete (el save lo completa).
+  const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
   const continueDisabled =
-    !activeStep || activeStep.status !== 'complete' || activeIndex >= steps.length - 1;
+    !activeStep ||
+    activeIndex >= steps.length - 1 ||
+    continuing ||
+    (!isActorStep && activeStep.status !== 'complete');
+
+  // "Guardar y continuar" para pasos de actores: valida + PUT /actors (vía ref),
+  // refresca el wizard y avanza solo si el paso quedó complete. Otros pasos:
+  // navegación directa al siguiente.
+  const handleContinue = async () => {
+    if (!isActorStep) {
+      goToStep(activeIndex + 1);
+      return;
+    }
+    setContinuing(true);
+    setSubmitError(null);
+    try {
+      const ok = await actorsFormRef.current?.save();
+      if (!ok) {
+        setSubmitError('No se pudo guardar. Por favor, reintenta.');
+        return;
+      }
+      const fresh = await refresh();
+      if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+        setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
+      }
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo guardar. Por favor, reintenta.',
+      );
+    } finally {
+      setContinuing(false);
+    }
+  };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+   <WizardReadOnlyProvider readOnly={readOnly}>
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-xl font-bold">{headerTitle}</h1>
@@ -221,11 +342,28 @@ export function TramiteWizard(props: Props) {
         <button
           onClick={onExit}
           className="text-xs opacity-70 hover:opacity-100"
-          aria-label="Cancelar y volver al selector"
+          aria-label={readOnly ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >
-          ← Cancelar
+          {readOnly ? '← Volver al listado' : '← Cancelar'}
         </button>
       </div>
+
+      {readOnly && (
+        <div
+          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+          role="status"
+          aria-live="polite"
+        >
+          <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+          <span>
+            <span className="font-semibold" style={{ color: '#557EFF' }}>
+              Enviado a tránsito — solo visualización.
+            </span>{' '}
+            Este trámite ya no puede editarse.
+          </span>
+        </div>
+      )}
 
       {(wizardError || submitError || state.error) && (
         <div
@@ -238,10 +376,10 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-12 gap-4 items-start">
         {/* Sidebar de pasos server-driven. */}
         <aside
-          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
+          className="col-span-12 md:col-span-3 md:sticky md:top-4 md:self-start rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border"
           style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
@@ -255,7 +393,7 @@ export function TramiteWizard(props: Props) {
             <ol className="space-y-3">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
-                const clickable = s.status !== 'locked';
+                const clickable = canNavigateToStep(steps, i, readOnly);
                 return (
                   <li key={s.key} aria-current={isActive ? 'step' : undefined}>
                     <button
@@ -296,7 +434,7 @@ export function TramiteWizard(props: Props) {
 
         {/* Cuerpo del paso activo. */}
         <section
-          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
+          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
           style={{ borderColor: '#DFE5ED' }}
         >
           {!activeStep ? (
@@ -305,7 +443,14 @@ export function TramiteWizard(props: Props) {
             </p>
           ) : (
             <div className="space-y-6">
-              <h2 className="text-base font-bold">{activeStep.label}</h2>
+              <div>
+                <h2 className="text-base font-bold">{activeStep.label}</h2>
+                {STEP_SUBTITLE[activeStep.key] && (
+                  <p className="mt-1 text-xs opacity-60">
+                    {STEP_SUBTITLE[activeStep.key]}
+                  </p>
+                )}
+              </div>
               <StepBody
                 step={activeStep}
                 modalidad={modalidad}
@@ -314,7 +459,7 @@ export function TramiteWizard(props: Props) {
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
-                onSubmitted={() => setSubmitted(true)}
+                actorsRef={actorsFormRef}
               />
             </div>
           )}
@@ -352,14 +497,15 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
-            {!isLast ? (
+            {/* En solo lectura no hay Continuar/Guardar/Finalizar: solo se recorre. */}
+            {readOnly ? null : !isLast ? (
               <button
-                onClick={() => goToStep(activeIndex + 1)}
+                onClick={() => void handleContinue()}
                 disabled={continueDisabled}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: '#557EFF' }}
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
-                Continuar
+                {continuing ? 'Guardando…' : isActorStep ? 'Guardar y continuar' : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
@@ -376,69 +522,85 @@ export function TramiteWizard(props: Props) {
         </section>
       </div>
     </div>
+   </WizardReadOnlyProvider>
   );
 }
 
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
- * Grupos de atributos del vehículo hidratados por el backend en field_values
- * tras la consulta (origen RUNT). Solo se pinta lo presente; nada de proveedor.
+ * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
+ * modelo). Cada uno con su icono para una grilla legible. Origen RUNT, hidratados
+ * en field_values por la consulta del preflight. Solo se pinta lo presente.
  */
-const VEHICLE_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
-  {
-    title: 'Identificación',
-    fields: [
-      { key: 'plate', label: 'Placa' },
-      { key: 'vin', label: 'VIN' },
-    ],
-  },
-  {
-    title: 'Características',
-    fields: [
-      { key: 'vehicle_brand', label: 'Marca' },
-      { key: 'vehicle_line', label: 'Línea' },
-      { key: 'vehicle_year', label: 'Modelo' },
-      { key: 'vehicle_color', label: 'Color' },
-      { key: 'vehicle_class', label: 'Clase' },
-      { key: 'vehicle_fuel', label: 'Combustible' },
-      { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
-    ],
-  },
-  {
-    title: 'Tránsito',
-    fields: [
-      { key: 'transit_office_name', label: 'Organismo de tránsito' },
-      { key: 'vehicle_state', label: 'Estado del vehículo' },
-    ],
-  },
+const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
+  { key: 'vin', label: 'VIN', icon: Hash },
+  { key: 'vehicle_color', label: 'Color', icon: Palette },
+  { key: 'vehicle_class', label: 'Clase', icon: Tag },
+  { key: 'vehicle_service', label: 'Servicio', icon: Briefcase },
+  { key: 'vehicle_fuel', label: 'Combustible', icon: Fuel },
+  { key: 'vehicle_engine_displacement', label: 'Cilindraje', icon: Gauge },
+  { key: 'vehicle_body_type', label: 'Carrocería', icon: Layers },
+  { key: 'vehicle_engine_number', label: 'Nº Motor', icon: Wrench },
+  { key: 'vehicle_chassis', label: 'Nº Chasis', icon: Hash },
+  { key: 'vehicle_series', label: 'Nº Serie', icon: Hash },
+  { key: 'vehicle_passengers', label: 'Pasajeros', icon: Users },
+  { key: 'vehicle_registration_date', label: 'Fecha matrícula', icon: Calendar },
+  { key: 'transit_office_name', label: 'Organismo de tránsito', icon: Building2 },
 ];
 
 /**
  * Tarjeta "Datos del vehículo · RUNT". Lee los field_values frescos de la
- * instancia y muestra una fila por atributo presente, agrupado. Reusa la
- * convención de cards de operación (rounded-2xl + borde #DFE5ED).
+ * instancia (hidratados por la consulta del preflight) y los presenta con un
+ * hero (placa + marca/línea/modelo + estado) y una grilla de atributos con
+ * iconos. Solo se pinta lo presente; nada de proveedor.
  */
 function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   const byKey = (key: string) =>
-    fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+    fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 
-  const groups = VEHICLE_GROUPS.map((g) => ({
-    title: g.title,
-    rows: g.fields
-      .map((f) => ({ label: f.label, value: byKey(f.key) }))
-      .filter((r) => r.value.trim() !== ''),
-  })).filter((g) => g.rows.length > 0);
+  const plate = byKey('plate');
+  const vin = byKey('vin');
+  const brand = byKey('vehicle_brand');
+  const line = byKey('vehicle_line');
+  const year = byKey('vehicle_year');
+  const estado = byKey('vehicle_state');
+  const soatVencimiento = byKey('soat_vencimiento');
+  const soatAseguradora = byKey('soat_aseguradora');
+  const rtmVencimiento = byKey('rtm_vencimiento');
 
-  if (groups.length === 0) return null;
+  // Antes de consultar no hay datos del vehículo → no renderiza.
+  const hasAny = [plate, vin, brand, line, year].some((v) => v !== '');
+  if (!hasAny) return null;
+
+  const title = [brand, line].filter((v) => v !== '').join(' ') || 'Vehículo';
+  const estadoActivo = /activo/i.test(estado);
+
+  const details = VEHICLE_DETAILS.map((d) => ({ ...d, value: byKey(d.key) })).filter(
+    (d) => d.value !== '',
+  );
+
+  const hasSoatRtm = soatVencimiento || soatAseguradora || rtmVencimiento;
 
   return (
     <div
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
       style={{ borderColor: '#DFE5ED' }}
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="text-sm font-bold">Datos del vehículo</h4>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between gap-3 border-b px-4 py-3"
+        style={{ borderColor: '#DFE5ED' }}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className="grid h-7 w-7 place-items-center rounded-lg"
+            style={{ background: 'rgba(85,126,255,0.10)' }}
+          >
+            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+          </span>
+          <h4 className="text-sm font-bold">Datos del vehículo</h4>
+        </div>
         <span
           className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
           style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
@@ -446,23 +608,117 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
           RUNT
         </span>
       </div>
-      <div className="space-y-4">
-        {groups.map((g) => (
-          <div key={g.title}>
-            <p className="text-[10px] font-semibold uppercase opacity-60 mb-1.5">
-              {g.title}
+
+      {/* Hero: placa + marca/línea/modelo + estado */}
+      <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+        {plate && (
+          <div
+            className="rounded-xl border-2 px-4 py-2 text-center"
+            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+          >
+            <p className="text-[9px] font-semibold uppercase opacity-50">Placa</p>
+            <p
+              className="font-mono text-lg font-extrabold tracking-widest"
+              style={{ color: '#557EFF' }}
+            >
+              {plate}
             </p>
-            <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              {g.rows.map((r) => (
-                <div key={r.label} className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[11px] opacity-60 shrink-0">{r.label}</dt>
-                  <dd className="text-xs font-semibold text-right">{r.value}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
-        ))}
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-bold">{title}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {year && (
+              <span className="inline-flex items-center gap-1 text-[11px] opacity-70">
+                <Calendar className="h-3 w-3" /> Modelo {year}
+              </span>
+            )}
+            {estado && (
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                style={
+                  estadoActivo
+                    ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
+                    : { background: 'rgba(154,165,177,0.15)', color: '#9AA5B1' }
+                }
+              >
+                {estado}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Grilla de atributos */}
+      {details.length > 0 && (
+        <div
+          className="grid gap-px border-t sm:grid-cols-2"
+          style={{ borderColor: '#DFE5ED', background: '#DFE5ED' }}
+        >
+          {details.map((d) => {
+            const Icon = d.icon;
+            return (
+              <div
+                key={d.key}
+                className="flex items-center gap-2.5 bg-white px-4 py-2.5 dark:bg-[#0B0F14]"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-40" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase opacity-50">{d.label}</p>
+                  <p className="truncate text-xs font-semibold">{d.value}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sección SOAT / RTM */}
+      {hasSoatRtm && (
+        <div
+          className="border-t px-4 py-3"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
+            Documentos del vehículo
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {(soatVencimiento || soatAseguradora) && (
+              <div
+                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase" style={{ color: '#557EFF' }}>
+                    SOAT
+                  </p>
+                  {soatVencimiento && (
+                    <p className="text-[11px] font-semibold">Vence: {soatVencimiento}</p>
+                  )}
+                  {soatAseguradora && (
+                    <p className="truncate text-[10px] opacity-60">{soatAseguradora}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {rtmVencimiento && (
+              <div
+                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase" style={{ color: '#8CC63F' }}>
+                    Tecno-mecánica
+                  </p>
+                  <p className="text-[11px] font-semibold">Vence: {rtmVencimiento}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -488,6 +744,7 @@ function ConsultaStep({
   onRunPreflight: () => Promise<void>;
 }) {
   const isVin = step.key === 'consulta_vin';
+  const readOnly = useWizardReadOnly();
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -565,17 +822,12 @@ function ConsultaStep({
     setError(null);
     setPersisting(true);
     try {
-      // 1) Persistir identificador → 2) consulta RUNT del vehículo (hidrata
-      // marca/línea/color/etc. en field_values) → 3) preflight (semáforo) →
-      // 4) recargar la instancia para pintar la tarjeta "Datos del vehículo · RUNT".
+      // UNA sola consulta a Verifik: 1) persistir identificador → 2) preflight,
+      // que con la MISMA respuesta del RUNT compone el semáforo Y hidrata los
+      // atributos del vehículo en field_values → 3) recargar la instancia para
+      // pintar la tarjeta "Datos del vehículo". (Antes se hacían dos consultas:
+      // una dedicada de datos + el preflight; el preflight ya trae ambos.)
       await tramitesClient.patchFieldValues(instanceId, items);
-      // La consulta de datos es independiente del semáforo: si falla, igual
-      // seguimos con el pre-vuelo para no bloquear el avance.
-      try {
-        await tramitesClient.runConsultation(instanceId, 'RUNT_VEHICLE');
-      } catch {
-        /* hidratación best-effort */
-      }
       await onRunPreflight();
       await loadInstance();
     } catch (err) {
@@ -588,83 +840,113 @@ function ConsultaStep({
   const inputClass =
     'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
 
+  const loading = preflightLoading || persisting;
+  const hasResult = !!preflight?.overall;
+
+  // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
+  // (unificación de estilos pedida). Disparo único de la consulta.
+  const consultButton = (
+    <button
+      type="button"
+      onClick={() => void handleRun()}
+      disabled={loading}
+      className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      aria-label="Consultar RUNT"
+    >
+      <Search className="h-3.5 w-3.5" />
+      {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+    </button>
+  );
+
   return (
     <div className="space-y-4">
-      <p className="text-xs opacity-70">
-        {isVin
-          ? 'Ingresa el VIN del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'
-          : 'Ingresa la placa y el propietario del vehículo para consultar los datos del RUNT y correr el pre-vuelo.'}
-      </p>
-
       {isVin ? (
-        <div className="max-w-sm">
-          <label htmlFor="consulta-vin" className="text-xs font-semibold mb-1.5 block">
-            VIN
-          </label>
-          <input
-            id="consulta-vin"
-            type="text"
-            value={vin}
-            onChange={(e) => setVin(e.target.value)}
-            className={inputClass}
-            style={{ borderColor: '#DFE5ED' }}
-            placeholder="Ej. 9BWZZZ377VT004251"
-          />
+        <div
+          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="consulta-vin"
+              type="text"
+              value={vin}
+              onChange={(e) => setVin(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleRun();
+              }}
+              disabled={readOnly}
+              className={`${inputClass} sm:flex-1 disabled:opacity-60`}
+              style={{ borderColor: '#DFE5ED' }}
+              placeholder="Número VIN…"
+              aria-label="Número VIN"
+            />
+            {!readOnly && consultButton}
+          </div>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 max-w-xl">
-          <div>
-            <label htmlFor="consulta-plate" className="text-xs font-semibold mb-1.5 block">
-              Placa
-            </label>
-            <input
-              id="consulta-plate"
-              type="text"
-              value={plate}
-              onChange={(e) => setPlate(e.target.value)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-              placeholder="Ej. ABC123"
-            />
+        <div
+          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
+                Placa
+              </label>
+              <input
+                id="consulta-plate"
+                type="text"
+                value={plate}
+                onChange={(e) => setPlate(e.target.value)}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
+                style={{ borderColor: '#DFE5ED' }}
+                placeholder="Ej. ABC123"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="consulta-owner-doc-type"
+                className="mb-1.5 block text-xs font-semibold"
+              >
+                Tipo documento propietario
+              </label>
+              <select
+                id="consulta-owner-doc-type"
+                value={ownerDocType}
+                onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
+                style={{ borderColor: '#DFE5ED' }}
+              >
+                {DOC_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label
+                htmlFor="consulta-owner-doc-number"
+                className="mb-1.5 block text-xs font-semibold"
+              >
+                Número documento propietario
+              </label>
+              <input
+                id="consulta-owner-doc-number"
+                type="text"
+                value={ownerDocNumber}
+                onChange={(e) => setOwnerDocNumber(e.target.value)}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
+                style={{ borderColor: '#DFE5ED' }}
+                placeholder="Ej. 1020304050"
+              />
+            </div>
           </div>
-          <div>
-            <label
-              htmlFor="consulta-owner-doc-type"
-              className="text-xs font-semibold mb-1.5 block"
-            >
-              Tipo documento propietario
-            </label>
-            <select
-              id="consulta-owner-doc-type"
-              value={ownerDocType}
-              onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-            >
-              {DOC_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label
-              htmlFor="consulta-owner-doc-number"
-              className="text-xs font-semibold mb-1.5 block"
-            >
-              Número documento propietario
-            </label>
-            <input
-              id="consulta-owner-doc-number"
-              type="text"
-              value={ownerDocNumber}
-              onChange={(e) => setOwnerDocNumber(e.target.value)}
-              className={inputClass}
-              style={{ borderColor: '#DFE5ED' }}
-              placeholder="Ej. 1020304050"
-            />
-          </div>
+          {!readOnly && <div className="mt-4">{consultButton}</div>}
         </div>
       )}
 
@@ -679,15 +961,16 @@ function ConsultaStep({
         </p>
       )}
 
+      <VehicleDataCard fieldValues={fieldValues} />
+
       <PreflightPanel
         snapshot={preflight}
-        loading={preflightLoading || persisting}
+        loading={loading}
         onRun={() => void handleRun()}
         riesgoAceptado={false}
         onToggleRiesgo={() => {}}
+        showRunButton={false}
       />
-
-      <VehicleDataCard fieldValues={fieldValues} />
     </div>
   );
 }
@@ -704,7 +987,7 @@ function StepBody({
   preflightLoading,
   onRunPreflight,
   onRefresh,
-  onSubmitted,
+  actorsRef,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -713,7 +996,7 @@ function StepBody({
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
-  onSubmitted: () => void;
+  actorsRef: RefObject<ActorsFormHandle | null>;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -749,38 +1032,58 @@ function StepBody({
       );
 
     case 'documentos':
-      return <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} />;
+      // hideHeader: el título/descripción del paso ya los pinta el h2 + subtítulo.
+      return (
+        <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
+      );
 
+    // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
+    // posición del árbol; sin key, React reusa la instancia al cambiar de paso y
+    // arrastra el estado (actores hidratados) del paso anterior. La key fuerza
+    // el remontaje y la rehidratación limpia por paso.
     case 'comprador':
       return (
         <ActorsForm
+          key={step.key}
+          ref={actorsRef}
           instanceId={instanceId}
           modalidad={modalidad === 'traspaso' ? 'traspaso' : 'matricula_inicial'}
           roles={['comprador']}
           onSaved={onRefresh}
+          embeddedInWizard
+          layout="split"
         />
       );
 
     case 'vendedor':
       return (
         <ActorsForm
+          key={step.key}
+          ref={actorsRef}
           instanceId={instanceId}
           modalidad="traspaso"
           roles={['vendedor']}
           onSaved={onRefresh}
+          embeddedInWizard
         />
       );
 
     case 'comercial':
-      return <CommercialForm instanceId={instanceId} onSaved={onRefresh} />;
+      // hideHeader: el h2 + subtítulo ya cubren el título del paso.
+      return (
+        <CommercialForm instanceId={instanceId} onSaved={onRefresh} hideHeader />
+      );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
+    // hideIntro: el h2 + subtítulo ya describen el paso (en `fur` la intro se
+    // conserva porque ahí la biométrica es una subsección, no el título).
     case 'identidad':
       return (
         <BiometricStep
           instanceId={instanceId}
           modalidad={modalidad}
           onRefresh={onRefresh}
+          hideIntro
         />
       );
 
@@ -799,7 +1102,6 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
-            onSubmitted={onSubmitted}
           />
         </div>
       );

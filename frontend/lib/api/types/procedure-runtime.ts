@@ -140,6 +140,9 @@ export interface ProcedureActor {
   nombreCompleto: string;
   email: string;
   telefono?: string;
+  /** Persistidos en actor.metadata (JSON) — opcionales. */
+  ciudad?: string;
+  direccion?: string;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -163,9 +166,15 @@ export interface RuntPersonLookupResult {
   lastName: string | null;
   documentType: string;
   documentNumber: string;
-  licenseStatus: string | null;
+  licenseStatus: string | null;    // driverStatus del conductor
   source: 'RUNT';
   mode: 'real' | 'mock';
+  // Campos enriquecidos (presentes cuando found=true)
+  citizenStatus?: string | null;    // Estado del ciudadano (ACTIVA/INACTIVA)
+  hasPendingFines?: boolean;        // true si tieneMultas == "SI"
+  nroPazYSalvo?: string | null;     // Número del paz y salvo
+  hasActiveLicense?: boolean;       // true si tiene al menos 1 licencia ACTIVA
+  licenseCategories?: string | null; // "B1" o "B1,C1"
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────

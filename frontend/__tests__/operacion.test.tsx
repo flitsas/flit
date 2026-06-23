@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type {
-  CreateInstanceRequest,
   InstanceSummary,
   WizardState,
 } from '@/lib/api/types/procedure-runtime';
@@ -37,6 +36,13 @@ vi.mock('@/lib/api/tramites-client', () => ({
   DEV_USER_ID: 'user-dev',
 }));
 
+// La tabla embebida (TramitesTable) usa useRouter para abrir cada fila; en
+// jsdom no hay router de Next montado, así que lo stubeamos.
+const routerPush = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
 import { OperacionView } from '@/components/operacion/OperacionView';
 
 const TRASPASO_WIZARD: WizardState = {
@@ -52,21 +58,6 @@ const TRASPASO_WIZARD: WizardState = {
     { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
     { index: 5, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
-  ],
-};
-
-const MATRICULA_WIZARD: WizardState = {
-  modalidad: 'matricula_inicial',
-  tipologiaCodigo: 'matricula_inicial',
-  totalSteps: 5,
-  canSubmit: false,
-  blockers: ['documentos_incompletos'],
-  steps: [
-    { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
-    { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
-    { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
-    { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
   ],
 };
 
@@ -135,14 +126,14 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
 
 describe('M6 — tabla de trámites en curso', () => {
   it('muestra el estado vacío cuando no hay instancias', async () => {
-    render(<OperacionView />);
+    render(<OperacionView onStartTramite={vi.fn()} />);
     expect(await screen.findByText('Aún no hay trámites')).toBeInTheDocument();
     expect(mocks.listInstances).toHaveBeenCalledTimes(1);
   });
 
   it('renderiza una fila por instancia con placa, comprador, VIN, paso y chip de estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView />);
+    render(<OperacionView onStartTramite={vi.fn()} />);
 
     const list = await screen.findByRole('list', { name: /Trámites en curso/ });
     const rows = within(list).getAllByRole('listitem');
@@ -162,51 +153,135 @@ describe('M6 — tabla de trámites en curso', () => {
     expect(within(rows[1]).getByText('Enviado a tránsito')).toBeInTheDocument();
     expect(within(rows[1]).getByText('5/5')).toBeInTheDocument();
   });
+
+  it('al hacer clic en una fila navega al wizard de esa instancia', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const row = await screen.findByRole('button', { name: /Abrir trámite TR-001/ });
+    await user.click(row);
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
+  });
 });
 
-describe('M0 — chooser por modalidad (sin tipos publicados)', () => {
+describe('M0 — chooser por modalidad (Track B: delega en la ruta)', () => {
   it('muestra las dos modalidades y NO consulta tipos publicados', async () => {
-    render(<OperacionView />);
+    render(<OperacionView onStartTramite={vi.fn()} />);
     expect(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Iniciar Traspaso estándar/ })).toBeInTheDocument();
     // M0 desliga de Parametrización: ya no se listan tipos publicados.
     expect(mocks.listPublishedProcedureTypes).not.toHaveBeenCalled();
   });
 
-  it('Matrícula inicial crea la instancia con modalidad (sin procedureTypeId)', async () => {
-    mocks.getWizardState.mockResolvedValue(MATRICULA_WIZARD);
+  it('Matrícula inicial dispara onStartTramite y NO crea instancia inline', async () => {
+    const onStart = vi.fn();
     const user = userEvent.setup();
-    render(<OperacionView />);
+    render(<OperacionView onStartTramite={onStart} />);
     await user.click(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ }));
 
-    await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
-    const body = mocks.createInstance.mock.calls[0][0] as CreateInstanceRequest;
-    expect(body.modalidad).toBe('matricula_inicial');
-    expect(body.procedureTypeId).toBeUndefined();
-    // tenantId/createdByUserId provienen de dev-constants (UUIDs fijos del seed),
-    // no del mock del cliente: useProcedureInstance los importa directamente.
-    expect(body.tenantId).toBe('11111111-1111-1111-1111-111111111111');
-    expect(body.createdByUserId).toBe('22222222-2222-2222-2222-222222222222');
-
-    // Wizard server-driven: 5 pasos de matrícula.
-    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
-    expect(stepButtons).toHaveLength(5);
+    expect(onStart).toHaveBeenCalledWith('matricula_inicial');
+    // Track B: el listado ya no crea la instancia; eso lo hace la ruta /nuevo.
+    expect(mocks.createInstance).not.toHaveBeenCalled();
   });
 
-  it('Traspaso estándar crea la instancia con modalidad traspaso', async () => {
+  it('Traspaso estándar dispara onStartTramite con la modalidad traspaso', async () => {
+    const onStart = vi.fn();
     const user = userEvent.setup();
-    render(<OperacionView />);
+    render(<OperacionView onStartTramite={onStart} />);
     await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
 
-    await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
-    const body = mocks.createInstance.mock.calls[0][0] as CreateInstanceRequest;
-    expect(body.modalidad).toBe('traspaso');
-    expect(body.procedureTypeId).toBeUndefined();
+    expect(onStart).toHaveBeenCalledWith('traspaso');
+    expect(mocks.createInstance).not.toHaveBeenCalled();
+  });
+});
 
-    await waitFor(() =>
-      expect(mocks.getWizardState).toHaveBeenCalledWith('inst-1', expect.anything()),
-    );
-    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
-    expect(stepButtons).toHaveLength(6);
+describe('Track A — toolbar de filtros y acciones del listado', () => {
+  it('renderiza los chips de filtro de modalidad y estado', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    // Espera a que cargue el listado (sale del estado "Cargando…").
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+
+    expect(screen.getByRole('button', { name: 'Matrícula inicial' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Traspaso' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'En preparación' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviado a tránsito' })).toBeInTheDocument();
+  });
+
+  it('la búsqueda por placa reduce las filas visibles', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
+
+    const rows = within(
+      screen.getByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
+  });
+
+  it('la búsqueda por VIN reduce las filas visibles', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
+
+    const rows = within(
+      screen.getByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('Enviado a tránsito')).toBeInTheDocument();
+  });
+
+  it('el botón Continuar de una fila draft navega al wizard de esa instancia', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const btn = await screen.findByRole('button', { name: /Continuar trámite TR-001/ });
+    await user.click(btn);
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
+  });
+
+  it('el botón Ver de una fila submitted navega al wizard de esa instancia', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const btn = await screen.findByRole('button', { name: /Ver trámite MA-002/ });
+    await user.click(btn);
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
+  });
+
+  it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
+
+    // Ya no hay lista de resultados; aparece el vacío "Sin resultados".
+    expect(screen.queryByRole('list', { name: /Trámites en curso/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0);
+
+    const clearButtons = screen.getAllByRole('button', { name: 'Limpiar filtros' });
+    expect(clearButtons.length).toBeGreaterThan(0);
+    await user.click(clearButtons[0]);
+
+    // Tras limpiar, vuelven las dos filas.
+    const rows = within(
+      await screen.findByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
   });
 });

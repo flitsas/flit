@@ -32,7 +32,7 @@ public static class VerifikResultMapper
             MapGravamenes(info),
         };
 
-        var hydrated = MapHydratedFields(info);
+        var hydrated = MapHydratedFields(response.Data);
         var overall = ComputeOverall(checks);
 
         return new ConsultationResult(Provider, overall, checks, hydrated);
@@ -108,8 +108,9 @@ public static class VerifikResultMapper
     private static bool IsSi(string? value) =>
         string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
 
-    private static List<HydratedField> MapHydratedFields(VerifikInformacionGeneral? info)
+    private static List<HydratedField> MapHydratedFields(VerifikVehicleData? data)
     {
+        var info = data?.InformacionGeneral;
         if (info is null)
             return [];
 
@@ -147,6 +148,49 @@ public static class VerifikResultMapper
 
         if (!string.IsNullOrWhiteSpace(info.EstadoDelVehiculo))
             fields.Add(new HydratedField("vehicle_state", info.EstadoDelVehiculo, null));
+
+        if (!string.IsNullOrWhiteSpace(info.TipoServicio))
+            fields.Add(new HydratedField("vehicle_service", info.TipoServicio, null));
+
+        if (!string.IsNullOrWhiteSpace(info.TipoCarroceria))
+            fields.Add(new HydratedField("vehicle_body_type", info.TipoCarroceria, null));
+
+        if (!string.IsNullOrWhiteSpace(info.NoChasis))
+            fields.Add(new HydratedField("vehicle_chassis", info.NoChasis, null));
+
+        if (!string.IsNullOrWhiteSpace(info.NoMotor))
+            fields.Add(new HydratedField("vehicle_engine_number", info.NoMotor, null));
+
+        if (!string.IsNullOrWhiteSpace(info.NoSerie))
+            fields.Add(new HydratedField("vehicle_series", info.NoSerie, null));
+
+        if (!string.IsNullOrWhiteSpace(info.PasajerosSentados))
+            fields.Add(new HydratedField("vehicle_passengers", info.PasajerosSentados, null));
+
+        if (!string.IsNullOrWhiteSpace(info.PesoBruto))
+            fields.Add(new HydratedField("vehicle_weight", info.PesoBruto, null));
+
+        if (!string.IsNullOrWhiteSpace(info.NoEjes))
+            fields.Add(new HydratedField("vehicle_axles", info.NoEjes, null));
+
+        if (!string.IsNullOrWhiteSpace(info.FechaMatricula))
+            fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
+
+        // SOAT: tomar el vigente; si no, el primero disponible.
+        var soat = data?.Soat?.FirstOrDefault(s =>
+            string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
+            ?? data?.Soat?.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(soat?.FechaVencimiento))
+            fields.Add(new HydratedField("soat_vencimiento", soat.FechaVencimiento, null));
+        if (!string.IsNullOrWhiteSpace(soat?.EntidadExpideSoat))
+            fields.Add(new HydratedField("soat_aseguradora", soat.EntidadExpideSoat, null));
+
+        // RTM: tomar la vigente; si no, la primera.
+        var rtm = data?.TecnoMecanica?.FirstOrDefault(t =>
+            string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase))
+            ?? data?.TecnoMecanica?.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(rtm?.FechaVencimiento))
+            fields.Add(new HydratedField("rtm_vencimiento", rtm.FechaVencimiento, null));
 
         return fields;
     }

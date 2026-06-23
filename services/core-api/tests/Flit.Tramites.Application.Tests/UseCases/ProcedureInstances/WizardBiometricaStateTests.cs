@@ -54,13 +54,63 @@ public sealed class WizardBiometricaStateTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(instance);
 
+    private static ProcedureInstanceActor Comprador(string doc = "777") =>
+        new()
+        {
+            Id = Guid.NewGuid(), ActorType = "comprador", DocumentType = "CC", DocumentNumber = doc,
+            FullName = "Maria", Email = "maria@x.com", CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceActor Vendedor(string doc = "555") =>
+        new()
+        {
+            Id = Guid.NewGuid(), ActorType = "vendedor", DocumentType = "CC", DocumentNumber = doc,
+            FullName = "Juan", Email = "juan@x.com", CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstancePreflightSnapshot Preflight(string overall) =>
+        new() { Id = Guid.NewGuid(), Overall = overall, Checks = "[]", CreatedAt = DateTimeOffset.UtcNow };
+
+    private static ProcedureInstanceAttachment Doc(string tipo) =>
+        new() { Id = Guid.NewGuid(), Tipo = tipo, Filename = $"{tipo}.pdf", StoragePath = $"x/{tipo}", UploadedAt = DateTimeOffset.UtcNow };
+
+    /// <summary>Agrega VIN + docs obligatorios de matrícula (factura/aduana/impronta).</summary>
+    private static void AgregarVinYDocsMatricula(ProcedureInstance instance)
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.Attachments.Add(Doc("factura"));
+        instance.Attachments.Add(Doc("aduana"));
+        instance.Attachments.Add(Doc("impronta"));
+    }
+
+    /// <summary>Completa pasos 1-3 de matrícula (VIN, docs, comprador+RUNT) → Identidad (4) alcanzable.</summary>
+    private static void CompletarHastaIdentidadMatricula(ProcedureInstance instance)
+    {
+        AgregarVinYDocsMatricula(instance);
+        instance.Actors.Add(Comprador());
+    }
+
+    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Vendedor());
+        instance.Actors.Add(Comprador("666"));
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+    }
+
     // ── Matrícula: paso 4 (identidad) refleja biométrica del comprador (Parte == "comprador") ──
+    // Nota cascada: los pasos diferidos solo se evalúan cuando son ALCANZABLES; por eso cada
+    // test completa primero los pasos previos (de lo contrario el paso sería 'locked').
 
     [Fact]
     public async Task Matricula_NoBiometria_IdentidadIncompleteWithReason()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("matricula_inicial"));
+        var instance = Base("matricula_inicial");
+        CompletarHastaIdentidadMatricula(instance); // identidad alcanzable
+        Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -74,6 +124,7 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
+        CompletarHastaIdentidadMatricula(instance); // identidad alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
         Setup(instance);
 
@@ -89,6 +140,7 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
+        CompletarHastaIdentidadMatricula(instance); // identidad alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Rechazado));
         Setup(instance);
 
@@ -108,6 +160,7 @@ public sealed class WizardBiometricaStateTests
             ActorType = "comprador", DocumentType = "CC", DocumentNumber = "999",
             FullName = "Maria", Email = "maria@x.com", Metadata = "{}", CreatedAt = DateTimeOffset.UtcNow,
         });
+        AgregarVinYDocsMatricula(instance); // pasos 1-3 completos → identidad (4) alcanzable
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, instance.TenantId, ct).Returns(instance);
         Setup(instance);
 
@@ -133,7 +186,9 @@ public sealed class WizardBiometricaStateTests
     public async Task Traspaso_NoBiometria_Step6HasBiometriaReason()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("traspaso"));
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
+        Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -146,6 +201,7 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
         Setup(instance);
 
@@ -161,6 +217,7 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
         instance.BiometricValidations.Add(Biometria(parte: "vendedor", estado: BiometricEstados.Aprobado));
         Setup(instance);

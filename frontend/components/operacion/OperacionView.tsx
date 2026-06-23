@@ -1,17 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { ChevronRight, Car, ArrowLeftRight } from 'lucide-react';
-import { TramiteWizard } from './TramiteWizard';
 import { TramitesTable } from './TramitesTable';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
- * M0 — Entrada por MODALIDAD (desligada de Parametrización). En vez de listar
- * tipos publicados, el gestor elige Matrícula inicial o Traspaso; el backend
- * deriva la tipología desde la modalidad al crear la instancia (POST /instances
- * con `modalidad`). El wizard es server-driven, así que NO se necesita cargar la
- * configuración del tipo aquí: basta la modalidad para el header y la creación.
+ * M0 — Entrada por MODALIDAD (desligada de Parametrización). El gestor elige
+ * Matrícula inicial o Traspaso y la vista solo muestra el chooser + el listado.
+ * Track B: ya NO crea la instancia ni hospeda el wizard inline; delega en la
+ * ruta (onStartTramite → /tramites/nuevo/[modalidad]) la creación + navegación.
  */
 interface Modalidad {
   id: WizardModalidad;
@@ -35,30 +32,17 @@ const MODALIDADES: Modalidad[] = [
   },
 ];
 
-export function OperacionView() {
-  const [selected, setSelected] = useState<Modalidad | null>(null);
-  // Se incrementa al volver del wizard para forzar el refetch de la tabla:
-  // así, tras "Enviar a tránsito", el listado refleja el trámite nuevo/actualizado.
-  const [refreshKey, setRefreshKey] = useState(0);
+interface OperacionViewProps {
+  /**
+   * Track B — el listado ya no hospeda el wizard inline. Al elegir modalidad,
+   * delega en el contenedor (ruta) para navegar a /tramites/nuevo/[modalidad].
+   */
+  onStartTramite: (modalidad: WizardModalidad) => void;
+}
 
-  const handleExit = () => {
-    setSelected(null);
-    setRefreshKey((k) => k + 1);
-  };
-
-  // Wizard activo: hay una modalidad elegida. El wizard crea la instancia.
-  if (selected) {
-    return (
-      <TramiteWizard
-        modalidad={selected.id}
-        title={selected.label}
-        onExit={handleExit}
-      />
-    );
-  }
-
+export function OperacionView({ onStartTramite }: OperacionViewProps) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
+    <div className="flex flex-col gap-4">
       <section
         className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
         style={{ borderColor: '#DFE5ED' }}
@@ -79,7 +63,7 @@ export function OperacionView() {
               <li key={m.id}>
                 <button
                   type="button"
-                  onClick={() => setSelected(m)}
+                  onClick={() => onStartTramite(m.id)}
                   className="w-full h-full flex flex-col gap-3 px-4 py-4 rounded-xl border text-left transition hover:border-[#557EFF]"
                   style={{ borderColor: '#DFE5ED' }}
                   aria-label={`Iniciar ${m.label}`}
@@ -111,14 +95,10 @@ export function OperacionView() {
         </ul>
       </section>
 
-      {/* Listado de instancias (Slice M6) — se refresca al volver del wizard. */}
-      <section
-        className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] shrink-0"
-        style={{ borderColor: '#DFE5ED' }}
-      >
-        <h2 className="text-sm font-bold mb-3">Trámites en curso</h2>
-        <TramitesTable refreshKey={refreshKey} />
-      </section>
+      {/* Listado de instancias (Track A). La tabla hospeda su propia sección,
+          toolbar de filtros y encabezado con contador dinámico. Carga al montar;
+          como ahora es una ruta propia, volver del wizard remonta y refresca. */}
+      <TramitesTable />
     </div>
   );
 }

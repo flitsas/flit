@@ -29,7 +29,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
       <div role="status" className="space-y-4">
         <p className="text-sm" style={{ color: "#162744" }}>Tu cuenta fue activada correctamente.</p>
         <Link
-          href="/"
+          href="/login"
           className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
           style={{ background: "#557eff" }}
         >
