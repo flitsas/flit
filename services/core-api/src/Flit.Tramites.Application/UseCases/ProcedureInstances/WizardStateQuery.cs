@@ -110,9 +110,17 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             var reasons = new List<string>();
             string status;
 
+            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
+            // (locked, sin reasons), incluidos los diferidos (4 identidad, 5 FUR). Así el
+            // sidebar no deja saltar a Identidad sin haber completado Comprador. Solo cuando
+            // el paso es alcanzable se aplica su lógica específica.
+            if (p > maxAlcanzable)
+            {
+                status = "locked";
+            }
             // 4 = Identidad (biométrica, slice 6): refleja el estado real de la biométrica del comprador.
             // 5 = Generar FUR (firma, slice 7): diferido → incomplete con reason, sin bloqueo.
-            if (p == 4)
+            else if (p == 4)
             {
                 if (identidadAprobada)
                 {
@@ -144,7 +152,8 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             }
             else
             {
-                status = p > maxAlcanzable ? "locked" : "incomplete";
+                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
+                status = "incomplete";
                 if (gate.Code is not null)
                     reasons.Add(gate.Code);
             }
@@ -212,10 +221,17 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             var reasons = new List<string>();
             string status;
 
+            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
+            // (locked, sin reasons), incluido el diferido (6 FUR). El sidebar no deja saltar
+            // a FUR sin haber completado los pasos previos. Solo si es alcanzable se evalúa.
+            if (p > maxAlcanzable)
+            {
+                status = "locked";
+            }
             // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) +
             // firma de AMBAS partes (slice 7) + FUR generado. Completa solo cuando todo está listo;
             // emite las razones precisas de lo que falta.
-            if (p == 6)
+            else if (p == 6)
             {
                 var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
                 var firmaOk = FirmaAmbasFirmadas(instance);
@@ -238,7 +254,8 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             }
             else
             {
-                status = p > maxAlcanzable ? "locked" : "incomplete";
+                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
+                status = "incomplete";
                 if (gate.Code is not null)
                     reasons.Add(gate.Code);
             }

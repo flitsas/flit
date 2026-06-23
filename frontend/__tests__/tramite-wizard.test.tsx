@@ -165,6 +165,30 @@ describe('TramiteWizard — status y reasons traducidos', () => {
   });
 });
 
+describe('TramiteWizard — navegación en cascada (frontera)', () => {
+  it('Identidad no es clickeable cuando Comprador (paso previo) está incompleto', async () => {
+    // Defensa de frontend: aunque el backend devolviera Identidad como 'incomplete'
+    // (no 'locked'), solo se navega a pasos completos o a la frontera (primer
+    // incompleto = Comprador). Identidad queda fuera de alcance → no clickeable.
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: [
+        { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+        { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
+        { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente'] },
+        { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
+      ],
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    // Comprador es la frontera → navegable.
+    expect(screen.getByRole('button', { name: /^Paso 3: Comprador/ })).toBeEnabled();
+    // Identidad está más allá de la frontera → NO navegable, pese a no estar 'locked'.
+    expect(screen.getByRole('button', { name: /^Paso 4: Identidad/ })).toBeDisabled();
+  });
+});
+
 describe('TramiteWizard — Continuar', () => {
   it('Continuar habilitado en step complete', async () => {
     renderWizard();
@@ -222,8 +246,9 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     // 1 carga inicial del wizard.
     await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(1));
 
-    // Captura el VIN en el input del paso consulta_vin.
-    await user.type(screen.getByLabelText(/^VIN$/), '9BWZZZ377VT004251');
+    // Captura el VIN en el input del paso consulta_vin (aria-label "Número VIN"
+    // tras el rediseño del card de matrícula).
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
 
     // Orden de llamadas observado para verificar persist→preflight.
     const calls: string[] = [];

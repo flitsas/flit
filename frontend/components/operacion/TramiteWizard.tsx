@@ -30,6 +30,7 @@ import { CommercialForm } from './CommercialForm';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
+import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
@@ -144,11 +145,22 @@ export function TramiteWizard(props: Props) {
   const modalidad: WizardModalidad = wizard?.modalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Navegación en cascada: solo a pasos completos o a la frontera (primer
+  // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
-    const target = steps[index];
-    if (!target || target.status === 'locked') return;
+    if (!canNavigateToStep(steps, index)) return;
     setActiveIndex(index);
   };
+
+  // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
+  // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
+  useEffect(() => {
+    if (steps.length === 0) return;
+    if (!canNavigateToStep(steps, activeIndex)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveIndex(frontierIndex(steps));
+    }
+  }, [steps, activeIndex]);
 
   const runPreflight = async () => {
     if (!instanceId) return;
@@ -274,7 +286,7 @@ export function TramiteWizard(props: Props) {
             <ol className="space-y-3">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
-                const clickable = s.status !== 'locked';
+                const clickable = canNavigateToStep(steps, i);
                 return (
                   <li key={s.key} aria-current={isActive ? 'step' : undefined}>
                     <button
