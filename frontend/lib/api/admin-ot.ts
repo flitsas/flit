@@ -2,16 +2,25 @@
 import { apiFetch } from "./client";
 import type {
   CreateOtWebhookRequest,
+  CreateOtDocumentTagRequest,
+  CreateOtRuleRequest,
   OtApiLogsPagedResult,
   OtApiLogsParams,
   OtClientProcedure,
   OtClientProcedurePagedResult,
   OtClientProceduresParams,
+  OtDocumentPrecedenceListResult,
+  OtDocumentTag,
+  OtDocumentTagsListResult,
   OtProfile,
+  OtRule,
+  OtRulesListResult,
   OtWebhook,
   OtWebhooksListResult,
   RejectOtClientProcedureRequest,
+  UpdateOtDocumentPrecedenceRequest,
   UpdateOtProfileRequest,
+  UpdateOtRuleRequest,
   UpdateOtWebhookRequest,
 } from "./types-ot";
 
@@ -68,4 +77,47 @@ export function fetchOtApiLogs(
   signal?: AbortSignal,
 ): Promise<OtApiLogsPagedResult> {
   return apiFetch<OtApiLogsPagedResult>(`${base}/api-logs`, { query: { ...params }, signal });
+}
+
+export function fetchOtRules(signal?: AbortSignal): Promise<OtRulesListResult> {
+  return apiFetch<OtRulesListResult>(`${base}/rules`, { signal });
+}
+
+export function createOtRule(body: CreateOtRuleRequest): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules`, { method: "POST", body });
+}
+
+export function updateOtRule(id: string, body: UpdateOtRuleRequest): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules/${id}`, { method: "PATCH", body });
+}
+
+export function fetchOtDocumentPrecedence(
+  procedureTypeId: string,
+  signal?: AbortSignal,
+): Promise<OtDocumentPrecedenceListResult> {
+  return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
+    query: { procedureTypeId },
+    signal,
+  });
+}
+
+export function updateOtDocumentPrecedence(
+  body: UpdateOtDocumentPrecedenceRequest,
+): Promise<OtDocumentPrecedenceListResult> {
+  return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export function fetchOtDocumentTags(signal?: AbortSignal): Promise<OtDocumentTagsListResult> {
+  return apiFetch<OtDocumentTagsListResult>(`${base}/document-tags`, { signal });
+}
+
+export function createOtDocumentTag(body: CreateOtDocumentTagRequest): Promise<OtDocumentTag> {
+  return apiFetch<OtDocumentTag>(`${base}/document-tags`, { method: "POST", body });
+}
+
+export function deleteOtDocumentTag(id: string): Promise<void> {
+  return apiFetch<void>(`${base}/document-tags/${id}`, { method: "DELETE" });
 }

@@ -35,3 +35,24 @@ export function formatOtDate(iso: string): string {
   if (Number.isNaN(parsed.getTime())) return iso;
   return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
+
+export const OT_RULE_FIELDS = [
+  { value: "deuda_pendiente", label: "Deuda pendiente" },
+  { value: "tipo_tramite", label: "Tipo de trámite" },
+  { value: "prioridad", label: "Prioridad" },
+] as const;
+
+export const OT_RULE_OPERATORS = [
+  { value: "eq", label: "Igual a" },
+  { value: "in", label: "Está en" },
+] as const;
+
+export const OT_RULE_ACTIONS = [
+  { value: "bloquear", label: "Bloquear" },
+  { value: "biometria", label: "Biometría" },
+  { value: "cola_especial", label: "Cola especial" },
+] as const;
+
+export function formatOtRuleAction(type: string): string {
+  return OT_RULE_ACTIONS.find((a) => a.value === type)?.label ?? type;
+}

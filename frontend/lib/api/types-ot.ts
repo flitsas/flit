@@ -99,3 +99,81 @@ export interface OtApiLogsParams {
 export interface RejectOtClientProcedureRequest {
   reason: string;
 }
+
+export type OtRuleLogic = "AND" | "OR";
+
+export type OtRuleActionType = "bloquear" | "biometria" | "cola_especial";
+
+export interface OtRuleCondition {
+  field: string;
+  op: string;
+  value: unknown;
+}
+
+export interface OtRuleAction {
+  type: OtRuleActionType;
+  queue_name?: string;
+}
+
+export interface OtRule {
+  id: string;
+  name: string;
+  isEnabled: boolean;
+  conditions: OtRuleCondition[];
+  logic: OtRuleLogic;
+  action: OtRuleAction;
+}
+
+export interface CreateOtRuleRequest {
+  name: string;
+  conditions: OtRuleCondition[];
+  logic: OtRuleLogic;
+  action: OtRuleAction;
+}
+
+export interface UpdateOtRuleRequest {
+  isEnabled?: boolean;
+}
+
+export interface OtRulesListResult {
+  data: OtRule[];
+}
+
+export interface OtDocumentPrecedenceItem {
+  document_type_id: string;
+  document_name: string;
+  sort_order: number;
+}
+
+export interface OtDocumentPrecedenceListResult {
+  data: OtDocumentPrecedenceItem[];
+}
+
+export interface OtDocumentPrecedenceOrderItem {
+  document_type_id: string;
+  sort_order: number;
+}
+
+export interface UpdateOtDocumentPrecedenceRequest {
+  procedure_type_id: string;
+  items: OtDocumentPrecedenceOrderItem[];
+}
+
+export interface OtDocumentTag {
+  id: string;
+  code: string;
+  name: string;
+  color: string;
+  /** Conteo local/FE para advertencia AC5 — no expuesto por API aún. */
+  usageCount?: number;
+}
+
+export interface CreateOtDocumentTagRequest {
+  code: string;
+  name: string;
+  color: string;
+}
+
+export interface OtDocumentTagsListResult {
+  data: OtDocumentTag[];
+}
