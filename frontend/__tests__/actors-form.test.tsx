@@ -1,21 +1,28 @@
+import { createRef } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   getActors: vi.fn(),
   saveActors: vi.fn(),
+  runtPersonLookup: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
+    runtPersonLookup: mocks.runtPersonLookup,
   },
 }));
 
-import { ActorsForm, validateActors } from '@/components/operacion/ActorsForm';
+import {
+  ActorsForm,
+  validateActors,
+  type ActorsFormHandle,
+} from '@/components/operacion/ActorsForm';
 import type { ProcedureActor } from '@/lib/api/types/procedure-runtime';
 
 const INSTANCE = 'inst-1';
@@ -26,15 +33,40 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
 });
 
-describe('ActorsForm — render por modalidad', () => {
-  it('matrícula inicial muestra solo el comprador', async () => {
+describe('ActorsForm — layout split (un comprador)', () => {
+  it('matrícula inicial muestra las 2 secciones (Identificación + Datos de contacto)', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     expect(
-      await screen.findByRole('group', { name: 'Comprador' }),
+      await screen.findByText(/Identificación · Comprador/),
     ).toBeInTheDocument();
+    expect(screen.getByText('Datos de contacto')).toBeInTheDocument();
+    // Sección de identificación: documento + Consultar RUNT.
+    expect(screen.getByLabelText('Número de documento')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Consultar RUNT' }),
+    ).toBeInTheDocument();
+    // Sección de contacto: ciudad y dirección (nuevos).
+    expect(screen.getByLabelText('Ciudad')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dirección')).toBeInTheDocument();
+    // No es el layout de fieldsets ni renderiza vendedor.
     expect(screen.queryByRole('group', { name: 'Vendedor' })).toBeNull();
   });
 
+  it('ciudad autocomplete: filtra y selecciona (≥2 chars)', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const ciudad = await screen.findByLabelText('Ciudad');
+    await user.type(ciudad, 'med');
+    // Sugerencia filtrada del catálogo.
+    const opcion = await screen.findByRole('button', { name: 'Medellin' });
+    await user.click(opcion);
+
+    expect(ciudad).toHaveValue('Medellin');
+  });
+});
+
+describe('ActorsForm — render por modalidad', () => {
   it('traspaso muestra vendedor y comprador', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
     expect(
@@ -139,6 +171,72 @@ describe('ActorsForm — submit', () => {
     ]);
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Actores guardados/)).toBeInTheDocument();
+  });
+});
+
+describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
+  it('expone save() que valida y persiste; oculta el botón propio', async () => {
+    mocks.getActors.mockResolvedValue([
+      {
+        rol: 'comprador',
+        tipoDocumento: 'CC',
+        numeroDocumento: '123',
+        nombreCompleto: 'Juan Perez',
+        email: 'juan@example.com',
+      },
+    ]);
+    const ref = createRef<ActorsFormHandle>();
+    render(
+      <ActorsForm
+        ref={ref}
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        embeddedInWizard
+      />,
+    );
+
+    // Hidrata desde el backend (espera a que pinte el nombre cargado).
+    expect(await screen.findByDisplayValue('Juan Perez')).toBeInTheDocument();
+    // Embebido → no hay botón "Guardar actores" propio.
+    expect(screen.queryByRole('button', { name: /Guardar actores/ })).toBeNull();
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+
+    expect(ok).toBe(true);
+    expect(mocks.saveActors).toHaveBeenCalledTimes(1);
+    const [instanceId, actors] = mocks.saveActors.mock.calls[0];
+    expect(instanceId).toBe(INSTANCE);
+    expect(actors[0]).toMatchObject({
+      rol: 'comprador',
+      numeroDocumento: '123',
+      nombreCompleto: 'Juan Perez',
+      email: 'juan@example.com',
+    });
+  });
+
+  it('save() devuelve false y no persiste si hay campos inválidos', async () => {
+    mocks.getActors.mockResolvedValue([]);
+    const ref = createRef<ActorsFormHandle>();
+    render(
+      <ActorsForm
+        ref={ref}
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        embeddedInWizard
+      />,
+    );
+    await screen.findByText(/Identificación · Comprador/);
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+
+    expect(ok).toBe(false);
+    expect(mocks.saveActors).not.toHaveBeenCalled();
   });
 });
 

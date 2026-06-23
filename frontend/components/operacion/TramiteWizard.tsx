@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   Briefcase,
   Building2,
@@ -24,7 +24,7 @@ import {
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { PreflightPanel } from './PreflightPanel';
-import { ActorsForm } from './ActorsForm';
+import { ActorsForm, type ActorsFormHandle } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { BiometricStep } from './BiometricStep';
@@ -137,6 +137,9 @@ export function TramiteWizard(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Guardar+continuar de los pasos de actores: la shell dispara save() vía ref.
+  const actorsFormRef = useRef<ActorsFormHandle>(null);
+  const [continuing, setContinuing] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
@@ -234,8 +237,35 @@ export function TramiteWizard(props: Props) {
   }
 
   const isLast = steps.length > 0 && activeIndex === steps.length - 1;
+  // Pasos de captura de actores: el footer "Continuar" guarda y luego avanza,
+  // así que se habilita aunque el paso aún esté incomplete (el save lo completa).
+  const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
   const continueDisabled =
-    !activeStep || activeStep.status !== 'complete' || activeIndex >= steps.length - 1;
+    !activeStep ||
+    activeIndex >= steps.length - 1 ||
+    continuing ||
+    (!isActorStep && activeStep.status !== 'complete');
+
+  // "Guardar y continuar" para pasos de actores: valida + PUT /actors (vía ref),
+  // refresca el wizard y avanza solo si el paso quedó complete. Otros pasos:
+  // navegación directa al siguiente.
+  const handleContinue = async () => {
+    if (!isActorStep) {
+      goToStep(activeIndex + 1);
+      return;
+    }
+    setContinuing(true);
+    try {
+      const ok = await actorsFormRef.current?.save();
+      if (!ok) return;
+      const fresh = await refresh();
+      if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+        setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
+      }
+    } finally {
+      setContinuing(false);
+    }
+  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
@@ -346,6 +376,7 @@ export function TramiteWizard(props: Props) {
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
                 onSubmitted={() => setSubmitted(true)}
+                actorsRef={actorsFormRef}
               />
             </div>
           )}
@@ -385,12 +416,12 @@ export function TramiteWizard(props: Props) {
             </button>
             {!isLast ? (
               <button
-                onClick={() => goToStep(activeIndex + 1)}
+                onClick={() => void handleContinue()}
                 disabled={continueDisabled}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
-                Continuar
+                {continuing ? 'Guardando…' : isActorStep ? 'Guardar y continuar' : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
@@ -875,6 +906,7 @@ function StepBody({
   onRunPreflight,
   onRefresh,
   onSubmitted,
+  actorsRef,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -884,6 +916,7 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   onSubmitted: () => void;
+  actorsRef: RefObject<ActorsFormHandle | null>;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -921,23 +954,34 @@ function StepBody({
     case 'documentos':
       return <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} />;
 
+    // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
+    // posición del árbol; sin key, React reusa la instancia al cambiar de paso y
+    // arrastra el estado (actores hidratados) del paso anterior. La key fuerza
+    // el remontaje y la rehidratación limpia por paso.
     case 'comprador':
       return (
         <ActorsForm
+          key={step.key}
+          ref={actorsRef}
           instanceId={instanceId}
           modalidad={modalidad === 'traspaso' ? 'traspaso' : 'matricula_inicial'}
           roles={['comprador']}
           onSaved={onRefresh}
+          embeddedInWizard
+          layout="split"
         />
       );
 
     case 'vendedor':
       return (
         <ActorsForm
+          key={step.key}
+          ref={actorsRef}
           instanceId={instanceId}
           modalidad="traspaso"
           roles={['vendedor']}
           onSaved={onRefresh}
+          embeddedInWizard
         />
       );
 

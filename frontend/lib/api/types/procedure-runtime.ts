@@ -140,6 +140,9 @@ export interface ProcedureActor {
   nombreCompleto: string;
   email: string;
   telefono?: string;
+  /** Persistidos en actor.metadata (JSON) — opcionales. */
+  ciudad?: string;
+  direccion?: string;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */

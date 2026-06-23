@@ -335,4 +335,82 @@ public sealed class ActorsHandlerTests
         dto.Email.Should().Be("comprador@x.com");
         dto.Telefono.Should().Be("3001112233");
     }
+
+    // ── Ciudad / dirección (metadata JSON) ─────────────────────────────────────
+
+    [Fact]
+    public async Task Put_PersistsCiudadDireccion_InActorMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+
+        var comprador = new ActorInput("comprador", "CC", "123", "Juan Comprador", "comprador@x.com", "3001112233", "Medellin", "Calle 10 #20-30");
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([comprador]), ct);
+
+        error.Should().BeNull();
+        // El handler vuelca ciudad/dirección en metadata JSON del actor persistido…
+        var saved = instance.Actors.Should().ContainSingle().Subject;
+        saved.Metadata.Should().Contain("Medellin").And.Contain("Calle 10 #20-30");
+        // …y el DTO de respuesta los re-expone leyendo ese metadata.
+        result!.Actors[0].Ciudad.Should().Be("Medellin");
+        result.Actors[0].Direccion.Should().Be("Calle 10 #20-30");
+    }
+
+    [Fact]
+    public async Task Get_ReadsCiudadDireccion_FromActorMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            FullName = "Juan Comprador",
+            Email = "comprador@x.com",
+            Phone = "3001112233",
+            ProcedureEntityId = BuyerEntityId,
+            Metadata = "{\"ciudad\":\"Cali\",\"direccion\":\"Av Siempre Viva 742\"}",
+        });
+        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _get.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var dto = result!.Actors[0];
+        dto.Ciudad.Should().Be("Cali");
+        dto.Direccion.Should().Be("Av Siempre Viva 742");
+    }
+
+    [Fact]
+    public async Task Get_EmptyMetadata_CiudadDireccionNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            FullName = "Juan Comprador",
+            Email = "comprador@x.com",
+            ProcedureEntityId = BuyerEntityId,
+            Metadata = "{}",
+        });
+        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, _) = await _get.HandleAsync(id, tenant, ct);
+
+        result!.Actors[0].Ciudad.Should().BeNull();
+        result.Actors[0].Direccion.Should().BeNull();
+    }
 }

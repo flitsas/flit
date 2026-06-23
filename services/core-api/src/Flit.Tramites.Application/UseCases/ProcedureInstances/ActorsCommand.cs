@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -11,6 +12,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>
 /// Contrato congelado consumido por el frontend (Slice 2).
 /// <c>rol</c>: comprador|vendedor; <c>tipoDocumento</c>: CC|CE|NIT|PAS|TI.
+/// <c>ciudad</c>/<c>direccion</c> son opcionales y se persisten en <c>actor.metadata</c> (JSON).
 /// </summary>
 public sealed record ActorInput(
     string Rol,
@@ -18,7 +20,9 @@ public sealed record ActorInput(
     string NumeroDocumento,
     string NombreCompleto,
     string Email,
-    string? Telefono);
+    string? Telefono,
+    string? Ciudad = null,
+    string? Direccion = null);
 
 public sealed record ActorDto(
     string Rol,
@@ -26,7 +30,9 @@ public sealed record ActorDto(
     string NumeroDocumento,
     string NombreCompleto,
     string Email,
-    string? Telefono);
+    string? Telefono,
+    string? Ciudad = null,
+    string? Direccion = null);
 
 public sealed record PutActorsRequest(IReadOnlyList<ActorInput> Actors);
 
@@ -154,7 +160,7 @@ public sealed class PutActorsHandler(
                 FullName = a.NombreCompleto.Trim(),
                 Email = a.Email.Trim(),
                 Phone = string.IsNullOrWhiteSpace(a.Telefono) ? null : a.Telefono.Trim(),
-                Metadata = "{}",
+                Metadata = SerializeMetadata(a.Ciudad, a.Direccion),
                 CreatedAt = now,
             };
             instance.Actors.Add(actor);
@@ -210,14 +216,50 @@ public sealed class PutActorsHandler(
 
     internal static ActorsResponse ToResponse(ProcedureInstance instance) =>
         new(instance.Actors
-            .Select(a => new ActorDto(
-                a.ActorType,
-                a.DocumentType,
-                a.DocumentNumber,
-                a.FullName,
-                a.Email ?? string.Empty,
-                a.Phone))
+            .Select(a =>
+            {
+                var (ciudad, direccion) = ParseMetadata(a.Metadata);
+                return new ActorDto(
+                    a.ActorType,
+                    a.DocumentType,
+                    a.DocumentNumber,
+                    a.FullName,
+                    a.Email ?? string.Empty,
+                    a.Phone,
+                    ciudad,
+                    direccion);
+            })
             .ToList());
+
+    private static readonly JsonSerializerOptions MetadataJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Serializa ciudad/dirección al JSON de <c>actor.metadata</c>. Vacíos → "{}".</summary>
+    private static string SerializeMetadata(string? ciudad, string? direccion)
+    {
+        var c = string.IsNullOrWhiteSpace(ciudad) ? null : ciudad.Trim();
+        var d = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim();
+        return c is null && d is null
+            ? "{}"
+            : JsonSerializer.Serialize(new ActorMetadata(c, d), MetadataJson);
+    }
+
+    /// <summary>Lee ciudad/dirección de <c>actor.metadata</c>. Robusto ante null/"{}"/JSON inválido.</summary>
+    private static (string? Ciudad, string? Direccion) ParseMetadata(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
+            return (null, null);
+        try
+        {
+            var m = JsonSerializer.Deserialize<ActorMetadata>(metadata, MetadataJson);
+            return (m?.Ciudad, m?.Direccion);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    private sealed record ActorMetadata(string? Ciudad, string? Direccion);
 }
 
 /// <summary>GET de actores del set guardado.</summary>
