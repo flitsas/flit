@@ -160,6 +160,39 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
     // ...y NO dispara un POST /instances (F5 reabre, no re-crea).
     expect(mocks.createInstance).not.toHaveBeenCalled();
   });
+
+  it('reanuda en la frontera (primer paso incompleto), no en el paso 1', async () => {
+    // MATRICULA_WIZARD: paso 1 (Consulta VIN) completo, paso 2 (Documentos) incompleto.
+    // Al abrir la instancia existente, el cuerpo debe arrancar en Documentos.
+    render(<TramiteWizard existingInstanceId="inst-99" onExit={() => {}} />);
+
+    // El título del paso activo (h2 del cuerpo) es "Documentos", no "Consulta VIN".
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Consulta VIN' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('un trámite sin avance (paso 1 = frontera) abre en el paso 1', async () => {
+    // Todos los pasos incompletos: la frontera es el paso 1 (Consulta VIN).
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: [
+        { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'incomplete', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Documentos', status: 'locked', reasons: [] },
+        { index: 2, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
+        { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
+        { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+      ],
+    });
+    render(<TramiteWizard existingInstanceId="inst-77" onExit={() => {}} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Consulta VIN' }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('TramiteWizard — status y reasons traducidos', () => {

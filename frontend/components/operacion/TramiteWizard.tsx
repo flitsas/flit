@@ -155,6 +155,11 @@ export function TramiteWizard(props: Props) {
   } = useWizard(instanceId);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  // Reanudar (Track B): al abrir una instancia existente queremos caer en el
+  // paso donde quedó el usuario (la frontera), no en el paso 1. Este ref marca
+  // que ya inicializamos el paso desde el primer `steps` del server, para NO
+  // re-saltar en cada refresh posterior (p.ej. tras "Guardar y continuar").
+  const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -182,6 +187,21 @@ export function TramiteWizard(props: Props) {
     if (!canNavigateToStep(steps, index)) return;
     setActiveIndex(index);
   };
+
+  // Reanudar en el paso donde quedó el usuario: cuando los pasos llegan del
+  // server por primera vez para una instancia existente, posiciona el paso
+  // activo en la frontera (primer incompleto; o el último si todo está
+  // completo). Solo una vez (ref): en creación nueva la frontera es el paso 1,
+  // y en refreshes posteriores no debe re-saltar.
+  useEffect(() => {
+    if (stepInitializedRef.current) return;
+    if (steps.length === 0) return;
+    stepInitializedRef.current = true;
+    if (existingInstanceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveIndex(frontierIndex(steps));
+    }
+  }, [steps, existingInstanceId]);
 
   // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
   // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.

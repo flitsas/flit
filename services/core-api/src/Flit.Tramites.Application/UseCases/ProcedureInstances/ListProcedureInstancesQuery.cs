@@ -74,9 +74,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// Computa (PasoActual, TotalPasos) reusando el estado server-driven del wizard
     /// (<see cref="GetWizardStateHandler.ComputeState"/>) — misma fuente de verdad que los gates
     /// (VIN consultado, documentos obligatorios, comprador presente, biométrica aprobada, FUR generado).
-    /// <para>Heurística: <c>PasoActual</c> = número de pasos en estado <c>complete</c>, acotado a
-    /// [1, TotalPasos]. Para instancias ya radicadas (Submitted o posterior) se reporta
-    /// <c>PasoActual = TotalPasos</c> (todos los pasos quedaron resueltos al radicar).</para>
+    /// <para><c>PasoActual</c> = paso ACTIVO (1-based) = la "frontera" del flujo: el primer paso aún
+    /// no <c>complete</c>. Es donde el wizard reanuda (Track B), de modo que la columna "Paso" del
+    /// listado coincide con el paso en que se abre el trámite. Si todos los pasos están completos, o
+    /// la instancia ya está radicada (Submitted o posterior), se reporta <c>PasoActual = TotalPasos</c>.</para>
     /// </summary>
     private static (int PasoActual, int TotalPasos) ComputeProgress(ProcedureInstance e)
     {
@@ -86,8 +87,12 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         if (!string.Equals(e.Status, ProcedureInstanceStatus.Draft, StringComparison.OrdinalIgnoreCase))
             return (total, total);
 
-        var completos = state.Steps.Count(s => string.Equals(s.Status, "complete", StringComparison.Ordinal));
-        var paso = Math.Clamp(completos, 1, total);
+        // Frontera = primer paso no completo (mismo criterio que frontierIndex del frontend).
+        // PasoActual 1-based = frontera + 1; si no hay incompletos, el último paso.
+        var frontier = state.Steps
+            .ToList()
+            .FindIndex(s => !string.Equals(s.Status, "complete", StringComparison.Ordinal));
+        var paso = frontier < 0 ? total : Math.Min(frontier + 1, total);
         return (paso, total);
     }
 

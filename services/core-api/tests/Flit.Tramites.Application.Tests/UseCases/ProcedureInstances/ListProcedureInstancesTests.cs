@@ -38,7 +38,9 @@ public sealed class ListProcedureInstancesTests
         var tenantId = Guid.NewGuid();
 
         // Matrícula en draft, parcialmente completa: VIN consultado + comprador presente, pero
-        // sin documentos / biométrica / FUR → solo el paso 1 (consulta VIN) queda complete → PasoActual = 1.
+        // sin documentos / biométrica / FUR → solo el paso 1 (consulta VIN) queda complete. La
+        // frontera (primer paso incompleto) es Documentos (paso 2) → PasoActual = 2 (donde reanuda
+        // el wizard, Track B).
         var matriculaParcial = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
@@ -98,7 +100,7 @@ public sealed class ListProcedureInstancesTests
         m.CompradorNombre.Should().Be("Juan Comprador");
         m.CompradorDocumento.Should().Be("1020304050");
         m.TotalPasos.Should().Be(5);
-        m.PasoActual.Should().Be(1); // solo VIN consultado
+        m.PasoActual.Should().Be(2); // frontera = Documentos (paso 1 completo, paso 2 pendiente)
 
         var t = result.Single(x => x.ReferenceNumber == "TRM-2026-000002");
         t.Modalidad.Should().Be("traspaso");
