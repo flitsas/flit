@@ -22,3 +22,16 @@ export const OT_PROCEDURE_STATUS_LABELS: Record<string, string> = {
 export function formatOtProcedureStatus(status: string): string {
   return OT_PROCEDURE_STATUS_LABELS[status] ?? status;
 }
+
+export function procedureStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "approved_ot") return "success";
+  if (status === "rejected_ot") return "danger";
+  if (status === "pending_ot") return "warning";
+  return "neutral";
+}
+
+export function formatOtDate(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+}

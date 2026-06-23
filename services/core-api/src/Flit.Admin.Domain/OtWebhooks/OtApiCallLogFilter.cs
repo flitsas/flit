@@ -7,7 +7,10 @@ public sealed class OtApiCallLogFilter
 
     public DateTimeOffset? From { get; init; }
 
-    public DateTimeOffset? To { get; init; }
+  public DateTimeOffset? To { get; init; }
+
+    /// <summary>Filtro mínimo de código HTTP (p. ej. 500 para errores 5xx).</summary>
+    public short? MinResponseCode { get; init; }
 
     public int Page { get; init; } = 1;
 

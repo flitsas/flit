@@ -42,6 +42,11 @@ internal sealed class OtApiCallLogRepository : IOtApiCallLogRepository
                     query = query.Where(l => l.CalledAt <= filter.To.Value);
                 }
 
+                if (filter.MinResponseCode is not null)
+                {
+                    query = query.Where(l => l.ResponseCode >= filter.MinResponseCode.Value);
+                }
+
                 var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
                 if (totalCount == 0)
                 {

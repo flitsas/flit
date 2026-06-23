@@ -30,6 +30,7 @@ public sealed class ListOtApiLogsHandler
             Direction = query.Direction,
             From = query.From,
             To = query.To,
+            MinResponseCode = query.MinResponseCode,
             Page = page,
             PageSize = pageSize,
         };

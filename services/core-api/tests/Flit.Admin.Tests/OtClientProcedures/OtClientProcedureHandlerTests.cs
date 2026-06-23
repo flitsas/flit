@@ -5,6 +5,7 @@ using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -40,6 +41,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice, isEnabled: true);
             SeedGrant(seed, UnlinkedClient, OtherOffice, isEnabled: true);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
             SeedProcedure(seed, pendingId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
             SeedProcedure(seed, otherClientProcedureId, UnlinkedClient, OtherOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
         }
@@ -53,6 +55,8 @@ public sealed class OtClientProcedureHandlerTests
         });
 
         result.Data.Should().ContainSingle();
+        result.Data[0].ProcedureTypeName.Should().Be("Matrícula inicial");
+        result.Data[0].ClientTenantName.Should().Be("Flota Andina S.A.S.");
         result.Data[0].Id.Should().Be(pendingId);
         result.Data[0].ClientTenantId.Should().Be(ClientTenant);
     }
@@ -229,6 +233,43 @@ public sealed class OtClientProcedureHandlerTests
             IsEnabled = isEnabled,
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        ctx.SaveChanges();
+    }
+
+    private static void SeedCatalog(
+        FlitDbContext ctx,
+        Guid clientTenantId,
+        Guid procedureTypeId,
+        string tenantLegalName,
+        string procedureTypeName)
+    {
+        if (!ctx.Tenants.Any(t => t.Id == clientTenantId))
+        {
+            ctx.Tenants.Add(new Tenant
+            {
+                Id = clientTenantId,
+                Code = "client",
+                LegalName = tenantLegalName,
+                TaxId = "900000000",
+                TenantType = "client",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        if (!ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
+        {
+            ctx.ProcedureTypes.Add(new ProcedureType
+            {
+                Id = procedureTypeId,
+                Code = "matricula_inicial",
+                Name = procedureTypeName,
+                Family = "MATRICULAS",
+                IsActive = true,
+                PublicationStatus = PublicationStatus.Published,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         ctx.SaveChanges();
     }
 

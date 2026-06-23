@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { CreateOtWebhookRequest, OtWebhook, UpdateOtWebhookRequest } from "@/lib/api/types-ot";
+import { OtSidePanel } from "./OtSidePanel";
+import { OT_INPUT_CLS } from "./ot-form-styles";
 import { OT_WEBHOOK_EVENT_TYPES } from "./ot-utils";
 
 export interface WebhookFormPanelProps {
@@ -35,10 +37,6 @@ export function WebhookFormPanel({
     setSecret("");
   }, [open, editing]);
 
-  if (!open) {
-    return null;
-  }
-
   const isEdit = editing !== null;
 
   const submit = async () => {
@@ -61,25 +59,31 @@ export function WebhookFormPanel({
   };
 
   return (
-    <aside
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l bg-white shadow-xl"
-      style={{ borderColor: "#DFE5ED" }}
-      role="dialog"
-      aria-label={isEdit ? "Editar webhook" : "Nuevo webhook"}
-    >
-      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-        <h2 className="text-sm font-bold">{isEdit ? "Editar webhook" : "Nuevo webhook"}</h2>
-        <button type="button" aria-label="Cerrar" onClick={onClose} disabled={submitting}>
-          <X className="h-4 w-4" />
+    <OtSidePanel
+      open={open}
+      title={isEdit ? "Editar webhook" : "Nuevo webhook"}
+      ariaLabel={isEdit ? "Editar webhook" : "Nuevo webhook"}
+      onClose={onClose}
+      disabled={submitting}
+      footer={
+        <button
+          type="button"
+          disabled={submitting || !targetUrl.trim() || (!isEdit && !secret.trim())}
+          className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+          style={{ background: "#557EFF" }}
+          onClick={() => void submit()}
+        >
+          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          Guardar
         </button>
-      </div>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      }
+    >
+      <div className="space-y-3">
         {!isEdit && (
-          <label className="block text-xs font-semibold">
+          <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
             Tipo de evento
             <select
-              className="mt-1 w-full rounded-lg border px-2 py-2 text-xs"
-              style={{ borderColor: "#DFE5ED" }}
+              className={`mt-1 ${OT_INPUT_CLS}`}
               value={eventType}
               onChange={(e) => setEventType(e.target.value)}
             >
@@ -91,41 +95,27 @@ export function WebhookFormPanel({
             </select>
           </label>
         )}
-        <label className="block text-xs font-semibold">
+        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
           URL destino (HTTPS)
           <input
             type="url"
-            className="mt-1 w-full rounded-lg border px-2 py-2 text-xs"
-            style={{ borderColor: "#DFE5ED" }}
+            className={`mt-1 ${OT_INPUT_CLS}`}
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
           />
         </label>
         {!isEdit && (
-          <label className="block text-xs font-semibold">
+          <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
             Secreto
             <input
               type="password"
-              className="mt-1 w-full rounded-lg border px-2 py-2 text-xs"
-              style={{ borderColor: "#DFE5ED" }}
+              className={`mt-1 ${OT_INPUT_CLS}`}
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
             />
           </label>
         )}
       </div>
-      <div className="border-t p-4" style={{ borderColor: "#DFE5ED" }}>
-        <button
-          type="button"
-          disabled={submitting || !targetUrl.trim() || (!isEdit && !secret.trim())}
-          className="flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
-          onClick={() => void submit()}
-        >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Guardar
-        </button>
-      </div>
-    </aside>
+    </OtSidePanel>
   );
 }

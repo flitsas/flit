@@ -23,6 +23,8 @@ export interface OtClientProcedure {
   id: string;
   clientTenantId: string;
   procedureTypeId: string;
+  procedureTypeName?: string;
+  clientTenantName?: string;
   referenceNumber: string;
   status: string;
   transitOfficeId?: string | null;
@@ -89,6 +91,7 @@ export interface OtApiLogsParams {
   direction?: string;
   from?: string;
   to?: string;
+  minResponseCode?: number;
   page?: number;
   pageSize?: number;
 }

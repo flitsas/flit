@@ -300,6 +300,7 @@ public static class AdminOtEndpoints
         string? direction,
         DateTimeOffset? from,
         DateTimeOffset? to,
+        short? minResponseCode,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)
@@ -317,6 +318,7 @@ public static class AdminOtEndpoints
             Direction = direction,
             From = from,
             To = to,
+            MinResponseCode = minResponseCode,
             Page = page,
             PageSize = pageSize,
         }, cancellationToken).ConfigureAwait(false);

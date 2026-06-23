@@ -8,6 +8,10 @@ public sealed class OtClientProcedureResponse
 
     public Guid ProcedureTypeId { get; init; }
 
+    public string ProcedureTypeName { get; init; } = string.Empty;
+
+    public string ClientTenantName { get; init; } = string.Empty;
+
     public string ReferenceNumber { get; init; } = string.Empty;
 
     public string Status { get; init; } = string.Empty;
@@ -32,6 +36,8 @@ internal static class OtClientProcedureMapper
             Id = procedure.Id,
             ClientTenantId = procedure.ClientTenantId,
             ProcedureTypeId = procedure.ProcedureTypeId,
+            ProcedureTypeName = procedure.ProcedureTypeName,
+            ClientTenantName = procedure.ClientTenantName,
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
             TransitOfficeId = procedure.TransitOfficeId,

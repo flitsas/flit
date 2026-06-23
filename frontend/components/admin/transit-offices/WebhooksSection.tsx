@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -11,8 +10,15 @@ import {
   updateOtWebhook,
 } from "@/lib/api/admin-ot";
 import type { OtApiCallLog, OtWebhook } from "@/lib/api/types-ot";
+import { OtSidePanel } from "./OtSidePanel";
+import { OtStatusBadge } from "./OtStatusBadge";
+import { OtTabBar } from "./OtTabBar";
+import { OtTablePagination } from "./OtTablePagination";
+import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 import { maskTargetUrl } from "./ot-utils";
 import { WebhookFormPanel } from "./WebhookFormPanel";
+
+const LOG_PAGE_SIZE = 20;
 
 type Tab = "webhooks" | "logs";
 
@@ -27,9 +33,14 @@ export function WebhooksSection() {
 
   const [logStatus, setLogStatus] = useState<UiStatus>("loading");
   const [logs, setLogs] = useState<OtApiCallLog[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logPage, setLogPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<OtApiCallLog | null>(null);
+
   const [direction, setDirection] = useState("outbound");
   const [httpClass, setHttpClass] = useState<"all" | "5xx">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const loadWebhooks = useCallback(async (signal?: AbortSignal) => {
     setWebhookStatus("loading");
@@ -43,21 +54,32 @@ export function WebhooksSection() {
     }
   }, []);
 
-  const loadLogs = useCallback(async (signal?: AbortSignal) => {
-    setLogStatus("loading");
-    try {
-      const result = await fetchOtApiLogs({ direction, page: 1, pageSize: 50 }, signal);
-      if (signal?.aborted) return;
-      let rows = result.data;
-      if (httpClass === "5xx") {
-        rows = rows.filter((l) => (l.responseCode ?? 0) >= 500);
+    const loadLogs = useCallback(
+    async (signal?: AbortSignal, targetPage = 1) => {
+      setLogStatus("loading");
+      try {
+        const result = await fetchOtApiLogs(
+          {
+            direction,
+            from: dateFrom ? `${dateFrom}T00:00:00.000Z` : undefined,
+            to: dateTo ? `${dateTo}T23:59:59.999Z` : undefined,
+            minResponseCode: httpClass === "5xx" ? 500 : undefined,
+            page: targetPage,
+            pageSize: LOG_PAGE_SIZE,
+          },
+          signal,
+        );
+        if (signal?.aborted) return;
+        setLogs(result.data);
+        setLogTotal(result.totalCount);
+        setLogPage(result.page);
+        setLogStatus(result.data.length === 0 ? "empty" : "ready");
+      } catch {
+        if (!signal?.aborted) setLogStatus("error");
       }
-      setLogs(rows);
-      setLogStatus(rows.length === 0 ? "empty" : "ready");
-    } catch {
-      if (!signal?.aborted) setLogStatus("error");
-    }
-  }, [direction, httpClass]);
+    },
+    [direction, httpClass, dateFrom, dateTo],
+  );
 
   useEffect(() => {
     const c = new AbortController();
@@ -68,9 +90,9 @@ export function WebhooksSection() {
   useEffect(() => {
     if (tab !== "logs") return;
     const c = new AbortController();
-    void loadLogs(c.signal);
+    void loadLogs(c.signal, logPage);
     return () => c.abort();
-  }, [tab, loadLogs]);
+  }, [tab, loadLogs, logPage]);
 
   const handleSaved = (webhook: OtWebhook, isNew: boolean) => {
     setWebhooks((prev) =>
@@ -82,50 +104,36 @@ export function WebhooksSection() {
     show(isNew ? "Webhook creado." : "Webhook actualizado.", "success");
   };
 
+  const applyLogFilters = () => {
+    setLogPage(1);
+    void loadLogs(undefined, 1);
+  };
+
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Secciones de integración" className="flex gap-2">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "webhooks"}
-          className="rounded-xl px-4 py-2 text-xs font-semibold"
-          style={{
-            background: tab === "webhooks" ? "#557EFF" : "#F4F7FC",
-            color: tab === "webhooks" ? "#FFF" : "#162744",
-          }}
-          onClick={() => setTab("webhooks")}
-        >
-          Webhooks
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "logs"}
-          className="rounded-xl px-4 py-2 text-xs font-semibold"
-          style={{
-            background: tab === "logs" ? "#557EFF" : "#F4F7FC",
-            color: tab === "logs" ? "#FFF" : "#162744",
-          }}
-          onClick={() => setTab("logs")}
-        >
-          Bitácora
-        </button>
-      </div>
+      <OtTabBar
+        ariaLabel="Secciones de integración"
+        tabs={[
+          { id: "webhooks", label: "Webhooks" },
+          { id: "logs", label: "Bitácora" },
+        ]}
+        activeId={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
 
       {tab === "webhooks" && (
-        <div role="tabpanel">
-          <div className="mb-3 flex justify-end">
+        <div role="tabpanel" className="space-y-3 pt-2">
+          <div className="flex justify-end">
             <button
               type="button"
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
+              className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
               style={{ background: "#557EFF" }}
               onClick={() => {
                 setEditing(null);
                 setFormOpen(true);
               }}
             >
-              <Plus className="h-3.5 w-3.5" /> Nuevo webhook
+              Nuevo webhook
             </button>
           </div>
           <UiStateBoundary
@@ -134,77 +142,132 @@ export function WebhooksSection() {
             errorMessage="Error al cargar webhooks."
             onRetry={() => void loadWebhooks()}
           >
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: "#DFE5ED" }}>
-                    <th className="px-3 py-2 font-semibold">Evento</th>
-                    <th className="px-3 py-2 font-semibold">URL destino</th>
-                    <th className="px-3 py-2 font-semibold">Estado</th>
-                    <th className="px-3 py-2 font-semibold">Creado</th>
-                    <th className="px-3 py-2 font-semibold" />
+            <table className="w-full border-separate border-spacing-y-2 text-xs">
+              <thead>
+                <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
+                  <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Evento
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    URL destino
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Estado
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Creado
+                  </th>
+                  <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {webhooks.map((w) => (
+                  <tr key={w.id} className="bg-white dark:bg-[#0B0F14]">
+                    <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                      {w.eventType}
+                    </td>
+                    <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+                      {maskTargetUrl(w.targetUrl)}
+                    </td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                      <OtStatusBadge
+                        label={w.isActive ? "Activo" : "Inactivo"}
+                        tone={w.isActive ? "success" : "danger"}
+                      />
+                    </td>
+                    <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+                      {new Date(w.createdAt).toLocaleString("es-CO")}
+                    </td>
+                    <td
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                      style={{ borderColor: "#DFE5ED" }}
+                    >
+                      <button
+                        type="button"
+                        className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
+                        style={{ background: "#557EFF" }}
+                        onClick={() => {
+                          setEditing(w);
+                          setFormOpen(true);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {webhooks.map((w) => (
-                    <tr key={w.id} className="border-b" style={{ borderColor: "#DFE5ED" }}>
-                      <td className="px-3 py-2">{w.eventType}</td>
-                      <td className="px-3 py-2 font-mono">{maskTargetUrl(w.targetUrl)}</td>
-                      <td className="px-3 py-2">{w.isActive ? "Activo" : "Inactivo"}</td>
-                      <td className="px-3 py-2">{new Date(w.createdAt).toLocaleString()}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="text-[#557EFF] font-semibold"
-                          onClick={() => {
-                            setEditing(w);
-                            setFormOpen(true);
-                          }}
-                        >
-                          Editar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </UiStateBoundary>
         </div>
       )}
 
       {tab === "logs" && (
-        <div role="tabpanel" className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <select
-              aria-label="Dirección"
-              className="rounded-lg border px-2 py-1 text-xs"
-              style={{ borderColor: "#DFE5ED" }}
-              value={direction}
-              onChange={(e) => setDirection(e.target.value)}
-            >
-              <option value="outbound">outbound</option>
-              <option value="inbound">inbound</option>
-            </select>
-            <select
-              aria-label="Código HTTP"
-              className="rounded-lg border px-2 py-1 text-xs"
-              style={{ borderColor: "#DFE5ED" }}
-              value={httpClass}
-              onChange={(e) => setHttpClass(e.target.value as "all" | "5xx")}
-            >
-              <option value="all">Todos</option>
-              <option value="5xx">5xx</option>
-            </select>
-            <button
-              type="button"
-              className="rounded-lg px-3 py-1 text-xs font-semibold text-white"
-              style={{ background: "#557EFF" }}
-              onClick={() => void loadLogs()}
-            >
-              Aplicar filtros
-            </button>
-          </div>
+        <div role="tabpanel" className="space-y-3 pt-2">
+          <form
+            className={OT_FILTER_FORM_CLS}
+            style={{ borderColor: "#DFE5ED" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyLogFilters();
+            }}
+            aria-label="Filtros de bitácora"
+          >
+            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+              Desde
+              <input
+                type="date"
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </label>
+            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+              Hasta
+              <input
+                type="date"
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </label>
+            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+              Dirección
+              <select
+                aria-label="Dirección"
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                value={direction}
+                onChange={(e) => setDirection(e.target.value)}
+              >
+                <option value="outbound">outbound</option>
+                <option value="inbound">inbound</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+              Código HTTP
+              <select
+                aria-label="Código HTTP"
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                value={httpClass}
+                onChange={(e) => setHttpClass(e.target.value as "all" | "5xx")}
+              >
+                <option value="all">Todos</option>
+                <option value="5xx">5xx</option>
+              </select>
+            </label>
+            <div className="flex items-end md:col-span-4">
+              <button
+                type="submit"
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
+                style={{ background: "#557EFF" }}
+              >
+                Aplicar filtros
+              </button>
+            </div>
+          </form>
+
           <UiStateBoundary
             status={logStatus}
             emptyMessage="Sin registros en el período seleccionado."
@@ -212,59 +275,86 @@ export function WebhooksSection() {
             onRetry={() => void loadLogs()}
             skeletonRows={5}
           >
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: "#DFE5ED" }}>
-                    <th className="px-3 py-2">Endpoint</th>
-                    <th className="px-3 py-2">Método</th>
-                    <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Duración (ms)</th>
-                    <th className="px-3 py-2">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log, i) => (
-                    <tr
-                      key={`${log.calledAt}-${i}`}
-                      className="cursor-pointer border-b hover:bg-[#F4F7FC]"
+            <table className="w-full border-separate border-spacing-y-2 text-xs">
+              <thead>
+                <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
+                  <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Endpoint
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Método
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Código
+                  </th>
+                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Duración (ms)
+                  </th>
+                  <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    Fecha
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, i) => (
+                  <tr
+                    key={`${log.calledAt}-${i}`}
+                    className="cursor-pointer bg-white hover:opacity-90 dark:bg-[#0B0F14]"
+                    onClick={() => setSelectedLog(log)}
+                  >
+                    <td
+                      className="max-w-[220px] truncate rounded-l-xl border-y border-l px-4 py-3"
                       style={{ borderColor: "#DFE5ED" }}
-                      onClick={() => setSelectedLog(log)}
                     >
-                      <td className="px-3 py-2 max-w-[200px] truncate">{log.endpoint}</td>
-                      <td className="px-3 py-2">{log.httpMethod}</td>
-                      <td className="px-3 py-2">{log.responseCode ?? "—"}</td>
-                      <td className="px-3 py-2">{log.durationMs ?? "—"}</td>
-                      <td className="px-3 py-2">{new Date(log.calledAt).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      {log.endpoint}
+                    </td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                      {log.httpMethod}
+                    </td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                      {log.responseCode ?? "—"}
+                    </td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                      {log.durationMs ?? "—"}
+                    </td>
+                    <td
+                      className="rounded-r-xl border-y border-r px-4 py-3 opacity-70"
+                      style={{ borderColor: "#DFE5ED" }}
+                    >
+                      {new Date(log.calledAt).toLocaleString("es-CO")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <OtTablePagination
+              totalCount={logTotal}
+              page={logPage}
+              pageSize={LOG_PAGE_SIZE}
+              onPageChange={setLogPage}
+            />
           </UiStateBoundary>
         </div>
       )}
 
-      {selectedLog && (
-        <aside
-          className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l bg-white p-6 shadow-xl"
-          style={{ borderColor: "#DFE5ED" }}
-          role="dialog"
-          aria-label="Detalle de log"
-        >
-          <button type="button" className="mb-4 text-xs font-semibold text-[#557EFF]" onClick={() => setSelectedLog(null)}>
-            Cerrar
-          </button>
-          <h3 className="text-sm font-bold mb-2">Detalle de llamada</h3>
-          <p className="text-xs mb-2">
-            <strong>payload_hash:</strong>{" "}
-            <code className="break-all">{selectedLog.payloadHash}</code>
-          </p>
-          <p className="text-[11px] opacity-70">
-            Datos protegidos por Ley 1581 de 2012 — el payload completo no se expone.
-          </p>
-        </aside>
-      )}
+      <OtSidePanel
+        open={selectedLog !== null}
+        title="Detalle de llamada"
+        ariaLabel="Detalle de log"
+        onClose={() => setSelectedLog(null)}
+      >
+        {selectedLog && (
+          <>
+            <p className="text-xs mb-2">
+              <strong>payload_hash:</strong>{" "}
+              <code className="break-all">{selectedLog.payloadHash}</code>
+            </p>
+            <p className="text-[11px] opacity-70">
+              Datos protegidos por Ley 1581 de 2012 — el payload completo no se expone.
+            </p>
+          </>
+        )}
+      </OtSidePanel>
 
       <WebhookFormPanel
         open={formOpen}

@@ -10,6 +10,8 @@ public sealed class ListOtApiLogsQuery
 
     public DateTimeOffset? To { get; init; }
 
+    public short? MinResponseCode { get; init; }
+
     public int? Page { get; init; }
 
     public int? PageSize { get; init; }

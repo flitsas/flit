@@ -68,7 +68,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
 
-                        return new PagedResult<OtClientProcedure>(items, totalCount);
+                        var enriched = await EnrichDisplayNamesAsync(items, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        return new PagedResult<OtClientProcedure>(enriched, totalCount);
                     },
                     cancellationToken).ConfigureAwait(false);
             },
@@ -177,7 +180,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return Map(entity);
+                var mapped = Map(entity);
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken)
+                    .ConfigureAwait(false);
+                return enriched[0];
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -197,11 +203,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         }
 
         return await ExecuteCrossTenantReadAsync(
-            async () => await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
-                .Where(p => p.Id == procedureInstanceId)
-                .Select(p => Map(p))
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false),
+            async () =>
+            {
+                var mapped = await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
+                    .Where(p => p.Id == procedureInstanceId)
+                    .Select(p => Map(p))
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (mapped is null)
+                {
+                    return null;
+                }
+
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken)
+                    .ConfigureAwait(false);
+                return enriched[0];
+            },
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -356,4 +374,45 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,
     };
+
+    private async Task<IReadOnlyList<OtClientProcedure>> EnrichDisplayNamesAsync(
+        List<OtClientProcedure> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return items;
+        }
+
+        var typeIds = items.Select(i => i.ProcedureTypeId).Distinct().ToList();
+        var tenantIds = items.Select(i => i.ClientTenantId).Distinct().ToList();
+
+        var typeNames = await _context.ProcedureTypes
+            .AsNoTracking()
+            .Where(pt => typeIds.Contains(pt.Id))
+            .ToDictionaryAsync(pt => pt.Id, pt => pt.Name, cancellationToken)
+            .ConfigureAwait(false);
+
+        var tenantNames = await _context.Tenants
+            .AsNoTracking()
+            .Where(t => tenantIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.LegalName, cancellationToken)
+            .ConfigureAwait(false);
+
+        return items
+            .Select(item => new OtClientProcedure
+            {
+                Id = item.Id,
+                ClientTenantId = item.ClientTenantId,
+                ClientTenantName = tenantNames.GetValueOrDefault(item.ClientTenantId, "—"),
+                ProcedureTypeId = item.ProcedureTypeId,
+                ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "—"),
+                ReferenceNumber = item.ReferenceNumber,
+                Status = item.Status,
+                TransitOfficeId = item.TransitOfficeId,
+                CreatedAt = item.CreatedAt,
+                SubmittedAt = item.SubmittedAt,
+            })
+            .ToList();
+    }
 }

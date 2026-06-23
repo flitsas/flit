@@ -12,6 +12,22 @@ vi.mock("@/lib/api/admin-ot", () => ({
   rejectOtClientProcedure: vi.fn(),
 }));
 
+vi.mock("@/lib/api/tramites-client", () => ({
+  tramitesClient: {
+    listPublishedProcedureTypes: vi.fn().mockResolvedValue([
+      {
+        id: "matricula_inicial-type-id",
+        code: "matricula_inicial",
+        name: "Matrícula inicial",
+        family: "MATRICULAS",
+        publicationStatus: "published",
+        isActive: true,
+        publishedAt: null,
+      },
+    ]),
+  },
+}));
+
 import {
   approveOtClientProcedure,
   fetchOtClientProcedures,
@@ -21,7 +37,9 @@ import {
 const procedure: OtClientProcedure = {
   id: "proc-1",
   clientTenantId: "client-tenant-aaaa",
+  clientTenantName: "Flota Andina S.A.S.",
   procedureTypeId: "matricula_inicial-type-id",
+  procedureTypeName: "Matrícula inicial",
   referenceNumber: "RAD-2026-001",
   status: "pending_ot",
   createdAt: "2026-06-23T09:00:00Z",
@@ -42,7 +60,7 @@ describe("ClientProceduresSection — HU #10220", () => {
       data: [procedure],
       totalCount: 1,
       page: 1,
-      pageSize: 50,
+      pageSize: 20,
     });
     vi.mocked(approveOtClientProcedure).mockResolvedValue({
       ...procedure,
@@ -57,8 +75,9 @@ describe("ClientProceduresSection — HU #10220", () => {
   it("AC1 muestra tabla con columnas requeridas", async () => {
     renderSection();
     expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Matrícula inicial" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Flota Andina S.A.S." })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Pendiente OT" })).toBeInTheDocument();
-    expect(screen.getByText(/Radicado/i)).toBeInTheDocument();
   });
 
   it("AC2 aprobar con confirmación actualiza fila optimistamente", async () => {
@@ -89,10 +108,22 @@ describe("ClientProceduresSection — HU #10220", () => {
   });
 
   it("AC4 aplica filtro por estado pending_ot", async () => {
+    const user = userEvent.setup();
     renderSection();
     await waitFor(() =>
       expect(fetchOtClientProcedures).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "pending_ot" }),
+        expect.objectContaining({ status: "pending_ot", pageSize: 20 }),
+        expect.anything(),
+      ),
+    );
+    await user.selectOptions(screen.getByLabelText(/Filtrar por tipo de trámite/i), "matricula_inicial-type-id");
+    await user.click(screen.getByRole("button", { name: /Aplicar filtros/i }));
+    await waitFor(() =>
+      expect(fetchOtClientProcedures).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "pending_ot",
+          procedureTypeId: "matricula_inicial-type-id",
+        }),
         expect.anything(),
       ),
     );

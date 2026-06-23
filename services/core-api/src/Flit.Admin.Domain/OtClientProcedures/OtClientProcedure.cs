@@ -9,6 +9,10 @@ public sealed class OtClientProcedure
 
     public Guid ProcedureTypeId { get; init; }
 
+    public string ProcedureTypeName { get; init; } = string.Empty;
+
+    public string ClientTenantName { get; init; } = string.Empty;
+
     public string ReferenceNumber { get; init; } = string.Empty;
 
     public string Status { get; init; } = string.Empty;
