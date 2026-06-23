@@ -4,6 +4,16 @@ using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentTags;
+using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.ListOtDocumentTags;
+using Flit.Admin.Application.OtRules;
+using Flit.Admin.Application.OtRules.CreateOtRule;
+using Flit.Admin.Application.OtRules.ListOtRules;
+using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
@@ -19,7 +29,8 @@ namespace Flit.Api.Endpoints;
 
 /// <summary>
 /// Endpoints de administración OT — perfil, modo Dashboard/QX, feature flags (HU #10215),
-/// webhooks / bitácora API (HU #10216) y trámites de clientes tenant admin (HU #10217).
+/// webhooks / bitácora API (HU #10216), trámites de clientes tenant admin (HU #10217),
+/// motor de reglas (HU #10221) y prelación/etiquetas documentales (HU #10222).
 /// El tenant se resuelve exclusivamente del claim JWT <c>tenant_id</c> (AC5).
 /// </summary>
 public static class AdminOtEndpoints
@@ -120,6 +131,62 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapPost("/rules", CreateRuleAsync)
+            .WithName("AdminOtCreateRule")
+            .WithSummary("Crea una regla OT con condiciones AND/OR")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapGet("/rules", ListRulesAsync)
+            .WithName("AdminOtListRules")
+            .WithSummary("Lista reglas OT del tenant")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPatch("/rules/{id:guid}", UpdateRuleAsync)
+            .WithName("AdminOtUpdateRule")
+            .WithSummary("Activa o desactiva una regla OT (hot-swap)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapGet("/document-precedence", ListDocumentPrecedenceAsync)
+            .WithName("AdminOtListDocumentPrecedence")
+            .WithSummary("Lista prelación documental por tipo de trámite")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapPatch("/document-precedence", UpdateDocumentPrecedenceAsync)
+            .WithName("AdminOtUpdateDocumentPrecedence")
+            .WithSummary("Reordena prelación documental en batch atómico")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapPost("/document-tags", CreateDocumentTagAsync)
+            .WithName("AdminOtCreateDocumentTag")
+            .WithSummary("Crea una etiqueta documental OT")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapGet("/document-tags", ListDocumentTagsAsync)
+            .WithName("AdminOtListDocumentTags")
+            .WithSummary("Lista etiquetas documentales del tenant")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         return app;
     }
@@ -451,5 +518,192 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status422UnprocessableEntity),
             _ => Results.Ok(result.Procedure),
         };
+    }
+
+    private static async Task<IResult> CreateRuleAsync(
+        HttpContext httpContext,
+        CreateOtRuleRequest request,
+        CreateOtRuleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new CreateOtRuleCommand
+        {
+            TenantId = tenantId,
+            CreatedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            CreateOtRuleStatus.ValidationFailed => Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Created($"/api/v1/admin/ot/rules/{result.Rule!.Id}", result.Rule),
+        };
+    }
+
+    private static async Task<IResult> ListRulesAsync(
+        HttpContext httpContext,
+        ListOtRulesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(
+            new ListOtRulesQuery { TenantId = tenantId },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = result.Data });
+    }
+
+    private static async Task<IResult> UpdateRuleAsync(
+        Guid id,
+        HttpContext httpContext,
+        UpdateOtRuleRequest request,
+        UpdateOtRuleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new UpdateOtRuleCommand
+        {
+            TenantId = tenantId,
+            RuleId = id,
+            ChangedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            UpdateOtRuleStatus.NotFound => Results.NotFound(new { error = "Regla no encontrada" }),
+            UpdateOtRuleStatus.ValidationFailed => Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(result.Rule),
+        };
+    }
+
+    private static async Task<IResult> ListDocumentPrecedenceAsync(
+        HttpContext httpContext,
+        ListOtDocumentPrecedenceHandler handler,
+        Guid? procedureTypeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (procedureTypeId is null || procedureTypeId == Guid.Empty)
+        {
+            return Results.Json(
+                new { errors = new[] { new { field = "procedureTypeId", message = "PROCEDURE_TYPE_REQUIRED" } } },
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        var result = await handler.HandleAsync(new ListOtDocumentPrecedenceQuery
+        {
+            TenantId = tenantId,
+            ProcedureTypeId = procedureTypeId.Value,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = result.Data });
+    }
+
+    private static async Task<IResult> UpdateDocumentPrecedenceAsync(
+        HttpContext httpContext,
+        UpdateOtDocumentPrecedenceRequest request,
+        UpdateOtDocumentPrecedenceHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new UpdateOtDocumentPrecedenceCommand
+        {
+            TenantId = tenantId,
+            ChangedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            UpdateOtDocumentPrecedenceStatus.ValidationFailed => Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(new { data = result.Data }),
+        };
+    }
+
+    private static async Task<IResult> CreateDocumentTagAsync(
+        HttpContext httpContext,
+        CreateOtDocumentTagRequest request,
+        CreateOtDocumentTagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new CreateOtDocumentTagCommand
+        {
+            TenantId = tenantId,
+            CreatedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            CreateOtDocumentTagStatus.DuplicateCode => Results.Conflict(new { error = "TAG_CODE_DUPLICATE" }),
+            CreateOtDocumentTagStatus.ValidationFailed => Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Created($"/api/v1/admin/ot/document-tags/{result.Tag!.Id}", result.Tag),
+        };
+    }
+
+    private static async Task<IResult> ListDocumentTagsAsync(
+        HttpContext httpContext,
+        ListOtDocumentTagsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(
+            new ListOtDocumentTagsQuery { TenantId = tenantId },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = result.Data });
     }
 }

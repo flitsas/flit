@@ -42,6 +42,14 @@ using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.ListOtDocumentTags;
+using Flit.Admin.Application.OtRules;
+using Flit.Admin.Application.OtRules.CreateOtRule;
+using Flit.Admin.Application.OtRules.ListOtRules;
+using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
@@ -131,6 +139,17 @@ public static class DependencyInjection
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();
+
+        // HU #10221 — motor de reglas AND/OR.
+        services.AddScoped<CreateOtRuleHandler>();
+        services.AddScoped<UpdateOtRuleHandler>();
+        services.AddScoped<ListOtRulesHandler>();
+
+        // HU #10222 — prelación documental y etiquetas.
+        services.AddScoped<ListOtDocumentPrecedenceHandler>();
+        services.AddScoped<UpdateOtDocumentPrecedenceHandler>();
+        services.AddScoped<CreateOtDocumentTagHandler>();
+        services.AddScoped<ListOtDocumentTagsHandler>();
 
         return services;
     }

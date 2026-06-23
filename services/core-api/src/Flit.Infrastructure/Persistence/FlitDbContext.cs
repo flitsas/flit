@@ -49,6 +49,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
 
     public DbSet<OtApiCallLogEntity> OtApiCallLogs => Set<OtApiCallLogEntity>();
 
+    public DbSet<OtDocumentPrecedenceEntity> OtDocumentPrecedences => Set<OtDocumentPrecedenceEntity>();
+
+    public DbSet<OtDocumentTagEntity> OtDocumentTags => Set<OtDocumentTagEntity>();
+
     // ── Admin / parametrización documental (develop, HU #10193–#10198) ─────────
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 

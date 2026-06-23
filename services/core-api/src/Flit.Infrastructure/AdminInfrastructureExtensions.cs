@@ -10,6 +10,9 @@ using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Admin.Domain.OtDocumentPrecedence;
+using Flit.Admin.Domain.OtDocumentTags;
+using Flit.Admin.Domain.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
@@ -82,6 +85,13 @@ public static class AdminInfrastructureExtensions
 
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();
+
+        // HU #10221 — motor de reglas OT (sobre ot_feature_flags).
+        services.AddScoped<IOtRuleRepository, OtRuleRepository>();
+
+        // HU #10222 — prelación documental y etiquetas OT.
+        services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
+        services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
 
         return services;
     }
