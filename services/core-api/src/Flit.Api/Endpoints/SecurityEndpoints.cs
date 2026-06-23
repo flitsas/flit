@@ -1,9 +1,12 @@
 using System.Security.Claims;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using IRoleRepository = Flit.Modules.Security.Domain.Roles.IRoleRepository;
 
 namespace Flit.Api.Endpoints;
 
@@ -52,6 +55,58 @@ public static class SecurityEndpoints
                 return Results.Json(
                     new ErrorResponse("INVITATION_ALREADY_PENDING", "Ya existe una invitación pendiente para este correo."),
                     statusCode: StatusCodes.Status409Conflict);
+            }
+        });
+
+        // AC5 — GET /roles — lista roles activos del tenant del caller (HU #10164)
+        group.MapGet("/roles", async (
+            ClaimsPrincipal caller,
+            IRoleRepository roleRepo,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var tenantId))
+                return Results.Unauthorized();
+
+            var roles = await roleRepo.ListByTenantAsync(tenantId, cancellationToken);
+            return Results.Ok(roles);
+        });
+
+        // AC1/AC2 — PUT /users/{userId}/role — asigna o reemplaza rol (HU #10164)
+        group.MapPut("/users/{userId:guid}/role", async (
+            Guid userId,
+            [FromBody] AssignRoleRequest request,
+            ClaimsPrincipal caller,
+            AssignRoleHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var tenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            try
+            {
+                await handler.HandleAsync(
+                    new AssignRoleCommand(tenantId, userId, request.RoleId, callerId),
+                    cancellationToken);
+                return Results.Ok();
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("OUT_OF_SCOPE", "El usuario no pertenece al tenant."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (RoleForAssignmentNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_NOT_FOUND", "Rol no encontrado o inactivo."),
+                    statusCode: StatusCodes.Status404NotFound);
             }
         });
 
@@ -119,6 +174,8 @@ public static class SecurityEndpoints
 
         return app;
     }
+
+    private sealed record AssignRoleRequest(Guid RoleId);
 
     private sealed record CreateInvitationRequest(string Email, string? FullName, string? RoleId);
 

@@ -8,6 +8,7 @@ using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
+using Flit.Modules.Security.Application.UserRoles;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -42,6 +43,9 @@ public static class SecurityApplicationExtensions
         services.AddScoped<DeleteRoleHandler>();
         services.AddScoped<SetRolePermissionsHandler>();
         services.AddScoped<ListRolesHandler>();
+
+        // HU #10164 — Asignación única de rol por usuario tenant
+        services.AddScoped<AssignRoleHandler>();
 
         return services;
     }
