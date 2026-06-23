@@ -255,13 +255,21 @@ export function TramiteWizard(props: Props) {
       return;
     }
     setContinuing(true);
+    setSubmitError(null);
     try {
       const ok = await actorsFormRef.current?.save();
-      if (!ok) return;
+      if (!ok) {
+        setSubmitError('No se pudo guardar. Por favor, reintenta.');
+        return;
+      }
       const fresh = await refresh();
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
         setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       }
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo guardar. Por favor, reintenta.',
+      );
     } finally {
       setContinuing(false);
     }

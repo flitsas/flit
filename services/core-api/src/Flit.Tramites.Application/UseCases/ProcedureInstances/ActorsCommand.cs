@@ -67,7 +67,7 @@ public sealed class PutActorsHandler(
         PutActorsRequest request,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -270,7 +270,7 @@ public sealed class GetActorsHandler(IProcedureInstanceRepository repo)
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 

@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: monorepoRoot,
   },
+  // El proxy de rewrites corta conexiones largas (~5s por defecto) → "socket hang up".
+  // El pre-vuelo hace consultas RUNT/SIMIT reales (~8-10s); subimos el timeout del proxy.
+  experimental: {
+    proxyTimeout: 120_000,
+  },
   // Proxy SuperAdmin API in dev — avoids browser CORS to :4003.
   // Requires: pnpm run dev:core-api + pnpm run dev:frontend (leave NEXT_PUBLIC_API_URL unset).
   async rewrites() {
