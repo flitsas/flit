@@ -54,6 +54,7 @@ internal static class ConsultationEndpoints
                 "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Se requiere documentType y documentNumber."),
                 "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "provider_not_found" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor RUNT conductor no está disponible."),
+                "unsupported_document_type" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "Tipo de documento no soportado por RUNT conductor (NIT no aplica)."),
                 _ => Results.Ok(result)
             };
         }).WithName("RuntPersonLookup");

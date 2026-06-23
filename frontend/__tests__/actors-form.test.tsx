@@ -240,6 +240,67 @@ describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
   });
 });
 
+describe('ActorsForm — cards RUNT enriquecidas', () => {
+  it('muestra Card A con datos del conductor cuando found=true', async () => {
+    const user = userEvent.setup();
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'JUAN CARLOS PEREZ GOMEZ',
+      firstName: 'JUAN CARLOS',
+      lastName: 'PEREZ GOMEZ',
+      documentType: 'CC',
+      documentNumber: '3216549870',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'mock',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: false,
+      nroPazYSalvo: '840377030067',
+      hasActiveLicense: true,
+      licenseCategories: 'B1',
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.type(await screen.findByLabelText('Número de documento'), '3216549870');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
+    expect(screen.getByText('JUAN CARLOS')).toBeInTheDocument();
+    expect(screen.getByText('PEREZ GOMEZ')).toBeInTheDocument();
+    // Conductor status
+    expect(screen.getByText('ACTIVO')).toBeInTheDocument();
+    // Card B multas negativa
+    expect(screen.getByText(/Sin multas ni comparendos pendientes/)).toBeInTheDocument();
+    // Nombre autopoblado en sección de contacto
+    expect(screen.getByDisplayValue('JUAN CARLOS PEREZ GOMEZ')).toBeInTheDocument();
+  });
+
+  it('muestra alerta roja cuando hasPendingFines=true', async () => {
+    const user = userEvent.setup();
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'ANA GARCIA',
+      firstName: 'ANA',
+      lastName: 'GARCIA',
+      documentType: 'CC',
+      documentNumber: '9999999',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'mock',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: true,
+      hasActiveLicense: true,
+      licenseCategories: 'B1',
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.type(await screen.findByLabelText('Número de documento'), '9999999');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+  });
+});
+
 describe('validateActors — unidad', () => {
   const base: ProcedureActor = {
     rol: 'comprador',

@@ -33,9 +33,13 @@ public sealed class RuntPersonLookupHandler(
         if (provider is null)
             return (null, "provider_not_found");
 
+        var mappedDocType = MapDocumentType(documentType);
+        if (mappedDocType is null)
+            return (null, "unsupported_document_type");
+
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["document_type"] = documentType,
+            ["document_type"] = mappedDocType,
             ["document_number"] = documentNumber,
         };
 
@@ -45,6 +49,12 @@ public sealed class RuntPersonLookupHandler(
         var fullName = GetHydrated(result, "person_full_name");
         var found = !string.IsNullOrWhiteSpace(fullName);
 
+        var hasPendingFines = GetHydrated(result, "person_has_pending_fines") == "true";
+        var citizenStatus = found ? GetHydrated(result, "person_citizen_status") : null;
+        var nroPazYSalvo = found ? GetHydrated(result, "person_paz_y_salvo") : null;
+        var hasActiveLicense = GetHydrated(result, "person_has_active_license") == "true";
+        var licenseCategories = found ? GetHydrated(result, "person_license_categories") : null;
+
         var dto = new RuntPersonDto(
             Found: found,
             FullName: found ? fullName : null,
@@ -53,7 +63,12 @@ public sealed class RuntPersonLookupHandler(
             DocumentType: documentType,
             DocumentNumber: documentNumber,
             LicenseStatus: found ? GetHydrated(result, "person_license_status") : null,
-            Mode: ResolveMode());
+            Mode: ResolveMode(),
+            CitizenStatus: citizenStatus,
+            HasPendingFines: hasPendingFines,
+            NroPazYSalvo: nroPazYSalvo,
+            HasActiveLicense: hasActiveLicense,
+            LicenseCategories: licenseCategories);
 
         return (dto, null);
     }
@@ -68,6 +83,18 @@ public sealed class RuntPersonLookupHandler(
 
         return null;
     }
+
+    // Mapeo documentType FLIT → Verifik: CC→CC, CE→CE, PAS→PA, TI→PPT, NIT→null (no soportado)
+    private static string? MapDocumentType(string documentType) =>
+        documentType.ToUpperInvariant() switch
+        {
+            "CC" => "CC",
+            "CE" => "CE",
+            "PAS" => "PA",
+            "TI" => "PPT",
+            "NIT" => null,
+            _ => documentType
+        };
 
     // El modo real|mock del provider verifik_conductor se controla con VERIFIK_CONDUCTOR_MODE
     // (default "mock"; cualquier valor distinto de "real" se trata como mock — misma semántica
@@ -94,4 +121,9 @@ public sealed record RuntPersonDto(
     string DocumentNumber,
     string? LicenseStatus,
     string Mode,
-    string Source = "RUNT");
+    string Source = "RUNT",
+    string? CitizenStatus = null,
+    bool HasPendingFines = false,
+    string? NroPazYSalvo = null,
+    bool HasActiveLicense = false,
+    string? LicenseCategories = null);

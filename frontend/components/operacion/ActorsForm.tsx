@@ -312,20 +312,86 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const runtResult = (index: number) => {
     const runtState: RuntState = runt[index] ?? { status: 'idle' };
     if (runtState.status === 'found') {
+      const r = runtState.result;
+      const hasLicenses = r.hasActiveLicense ?? (r.licenseStatus != null);
       return (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
-          role="status"
-          aria-live="polite"
-        >
-          <p className="font-semibold" style={{ color: '#5a8a1f' }}>
-            Persona encontrada en RUNT
-          </p>
-          <p className="opacity-80 mt-0.5">
-            {runtState.result.fullName} · {runtState.result.documentType}{' '}
-            {runtState.result.documentNumber}
-          </p>
+        <div className="space-y-2" role="status" aria-live="polite">
+          {/* Card A — Datos del conductor */}
+          <div
+            className="rounded-xl p-3 text-xs border"
+            style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
+          >
+            <p className="font-semibold mb-2 flex items-center gap-1.5" style={{ color: '#5a8a1f' }}>
+              <span aria-hidden="true">✓</span>
+              Persona encontrada en RUNT
+            </p>
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+              <div>
+                <span className="opacity-60 font-normal">Nombres: </span>
+                <span className="font-semibold" style={{ color: '#162744' }}>
+                  {r.firstName ?? r.fullName ?? '—'}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Apellidos: </span>
+                <span className="font-semibold" style={{ color: '#162744' }}>
+                  {r.lastName ?? '—'}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Documento: </span>
+                <span className="font-semibold font-mono" style={{ color: '#162744' }}>
+                  {r.documentNumber}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Estado: </span>
+                <span
+                  className="font-semibold"
+                  style={{ color: r.citizenStatus === 'ACTIVA' ? '#5a8a1f' : '#162744' }}
+                >
+                  {r.citizenStatus ?? r.licenseStatus ?? '—'}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Licencias: </span>
+                <span className="font-semibold" style={{ color: '#162744' }}>
+                  {hasLicenses
+                    ? `Sí${r.licenseCategories ? ` (${r.licenseCategories})` : ''}`
+                    : 'No'}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Conductor: </span>
+                <span
+                  className="font-semibold"
+                  style={{ color: r.licenseStatus === 'ACTIVO' ? '#5a8a1f' : '#162744' }}
+                >
+                  {r.licenseStatus ?? '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card B — Multas */}
+          {r.hasPendingFines !== undefined && (
+            <div
+              className="rounded-xl p-3 text-xs border flex items-center gap-2"
+              style={
+                r.hasPendingFines
+                  ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
+                  : { borderColor: '#8CC63F', background: 'rgba(140,198,63,0.06)', color: '#5a8a1f' }
+              }
+              role="status"
+            >
+              <span aria-hidden="true">{r.hasPendingFines ? '⚠' : '⊙'}</span>
+              <span className="font-semibold">
+                {r.hasPendingFines
+                  ? 'ALERTA: Comparendos/Multas pendientes'
+                  : `Sin multas ni comparendos pendientes${r.nroPazYSalvo ? ` · Paz y Salvo ${r.nroPazYSalvo}` : ''}`}
+              </span>
+            </div>
+          )}
         </div>
       );
     }

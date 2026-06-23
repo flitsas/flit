@@ -102,6 +102,26 @@ internal sealed class VerifikConductorConsultationProvider(
                 FirstName = "JUAN CARLOS",
                 LastName = "PEREZ GOMEZ",
                 FullName = "JUAN CARLOS PEREZ GOMEZ",
+                CitizenStatus = "ACTIVA",
+                DriverStatus = "ACTIVO",
+                TotalLicenses = "1",
+                Licenses =
+                [
+                    new VerifikConductorLicense
+                    {
+                        Category = "B1",
+                        Status = "ACTIVA",
+                        DueDate = "19/09/2034",
+                        ExpeditionDate = "19/09/2024",
+                        LicenceNumber = "00000000",
+                        OtExpide = "SECRETARIA DISTRITAL DE MOVILIDAD",
+                    }
+                ],
+                Infractions = new VerifikConductorInfractions
+                {
+                    TieneMultas = "NO",
+                    NroPazYSalvo = "DEMO-PAZ-Y-SALVO"
+                },
                 IdentityValidationAttempts = new VerifikConductorIdentityValidation
                 {
                     EstadoUsuario = "ACTIVO",
