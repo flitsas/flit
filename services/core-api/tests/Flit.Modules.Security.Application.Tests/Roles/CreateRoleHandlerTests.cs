@@ -1,0 +1,63 @@
+using Flit.Modules.Security.Application.Roles;
+using Flit.Modules.Security.Domain.Roles;
+using FluentAssertions;
+using NSubstitute;
+using Xunit;
+
+namespace Flit.Modules.Security.Application.Tests.Roles;
+
+public sealed class CreateRoleHandlerTests
+{
+    private readonly IRoleRepository _repo = Substitute.For<IRoleRepository>();
+    private readonly CreateRoleHandler _handler;
+
+    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Guid RoleId = Guid.NewGuid();
+
+    private const string Code = "ADMIN";
+    private const string Name = "Administrador";
+
+    public CreateRoleHandlerTests()
+    {
+        _handler = new CreateRoleHandler(_repo);
+        _repo.CreateAsync(Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>())
+            .Returns(RoleId);
+    }
+
+    // AC1 — datos válidos, code único en tenant → crea rol y retorna Guid
+    [Fact]
+    public async Task HandleAsync_ValidData_CreatesRole()
+    {
+        _repo.CodeExistsInTenantAsync(TenantId, Code, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.HandleAsync(
+            new CreateRoleCommand(TenantId, Code, Name, null),
+            CancellationToken.None);
+
+        result.Should().Be(RoleId);
+        await _repo.Received(1).CreateAsync(
+            Arg.Is<CreateRoleData>(d =>
+                d.TenantId == TenantId &&
+                d.Code == Code &&
+                d.Name == Name &&
+                d.Description == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    // AC6 — code duplicado en el mismo tenant → RoleCodeDuplicateException, sin llamar a CreateAsync
+    [Fact]
+    public async Task HandleAsync_DuplicateCode_ThrowsRoleCodeDuplicate()
+    {
+        _repo.CodeExistsInTenantAsync(TenantId, Code, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _handler
+            .Invoking(h => h.HandleAsync(
+                new CreateRoleCommand(TenantId, Code, Name, null),
+                CancellationToken.None))
+            .Should().ThrowAsync<RoleCodeDuplicateException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(
+            Arg.Any<CreateRoleData>(),
+            Arg.Any<CancellationToken>());
+    }
+}
