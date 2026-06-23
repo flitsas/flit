@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, Car, ArrowLeftRight } from 'lucide-react';
 import { TramiteWizard } from './TramiteWizard';
 import { TramitesTable } from './TramitesTable';
@@ -35,11 +35,22 @@ const MODALIDADES: Modalidad[] = [
   },
 ];
 
-export function OperacionView() {
+interface OperacionViewProps {
+  /** Notifica al contenedor cuando el wizard está abierto (modo inmersivo). */
+  onImmersiveChange?: (immersive: boolean) => void;
+}
+
+export function OperacionView({ onImmersiveChange }: OperacionViewProps) {
   const [selected, setSelected] = useState<Modalidad | null>(null);
   // Se incrementa al volver del wizard para forzar el refetch de la tabla:
   // así, tras "Enviar a tránsito", el listado refleja el trámite nuevo/actualizado.
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // El wizard activo (selected !== null) entra en modo inmersivo: el contenedor
+  // oculta título y tabs para dar todo el viewport al asistente.
+  useEffect(() => {
+    onImmersiveChange?.(selected !== null);
+  }, [selected, onImmersiveChange]);
 
   const handleExit = () => {
     setSelected(null);
@@ -58,7 +69,7 @@ export function OperacionView() {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
+    <div className="flex flex-col gap-4">
       <section
         className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
         style={{ borderColor: '#DFE5ED' }}

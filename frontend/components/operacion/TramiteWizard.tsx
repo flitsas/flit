@@ -207,7 +207,7 @@ export function TramiteWizard(props: Props) {
 
   if (submitted) {
     return (
-      <div className="h-full w-full grid place-items-center px-6 pb-24">
+      <div className="w-full grid place-items-center px-6 py-16">
         <div
           className="max-w-md w-full rounded-3xl p-8 bg-white dark:bg-[#0B0F14] border text-center"
           style={{ borderColor: '#DFE5ED' }}
@@ -276,7 +276,7 @@ export function TramiteWizard(props: Props) {
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-xl font-bold">{headerTitle}</h1>
@@ -307,10 +307,10 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-12 gap-4 items-start">
         {/* Sidebar de pasos server-driven. */}
         <aside
-          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
+          className="col-span-12 md:col-span-3 md:sticky md:top-4 md:self-start rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border"
           style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
@@ -365,7 +365,7 @@ export function TramiteWizard(props: Props) {
 
         {/* Cuerpo del paso activo. */}
         <section
-          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
+          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
           style={{ borderColor: '#DFE5ED' }}
         >
           {!activeStep ? (

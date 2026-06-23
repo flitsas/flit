@@ -13,6 +13,9 @@ const SHOW_PARAMETRIZACION = false;
 
 export function Tramites() {
   const [view, setView] = useState<"operacion" | "parametrizacion">("operacion");
+  // Modo inmersivo: cuando el wizard de Operación está abierto, ocultamos el
+  // chrome vertical (título + tabs) para dar todo el viewport al asistente.
+  const [wizardImmersive, setWizardImmersive] = useState(false);
 
   const tabs = [
     { id: "operacion" as const, label: "Operación", icon: List },
@@ -21,33 +24,43 @@ export function Tramites() {
       : []),
   ];
 
+  const immersive = view === "operacion" && wizardImmersive;
+
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
-      <ModuleTitle title="Gestión Integral de Trámites" subtitle="Embudo de tus trámites vehiculares" />
+    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
+      {!immersive && (
+        <>
+          <ModuleTitle title="Gestión Integral de Trámites" subtitle="Embudo de tus trámites vehiculares" />
 
-      <div className="flex items-center gap-2 shrink-0">
-        {tabs.map((v) => {
-          const Icon = v.icon;
-          const active = view === v.id;
-          return (
-            <button
-              key={v.id}
-              onClick={() => setView(v.id)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition"
-              style={{
-                borderColor: active ? "#557EFF" : "#DFE5ED",
-                background: active ? "rgba(85,126,255,0.10)" : "transparent",
-                color: active ? "#557EFF" : undefined,
-              }}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {v.label}
-            </button>
-          );
-        })}
-      </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {tabs.map((v) => {
+              const Icon = v.icon;
+              const active = view === v.id;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setView(v.id)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition"
+                  style={{
+                    borderColor: active ? "#557EFF" : "#DFE5ED",
+                    background: active ? "rgba(85,126,255,0.10)" : "transparent",
+                    color: active ? "#557EFF" : undefined,
+                  }}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {v.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
-      {view === "parametrizacion" ? <ParametrizacionView /> : <OperacionView />}
+      {view === "parametrizacion" ? (
+        <ParametrizacionView />
+      ) : (
+        <OperacionView onImmersiveChange={setWizardImmersive} />
+      )}
     </div>
   );
 }
