@@ -39,6 +39,8 @@ public sealed partial class CreateInvitationHandler(
             "Invitación a FLIT — Activa tu cuenta",
             BuildHtmlBody(link));
 
+        LogActivationLinkDev(logger, link);
+
         var emailSent = true;
         try
         {
@@ -57,6 +59,10 @@ public sealed partial class CreateInvitationHandler(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending.")]
     private static partial void LogEmailFailed(ILogger logger, Guid invitationId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[DEV] Activation link (use this to test locally): {Link}")]
+    private static partial void LogActivationLinkDev(ILogger logger, string link);
 
     private static string BuildActivateLink(string activateUrlBase, string rawToken)
     {
