@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, X, Building2, Users, Shield } from "lucide-react";
-import { createInvitation } from "@/lib/api/security";
+import { createInvitation, getRoles, assignRole, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 
@@ -19,9 +19,6 @@ const COMPANIES = [
   { name: "Transito Sabaneta", nit: "890.111.222-3", estado: "Suspendida", plan: "Básico", users: 12 },
   { name: "Operador Valle", nit: "890.333.444-5", estado: "En prueba", plan: "Trial", users: 6 },
 ];
-
-const PERMISSIONS = ["Trámites", "Reportes", "Validaciones", "Usuarios", "Admin OT", "Documentos"];
-const ROLES = ["Super Admin", "Admin Tenant", "Gestor", "Auditor"];
 
 const TABS = [
   { id: "equipo", label: "Equipo", icon: Users },
@@ -42,6 +39,16 @@ export function Usuarios() {
   const [tab, setTab] = useState<TabId>("equipo");
   const [list, setList] = useState(USERS);
   const [pendingInvites, setPendingInvites] = useState<{ email: string }[]>([]);
+  const [roles, setRoles] = useState<TenantRole[]>([]);
+
+  useEffect(() => {
+    getRoles().then(setRoles).catch(() => {});
+  }, []);
+
+  function loadUsers() {
+    // Re-fetch or refresh user list; currently uses local state
+    // Future: replace with getUsers() API call
+  }
 
   function handleInviteSuccess(email: string) {
     setPendingInvites((prev) => [...prev, { email }]);
@@ -122,7 +129,14 @@ export function Usuarios() {
                     <p className="font-semibold">{u.n}</p>
                     <p className="text-[10px] opacity-60">{u.e}</p>
                   </div>
-                  <div className="col-span-2 opacity-80">{u.r}</div>
+                  <div className="col-span-2">
+                    <RoleDropdown
+                      userId={u.e}
+                      currentRoleName={u.r}
+                      roles={roles}
+                      onAssigned={loadUsers}
+                    />
+                  </div>
                   <div className="col-span-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: u.a ? "#00DBD5" : "#FF4E00" }}>{u.a ? "Activo" : "Inactivo"}</span></div>
                   <div className="col-span-3 opacity-70">{u.la}</div>
                   <div className="col-span-1 flex justify-end">
@@ -154,44 +168,28 @@ export function Usuarios() {
 
       {tab === "roles" && (
         <div className="flex-1 min-h-0 flex flex-col gap-3">
-          <div className="grid grid-cols-4 gap-3 shrink-0">
-            {[
-              ["Super Admin", "12/12", "#00DBD5"],
-              ["Admin Tenant", "9/12", "#557EFF"],
-              ["Gestor", "6/12", "#F9AC00"],
-              ["Auditor", "4/12", "#162744"],
-            ].map(([role, scope, color]) => (
-              <div key={role as string} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-                <p className="text-xs font-semibold">{role as string}</p>
-                <p className="text-[10px] font-semibold mt-1" style={{ color: color as string }}>{scope as string} permisos</p>
-                <div className="h-2 rounded-full mt-2 overflow-hidden" style={{ background: "#DFE5ED" }}>
-                  <div className="h-full" style={{ width: scope === "12/12" ? "100%" : scope === "9/12" ? "75%" : scope === "6/12" ? "50%" : "34%", background: color as string }} />
-                </div>
+          {roles.length === 0 ? (
+            <div className="text-sm text-center py-12 opacity-60">No hay roles configurados para este tenant.</div>
+          ) : (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl" style={{ background: "#DFE5ED", color: "#162744" }}>
+                <div className="col-span-2">Código</div>
+                <div className="col-span-4">Nombre</div>
+                <div className="col-span-4">Descripción</div>
+                <div className="col-span-2 text-center">Permisos</div>
               </div>
-            ))}
-          </div>
-          <div className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-            <div className="grid px-4 py-2.5 text-[10px] font-semibold uppercase shrink-0" style={{ gridTemplateColumns: `180px repeat(${ROLES.length}, 1fr)`, background: "#DFE5ED", color: "#162744" }}>
-              <div>Módulo</div>
-              {ROLES.map((r) => <div key={r} className="text-center">{r}</div>)}
+              <div className="flex-1 overflow-y-auto space-y-2 pt-2">
+                {roles.map((r) => (
+                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
+                    <div className="col-span-2 font-mono opacity-80">{r.code}</div>
+                    <div className="col-span-4 font-semibold">{r.name}</div>
+                    <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
+                    <div className="col-span-2 text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {PERMISSIONS.map((perm) => (
-                <div key={perm} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: `180px repeat(${ROLES.length}, 1fr)`, borderColor: "#DFE5ED" }}>
-                  <div className="font-medium">{perm}</div>
-                  {ROLES.map((role, i) => (
-                    <div key={role} className="flex justify-center">
-                      <input type="checkbox" defaultChecked={i === 0 || (i === 1 && perm !== "Admin OT")} className="h-4 w-4 accent-[#557EFF]" />
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-3 border-t flex justify-end gap-2 shrink-0" style={{ borderColor: "#DFE5ED" }}>
-              <button className="px-4 py-2 rounded-xl text-xs font-medium border" style={{ borderColor: "#DFE5ED" }}>Descartar</button>
-              <button className="px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: "#557EFF" }}>Guardar permisos</button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -249,13 +247,63 @@ export function Usuarios() {
   );
 }
 
+function RoleDropdown({
+  userId, currentRoleName, roles, onAssigned,
+}: {
+  userId: string;
+  currentRoleName: string | null;
+  roles: TenantRole[];
+  onAssigned: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const roleId = e.target.value;
+    if (!roleId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await assignRole(userId, roleId);
+      onAssigned();
+    } catch {
+      setErr("Error al asignar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <select
+        aria-label="Asignar rol"
+        value=""
+        onChange={handleChange}
+        disabled={busy || roles.length === 0}
+        className="text-[11px] rounded-lg border px-2 py-1 bg-transparent outline-none"
+        style={{ borderColor: "#DFE5ED", minWidth: 100 }}
+      >
+        <option value="" disabled>{busy ? "Asignando…" : (currentRoleName ?? "Sin rol ▾")}</option>
+        {roles.map((r) => (
+          <option key={r.id} value={r.id}>{r.name}</option>
+        ))}
+      </select>
+      {err && <span className="text-[10px]" style={{ color: "#FF4E00" }}>{err}</span>}
+    </div>
+  );
+}
+
 function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (email: string) => void }) {
   const [email, setEmail] = useState("");
-  const [roleId, setRoleId] = useState("");
-  const [selectedRole, setSelectedRole] = useState(0);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [modalRoles, setModalRoles] = useState<TenantRole[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
   const [invitedEmail, setInvitedEmail] = useState("");
+
+  useEffect(() => {
+    getRoles().then(setModalRoles).catch(() => {});
+  }, []);
 
   const isDone = status === "done" || status === "done_no_email";
 
@@ -264,7 +312,7 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     setError(null);
     setStatus("loading");
     try {
-      const result = await createInvitation(email.trim(), roleId.trim());
+      const result = await createInvitation(email.trim(), selectedRoleId || undefined);
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
       onSuccess(result.email);
@@ -328,30 +376,19 @@ function InviteModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
               style={{ borderColor: "#DFE5ED" }}
             />
             <div>
-              <p className="text-xs font-semibold mb-2">Rol del usuario</p>
-              <div className="grid grid-cols-2 gap-2">
-                {["Administrador", "Gestor", "Operador", "Visualizador"].map((r, i) => (
-                  <label
-                    key={r}
-                    className="flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition"
-                    style={{ borderColor: selectedRole === i ? "#557EFF" : "#DFE5ED" }}
-                  >
-                    <input type="radio" name="rol" checked={selectedRole === i} onChange={() => setSelectedRole(i)} /> {r}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-[10px] opacity-60 mb-1">ID de rol (UUID del tenant)</p>
-              <input
-                type="text"
-                required
-                value={roleId}
-                onChange={(e) => setRoleId(e.target.value)}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                className="w-full text-xs px-3 py-2.5 rounded-xl border bg-transparent outline-none font-mono focus:border-[#557EFF]"
+              <label htmlFor="invite-role" className="text-xs font-semibold mb-2 block">
+                Rol del usuario <span className="opacity-60">(opcional)</span>
+              </label>
+              <select
+                id="invite-role"
+                value={selectedRoleId}
+                onChange={(e) => setSelectedRoleId(e.target.value)}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
                 style={{ borderColor: "#DFE5ED" }}
-              />
+              >
+                <option value="">Sin rol</option>
+                {modalRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
             </div>
             {error && (
               <p className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
