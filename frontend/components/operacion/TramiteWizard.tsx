@@ -256,7 +256,7 @@ export function TramiteWizard(props: Props) {
   useEffect(() => {
     const key = activeStep?.key;
     if (!instanceId || !key) return;
-    if (key === 'consulta' || key === 'consulta_vin' || key === 'validacion') {
+    if (key === 'consulta' || key === 'consulta_vin') {
       tramitesClient
         .getPreflight(instanceId)
         .then((snap) => snap && setPreflight(snap))
@@ -736,15 +736,20 @@ function ConsultaStep({
   preflight,
   preflightLoading,
   onRunPreflight,
+  onRefresh,
 }: {
   step: WizardStep;
   instanceId: string | null;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
+  onRefresh: () => void;
 }) {
   const isVin = step.key === 'consulta_vin';
   const readOnly = useWizardReadOnly();
+  // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
+  // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
+  const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -842,6 +847,30 @@ function ConsultaStep({
 
   const loading = preflightLoading || persisting;
   const hasResult = !!preflight?.overall;
+
+  // Paz y salvo de impuesto: solo traspaso (placa-first) y solo si el preflight dejó el
+  // check de impuesto sin verificar (unknown/warn). Estado leído de field_values.
+  const impuestoCheck = preflight?.checks?.find((c) =>
+    c.key.toLowerCase().includes('impuesto'),
+  );
+  const mostrarPazSalvo =
+    !isVin && !!impuestoCheck && (impuestoCheck.status === 'unknown' || impuestoCheck.status === 'warn');
+  const pazSalvoConfirmado =
+    fieldValues.find((f) => f.fieldKey === 'paz_salvo_impuesto')?.valueText === 'true';
+
+  const handlePazSalvo = async (checked: boolean) => {
+    if (!instanceId) return;
+    setPazSalvoSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'paz_salvo_impuesto', valueText: checked ? 'true' : 'false', valueJson: null },
+      ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setPazSalvoSaving(false);
+    }
+  };
 
   // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
   // (unificación de estilos pedida). Disparo único de la consulta.
@@ -963,6 +992,28 @@ function ConsultaStep({
 
       <VehicleDataCard fieldValues={fieldValues} />
 
+      {mostrarPazSalvo && (
+        <label
+          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"
+          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
+        >
+          <input
+            type="checkbox"
+            checked={pazSalvoConfirmado}
+            onChange={(e) => void handlePazSalvo(e.target.checked)}
+            disabled={readOnly || pazSalvoSaving}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+          />
+          <span className="text-xs">
+            <span className="font-semibold">Confirmo paz y salvo de impuesto vehicular</span>
+            <span className="mt-0.5 block opacity-60">
+              No pudimos verificar el impuesto vehicular en línea. Confirma que el vehículo
+              está al día para poder continuar.
+            </span>
+          </span>
+        </label>
+      )}
+
       <PreflightPanel
         snapshot={preflight}
         loading={loading}
@@ -1011,28 +1062,14 @@ function StepBody({
           preflight={preflight}
           preflightLoading={preflightLoading}
           onRunPreflight={onRunPreflight}
+          onRefresh={onRefresh}
         />
       );
 
-    // Validación legal (traspaso): muestra el semáforo del preflight.
-    case 'validacion':
-      return (
-        <div className="space-y-4">
-          <p className="text-xs opacity-70">
-            Resultado legal de la consulta (RUNT · SIMIT · RNMC).
-          </p>
-          <PreflightPanel
-            snapshot={preflight}
-            loading={preflightLoading}
-            onRun={onRunPreflight}
-            riesgoAceptado={false}
-            onToggleRiesgo={() => {}}
-          />
-        </div>
-      );
-
+    // Paso 2 de ambas modalidades = Documentos (traspaso ya no usa 'validacion':
+    // el semáforo del preflight vive en el paso 1). hideHeader: el h2 + subtítulo
+    // ya pintan el título del paso.
     case 'documentos':
-      // hideHeader: el título/descripción del paso ya los pinta el h2 + subtítulo.
       return (
         <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
       );
@@ -1065,6 +1102,7 @@ function StepBody({
           roles={['vendedor']}
           onSaved={onRefresh}
           embeddedInWizard
+          layout="split"
         />
       );
 

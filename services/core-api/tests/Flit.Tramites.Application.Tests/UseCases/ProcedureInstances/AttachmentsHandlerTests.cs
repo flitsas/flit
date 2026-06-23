@@ -288,6 +288,58 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
+    public async Task Delete_UnmarksChecklistItem_WhenNoOtherAttachmentOfTipo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        // traspaso: el ítem "rtm" (docTipo "rtm") quedó auto-marcado por una subida previa.
+        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.ChecklistEstado = "{\"rtm\":true}";
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = attachmentId, ProcedureInstanceId = id, Tipo = "rtm",
+            StoragePath = "p/rtm.pdf", UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var error = await _delete.HandleAsync(id, tenant, attachmentId, ct);
+
+        error.Should().BeNull();
+        // Sin otro adjunto "rtm", el ítem deja de estar satisfecho.
+        instance.ChecklistEstado.Should().NotContain("rtm");
+    }
+
+    [Fact]
+    public async Task Delete_KeepsChecklistMark_WhenAnotherAttachmentOfTipoRemains()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.ChecklistEstado = "{\"rtm\":true}";
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = attachmentId, ProcedureInstanceId = id, Tipo = "rtm",
+            StoragePath = "p/rtm-1.pdf", UploadedAt = DateTimeOffset.UtcNow,
+        });
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(), ProcedureInstanceId = id, Tipo = "rtm",
+            StoragePath = "p/rtm-2.pdf", UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var error = await _delete.HandleAsync(id, tenant, attachmentId, ct);
+
+        error.Should().BeNull();
+        // Queda otro adjunto "rtm" → el ítem sigue satisfecho.
+        instance.ChecklistEstado.Should().Contain("\"rtm\":true");
+    }
+
+    [Fact]
     public async Task Delete_AttachmentNotFound_Returns404()
     {
         var ct = TestContext.Current.CancellationToken;

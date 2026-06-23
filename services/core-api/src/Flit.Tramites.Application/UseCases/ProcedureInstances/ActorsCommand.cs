@@ -97,9 +97,6 @@ public sealed class PutActorsHandler(
         var allowedRoles = journey is null
             ? new HashSet<ParteRol>()
             : journey.Partes.Select(p => p.Rol).ToHashSet();
-        var requiredRoles = journey is null
-            ? new HashSet<ParteRol>()
-            : journey.Partes.Where(p => p.Obligatorio).Select(p => p.Rol).ToHashSet();
 
         var providedRoles = new List<ParteRol>();
         foreach (var a in inputs)
@@ -112,12 +109,15 @@ public sealed class PutActorsHandler(
             providedRoles.Add(rol);
         }
 
-        // 3. Partes obligatorias presentes (set completo, reemplazo total).
-        if (!requiredRoles.IsSubsetOf(providedRoles))
-            return (null, "missing_required_rol");
+        // 3. PUT incremental (upsert por rol): el wizard guarda un rol por paso
+        // (vendedor en el paso 3, comprador en el paso 4). NO se exige aquí la
+        // completitud de roles obligatorios — eso lo validan los gates de pasos 3–4
+        // y el SubmitGate al finalizar. Por eso ya no hay check de "missing_required_rol".
 
-        // 4. Unicidad vendedor ≠ comprador (documento y email) vía dominio.
-        var error = ValidateTraspasoPartes(inputs);
+        // 4. Unicidad vendedor ≠ comprador (documento y email) sobre el conjunto
+        // EFECTIVO: roles del request + actores existentes que se conservan. Así se
+        // detecta el duplicado aunque cada parte se guarde en un PUT distinto.
+        var error = ValidateTraspasoPartes(instance, inputs);
         if (error is not null)
             return (null, error);
 
@@ -131,17 +131,22 @@ public sealed class PutActorsHandler(
             entityIds[rol] = entity.Id;
         }
 
-        // 6. Reemplazo total del set.
-        // Instancia trackeada (GetByIdWithDetailsAsync sin AsNoTracking): el change tracker ve los
-        // actores quitados como Deleted y los nuevos como Added. NO se llama Update() (marcaría los
-        // hijos nuevos como Modified → UPDATE de 0 filas en vez de INSERT).
+        // 6. Upsert por rol (NO reemplazo total): se eliminan SOLO los actores cuyos roles
+        // vienen en el request y se insertan los nuevos; los roles ausentes del request se
+        // conservan. Así el wizard puede guardar vendedor y comprador en pasos separados sin
+        // que el segundo PUT borre al primero.
         //
-        // UNIQUE(procedure_instance_id, procedure_entity_id): un re-PUT puede reusar la misma
-        // procedure_entity_id (p.ej. comprador→BUYER) que un actor recién borrado. EF Core NO
-        // garantiza orden DELETE-antes-de-INSERT para la MISMA tabla dentro de un SaveChanges, así
-        // que un solo SaveChanges arriesga violar el UNIQUE. Por eso se hace un SaveChanges
-        // intermedio: primero persiste los DELETE del Clear(), luego los INSERT de los nuevos.
-        instance.Actors.Clear();
+        // Instancia trackeada: el change tracker ve los actores quitados como Deleted y los
+        // nuevos como Added. UNIQUE(procedure_instance_id, procedure_entity_id): un re-PUT del
+        // mismo rol reusa su procedure_entity_id. EF Core NO garantiza orden DELETE-antes-de-INSERT
+        // para la misma tabla en un SaveChanges, así que se persisten primero los DELETE y luego
+        // los INSERT (dos SaveChanges).
+        var providedRolesSet = providedRoles.ToHashSet();
+        var toRemove = instance.Actors
+            .Where(a => ParseRol(a.ActorType) is { } r && providedRolesSet.Contains(r))
+            .ToList();
+        foreach (var actor in toRemove)
+            instance.Actors.Remove(actor);
         await repo.SaveChangesAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
@@ -174,17 +179,35 @@ public sealed class PutActorsHandler(
         return (ToResponse(instance), null);
     }
 
-    private static string? ValidateTraspasoPartes(IReadOnlyList<ActorInput> inputs)
+    private static string? ValidateTraspasoPartes(ProcedureInstance instance, IReadOnlyList<ActorInput> inputs)
     {
-        var vendedorInput = inputs.FirstOrDefault(a => ParseRol(a.Rol) == ParteRol.Vendedor);
-        var compradorInput = inputs.FirstOrDefault(a => ParseRol(a.Rol) == ParteRol.Comprador);
-        if (vendedorInput is null || compradorInput is null)
+        var vendedor = EffectiveParte(instance, inputs, ParteRol.Vendedor);
+        var comprador = EffectiveParte(instance, inputs, ParteRol.Comprador);
+        if (vendedor is null || comprador is null)
             return null;
 
-        var vendedor = new ParteDatos(vendedorInput.NombreCompleto, vendedorInput.NumeroDocumento, vendedorInput.Email);
-        var comprador = new ParteDatos(compradorInput.NombreCompleto, compradorInput.NumeroDocumento, compradorInput.Email);
         var dup = TraspasoPartes.DetectarDuplicadas(vendedor, comprador);
         return TraspasoPartes.MensajeDuplicadas(dup) is null ? null : "partes_duplicadas";
+    }
+
+    /// <summary>
+    /// Datos efectivos de un rol tras el upsert: el del request si viene en él; si no, el del
+    /// actor ya persistido que se conservará. Permite validar vendedor≠comprador aunque cada
+    /// parte se guarde en un PUT distinto.
+    /// </summary>
+    private static ParteDatos? EffectiveParte(
+        ProcedureInstance instance,
+        IReadOnlyList<ActorInput> inputs,
+        ParteRol rol)
+    {
+        var input = inputs.FirstOrDefault(a => ParseRol(a.Rol) == rol);
+        if (input is not null)
+            return new ParteDatos(input.NombreCompleto, input.NumeroDocumento, input.Email);
+
+        var existing = instance.Actors.FirstOrDefault(a => ParseRol(a.ActorType) == rol);
+        return existing is null
+            ? null
+            : new ParteDatos(existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty);
     }
 
     private static TipologiaJourney? ResolveJourney(ProcedureInstance instance)

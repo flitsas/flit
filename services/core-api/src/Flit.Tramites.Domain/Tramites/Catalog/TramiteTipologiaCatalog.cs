@@ -64,17 +64,20 @@ public static class TramiteTipologiaCatalog
                     "rtm",
                     "Revisión técnico-mecánica vigente",
                     Obligatorio: true,
+                    DocTipo: "rtm",
                     Ayuda: "Aplica según antigüedad del vehículo (Ley 769 Art. 52)."),
                 new ChecklistItem(
                     "paz_salvo",
                     "Paz y salvo de impuestos y comparendos",
                     Obligatorio: true,
+                    DocTipo: "paz_salvo",
                     Ayuda: "Impuesto vehicular al día + SIMIT sin comparendos en mora."),
-                new ChecklistItem("cedulas", "Cédulas de comprador y vendedor", Obligatorio: true),
+                new ChecklistItem("cedulas", "Cédulas de comprador y vendedor", Obligatorio: true, DocTipo: "cedulas"),
                 new ChecklistItem(
                     "cert_tradicion",
                     "Certificado de tradición y libertad",
                     Obligatorio: false,
+                    DocTipo: "cert_tradicion",
                     Ayuda: "Recomendado para verificar prendas/embargos antes de radicar."),
             ]),
     ];

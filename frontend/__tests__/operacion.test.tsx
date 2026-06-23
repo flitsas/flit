@@ -53,7 +53,7 @@ const TRASPASO_WIZARD: WizardState = {
   blockers: ['documentos_incompletos'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-    { index: 1, key: 'validacion', label: 'Validación', status: 'incomplete', reasons: ['validacion_pendiente'] },
+    { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
     { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
