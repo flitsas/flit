@@ -27,6 +27,8 @@ function HomeContent() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    // Token solo disponible en cliente; se lee tras el montaje.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAuthed(Boolean(getToken()));
     setHydrated(true);
   }, []);
@@ -34,7 +36,10 @@ function HomeContent() {
   // Sync active module with URL so the browser back/forward and deep-links work.
   useEffect(() => {
     const fromUrl = parseModule(params.get("m"));
-    if (fromUrl !== module) setModule(fromUrl);
+    if (fromUrl !== module) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModule(fromUrl);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
