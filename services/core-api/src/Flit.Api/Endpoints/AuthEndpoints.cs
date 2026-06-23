@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
@@ -158,6 +159,34 @@ public static class AuthEndpoints
             }
         }).RequireAuthorization();
 
+        // HU #10177 AC1/AC2 — activación cuenta onboarding con token de invitación.
+        group.MapPost("/activate", async (
+            [FromBody] ActivateAccountRequest request,
+            ActivateAccountHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await handler.HandleAsync(
+                    new ActivateAccountCommand(request.Token, request.Password),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Cuenta activada. Ya puedes iniciar sesión."));
+            }
+            catch (InvalidInvitationTokenException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_INVALID", "El enlace de invitación es inválido o ya fue utilizado."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         group.MapGet("/me", (ClaimsPrincipal user) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -183,6 +212,8 @@ public static class AuthEndpoints
 
         return app;
     }
+
+    private sealed record ActivateAccountRequest(string Token, string Password);
 
     private sealed record LoginRequest(string Email, string Password);
 

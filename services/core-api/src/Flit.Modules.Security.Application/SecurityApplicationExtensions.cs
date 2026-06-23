@@ -1,5 +1,7 @@
+using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
+using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
@@ -16,6 +18,8 @@ public static class SecurityApplicationExtensions
         services.AddScoped<ResetPasswordHandler>();
         services.AddScoped<AdminResetPasswordHandler>();
         services.AddScoped<ChangePasswordHandler>();
+        services.AddScoped<CreateInvitationHandler>();
+        services.AddScoped<ActivateAccountHandler>();
         return services;
     }
 }

@@ -74,3 +74,30 @@ public sealed class InvalidCurrentPasswordException : Exception
     {
     }
 }
+
+/// <summary>Ya existe una invitación pending para ese email en el tenant (HU #10175 AC2).</summary>
+public sealed class InvitationAlreadyPendingException : Exception
+{
+    public InvitationAlreadyPendingException()
+        : base("There is already a pending invitation for this email in the tenant.")
+    {
+    }
+}
+
+/// <summary>El rol especificado no existe o no pertenece al tenant (HU #10175).</summary>
+public sealed class RoleNotFoundException : Exception
+{
+    public RoleNotFoundException()
+        : base("The specified role was not found in the tenant.")
+    {
+    }
+}
+
+/// <summary>Token de invitación inexistente o invitación no pending (HU #10177 AC2).</summary>
+public sealed class InvalidInvitationTokenException : Exception
+{
+    public InvalidInvitationTokenException()
+        : base("The invitation token is invalid or has already been used.")
+    {
+    }
+}
