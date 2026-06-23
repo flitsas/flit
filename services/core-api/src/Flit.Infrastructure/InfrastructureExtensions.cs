@@ -9,6 +9,7 @@ using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
+using Flit.Modules.Security.Domain.Permissions;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
@@ -72,6 +73,9 @@ public static class InfrastructureExtensions
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
         services.AddScoped<ISecurityModuleRepository, SecurityModuleRepository>();
+
+        // HU #10162 — CRUD permisos granulares Super Admin
+        services.AddScoped<IPermissionRepository, PermissionRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();
