@@ -43,3 +43,56 @@ export interface OtClientProceduresParams {
   page?: number;
   pageSize?: number;
 }
+
+export interface OtWebhook {
+  id: string;
+  eventType: string;
+  targetUrl: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface CreateOtWebhookRequest {
+  eventType: string;
+  targetUrl: string;
+  secret: string;
+}
+
+export interface UpdateOtWebhookRequest {
+  targetUrl?: string;
+  isActive?: boolean;
+}
+
+export interface OtWebhooksListResult {
+  data: OtWebhook[];
+}
+
+export interface OtApiCallLog {
+  endpoint: string;
+  httpMethod: string;
+  responseCode?: number | null;
+  durationMs?: number | null;
+  calledAt: string;
+  correlationId?: string | null;
+  payloadHash: string;
+}
+
+export interface OtApiLogsPagedResult {
+  data: OtApiCallLog[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface OtApiLogsParams {
+  direction?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface RejectOtClientProcedureRequest {
+  reason: string;
+}

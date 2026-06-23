@@ -27,4 +27,8 @@ public interface IOtWebhookSubscriptionRepository
         Guid tenantId,
         string eventType,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OtWebhookSubscription>> ListAllAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
 }

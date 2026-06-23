@@ -10,6 +10,7 @@ using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtWebhooks;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
+using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -62,6 +63,13 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapGet("/webhooks", ListWebhooksAsync)
+            .WithName("AdminOtListWebhooks")
+            .WithSummary("Lista suscripciones webhook OT del tenant")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPatch("/webhooks/{id:guid}", UpdateWebhookAsync)
             .WithName("AdminOtUpdateWebhook")
@@ -204,6 +212,25 @@ public static class AdminOtEndpoints
     {
         var sub = user.FindFirstValue("sub");
         return Guid.TryParse(sub, out var userId) ? userId : null;
+    }
+
+    private static async Task<IResult> ListWebhooksAsync(
+        HttpContext httpContext,
+        ListOtWebhooksHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(
+            new ListOtWebhooksQuery { TenantId = tenantId },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = result.Data });
     }
 
     private static async Task<IResult> CreateWebhookAsync(

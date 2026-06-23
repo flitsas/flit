@@ -121,6 +121,24 @@ internal sealed class OtWebhookSubscriptionRepository : IOtWebhookSubscriptionRe
             },
             cancellationToken);
 
+    public Task<IReadOnlyList<OtWebhookSubscription>> ListAllAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantScopeAsync(
+            tenantId,
+            async () =>
+            {
+                var entities = await _context.OtWebhookSubscriptions
+                    .AsNoTracking()
+                    .Where(s => s.TenantId == tenantId)
+                    .OrderByDescending(s => s.CreatedAt)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                return (IReadOnlyList<OtWebhookSubscription>)entities.Select(Map).ToList();
+            },
+            cancellationToken);
+
     private static OtWebhookSubscription Map(OtWebhookSubscriptionEntity entity) => new()
     {
         Id = entity.Id,

@@ -36,6 +36,7 @@ using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
+using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
@@ -123,6 +124,7 @@ public static class DependencyInjection
         services.AddScoped<CreateOtWebhookHandler>();
         services.AddScoped<UpdateOtWebhookHandler>();
         services.AddScoped<ListOtApiLogsHandler>();
+        services.AddScoped<ListOtWebhooksHandler>();
 
         // HU #10217 — trámites de clientes OT (tenant admin).
         services.AddScoped<ListOtClientProceduresHandler>();

@@ -4,6 +4,7 @@ using System.Text;
 using Flit.Admin.Application.OtWebhooks;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
+using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Infrastructure.OtWebhooks;
@@ -167,6 +168,34 @@ public sealed class OtWebhookHandlerTests
 
         result.Data.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ListWebhooks_ReturnsAllTenantSubscriptions()
+    {
+        var db = NewDbName();
+        var subscriptionId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.OtWebhookSubscriptions.Add(new OtWebhookSubscriptionEntity
+            {
+                Id = subscriptionId,
+                TenantId = TenantA,
+                EventType = OtWebhookEventTypes.ProcedureStateChanged,
+                TargetUrl = "https://hooks.example.com/proc",
+                SecretHash = OtWebhookSecretHasher.HashSecret("s"),
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new ListOtWebhooksHandler(new OtWebhookSubscriptionRepository(ctx));
+        var result = await handler.HandleAsync(new ListOtWebhooksQuery { TenantId = TenantA });
+
+        result.Data.Should().ContainSingle(w => w.Id == subscriptionId);
     }
 
     [Fact]
