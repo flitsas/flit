@@ -21,9 +21,18 @@ export function frontierIndex(steps: WizardStep[]): number {
  * ¿Se puede navegar al paso `index`? Solo si está completo o es exactamente la
  * frontera (el primer paso incompleto). Cualquier paso más allá de la frontera
  * queda fuera de alcance.
+ *
+ * En modo solo lectura (`viewOnly`, Track C) no hay frontera que respetar: el
+ * usuario solo recorre lo ya resuelto, así que únicamente son navegables los
+ * pasos `complete` (en un trámite enviado, típicamente todos).
  */
-export function canNavigateToStep(steps: WizardStep[], index: number): boolean {
+export function canNavigateToStep(
+  steps: WizardStep[],
+  index: number,
+  viewOnly = false,
+): boolean {
   const step = steps[index];
   if (!step) return false;
+  if (viewOnly) return step.status === 'complete';
   return step.status === 'complete' || index === frontierIndex(steps);
 }

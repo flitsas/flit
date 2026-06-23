@@ -79,6 +79,23 @@ const TRASPASO_WIZARD: WizardState = {
   ],
 };
 
+// Wizard con TODOS los pasos completos: el caso típico de un trámite ya enviado
+// a tránsito (submitted), navegable de extremo a extremo en solo lectura.
+const SUBMITTED_WIZARD: WizardState = {
+  modalidad: 'matricula_inicial',
+  tipologiaCodigo: 'matricula_inicial',
+  totalSteps: 5,
+  canSubmit: true,
+  blockers: [],
+  steps: [
+    { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
+    { index: 3, key: 'identidad', label: 'Identidad', status: 'complete', reasons: [] },
+    { index: 4, key: 'fur', label: 'FUR', status: 'complete', reasons: [] },
+  ],
+};
+
 const GREEN_PREFLIGHT: PreflightSnapshot = {
   overall: 'green',
   checks: [
@@ -192,6 +209,49 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
     expect(
       await screen.findByRole('heading', { level: 2, name: 'Consulta VIN' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — solo lectura (Track C)', () => {
+  beforeEach(() => {
+    mocks.getWizardState.mockResolvedValue(SUBMITTED_WIZARD);
+    // El estado submitted activa el modo solo lectura.
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-sub',
+      status: 'submitted',
+      fieldValues: [],
+    });
+  });
+
+  it('muestra el banner de solo lectura y oculta Continuar/Finalizar', async () => {
+    render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
+
+    expect(await screen.findByText(/solo visualización/i)).toBeInTheDocument();
+    // El botón de salida pasa a "Volver al listado".
+    expect(
+      screen.getByRole('button', { name: /Volver al listado/ }),
+    ).toBeInTheDocument();
+    // Sin acciones de edición en el footer.
+    expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Continuar/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Guardar y continuar/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('los inputs del paso de consulta están deshabilitados y sin Consultar RUNT', async () => {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
+
+    // Consulta VIN es un paso completo → navegable en solo lectura.
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await user.click(consultaTab);
+
+    const vin = await screen.findByLabelText('Número VIN');
+    expect(vin).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Consultar RUNT' }),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -4,6 +4,7 @@
 // viven en el wizard/hook. La consulta real (RUNT/SIMIT) se cablea en #10201;
 // por ahora el hook alimenta un snapshot stub.
 
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   PreflightCheckStatus,
   PreflightSnapshot,
@@ -59,6 +60,9 @@ export function PreflightPanel({
   onToggleRiesgo,
   showRunButton = true,
 }: Props) {
+  // En solo lectura nunca se ofrece el disparo de la consulta (Track C).
+  const readOnly = useWizardReadOnly();
+  const canRun = showRunButton && !readOnly;
   const hasResult = !!snapshot?.overall;
   const overall = snapshot?.overall;
   const checks = snapshot?.checks ?? [];
@@ -87,7 +91,7 @@ export function PreflightPanel({
               {ov.label}
             </span>
           )}
-          {showRunButton && (
+          {canRun && (
             <button
               type="button"
               onClick={onRun}
@@ -164,7 +168,8 @@ export function PreflightPanel({
             type="checkbox"
             checked={riesgoAceptado}
             onChange={(e) => onToggleRiesgo(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00]"
+            disabled={readOnly}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00] disabled:opacity-60"
           />
           <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
             Asumo el riesgo de rechazo en el organismo de tránsito y deseo

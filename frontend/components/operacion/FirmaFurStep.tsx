@@ -15,6 +15,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import {
   filterOrganismos,
   findOrganismoByName,
@@ -127,6 +128,9 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
 export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
+  // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
+  // se conserva la visualización (resumen, expediente, timeline, descargas).
+  const readOnly = useWizardReadOnly();
   // Detalle de la instancia (field_values + actors + estado) para organismo,
   // resumen, expediente y línea de tiempo.
   const [detail, setDetail] = useState<{
@@ -210,10 +214,11 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   useEffect(() => {
     if (!detail || autoOpened) return;
     // Auto-abrir una sola vez al cargar el detalle; el guard `autoOpened` evita el bucle.
+    // En solo lectura nunca se abre el selector de organismo.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!organismoSelected) setOrganismoModalOpen(true);
+    if (!organismoSelected && !readOnly) setOrganismoModalOpen(true);
     setAutoOpened(true);
-  }, [detail, organismoSelected, autoOpened]);
+  }, [detail, organismoSelected, autoOpened, readOnly]);
 
   const handleOrganismoConfirmed = async () => {
     setOrganismoModalOpen(false);
@@ -299,6 +304,7 @@ function OrganismoSection({
   organismoSelected: boolean;
   onOpenModal: () => void;
 }) {
+  const readOnly = useWizardReadOnly();
   return (
     <section className="space-y-3" aria-label="Organismo de tránsito">
       <div className="flex items-start justify-between gap-3">
@@ -309,15 +315,17 @@ function OrganismoSection({
             generar el FUR y enviar a tránsito.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onOpenModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-        >
-          <Building2 className="h-3 w-3" />
-          {organismoSelected ? 'Cambiar' : 'Seleccionar'}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onOpenModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          >
+            <Building2 className="h-3 w-3" />
+            {organismoSelected ? 'Cambiar' : 'Seleccionar'}
+          </button>
+        )}
       </div>
 
       {organismoSelected ? (
@@ -495,6 +503,7 @@ function FirmaSection({
   const [signatures, setSignatures] = useState<Signature[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -535,17 +544,19 @@ function FirmaSection({
             enlace de firma; en DEV puedes simular la firma para avanzar.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading || !instanceId}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Actualizar estado de firmas"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading || !instanceId}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            aria-label="Actualizar estado de firmas"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        )}
       </div>
 
       {error && (
@@ -592,6 +603,7 @@ function FirmaParteCard({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const handleSolicitar = async () => {
     if (!instanceId) return;
@@ -650,7 +662,7 @@ function FirmaParteCard({
               <Check className="h-3.5 w-3.5" /> Compraventa firmada
             </p>
           )}
-          {signature.estado === 'enviada' && (
+          {signature.estado === 'enviada' && !readOnly && (
             <button
               type="button"
               onClick={() => void handleSimular()}
@@ -662,6 +674,8 @@ function FirmaParteCard({
             </button>
           )}
         </div>
+      ) : readOnly ? (
+        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       ) : (
         <button
           type="button"
@@ -686,6 +700,7 @@ function FirmaParteCard({
 // ── Participantes (portal) ────────────────────────────────────────────
 
 function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
+  const readOnly = useWizardReadOnly();
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastLink, setLastLink] = useState<string | null>(null);
@@ -778,6 +793,7 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
         </div>
       )}
 
+      {!readOnly && (
       <form
         onSubmit={handleInvite}
         className="rounded-xl border p-4 space-y-3"
@@ -861,6 +877,7 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
           </button>
         </div>
       </form>
+      )}
 
       {lastLink && (
         <div className="space-y-2">
@@ -902,6 +919,7 @@ function ParticipantRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const handleReinvite = async () => {
     if (!instanceId) return;
@@ -958,7 +976,7 @@ function ParticipantRow({
             )}
           </div>
         </div>
-        {!p.completado && (
+        {!p.completado && !readOnly && (
           <button
             type="button"
             onClick={() => void handleReinvite()}
@@ -1019,6 +1037,7 @@ function FurSection({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1085,19 +1104,21 @@ function FurSection({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => void handleGenerate()}
-        disabled={generating || !instanceId}
-        className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-      >
-        {generating
-          ? 'Generando…'
-          : generated
-            ? 'Re-generar FUR / certificado'
-            : 'Generar FUR / certificado'}
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => void handleGenerate()}
+          disabled={generating || !instanceId}
+          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        >
+          {generating
+            ? 'Generando…'
+            : generated
+              ? 'Re-generar FUR / certificado'
+              : 'Generar FUR / certificado'}
+        </button>
+      )}
 
       {generated && (
         <ul className="space-y-2" aria-label="Documentos generados">

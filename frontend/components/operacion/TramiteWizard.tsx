@@ -9,6 +9,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Fuel,
   Gauge,
   Hash,
@@ -31,11 +32,13 @@ import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
+import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
   FieldValue,
   FieldValueInput,
+  InstanceStatus,
   PreflightSnapshot,
   ProcedureConfiguration,
   WizardModalidad,
@@ -122,6 +125,27 @@ export function TramiteWizard(props: Props) {
   // En las vías de auto-create el id lo produce `start()` → state.instanceId.
   const instanceId = existingInstanceId ?? state.instanceId;
 
+  // Modo solo lectura (Track C): un trámite que ya salió de `draft` (enviado a
+  // tránsito, en revisión, etc.) es solo visualización. Se deriva del estado de
+  // la instancia existente; los trámites nuevos siempre arrancan editables.
+  const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
+  useEffect(() => {
+    if (!existingInstanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(existingInstanceId)
+      .then((d) => {
+        if (active) setInstanceStatus(d.status ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [existingInstanceId]);
+  // Solo lectura cuando conocemos un estado y NO es draft. Si el estado aún no
+  // se resolvió (o el backend no lo devuelve), se asume editable.
+  const readOnly = !!instanceStatus && instanceStatus !== 'draft';
+
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
 
@@ -184,7 +208,7 @@ export function TramiteWizard(props: Props) {
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
-    if (!canNavigateToStep(steps, index)) return;
+    if (!canNavigateToStep(steps, index, readOnly)) return;
     setActiveIndex(index);
   };
 
@@ -205,13 +229,15 @@ export function TramiteWizard(props: Props) {
 
   // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
   // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
+  // En solo lectura no hay edición que regrese gates, así que no reposiciona.
   useEffect(() => {
+    if (readOnly) return;
     if (steps.length === 0) return;
     if (!canNavigateToStep(steps, activeIndex)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveIndex(frontierIndex(steps));
     }
-  }, [steps, activeIndex]);
+  }, [steps, activeIndex, readOnly]);
 
   const runPreflight = async () => {
     if (!instanceId) return;
@@ -324,6 +350,7 @@ export function TramiteWizard(props: Props) {
   };
 
   return (
+   <WizardReadOnlyProvider readOnly={readOnly}>
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -338,11 +365,28 @@ export function TramiteWizard(props: Props) {
         <button
           onClick={onExit}
           className="text-xs opacity-70 hover:opacity-100"
-          aria-label="Cancelar y volver al selector"
+          aria-label={readOnly ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >
-          ← Cancelar
+          {readOnly ? '← Volver al listado' : '← Cancelar'}
         </button>
       </div>
+
+      {readOnly && (
+        <div
+          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+          role="status"
+          aria-live="polite"
+        >
+          <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+          <span>
+            <span className="font-semibold" style={{ color: '#557EFF' }}>
+              Enviado a tránsito — solo visualización.
+            </span>{' '}
+            Este trámite ya no puede editarse.
+          </span>
+        </div>
+      )}
 
       {(wizardError || submitError || state.error) && (
         <div
@@ -372,7 +416,7 @@ export function TramiteWizard(props: Props) {
             <ol className="space-y-3">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
-                const clickable = canNavigateToStep(steps, i);
+                const clickable = canNavigateToStep(steps, i, readOnly);
                 return (
                   <li key={s.key} aria-current={isActive ? 'step' : undefined}>
                     <button
@@ -476,7 +520,8 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
-            {!isLast ? (
+            {/* En solo lectura no hay Continuar/Guardar/Finalizar: solo se recorre. */}
+            {readOnly ? null : !isLast ? (
               <button
                 onClick={() => void handleContinue()}
                 disabled={continueDisabled}
@@ -500,6 +545,7 @@ export function TramiteWizard(props: Props) {
         </section>
       </div>
     </div>
+   </WizardReadOnlyProvider>
   );
 }
 
@@ -721,6 +767,7 @@ function ConsultaStep({
   onRunPreflight: () => Promise<void>;
 }) {
   const isVin = step.key === 'consulta_vin';
+  const readOnly = useWizardReadOnly();
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -851,12 +898,13 @@ function ConsultaStep({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleRun();
               }}
-              className={`${inputClass} sm:flex-1`}
+              disabled={readOnly}
+              className={`${inputClass} sm:flex-1 disabled:opacity-60`}
               style={{ borderColor: '#DFE5ED' }}
               placeholder="Número VIN…"
               aria-label="Número VIN"
             />
-            {consultButton}
+            {!readOnly && consultButton}
           </div>
         </div>
       ) : (
@@ -874,7 +922,8 @@ function ConsultaStep({
                 type="text"
                 value={plate}
                 onChange={(e) => setPlate(e.target.value)}
-                className={inputClass}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. ABC123"
               />
@@ -890,7 +939,8 @@ function ConsultaStep({
                 id="consulta-owner-doc-type"
                 value={ownerDocType}
                 onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
-                className={inputClass}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
               >
                 {DOC_TYPES.map((t) => (
@@ -912,13 +962,14 @@ function ConsultaStep({
                 type="text"
                 value={ownerDocNumber}
                 onChange={(e) => setOwnerDocNumber(e.target.value)}
-                className={inputClass}
+                disabled={readOnly}
+                className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. 1020304050"
               />
             </div>
           </div>
-          <div className="mt-4">{consultButton}</div>
+          {!readOnly && <div className="mt-4">{consultButton}</div>}
         </div>
       )}
 

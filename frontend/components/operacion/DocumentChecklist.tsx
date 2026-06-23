@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useProcedureDocuments } from '@/hooks/useProcedureDocuments';
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -76,6 +77,8 @@ function DocumentSlot({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  // En solo lectura el checklist es visualización: sin subir/reemplazar/borrar.
+  const readOnly = useWizardReadOnly();
 
   const done = item.satisfied || !!attachment;
   const busy = uploading || deleting;
@@ -124,37 +127,43 @@ function DocumentSlot({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ALLOWED_MIME.join(',')}
-            onChange={handlePick}
-            className="hidden"
-            aria-label={`Subir ${item.label}`}
-          />
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          >
-            {uploading ? 'Subiendo…' : attachment ? 'Reemplazar' : 'Subir'}
-          </button>
-          {attachment && (
+        {readOnly ? (
+          <span className="shrink-0 text-[11px] font-semibold opacity-60">
+            {done ? 'Adjunto' : 'Sin adjuntar'}
+          </span>
+        ) : (
+          <div className="flex shrink-0 items-center gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ALLOWED_MIME.join(',')}
+              onChange={handlePick}
+              className="hidden"
+              aria-label={`Subir ${item.label}`}
+            />
             <button
               type="button"
-              onClick={() => onRemove(attachment.id)}
+              onClick={() => inputRef.current?.click()}
               disabled={busy}
               className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
-              aria-label={`Borrar ${item.label}`}
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
-              {deleting ? 'Borrando…' : 'Borrar'}
+              {uploading ? 'Subiendo…' : attachment ? 'Reemplazar' : 'Subir'}
             </button>
-          )}
-        </div>
+            {attachment && (
+              <button
+                type="button"
+                onClick={() => onRemove(attachment.id)}
+                disabled={busy}
+                className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
+                aria-label={`Borrar ${item.label}`}
+              >
+                {deleting ? 'Borrando…' : 'Borrar'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {localError && (

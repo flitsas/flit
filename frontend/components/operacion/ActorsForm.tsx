@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { Search, UserRound } from 'lucide-react';
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
@@ -179,6 +180,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     [rolesProp, modalidad],
   );
   const { state, save, clearError } = useProcedureActors(instanceId);
+  // Solo lectura (Track C): inputs deshabilitados + sin Consultar RUNT/guardar.
+  const readOnly = useWizardReadOnly();
 
   const [actors, setActors] = useState<ProcedureActor[]>(() =>
     roles.map(emptyActor),
@@ -433,10 +436,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     return (
       <form
         onSubmit={handleSubmit}
-        className="space-y-5"
         aria-label="Captura de actores del trámite"
         noValidate
       >
+       <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
         {/* Sección A — Identificación */}
@@ -474,17 +477,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => void handleRuntLookup(0)}
-                disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ background: GRADIENT }}
-                aria-label="Consultar RUNT"
-              >
-                <Search className="h-3.5 w-3.5" />
-                {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => void handleRuntLookup(0)}
+                  disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
+                  className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: GRADIENT }}
+                  aria-label="Consultar RUNT"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
+                </button>
+              )}
             </div>
             {runtResult(0)}
           </div>
@@ -637,6 +642,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </section>
 
         {footer}
+       </fieldset>
       </form>
     );
   }
@@ -650,6 +656,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       aria-label="Captura de actores del trámite"
       noValidate
     >
+     <fieldset disabled={readOnly} className="contents">
       {/* Embebido en el wizard el título del paso lo pinta la shell (h2); aquí el
           h4 sería un segundo título redundante, así que se omite. */}
       {!embeddedInWizard && (
@@ -716,15 +723,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     </p>
                   )}
                   {/* Consultar RUNT: autopopula el actor por documento. */}
-                  <button
-                    type="button"
-                    onClick={() => void handleRuntLookup(index)}
-                    disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                    className="mt-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
-                    style={{ borderColor: '#557EFF', color: '#557EFF' }}
-                  >
-                    {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => void handleRuntLookup(index)}
+                      disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
+                      className="mt-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
+                      style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                    >
+                      {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Resultado de la consulta RUNT (autopopulado). */}
@@ -799,6 +808,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       </div>
 
       {footer}
+     </fieldset>
     </form>
   );
 });

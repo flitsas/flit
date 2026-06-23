@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -42,6 +43,8 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
  */
 export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = false }: Props) {
   const partes = partesFor(modalidad);
+  // Solo lectura (Track C): sin Actualizar ni simular validación.
+  const readOnly = useWizardReadOnly();
 
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,17 +88,19 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
             iteración futura; por ahora puedes simular la validación de cada parte.
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => void handleRefresh()}
-          disabled={loading || !instanceId}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Actualizar estado biométrico"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            disabled={loading || !instanceId}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            aria-label="Actualizar estado biométrico"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        )}
       </div>
 
       {error && (
@@ -197,6 +202,7 @@ function SimulateAction({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const handleSimulate = async () => {
     if (!instanceId) return;
@@ -213,6 +219,13 @@ function SimulateAction({
       setSubmitting(false);
     }
   };
+
+  // En solo lectura no se simula: solo se informa que la identidad quedó pendiente.
+  if (readOnly) {
+    return (
+      <p className="text-[11px] opacity-60">Validación de identidad pendiente.</p>
+    );
+  }
 
   return (
     <div className="space-y-3">
