@@ -6,6 +6,7 @@ using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
@@ -38,7 +39,11 @@ public static class InfrastructureExtensions
                 })
             .UseSnakeCaseNamingConvention()
             .EnableSensitiveDataLogging(false)
-            .EnableDetailedErrors(false));
+            .EnableDetailedErrors(false)
+            // HU10175: UserInvitation se crea con SQL crudo en HU10147_Invitations; el snapshot
+            // no la registra, así que EF lanza PendingModelChangesWarning. Se ignora porque
+            // la tabla existe y la migración ya fue aplicada vía SQL.
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
@@ -63,6 +68,14 @@ public static class InfrastructureExtensions
         // Recuperación de contraseña (HU #10169): repos, generador de token y email.
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+
+        // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
+        services.AddScoped<IInvitationRepository, InvitationRepository>();
+        services.AddScoped<IUserActivationRepository, UserActivationRepository>();
+        var invitationOptions = configuration
+            .GetSection(InvitationOptions.SectionName)
+            .Get<InvitationOptions>() ?? new InvitationOptions();
+        services.AddSingleton(invitationOptions);
         services.AddSingleton<ISecureTokenGenerator, SecureTokenGenerator>();
         services.AddSingleton<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
 
