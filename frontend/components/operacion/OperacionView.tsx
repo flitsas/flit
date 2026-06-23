@@ -95,15 +95,10 @@ export function OperacionView({ onStartTramite }: OperacionViewProps) {
         </ul>
       </section>
 
-      {/* Listado de instancias (Slice M6). Carga al montar; como ahora es una
-          ruta propia, volver del wizard remonta la vista y refresca solo. */}
-      <section
-        className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] shrink-0"
-        style={{ borderColor: '#DFE5ED' }}
-      >
-        <h2 className="text-sm font-bold mb-3">Trámites en curso</h2>
-        <TramitesTable />
-      </section>
+      {/* Listado de instancias (Track A). La tabla hospeda su propia sección,
+          toolbar de filtros y encabezado con contador dinámico. Carga al montar;
+          como ahora es una ruta propia, volver del wizard remonta y refresca. */}
+      <TramitesTable />
     </div>
   );
 }

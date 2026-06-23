@@ -195,3 +195,93 @@ describe('M0 — chooser por modalidad (Track B: delega en la ruta)', () => {
     expect(mocks.createInstance).not.toHaveBeenCalled();
   });
 });
+
+describe('Track A — toolbar de filtros y acciones del listado', () => {
+  it('renderiza los chips de filtro de modalidad y estado', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    // Espera a que cargue el listado (sale del estado "Cargando…").
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+
+    expect(screen.getByRole('button', { name: 'Matrícula inicial' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Traspaso' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'En preparación' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviado a tránsito' })).toBeInTheDocument();
+  });
+
+  it('la búsqueda por placa reduce las filas visibles', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
+
+    const rows = within(
+      screen.getByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
+  });
+
+  it('la búsqueda por VIN reduce las filas visibles', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
+
+    const rows = within(
+      screen.getByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('Enviado a tránsito')).toBeInTheDocument();
+  });
+
+  it('el botón Continuar de una fila draft navega al wizard de esa instancia', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const btn = await screen.findByRole('button', { name: /Continuar trámite TR-001/ });
+    await user.click(btn);
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
+  });
+
+  it('el botón Ver de una fila submitted navega al wizard de esa instancia', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    const btn = await screen.findByRole('button', { name: /Ver trámite MA-002/ });
+    await user.click(btn);
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
+  });
+
+  it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {
+    mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
+    const user = userEvent.setup();
+    render(<OperacionView onStartTramite={vi.fn()} />);
+
+    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
+
+    // Ya no hay lista de resultados; aparece el vacío "Sin resultados".
+    expect(screen.queryByRole('list', { name: /Trámites en curso/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0);
+
+    const clearButtons = screen.getAllByRole('button', { name: 'Limpiar filtros' });
+    expect(clearButtons.length).toBeGreaterThan(0);
+    await user.click(clearButtons[0]);
+
+    // Tras limpiar, vuelven las dos filas.
+    const rows = within(
+      await screen.findByRole('list', { name: /Trámites en curso/ }),
+    ).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+  });
+});
