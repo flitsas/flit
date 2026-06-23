@@ -6,6 +6,7 @@ using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.Permissions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -28,6 +29,12 @@ public static class SecurityApplicationExtensions
         services.AddScoped<DeactivateModuleHandler>();
         services.AddScoped<DeleteModuleHandler>();
         services.AddScoped<ListModulesHandler>();
+
+        // HU #10162 — CRUD permisos granulares Super Admin
+        services.AddScoped<CreatePermissionHandler>();
+        services.AddScoped<DeactivatePermissionHandler>();
+        services.AddScoped<DeletePermissionHandler>();
+        services.AddScoped<ListPermissionsHandler>();
 
         return services;
     }
