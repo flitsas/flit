@@ -4,12 +4,15 @@ using Microsoft.AspNetCore.Authorization.Policy;
 namespace Flit.Api.Authorization;
 
 /// <summary>
-/// Personaliza la respuesta 403 cuando la autorización falla por falta de rol
-/// (usuario autenticado pero sin SuperAdmin) devolviendo el cuerpo JSON
-/// <c>{ error: "Acceso restringido: se requiere rol SuperAdmin" }</c> (AC3).
+/// Personaliza la respuesta 403 cuando la autorización falla, diferenciando entre:
+/// <list type="bullet">
+///   <item>Fallo por <see cref="PermissionRequirement"/> (HU #10165, AC3):
+///         <c>{ code: "FORBIDDEN", message: "Permisos insuficientes" }</c></item>
+///   <item>Fallo por rol SuperAdmin u otras policies:
+///         <c>{ error: "Acceso restringido: se requiere rol SuperAdmin" }</c></item>
+/// </list>
 ///
-/// El caso "no autenticado" (challenge → 401, AC4) se delega al handler por
-/// defecto, que no escribe cuerpo.
+/// El caso "no autenticado" (challenge → 401) se delega al handler por defecto.
 /// </summary>
 public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -27,9 +30,29 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
         if (authorizeResult.Forbidden && !context.Response.HasStarted)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response
-                .WriteAsJsonAsync(new { error = AdminAuthorization.ForbiddenMessage })
-                .ConfigureAwait(false);
+
+            // Si el fallo incluye un PermissionRequirement, usar el formato de permisos (HU #10165).
+            var failedRequirements = authorizeResult.AuthorizationFailure?.FailedRequirements;
+            var isPermissionFailure = failedRequirements is not null
+                && failedRequirements.OfType<PermissionRequirement>().Any();
+
+            if (isPermissionFailure)
+            {
+                await context.Response
+                    .WriteAsJsonAsync(new
+                    {
+                        code = "FORBIDDEN",
+                        message = "Permisos insuficientes",
+                    })
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await context.Response
+                    .WriteAsJsonAsync(new { error = AdminAuthorization.ForbiddenMessage })
+                    .ConfigureAwait(false);
+            }
+
             return;
         }
 
