@@ -21,6 +21,7 @@ import {
   KeyRound,
   LogOut,
   FolderCog,
+  Lock,
 } from "lucide-react";
 
 export type ModuleId =
@@ -220,6 +221,13 @@ export function Shell({
               onClick={() => {
                 window.location.href = "/admin/documents";
               }}
+              dark={dark}
+            />
+            {/* RBAC Admin (ruta aparte, gate SuperAdmin) */}
+            <DockBtn
+              item={{ label: "RBAC Admin", icon: Lock }}
+              active={false}
+              onClick={() => { window.location.href = "/admin/rbac"; }}
               dark={dark}
             />
           </div>
