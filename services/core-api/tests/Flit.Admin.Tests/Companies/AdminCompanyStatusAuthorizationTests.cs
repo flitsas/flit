@@ -30,7 +30,7 @@ public sealed class AdminCompanyStatusAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PutAsJsonAsync(StatusUrl, new { estadoActivo = false });
+        var response = await client.PutAsJsonAsync(StatusUrl, new { estadoActivo = false }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -42,7 +42,7 @@ public sealed class AdminCompanyStatusAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PutAsJsonAsync(StatusUrl, new { estadoActivo = false });
+        var response = await client.PutAsJsonAsync(StatusUrl, new { estadoActivo = false }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

@@ -29,8 +29,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(
-            $"{Url}?procedureTypeId={Guid.NewGuid()}&transitOfficeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{Url}?procedureTypeId={Guid.NewGuid()}&transitOfficeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -40,9 +39,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PutAsJsonAsync(
-            Url,
-            new { procedureTypeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), estado = "REQUIRED" });
+        var response = await client.PutAsJsonAsync(Url, new { procedureTypeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), estado = "REQUIRED" }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -54,8 +51,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(
-            $"{Url}?procedureTypeId={Guid.NewGuid()}&transitOfficeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{Url}?procedureTypeId={Guid.NewGuid()}&transitOfficeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -67,9 +63,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PutAsJsonAsync(
-            Url,
-            new { procedureTypeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), estado = "REQUIRED" });
+        var response = await client.PutAsJsonAsync(Url, new { procedureTypeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), estado = "REQUIRED" }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

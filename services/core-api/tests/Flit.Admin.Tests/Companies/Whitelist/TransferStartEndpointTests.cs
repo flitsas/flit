@@ -41,7 +41,7 @@ public sealed class TransferStartEndpointTests : IClassFixture<TransferStartEndp
             vehicleIdentifier = "ABC123",
             userEmail = "regular@co.com",
             onlyOwnVehicles = true,
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -57,10 +57,10 @@ public sealed class TransferStartEndpointTests : IClassFixture<TransferStartEndp
             vehicleIdentifier = "ABC123",
             userEmail = "regular@co.com",
             onlyOwnVehicles = true,
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("Vehículo no es propiedad de la compañía jurídica del tenant");
     }
 
@@ -75,7 +75,7 @@ public sealed class TransferStartEndpointTests : IClassFixture<TransferStartEndp
             vehicleIdentifier = "ABC123",
             userEmail = "vip@co.com", // exento en el doble de whitelist
             onlyOwnVehicles = true,
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

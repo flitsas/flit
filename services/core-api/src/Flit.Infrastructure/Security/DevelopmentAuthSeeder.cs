@@ -15,11 +15,21 @@ public static class DevelopmentAuthSeeder
 {
     public const string DemoEmail = "demo@flit.local";
     public const string DemoPassword = "DemoPass1!";
+    public const string OtAdminEmail = "otadmin@flit.local";
+    public const string OtAdminPassword = "OtAdminPass1!";
     public const string DemoTenantCode = "DEMO";
 
     public const string DemoAdminCompanyEmail = "admin@empresa.local";
     public const string DemoAdminCompanyPassword = "AdminPass1!";
     public const string DemoEmpresaTenantCode = "EMPRESA_DEMO";
+
+    /// <summary>Tenant OT fijo para validación E2E del módulo /admin/transit-offices (HU #10133).</summary>
+    public static readonly Guid OtDevTenantId =
+        Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
+
+    /// <summary>Usuario ot_admin fijo — alineado con seed SQL y FK changed_by en trámites.</summary>
+    public static readonly Guid OtAdminUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d0");
 
     public static async Task SeedAsync(
         FlitDbContext db,
@@ -32,6 +42,7 @@ public static class DevelopmentAuthSeeder
 
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
@@ -45,7 +56,10 @@ public static class DevelopmentAuthSeeder
         CancellationToken cancellationToken)
     {
         if (await db.Users.AnyAsync(u => u.Email == DemoEmail, cancellationToken))
+        {
+            await EnsureOtAdminUserAsync(db, passwordHasher, OtDevTenantId, cancellationToken);
             return;
+        }
 
         var tenantId = Guid.CreateVersion7();
         var userId = Guid.CreateVersion7();
@@ -139,6 +153,143 @@ public static class DevelopmentAuthSeeder
             RoleId = roleId,
             AssignedAt = now,
             CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await EnsureOtAdminUserAsync(db, passwordHasher, OtDevTenantId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Usuario demo ot_admin para validar el módulo OT en Development (HU #10218 / #10133).
+    /// Se asigna al tenant fijo <see cref="OtDevTenantId"/>.
+    /// </summary>
+    private static async Task EnsureOtAdminUserAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        Guid? tenantId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedTenantId = tenantId ?? OtDevTenantId;
+
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == OtAdminEmail, cancellationToken);
+
+        if (existingUser is not null)
+        {
+            await EnsureOtAdminAssignmentAsync(db, existingUser.Id, resolvedTenantId, cancellationToken);
+            return;
+        }
+
+        var userId = OtAdminUserId;
+        var roleId = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Email = OtAdminEmail,
+            DisplayName = "Administrador OT Demo",
+            Status = "active",
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = userId,
+            PasswordHash = passwordHasher.Hash(OtAdminPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.Roles.Add(new Role
+        {
+            Id = roleId,
+            TenantId = resolvedTenantId,
+            Code = "ot_admin",
+            Name = "Administrador OT",
+            IsSystem = true,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = resolvedTenantId,
+            UserId = userId,
+            RoleId = roleId,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureOtAdminAssignmentAsync(
+        FlitDbContext db,
+        Guid userId,
+        Guid otTenantId,
+        CancellationToken cancellationToken)
+    {
+        var staleAssignments = await db.UserRoleAssignments
+            .Where(a => a.UserId == userId && a.TenantId != otTenantId && a.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        if (staleAssignments.Count > 0)
+        {
+            db.UserRoleAssignments.RemoveRange(staleAssignments);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var hasOtAssignment = await db.UserRoleAssignments
+            .AnyAsync(
+                a => a.UserId == userId && a.TenantId == otTenantId && a.DeletedAt == null,
+                cancellationToken);
+
+        if (hasOtAssignment)
+        {
+            return;
+        }
+
+        var role = await db.Roles
+            .FirstOrDefaultAsync(
+                r => r.TenantId == otTenantId && r.Code == "ot_admin",
+                cancellationToken);
+
+        if (role is null)
+        {
+            var roleId = Guid.CreateVersion7();
+            var now = DateTimeOffset.UtcNow;
+            role = new Role
+            {
+                Id = roleId,
+                TenantId = otTenantId,
+                Code = "ot_admin",
+                Name = "Administrador OT",
+                IsSystem = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Roles.Add(role);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var assignedAt = DateTimeOffset.UtcNow;
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = otTenantId,
+            UserId = userId,
+            RoleId = role.Id,
+            AssignedAt = assignedAt,
+            CreatedAt = assignedAt,
             RowVersion = 0,
         });
 

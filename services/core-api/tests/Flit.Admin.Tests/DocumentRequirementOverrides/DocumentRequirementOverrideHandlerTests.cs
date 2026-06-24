@@ -39,7 +39,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var result = await SetHandler(act).HandleAsync(Command(DocumentRequirementState.Required));
+            var result = await SetHandler(act).HandleAsync(Command(DocumentRequirementState.Required), TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.Set);
             result.Response!.Estado.Should().Be("REQUIRED");
@@ -47,8 +47,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentRequirementOverrides.SingleAsync(
-            o => o.ProcedureTypeId == ProcedureTypeId && o.DocumentTypeId == DocId && o.TransitOfficeId == TransitOfficeId);
+        var row = await verify.DocumentRequirementOverrides.SingleAsync(o => o.ProcedureTypeId == ProcedureTypeId && o.DocumentTypeId == DocId && o.TransitOfficeId == TransitOfficeId, cancellationToken: TestContext.Current.CancellationToken);
         row.RequirementState.Should().Be("REQUIRED");
         row.CreatedBy.Should().Be(Actor);
     }
@@ -61,19 +60,19 @@ public sealed class DocumentRequirementOverrideHandlerTests
 
         await using (var first = NewContext(db))
         {
-            await SetHandler(first).HandleAsync(Command(DocumentRequirementState.Required));
+            await SetHandler(first).HandleAsync(Command(DocumentRequirementState.Required), TestContext.Current.CancellationToken);
         }
 
         await using (var second = NewContext(db))
         {
-            var result = await SetHandler(second).HandleAsync(Command(DocumentRequirementState.NotApplicable));
+            var result = await SetHandler(second).HandleAsync(Command(DocumentRequirementState.NotApplicable), TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.Set);
             result.Response!.Estado.Should().Be("NOT_APPLICABLE");
         }
 
         await using var verify = NewContext(db);
-        (await verify.DocumentRequirementOverrides.CountAsync()).Should().Be(1);
-        (await verify.DocumentRequirementOverrides.SingleAsync()).RequirementState.Should().Be("NOT_APPLICABLE");
+        (await verify.DocumentRequirementOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
+        (await verify.DocumentRequirementOverrides.SingleAsync(cancellationToken: TestContext.Current.CancellationToken)).RequirementState.Should().Be("NOT_APPLICABLE");
     }
 
     [Fact]
@@ -83,17 +82,17 @@ public sealed class DocumentRequirementOverrideHandlerTests
         await SeedCatalogAsync(db);
         await using (var seed = NewContext(db))
         {
-            await SetHandler(seed).HandleAsync(Command(DocumentRequirementState.Optional));
+            await SetHandler(seed).HandleAsync(Command(DocumentRequirementState.Optional), TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
         {
-            var result = await SetHandler(act).HandleAsync(Command(DocumentRequirementState.Default));
+            var result = await SetHandler(act).HandleAsync(Command(DocumentRequirementState.Default), TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.Cleared);
         }
 
         await using var verify = NewContext(db);
-        (await verify.DocumentRequirementOverrides.AnyAsync()).Should().BeFalse();
+        (await verify.DocumentRequirementOverrides.AnyAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -103,10 +102,10 @@ public sealed class DocumentRequirementOverrideHandlerTests
         await SeedCatalogAsync(db);
 
         await using var ctx = NewContext(db);
-        var result = await SetHandler(ctx).HandleAsync(Command(DocumentRequirementState.Default));
+        var result = await SetHandler(ctx).HandleAsync(Command(DocumentRequirementState.Default), TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.Cleared);
-        (await ctx.DocumentRequirementOverrides.AnyAsync()).Should().BeFalse();
+        (await ctx.DocumentRequirementOverrides.AnyAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Theory]
@@ -119,11 +118,11 @@ public sealed class DocumentRequirementOverrideHandlerTests
         await SeedCatalogAsync(db);
 
         await using var ctx = NewContext(db);
-        var result = await SetHandler(ctx).HandleAsync(Command(state));
+        var result = await SetHandler(ctx).HandleAsync(Command(state), TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
-        (await ctx.DocumentRequirementOverrides.AnyAsync()).Should().BeFalse();
+        (await ctx.DocumentRequirementOverrides.AnyAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -139,7 +138,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
             Actor = Actor,
             Request = new SetDocumentRequirementOverrideRequest(
                 ProcedureTypeId, SecondDocId, TransitOfficeId, DocumentRequirementState.Required),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.ValidationFailed);
         result.Error.Should().Contain("no está asociado");
@@ -156,7 +155,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
         {
             Request = new SetDocumentRequirementOverrideRequest(
                 Guid.NewGuid(), DocId, TransitOfficeId, DocumentRequirementState.Required),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.ProcedureTypeNotFound);
     }
@@ -172,7 +171,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
         {
             Request = new SetDocumentRequirementOverrideRequest(
                 ProcedureTypeId, Guid.NewGuid(), TransitOfficeId, DocumentRequirementState.Required),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.DocumentTypeNotFound);
     }
@@ -188,7 +187,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
         {
             Request = new SetDocumentRequirementOverrideRequest(
                 ProcedureTypeId, DocId, Guid.NewGuid(), DocumentRequirementState.Required),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetDocumentRequirementOverrideOutcome.TransitOfficeNotFound);
     }
@@ -205,7 +204,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
                 new DocumentRequirementOverride { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = DocId, TransitOfficeId = TransitOfficeId, RequirementState = "REQUIRED", CreatedAt = DateTimeOffset.UtcNow },
                 // Otro OT — no debe aparecer.
                 new DocumentRequirementOverride { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = DocId, TransitOfficeId = otherOt, RequirementState = "OPTIONAL", CreatedAt = DateTimeOffset.UtcNow });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -214,7 +213,7 @@ public sealed class DocumentRequirementOverrideHandlerTests
         {
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Should().HaveCount(1);
         result.Data[0].Estado.Should().Be("REQUIRED");

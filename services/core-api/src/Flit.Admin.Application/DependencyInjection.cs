@@ -30,7 +30,30 @@ using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
+using Flit.Admin.Application.OtProfile;
+using Flit.Admin.Application.OtProfile.GetOtProfile;
+using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
+using Flit.Admin.Application.OtProfile.UpdateOtProfile;
+using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
+using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
+using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
+using Flit.Admin.Application.OtWebhooks.ProcessOtWebhookCallback;
+using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
+using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
+using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
+using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.DeleteOtDocumentTag;
+using Flit.Admin.Application.OtDocumentTags.ListOtDocumentTags;
+using Flit.Admin.Application.OtRules;
+using Flit.Admin.Application.OtRules.CreateOtRule;
+using Flit.Admin.Application.OtRules.ListOtRules;
+using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,8 +88,8 @@ public static class DependencyInjection
         services.AddScoped<AddWhitelistEmailsHandler>();
         services.AddScoped<GetWhitelistHandler>();
 
-        // HU #10192 — catálogo OT (estático en memoria) + grants + consulta audit log.
-        services.AddSingleton<ITransitOfficeCatalog, StaticTransitOfficeCatalog>();
+        // HU #10192 — catálogo OT (BD) + grants + consulta audit log.
+        // ITransitOfficeCatalog se registra en AddAdminInfrastructure (DbTransitOfficeCatalog).
         services.AddScoped<SearchTransitOfficesHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
@@ -100,6 +123,37 @@ public static class DependencyInjection
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureDocumentRequirementsHandler>();
+
+        // HU #10215 — perfil OT, modo Dashboard/QX y feature flags.
+        services.AddScoped<GetOtProfileHandler>();
+        services.AddScoped<UpdateOtProfileHandler>();
+        services.AddScoped<UpdateOtFeatureFlagHandler>();
+        services.AddScoped<IQuipuxReadOnlyGuard, QuipuxReadOnlyGuard>();
+
+        // HU #10216 — webhooks OT y bitácora API.
+        services.AddScoped<CreateOtWebhookHandler>();
+        services.AddScoped<UpdateOtWebhookHandler>();
+        services.AddScoped<ListOtApiLogsHandler>();
+        services.AddScoped<ListOtWebhooksHandler>();
+        services.AddScoped<ProcessOtWebhookCallbackHandler>();
+
+        // HU #10217 — trámites de clientes OT (tenant admin).
+        services.AddScoped<ListOtClientProceduresHandler>();
+        services.AddScoped<GetOtClientProcedureHandler>();
+        services.AddScoped<ApproveOtClientProcedureHandler>();
+        services.AddScoped<RejectOtClientProcedureHandler>();
+
+        // HU #10221 — motor de reglas AND/OR.
+        services.AddScoped<CreateOtRuleHandler>();
+        services.AddScoped<UpdateOtRuleHandler>();
+        services.AddScoped<ListOtRulesHandler>();
+
+        // HU #10222 — prelación documental y etiquetas.
+        services.AddScoped<ListOtDocumentPrecedenceHandler>();
+        services.AddScoped<UpdateOtDocumentPrecedenceHandler>();
+        services.AddScoped<CreateOtDocumentTagHandler>();
+        services.AddScoped<DeleteOtDocumentTagHandler>();
+        services.AddScoped<ListOtDocumentTagsHandler>();
 
         return services;
     }

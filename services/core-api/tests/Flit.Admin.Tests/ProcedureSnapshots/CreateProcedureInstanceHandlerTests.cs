@@ -47,7 +47,7 @@ public sealed class CreateProcedureInstanceHandlerTests
                 SortOrder = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         CreateProcedureInstanceResult result;
@@ -58,7 +58,7 @@ public sealed class CreateProcedureInstanceHandlerTests
                 ActorUserId = Actor,
                 Request = new CreateProcedureInstanceRequest(
                     ProcedureTypeId, ClienteId, TransitOfficeId, "TR-2026-0001", null),
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.Created);
@@ -68,14 +68,14 @@ public sealed class CreateProcedureInstanceHandlerTests
         result.Response.DocumentCount.Should().Be(2);
 
         await using var verify = NewContext(db);
-        var instance = await verify.ProcedureInstances.SingleAsync();
+        var instance = await verify.ProcedureInstances.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         instance.TenantId.Should().Be(ClienteId);
         instance.ProcedureTypeId.Should().Be(ProcedureTypeId);
         instance.TransitOfficeId.Should().Be(TransitOfficeId);
         instance.CreatedByUserId.Should().Be(Actor);
         instance.Status.Should().Be("draft");
 
-        var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync();
+        var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         snapshot.ProcedureInstanceId.Should().Be(instance.Id);
         snapshot.TenantId.Should().Be(ClienteId);
         snapshot.SnapshotBy.Should().Be(Actor);
@@ -98,7 +98,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             seed.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
             seed.Tenants.Add(new Tenant { Id = ClienteId, Code = "C1", LegalName = "Cliente 1" });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var act = NewContext(db);
@@ -106,13 +106,13 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = Actor,
             Request = new CreateProcedureInstanceRequest(ProcedureTypeId, ClienteId, null, "TR-EMPTY", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.Created);
         result.Response!.DocumentCount.Should().Be(0);
 
         await using var verify = NewContext(db);
-        var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync();
+        var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         SnapshotJson.Deserialize(snapshot.Snapshot)!.Documentos.Should().BeEmpty();
     }
 
@@ -129,10 +129,10 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = Actor,
             Request = new CreateProcedureInstanceRequest(Guid.NewGuid(), ClienteId, null, "TR-X", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.ProcedureTypeNotFound);
-        (await act.ProcedureInstances.CountAsync()).Should().Be(0);
+        (await act.ProcedureInstances.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = Actor,
             Request = new CreateProcedureInstanceRequest(ProcedureTypeId, Guid.NewGuid(), null, "TR-X", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.TenantNotFound);
     }
@@ -168,7 +168,7 @@ public sealed class CreateProcedureInstanceHandlerTests
                 CreatedByUserId = Actor,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var act = NewContext(db);
@@ -176,10 +176,10 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = Actor,
             Request = new CreateProcedureInstanceRequest(ProcedureTypeId, ClienteId, null, "TR-DUP", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.ValidationFailed);
-        (await act.ProcedureInstances.CountAsync()).Should().Be(1);
+        (await act.ProcedureInstances.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Theory]
@@ -196,11 +196,11 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = Actor,
             Request = new CreateProcedureInstanceRequest(ProcedureTypeId, ClienteId, null, referenceNumber, null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
-        (await act.ProcedureInstances.CountAsync()).Should().Be(0);
+        (await act.ProcedureInstances.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             ActorUserId = null,
             Request = new CreateProcedureInstanceRequest(ProcedureTypeId, ClienteId, null, "TR-NOUSER", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.ValidationFailed);
     }
@@ -237,15 +237,15 @@ public sealed class CreateProcedureInstanceHandlerTests
                 ActorUserId = Actor,
                 Request = new CreateProcedureInstanceRequest(
                     ProcedureTypeId, ClienteId, TransitOfficeId, "TR-FAIL", null),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(CreateProcedureInstanceOutcome.Failed);
             result.Error.Should().NotBeNullOrWhiteSpace();
         }
 
         await using var verify = NewContext(db);
-        (await verify.ProcedureInstances.CountAsync()).Should().Be(0);
-        (await verify.ProcedureDocumentSnapshots.CountAsync()).Should().Be(0);
+        (await verify.ProcedureInstances.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+        (await verify.ProcedureDocumentSnapshots.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- Helpers ----------

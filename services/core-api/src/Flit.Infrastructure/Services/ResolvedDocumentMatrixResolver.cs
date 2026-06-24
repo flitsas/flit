@@ -14,6 +14,9 @@ namespace Flit.Infrastructure.Services;
 /// referencia; (3) por cada documento aplica el override de mayor precedencia disponible;
 /// (4) ordena por orden resuelto asc, desempatando por <c>document_type_id</c>.
 ///
+/// Para el scope OT, la prelación de <c>admin.ot_document_precedence</c> (consola OT HU #10222)
+/// tiene prioridad sobre <c>tramites.document_order_overrides</c> (HU #10196).
+///
 /// Además aplica la <b>obligatoriedad por OT</b> (HU #10198, granular solo para OT): cuando
 /// se aporta el OT, un override de obligatoriedad puede marcar el documento como obligatorio
 /// (<c>REQUIRED</c>), opcional (<c>OPTIONAL</c>) o no aplica (<c>NOT_APPLICABLE</c> → el
@@ -47,9 +50,13 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
             return [];
         }
 
-        var otOverrides = await LoadOverridesAsync(
+        var otLegacyOverrides = await LoadOverridesAsync(
                 procedureTypeId, DocumentOrderScope.Ot, transitOfficeId, cancellationToken)
             .ConfigureAwait(false);
+        var otAdminPrecedence = await LoadOtDocumentPrecedenceAsync(
+                procedureTypeId, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        var otOverrides = MergeOtOrder(otLegacyOverrides, otAdminPrecedence);
         var clienteOverrides = await LoadOverridesAsync(
                 procedureTypeId, DocumentOrderScope.Cliente, clienteId, cancellationToken)
             .ConfigureAwait(false);
@@ -127,6 +134,53 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 && o.ScopeType == scopeType
                 && o.ScopeRefId == scopeRefId.Value)
             .ToDictionaryAsync(o => o.DocumentTypeId, o => o.SortOrder, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static Dictionary<Guid, short> MergeOtOrder(
+        Dictionary<Guid, short> legacy,
+        Dictionary<Guid, short> adminPrecedence)
+    {
+        if (adminPrecedence.Count == 0)
+        {
+            return legacy;
+        }
+
+        var merged = new Dictionary<Guid, short>(legacy);
+        foreach (var (documentTypeId, sortOrder) in adminPrecedence)
+        {
+            merged[documentTypeId] = sortOrder;
+        }
+
+        return merged;
+    }
+
+    private async Task<Dictionary<Guid, short>> LoadOtDocumentPrecedenceAsync(
+        Guid procedureTypeId,
+        Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (transitOfficeId is null || transitOfficeId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var otTenantId = await _context.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TransitOfficeId == transitOfficeId.Value)
+            .Select(p => (Guid?)p.TenantId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (otTenantId is null)
+        {
+            return [];
+        }
+
+        return await _context.OtDocumentPrecedences
+            .AsNoTracking()
+            .Where(p => p.TenantId == otTenantId && p.ProcedureTypeId == procedureTypeId)
+            .ToDictionaryAsync(p => p.DocumentTypeId, p => p.SortOrder, cancellationToken)
             .ConfigureAwait(false);
     }
 

@@ -132,10 +132,14 @@ public sealed class VerifikConductorResultMapperTests
         {
             Data = new VerifikConductorData
             {
-                DocumentType = "CC", DocumentNumber = "63535709",
-                FirstName = "ARLETH PATRICIA", LastName = "RUEDA CORREA",
+                DocumentType = "CC",
+                DocumentNumber = "63535709",
+                FirstName = "ARLETH PATRICIA",
+                LastName = "RUEDA CORREA",
                 FullName = "ARLETH PATRICIA RUEDA CORREA",
-                CitizenStatus = "ACTIVA", DriverStatus = "ACTIVO", TotalLicenses = "1",
+                CitizenStatus = "ACTIVA",
+                DriverStatus = "ACTIVO",
+                TotalLicenses = "1",
                 Licenses = [new VerifikConductorLicense { Category = "B1", Status = "ACTIVA" }],
                 Infractions = new VerifikConductorInfractions { TieneMultas = "NO", NroPazYSalvo = "840377030067" },
                 IdentityValidationAttempts = new VerifikConductorIdentityValidation { EstadoUsuario = "ACTIVO" },
@@ -161,7 +165,8 @@ public sealed class VerifikConductorResultMapperTests
             Data = new VerifikConductorData
             {
                 FullName = "PERSONA CON MULTAS",
-                DriverStatus = "ACTIVO", CitizenStatus = "ACTIVA",
+                DriverStatus = "ACTIVO",
+                CitizenStatus = "ACTIVA",
                 Licenses = [new VerifikConductorLicense { Category = "B1", Status = "ACTIVA" }],
                 Infractions = new VerifikConductorInfractions { TieneMultas = "SI" },
             }
@@ -181,7 +186,8 @@ public sealed class VerifikConductorResultMapperTests
             Data = new VerifikConductorData
             {
                 FullName = "PERSONA SIN LICENCIA",
-                DriverStatus = "ACTIVO", CitizenStatus = "ACTIVA",
+                DriverStatus = "ACTIVO",
+                CitizenStatus = "ACTIVA",
                 Licenses = [],
                 Infractions = new VerifikConductorInfractions { TieneMultas = "NO" },
             }

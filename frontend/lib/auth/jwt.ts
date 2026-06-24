@@ -26,6 +26,9 @@ export const SUPER_ADMIN_ROLE = "SuperAdmin";
 /** Rol requerido para administración de empresa. */
 export const ADMIN_COMPANY_ROLE = "AdminCompany";
 
+/** Rol requerido para la consola OT (HU #10218). */
+export const OT_ADMIN_ROLE = "ot_admin";
+
 /**
  * Decodifica el payload (segunda parte) de un JWT base64url. Devuelve `null` si
  * el token es vacío, malformado o no es JSON válido. Tolerante a entornos sin
@@ -85,6 +88,22 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Indica si el payload contiene el rol ot_admin (comparación case-insensitive).
+ */
+export function isOtAdmin(payload: JwtPayload | null): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  const target = OT_ADMIN_ROLE.toLowerCase();
+  if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
+    return true;
+  }
+
+  return Array.isArray(payload.roles) && payload.roles.some((r) => r?.toLowerCase() === target);
 }
 
 function base64UrlDecode(value: string): string {

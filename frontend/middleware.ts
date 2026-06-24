@@ -24,8 +24,7 @@ export function middleware(request: NextRequest) {
       : NextResponse.redirect(new URL(redirectTo ?? "/403", request.url));
   }
 
-  // /admin/* — solo SuperAdmin
-  const { allowed, redirectTo } = evaluateAdminAccess(token);
+  const { allowed, redirectTo } = evaluateAdminAccess(token, pathname);
   return allowed
     ? NextResponse.next()
     : NextResponse.redirect(new URL(redirectTo ?? "/403", request.url));

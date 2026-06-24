@@ -52,8 +52,10 @@ public sealed class TenantAuditLogHandlerTests
 
         var page1 = await handler.HandleAsync(new GetTenantAuditLogQuery
         {
-            TenantId = tenantId, Page = 1, PageSize = 20,
-        });
+            TenantId = tenantId,
+            Page = 1,
+            PageSize = 20,
+        }, TestContext.Current.CancellationToken);
 
         page1.TotalCount.Should().Be(25);
         page1.Page.Should().Be(1);
@@ -65,8 +67,10 @@ public sealed class TenantAuditLogHandlerTests
 
         var page2 = await handler.HandleAsync(new GetTenantAuditLogQuery
         {
-            TenantId = tenantId, Page = 2, PageSize = 20,
-        });
+            TenantId = tenantId,
+            Page = 2,
+            PageSize = 20,
+        }, TestContext.Current.CancellationToken);
 
         page2.Data.Should().HaveCount(5);
         page2.Data[0].NewValue.Should().Be("\"office-4\"");
@@ -82,8 +86,10 @@ public sealed class TenantAuditLogHandlerTests
         {
             seed.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
             {
-                Id = Guid.NewGuid(), TenantId = tenantId,
-                EntityName = "tenant_transit_office_grants", FieldName = "transit_office_id",
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                EntityName = "tenant_transit_office_grants",
+                FieldName = "transit_office_id",
                 ChangedAt = DateTimeOffset.UtcNow,
             });
             seed.SaveChanges();
@@ -94,8 +100,10 @@ public sealed class TenantAuditLogHandlerTests
 
         var result = await handler.HandleAsync(new GetTenantAuditLogQuery
         {
-            TenantId = tenantId, Page = -5, PageSize = 0,
-        });
+            TenantId = tenantId,
+            Page = -5,
+            PageSize = 0,
+        }, TestContext.Current.CancellationToken);
 
         result.Page.Should().Be(GetTenantAuditLogHandler.DefaultPage);
         result.PageSize.Should().Be(GetTenantAuditLogHandler.DefaultPageSize);
@@ -108,7 +116,7 @@ public sealed class TenantAuditLogHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new GetTenantAuditLogHandler(new TenantAuditLogRepository(ctx));
 
-        var result = await handler.HandleAsync(new GetTenantAuditLogQuery { TenantId = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new GetTenantAuditLogQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(0);
         result.Data.Should().BeEmpty();

@@ -1,12 +1,15 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed class SubmitProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
-    IProcedureTypeRepository typeRepo)
+    IProcedureTypeRepository typeRepo,
+    IProcedureStateChangeNotifier stateChangeNotifier,
+    IOtRuleGate otRuleGate)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -24,11 +27,20 @@ public sealed class SubmitProcedureInstanceHandler(
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
             return (null, "not_published");
 
-        // Hard-gate server-side ANTES de transicionar: re-valida los gates del wizard (no se confía
-        // en el cliente). Devuelve el primer código de error (mapeado a 409 en el endpoint).
         var gateErrors = SubmitGate.Evaluate(instance);
         if (gateErrors.Count > 0)
             return (null, gateErrors[0]);
+
+        var ruleResult = await otRuleGate.EvaluateSubmissionAsync(
+            instance.TransitOfficeId,
+            instance.ProcedureTypeId,
+            procedureType.Code,
+            ct).ConfigureAwait(false);
+
+        if (ruleResult.IsBlocked)
+        {
+            return (null, ruleResult.ErrorCode ?? "ot_rule_blocked");
+        }
 
         var now = DateTimeOffset.UtcNow;
         instance.Status = ProcedureInstanceStatus.Submitted;
@@ -45,14 +57,18 @@ public sealed class SubmitProcedureInstanceHandler(
             ChangedAt = now
         };
         instance.StatusHistory.Add(statusHistory);
-        // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
-        // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
         repo.Add(statusHistory);
 
-        // Instancia trackeada (GetByIdWithDetailsAsync sin AsNoTracking): el change tracker
-        // detecta el cambio de estado de la instancia y el status_history nuevo (INSERT). NO se
-        // llama Update(): marcaría el status_history nuevo como Modified → UPDATE de 0 filas.
         await repo.SaveChangesAsync(ct);
+
+        await stateChangeNotifier.NotifyAsync(
+            new ProcedureStateChangeEvent(
+                tenantId,
+                id,
+                ProcedureInstanceStatus.Draft,
+                ProcedureInstanceStatus.Submitted,
+                now),
+            ct).ConfigureAwait(false);
 
         return (CreateProcedureInstanceHandler.ToSummary(instance), null);
     }

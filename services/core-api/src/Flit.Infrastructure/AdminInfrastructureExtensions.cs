@@ -7,6 +7,15 @@ using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.OtProfile;
+using Flit.Admin.Domain.OtWebhooks;
+using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Admin.Domain.OtDocumentPrecedence;
+using Flit.Admin.Domain.OtDocumentTags;
+using Flit.Admin.Domain.OtRules;
+using Flit.Infrastructure.OtRules;
+using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
@@ -31,7 +40,8 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();
         services.AddScoped<IVehicleTenantOwnershipChecker, StubVehicleTenantOwnershipChecker>();
 
-        // HU #10192 — grants de organismos de tránsito + consulta de audit log.
+        // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
+        services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
@@ -58,6 +68,33 @@ public static class AdminInfrastructureExtensions
         // AdminProcedureInstanceRepository (opera sobre la entidad canónica del runtime).
         services.AddScoped<IProcedureInstanceRepository, AdminProcedureInstanceRepository>();
         services.AddScoped<IProcedureDocumentSnapshotRepository, ProcedureDocumentSnapshotRepository>();
+
+        // HU #10215 — perfil OT y feature flags.
+        services.AddScoped<IOtProfileRepository, OtProfileRepository>();
+        services.AddScoped<IOtFeatureFlagRepository, OtFeatureFlagRepository>();
+
+        // HU #10216 — webhooks OT, bitácora API y dispatch de cambios de estado.
+        services.AddScoped<IOtWebhookSubscriptionRepository, OtWebhookSubscriptionRepository>();
+        services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
+        services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
+        services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
+        services.AddScoped<IProcedureStateChangeNotifier, OtWebhookProcedureStateChangeNotifier>();
+
+        services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
+        services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();
+
+        // HU #10221 — motor de reglas OT (sobre ot_feature_flags) + runtime gate.
+        services.AddScoped<IOtRuleRepository, OtRuleRepository>();
+        services.AddScoped<IOtRuleGate, OtRuleGateService>();
+
+        // HU #10222 — prelación documental y etiquetas OT.
+        services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
+        services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
 
         return services;
     }

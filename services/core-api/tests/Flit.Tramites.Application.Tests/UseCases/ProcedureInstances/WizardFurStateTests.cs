@@ -39,25 +39,40 @@ public sealed class WizardFurStateTests
     private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
         new()
         {
-            Id = Guid.NewGuid(), Parte = parte, Estado = BiometricEstados.Aprobado,
-            Nombre = "X", TipoDoc = "CC", Documento = "1", Email = "x@y.com",
+            Id = Guid.NewGuid(),
+            Parte = parte,
+            Estado = BiometricEstados.Aprobado,
+            Nombre = "X",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstanceSignature Firma(string parte) =>
         new()
         {
-            Id = Guid.NewGuid(), Parte = parte, DocTipo = SignatureDocTipos.Compraventa,
+            Id = Guid.NewGuid(),
+            Parte = parte,
+            DocTipo = SignatureDocTipos.Compraventa,
             Estado = SignatureEstados.Firmada,
-            SolicitadoAt = DateTimeOffset.UtcNow, FirmadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            FirmadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstanceAttachment Fur() =>
         new()
         {
-            Id = Guid.NewGuid(), Tipo = "fur", Filename = "fur.txt", Mimetype = "text/plain",
-            StoragePath = "x/fur", Source = "system", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Tipo = "fur",
+            Filename = "fur.txt",
+            Mimetype = "text/plain",
+            StoragePath = "x/fur",
+            Source = "system",
+            UploadedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstanceAttachment Doc(string tipo) =>
@@ -79,15 +94,25 @@ public sealed class WizardFurStateTests
     private static ProcedureInstanceActor Comprador(string doc = "777") =>
         new()
         {
-            Id = Guid.NewGuid(), ActorType = "comprador", DocumentType = "CC", DocumentNumber = doc,
-            FullName = "Maria", Email = "maria@x.com", CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = "Maria",
+            Email = "maria@x.com",
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstanceActor Vendedor(string doc = "555") =>
         new()
         {
-            Id = Guid.NewGuid(), ActorType = "vendedor", DocumentType = "CC", DocumentNumber = doc,
-            FullName = "Juan", Email = "juan@x.com", CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = "Juan",
+            Email = "juan@x.com",
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     /// <summary>Completa pasos 1-4 de matrícula (VIN, docs, comprador+RUNT, biométrica) → FUR (5) alcanzable.</summary>

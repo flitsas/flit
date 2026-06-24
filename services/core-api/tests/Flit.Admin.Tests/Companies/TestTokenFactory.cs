@@ -31,4 +31,22 @@ internal static class TestTokenFactory
             SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
         });
     }
+
+    public static string CreateOtAdminToken(Guid tenantId, string role = "ot_admin")
+    {
+        var handler = new JsonWebTokenHandler();
+        return handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "https://api.flit.co",
+            Audience = "flit-api",
+            Subject = new ClaimsIdentity(
+            [
+                new Claim("sub", "11111111-1111-1111-1111-111111111111"),
+                new Claim("role", role),
+                new Claim("tenant_id", tenantId.ToString()),
+            ]),
+            Expires = DateTime.UtcNow.AddHours(1),
+            SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
+        });
+    }
 }

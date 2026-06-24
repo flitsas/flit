@@ -1,6 +1,6 @@
-// Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6). Extraída del
-// middleware para poder probarla sin el runtime de Next.js.
-import { decodeJwtPayload, isAdminCompany, isSuperAdmin } from "./jwt";
+// Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
+// Extraída del middleware para poder probarla sin el runtime de Next.js.
+import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
 
@@ -14,13 +14,29 @@ export interface AdminAccessDecision {
 }
 
 /**
- * Evalúa si un token habilita el acceso a la consola admin global (/admin/*).
- * Solo SuperAdmin tiene acceso.
+ * Evalúa si un token habilita el acceso a la consola admin.
+ *
+ * Reglas:
+ * - Sin token o token malformado → no renderizar, redirigir a /403.
+ * - SuperAdmin → permitido en todo /admin/*.
+ * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
+ * - Otros roles → redirigir a /403.
  */
-export function evaluateAdminAccess(token: string | null | undefined): AdminAccessDecision {
+export function evaluateAdminAccess(
+  token: string | null | undefined,
+  pathname?: string,
+): AdminAccessDecision {
   const payload = decodeJwtPayload(token);
 
   if (payload && isSuperAdmin(payload)) {
+    return { allowed: true };
+  }
+
+  if (
+    pathname?.startsWith("/admin/transit-offices") &&
+    payload &&
+    isOtAdmin(payload)
+  ) {
     return { allowed: true };
   }
 

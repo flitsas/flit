@@ -24,6 +24,7 @@ import {
   FolderCog,
   Lock,
   Briefcase,
+  Landmark,
 } from "lucide-react";
 
 export type ModuleId =
@@ -125,6 +126,7 @@ export function Shell({
   }, []);
 
   // Dock balanceado alrededor del FAB: 4 a la izquierda y resto a la derecha.
+  // Filtra según permisos RBAC del JWT cuando visibleModuleCodes está disponible.
   const visibleDock = visibleModuleCodes
     ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
     : DOCK;
@@ -269,6 +271,12 @@ export function Shell({
                   item={{ label: "Compañías", icon: Building2 }}
                   active={false}
                   onClick={() => { window.location.href = "/admin/companies"; }}
+                  dark={dark}
+                />
+                <DockBtn
+                  item={{ label: "Tránsito", icon: Landmark }}
+                  active={false}
+                  onClick={() => { window.location.href = "/admin/transit-offices"; }}
                   dark={dark}
                 />
                 <DockBtn

@@ -30,7 +30,7 @@ public sealed class AdminCompaniesSettingsAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(SettingsUrl);
+        var response = await client.GetAsync(SettingsUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -40,7 +40,7 @@ public sealed class AdminCompaniesSettingsAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PutAsJsonAsync(SettingsUrl, new { });
+        var response = await client.PutAsJsonAsync(SettingsUrl, new { }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -52,10 +52,10 @@ public sealed class AdminCompaniesSettingsAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(SettingsUrl);
+        var response = await client.GetAsync(SettingsUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin");
     }
 
@@ -66,7 +66,7 @@ public sealed class AdminCompaniesSettingsAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PutAsJsonAsync(SettingsUrl, new { });
+        var response = await client.PutAsJsonAsync(SettingsUrl, new { }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

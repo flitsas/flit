@@ -31,7 +31,7 @@ public sealed class SetCompanyStatusHandlerTests
                 TenantId = tenantId,
                 EstadoActivo = false,
                 ChangedBy = Actor,
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(SetCompanyStatusOutcome.Updated);
             result.Company.Should().NotBeNull();
@@ -39,7 +39,7 @@ public sealed class SetCompanyStatusHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var tenant = await verify.Tenants.SingleAsync(t => t.Id == tenantId);
+        var tenant = await verify.Tenants.SingleAsync(t => t.Id == tenantId, cancellationToken: TestContext.Current.CancellationToken);
         tenant.IsActive.Should().BeFalse();
         tenant.UpdatedBy.Should().Be(Actor);
     }
@@ -58,7 +58,7 @@ public sealed class SetCompanyStatusHandlerTests
             TenantId = tenantId,
             EstadoActivo = true,
             ChangedBy = Actor,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetCompanyStatusOutcome.Updated);
         result.Company!.EstadoActivo.Should().BeTrue();
@@ -78,7 +78,7 @@ public sealed class SetCompanyStatusHandlerTests
             TenantId = tenantId,
             EstadoActivo = true,
             ChangedBy = Actor,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetCompanyStatusOutcome.Updated);
         result.Company!.EstadoActivo.Should().BeTrue();
@@ -95,7 +95,7 @@ public sealed class SetCompanyStatusHandlerTests
             TenantId = Guid.NewGuid(),
             EstadoActivo = false,
             ChangedBy = Actor,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(SetCompanyStatusOutcome.NotFound);
         result.Company.Should().BeNull();

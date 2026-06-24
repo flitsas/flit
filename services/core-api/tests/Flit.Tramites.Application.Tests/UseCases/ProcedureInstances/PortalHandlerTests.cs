@@ -126,9 +126,17 @@ public sealed class PortalHandlerTests
         var inst = Instance();
         inst.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), TenantId = inst.TenantId, ProcedureInstanceId = inst.Id,
-            Tipo = "soat", Filename = "s.pdf", Mimetype = "application/pdf", SizeBytes = 1,
-            Sha256 = "x", StoragePath = "p", Source = "portal", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = inst.TenantId,
+            ProcedureInstanceId = inst.Id,
+            Tipo = "soat",
+            Filename = "s.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 1,
+            Sha256 = "x",
+            StoragePath = "p",
+            Source = "portal",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         var (_, token) = Seed(instance: inst);
 
@@ -292,10 +300,16 @@ public sealed class PortalHandlerTests
         var inst = Instance();
         var sig = new ProcedureInstanceSignature
         {
-            Id = Guid.NewGuid(), TenantId = inst.TenantId, ProcedureInstanceId = inst.Id,
-            Parte = "comprador", DocTipo = "compraventa", Proveedor = "mock",
-            Estado = SignatureEstados.Enviada, EnvelopeId = "env-1",
-            SolicitadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = inst.TenantId,
+            ProcedureInstanceId = inst.Id,
+            Parte = "comprador",
+            DocTipo = "compraventa",
+            Proveedor = "mock",
+            Estado = SignatureEstados.Enviada,
+            EnvelopeId = "env-1",
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
         inst.Signatures.Add(sig);
         var (_, token) = Seed(rol: "comprador", instance: inst);

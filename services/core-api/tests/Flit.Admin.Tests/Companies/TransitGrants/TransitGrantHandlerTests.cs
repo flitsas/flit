@@ -46,7 +46,7 @@ public sealed class TransitGrantHandlerTests
                 TenantId = tenantId,
                 TransitOfficeId = KnownOfficeId,
                 CreatedBy = ChangedBy,
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Added.Should().BeTrue();
@@ -54,13 +54,13 @@ public sealed class TransitGrantHandlerTests
 
         await using var verify = NewContext(db);
 
-        var grants = await verify.TenantTransitOfficeGrants.Where(g => g.TenantId == tenantId).ToListAsync();
+        var grants = await verify.TenantTransitOfficeGrants.Where(g => g.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         grants.Should().ContainSingle();
         grants[0].TransitOfficeId.Should().Be(KnownOfficeId);
         grants[0].IsEnabled.Should().BeTrue();
         grants[0].CreatedBy.Should().Be(ChangedBy);
 
-        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync();
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         audits.Should().ContainSingle();
         audits[0].EntityName.Should().Be("tenant_transit_office_grants");
         audits[0].FieldName.Should().Be("transit_office_id");
@@ -83,15 +83,15 @@ public sealed class TransitGrantHandlerTests
                 TenantId = tenantId,
                 TransitOfficeId = Guid.NewGuid(), // no existe en el catálogo
                 CreatedBy = ChangedBy,
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeFalse();
             result.Errors.Should().ContainSingle(e => e.Field == "transitOfficeId");
         }
 
         await using var verify = NewContext(db);
-        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId)).Should().Be(0);
-        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId)).Should().Be(0);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -105,8 +105,10 @@ public sealed class TransitGrantHandlerTests
             var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(first));
             (await handler.HandleAsync(new AddTransitGrantCommand
             {
-                TenantId = tenantId, TransitOfficeId = KnownOfficeId, CreatedBy = ChangedBy,
-            })).Added.Should().BeTrue();
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                CreatedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken)).Added.Should().BeTrue();
         }
 
         await using (var second = NewContext(db))
@@ -114,16 +116,18 @@ public sealed class TransitGrantHandlerTests
             var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(second));
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
-                TenantId = tenantId, TransitOfficeId = KnownOfficeId, CreatedBy = ChangedBy,
-            });
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                CreatedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Added.Should().BeFalse(); // ya existía → idempotente
         }
 
         await using var verify = NewContext(db);
-        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId)).Should().Be(1);
-        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId)).Should().Be(1);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     // ---------- AC3: baja + auditoría / 404 ----------
@@ -138,8 +142,11 @@ public sealed class TransitGrantHandlerTests
         {
             seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = KnownOfficeId,
-                IsEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
             });
             seed.SaveChanges();
         }
@@ -149,16 +156,18 @@ public sealed class TransitGrantHandlerTests
             var handler = new RemoveTransitGrantHandler(new TransitGrantRepository(act));
             var removed = await handler.HandleAsync(new RemoveTransitGrantCommand
             {
-                TenantId = tenantId, TransitOfficeId = KnownOfficeId, ChangedBy = ChangedBy,
-            });
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                ChangedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken);
 
             removed.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
-        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId)).Should().Be(0);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
 
-        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync();
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         audits.Should().ContainSingle();
         audits[0].OldValue.Should().Be($"\"{KnownOfficeId}\"");
         audits[0].NewValue.Should().BeNull();
@@ -176,11 +185,13 @@ public sealed class TransitGrantHandlerTests
 
         var removed = await handler.HandleAsync(new RemoveTransitGrantCommand
         {
-            TenantId = tenantId, TransitOfficeId = KnownOfficeId, ChangedBy = ChangedBy,
-        });
+            TenantId = tenantId,
+            TransitOfficeId = KnownOfficeId,
+            ChangedBy = ChangedBy,
+        }, TestContext.Current.CancellationToken);
 
         removed.Should().BeFalse(); // → 404, sin auditoría
-        (await act.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId)).Should().Be(0);
+        (await act.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- AC5: listado de habilitados ----------
@@ -197,13 +208,19 @@ public sealed class TransitGrantHandlerTests
         {
             seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = enabledId,
-                IsEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                TransitOfficeId = enabledId,
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
             });
             seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = disabledId,
-                IsEnabled = false, CreatedAt = DateTimeOffset.UtcNow.AddMinutes(1),
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                TransitOfficeId = disabledId,
+                IsEnabled = false,
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(1),
             });
             seed.SaveChanges();
         }
@@ -211,7 +228,7 @@ public sealed class TransitGrantHandlerTests
         await using var ctx = NewContext(db);
         var handler = new GetTransitGrantsHandler(new TransitGrantRepository(ctx));
 
-        var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = tenantId });
+        var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
         result.TransitOfficeIds.Should().ContainSingle().Which.Should().Be(enabledId);
     }
@@ -222,7 +239,7 @@ public sealed class TransitGrantHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new GetTransitGrantsHandler(new TransitGrantRepository(ctx));
 
-        var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.TransitOfficeIds.Should().BeEmpty();
     }

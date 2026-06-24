@@ -75,7 +75,15 @@ public static class ApiSecurityExtensions
                 .RequireRole(AdminAuthorization.SuperAdminRole))
             .AddPolicy(AdminAuthorization.AdminCompanyPolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .AddRequirements(new AdminCompanyRequirement()));
+                .AddRequirements(new AdminCompanyRequirement()))
+            .AddPolicy(AdminAuthorization.OtAdminPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(AdminAuthorization.OtAdminRole))
+            .AddPolicy(AdminAuthorization.OtModulePolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(
+                    AdminAuthorization.SuperAdminRole,
+                    AdminAuthorization.OtAdminRole));
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, SuperAdminForbiddenResultHandler>();
 
