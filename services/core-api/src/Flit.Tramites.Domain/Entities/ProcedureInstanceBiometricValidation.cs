@@ -26,6 +26,28 @@ public sealed class ProcedureInstanceBiometricValidation
     public string TokenHash { get; set; } = string.Empty;
     public DateTimeOffset ExpiresAt { get; set; }
 
+    // ── Proveedor de validación de identidad (HU #10233 — Kyverum Verify) ────────
+
+    /// <summary>'mock' | 'kyverum'. Default 'mock' (flujo determinista de 3 fotos). 'kyverum' = validación
+    /// remota delegada al proveedor externo Kyverum Verify (captura + webhook firmado).</summary>
+    public string Provider { get; set; } = BiometricProviders.Mock;
+
+    /// <summary>Id de la verificación en Kyverum (correlación con el webhook). Null cuando provider='mock'.</summary>
+    public string? KyverumVerificationId { get; set; }
+
+    /// <summary>URL de captura que abre el participante para completar la validación en Kyverum.</summary>
+    public string? CaptureUrl { get; set; }
+
+    /// <summary>Secreto HMAC del webhook CIFRADO con Data Protection API. NUNCA se persiste en claro
+    /// ni se expone en DTOs/logs. Se descifra solo para verificar la firma del webhook entrante.</summary>
+    public string? WebhookSecretEncrypted { get; set; }
+
+    /// <summary>Estado crudo reportado por Kyverum (p.ej. 'approved'|'rejected'|'pending'). Trazabilidad.</summary>
+    public string? ProviderStatus { get; set; }
+
+    /// <summary>Payload del proveedor SANITIZADO (sin PII cruda ni secretos), en jsonb. Trazabilidad.</summary>
+    public string? ProviderPayload { get; set; }
+
     public int Intentos { get; set; }
     public int MaxIntentos { get; set; } = BiometricRules.MaxIntentos;
 
@@ -41,6 +63,16 @@ public sealed class ProcedureInstanceBiometricValidation
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public ProcedureInstance? ProcedureInstance { get; set; }
+}
+
+/// <summary>Proveedores de validación de identidad (HU #10233).</summary>
+public static class BiometricProviders
+{
+    /// <summary>Scorer determinista local (3 fotos). Default — preserva el flujo Slice 6.</summary>
+    public const string Mock = "mock";
+
+    /// <summary>Kyverum Verify: captura remota + webhook firmado (HMAC-SHA256).</summary>
+    public const string Kyverum = "kyverum";
 }
 
 /// <summary>Estados de la máquina de biométrica.</summary>

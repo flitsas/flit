@@ -17,7 +17,9 @@ public static class TraspasoGates
     public static readonly IReadOnlyDictionary<int, IReadOnlyList<string>> PasoDataKeys =
         new Dictionary<int, IReadOnlyList<string>>
         {
-            [2] = ["paz_salvo_impuesto", "impuesto_consulta"],
+            // El paz y salvo de impuesto se confirma en el paso 1 (junto a la consulta/preflight),
+            // ya no en el paso 2 (que pasa a ser Documentos, paridad con matrícula).
+            [1] = ["paz_salvo_impuesto", "impuesto_consulta"],
             [3] = ["vendedor", "runt_vendedor"],
             [4] = ["comprador", "runt_comprador", "simit_comprador"],
             [5] = ["comercial"],
@@ -32,15 +34,23 @@ public static class TraspasoGates
         switch (paso)
         {
             case 1:
-                return ctx.TramiteRadicado
-                    ? GateResult.Allowed
-                    : GateResult.Block("sin_radicado", "Radica el trámite antes de continuar");
-
-            case 2:
-                if (PreflightBloquea(ctx.Preflight, forzar))
-                    return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
+                // Paso 1 = consulta del vehículo por placa + (movido aquí) confirmación del paz y
+                // salvo de impuesto cuando el preflight lo reporta unknown. Sin consulta el paso NO
+                // se completa, así un trámite recién creado abre en el paso 1 (no salta al 2).
+                if (!ctx.TramiteRadicado)
+                    return GateResult.Block("sin_radicado", "Radica el trámite antes de continuar");
+                if (!ctx.VehiculoConsultado)
+                    return GateResult.Block("consulta_pendiente", "Consulta el vehículo por placa antes de continuar");
                 if (ImpuestoGateBloquea(ctx.Preflight, ctx.PazSalvoImpuestoVerificado, forzar))
                     return GateResult.Block("impuesto_pendiente", "Confirma paz y salvo de impuesto vehicular antes de continuar");
+                return GateResult.Allowed;
+
+            case 2:
+                // Paso 2 = Documentos (paridad con MatriculaGates paso 2): preflight crítico + checklist.
+                if (PreflightBloquea(ctx.Preflight, forzar))
+                    return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
+                if (!ctx.DocumentosObligatoriosCompletos)
+                    return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
                 return GateResult.Allowed;
 
             case 3:
@@ -61,8 +71,9 @@ public static class TraspasoGates
                 return ValidarComercial(ctx);
 
             case 6:
-                if (!ctx.DocumentosObligatoriosCompletos)
-                    return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
+                // Paso 6 = Generar FUR. Los documentos ya se exigen en el paso 2; aquí el gating
+                // (biometría de ambas partes + firma + FUR) se evalúa de forma diferida en
+                // WizardStateQuery.BuildTraspaso. PasoCompleto(6) no bloquea por documentos.
                 return GateResult.Allowed;
 
             default:

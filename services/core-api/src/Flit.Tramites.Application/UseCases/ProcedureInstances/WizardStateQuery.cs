@@ -194,6 +194,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         {
             // El trámite ya existe (instancia creada) → radicado a efectos del wizard server-side.
             TramiteRadicado = true,
+            // Consulta del vehículo por placa: sin ella el paso 1 queda incompleto (frontera),
+            // así un traspaso recién creado abre en el paso 1 y no en el 2.
+            VehiculoConsultado = HasVehiculoConsulta(fv),
             Preflight = preflight,
             PazSalvoImpuestoVerificado = PazSalvoVerificado(instance),
             Vendedor = vendedor,
@@ -233,12 +236,14 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             // emite las razones precisas de lo que falta.
             else if (p == 6)
             {
+                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + firma de AMBAS
+                // partes (slice 7) + FUR generado. Los documentos ya se exigen en el paso 2
+                // (paridad con matrícula); aquí NO se listan como reason. El faltante de docs
+                // sigue vetando el submit vía el blocker global documentos_incompletos.
                 var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
                 var firmaOk = FirmaAmbasFirmadas(instance);
                 var furOk = FurGenerado(instance);
 
-                if (!docsCompletos)
-                    reasons.Add("documentos_incompletos");
                 if (!biometriaOk)
                     reasons.Add(PendienteBiometria);
                 if (!firmaOk)
@@ -246,7 +251,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
                 if (!furOk)
                     reasons.Add(FurPendiente);
 
-                status = (docsCompletos && biometriaOk && firmaOk && furOk) ? "complete" : "incomplete";
+                status = (biometriaOk && firmaOk && furOk) ? "complete" : "incomplete";
             }
             else if (gate.Ok)
             {
@@ -477,7 +482,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             ? index switch
             {
                 1 => "consulta",
-                2 => "validacion",
+                2 => "documentos",
                 3 => "vendedor",
                 4 => "comprador",
                 5 => "comercial",

@@ -40,6 +40,9 @@ public static class AttachmentRules
         "factura", "aduana", "impronta", "soat", "certificado_ambiental", "compraventa",
         "acta_remate", "oficio_judicial", "declaracion_aduana", "comprobante_derechos",
         "acta_entrega", "otro",
+        // Documentos del checklist de traspaso (antes sin DocTipo → el front subía con el `key`,
+        // que no estaba en este set → 400 "tipo inválido").
+        "rtm", "paz_salvo", "cedulas", "cert_tradicion",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -195,9 +198,15 @@ public sealed class DeleteAttachmentHandler(
         if (attachment is null)
             return "attachment_not_found";
 
+        var tipo = attachment.Tipo;
         storage.Delete(attachment.StoragePath);
         instance.Attachments.Remove(attachment);
         repo.RemoveAttachment(attachment);
+
+        // Simétrico al AutoMark de la subida: si ya no queda ningún adjunto de ese tipo, se
+        // des-marca el ítem de checklist que se había auto-marcado. Sin esto, borrar un documento
+        // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
+        ChecklistEstadoJson.AutoUnmark(instance, tipo);
 
         await repo.SaveChangesAsync(ct);
         return null;
@@ -241,6 +250,37 @@ internal static class ChecklistEstadoJson
                 && (!estado.TryGetValue(item.Id, out var v) || !v))
             {
                 estado[item.Id] = true;
+                changed = true;
+            }
+        }
+
+        if (changed)
+            instance.ChecklistEstado = JsonSerializer.Serialize(estado);
+    }
+
+    /// <summary>
+    /// Inverso de <see cref="AutoMark"/>: al borrar un adjunto, des-marca en <c>checklist_estado</c>
+    /// los ítems cuyo <c>DocTipo</c> coincida con el tipo borrado, SIEMPRE que no quede ningún otro
+    /// adjunto de ese tipo. Debe llamarse DESPUÉS de quitar el adjunto de <c>instance.Attachments</c>.
+    /// </summary>
+    public static void AutoUnmark(ProcedureInstance instance, string docTipo)
+    {
+        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var tip = TramiteTipologiaCatalog.Get(codigo);
+        if (tip is null)
+            return;
+
+        // Si todavía queda otro adjunto del mismo tipo, el ítem sigue satisfecho por documento.
+        if (instance.Attachments.Any(a => string.Equals(a.Tipo, docTipo, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        var estado = Parse(instance.ChecklistEstado);
+        var changed = false;
+        foreach (var item in tip.Checklist)
+        {
+            if (string.Equals(item.DocTipo, docTipo, StringComparison.OrdinalIgnoreCase)
+                && estado.Remove(item.Id))
+            {
                 changed = true;
             }
         }

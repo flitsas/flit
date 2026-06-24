@@ -10,6 +10,7 @@ public sealed class TraspasoGatesTests
     private static TraspasoGateContext BaseCtx() => new()
     {
         TramiteRadicado = true,
+        VehiculoConsultado = true,
         Preflight = new PreflightSnapshot("green", ImpuestoVehicularUnknown: false),
         PazSalvoImpuestoVerificado = true,
         Vendedor = new ParteDatos("V", "111", "v@x.co"),
@@ -23,12 +24,11 @@ public sealed class TraspasoGatesTests
     };
 
     [Fact]
-    public void Paso6_DocumentosIncompletos_Bloquea()
+    public void Paso6_SinGateDocumentos_Avanza()
     {
+        // Los documentos se exigen ahora en el paso 2; el paso 6 (FUR) ya NO bloquea por docs.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
-        var r = TraspasoGates.PasoCompleto(6, ctx);
-        r.Ok.Should().BeFalse();
-        r.Code.Should().Be("documentos_incompletos");
+        TraspasoGates.PasoCompleto(6, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]
@@ -38,19 +38,28 @@ public sealed class TraspasoGatesTests
     }
 
     [Fact]
-    public void Paso6_DocumentosIncompletos_ForzarNoBypass()
+    public void Paso2_DocumentosIncompletos_Bloquea()
     {
-        // Gating ESTRICTO: forzar no omite documentos obligatorios.
-        var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false, ForzarContinuar = true };
-        TraspasoGates.PasoCompleto(6, ctx).Code.Should().Be("documentos_incompletos");
+        var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
+        var r = TraspasoGates.PasoCompleto(2, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("documentos_incompletos");
     }
 
     [Fact]
-    public void MaxPasoAlcanzable_DocumentosIncompletos_Es6()
+    public void Paso2_DocumentosIncompletos_ForzarNoBypass()
     {
-        // Pasos 1-5 completos; paso 6 bloquea por documentos → max alcanzable = 6.
+        // Gating ESTRICTO de documentos (igual que matrícula): forzar no omite obligatorios.
+        var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false, ForzarContinuar = true };
+        TraspasoGates.PasoCompleto(2, ctx).Code.Should().Be("documentos_incompletos");
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_DocumentosIncompletos_Es2()
+    {
+        // Documentos viven en el paso 2 → docs incompletos bloquean en 2 → max alcanzable = 2.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
-        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(6);
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(2);
     }
 
     [Fact]
@@ -60,6 +69,23 @@ public sealed class TraspasoGatesTests
         var r = TraspasoGates.PasoCompleto(1, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("sin_radicado");
+    }
+
+    [Fact]
+    public void Paso1_SinConsultaVehiculo_Bloquea()
+    {
+        // Un traspaso recién creado (sin placa consultada) debe quedarse en el paso 1.
+        var ctx = BaseCtx() with { VehiculoConsultado = false };
+        var r = TraspasoGates.PasoCompleto(1, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("consulta_pendiente");
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_SinConsultaVehiculo_Es1()
+    {
+        var ctx = BaseCtx() with { VehiculoConsultado = false };
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(1);
     }
 
     [Fact]
@@ -79,16 +105,28 @@ public sealed class TraspasoGatesTests
     }
 
     [Fact]
-    public void Paso2_ImpuestoUnknownSinPazSalvo_Bloquea()
+    public void Paso1_ImpuestoUnknownSinPazSalvo_Bloquea()
     {
+        // El gate de impuesto se movió al paso 1 (se confirma junto a la consulta/preflight).
         var ctx = BaseCtx() with
         {
             Preflight = new PreflightSnapshot("green", ImpuestoVehicularUnknown: true),
             PazSalvoImpuestoVerificado = false,
         };
-        var r = TraspasoGates.PasoCompleto(2, ctx);
+        var r = TraspasoGates.PasoCompleto(1, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("impuesto_pendiente");
+    }
+
+    [Fact]
+    public void Paso1_ImpuestoUnknownConPazSalvo_Avanza()
+    {
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("green", ImpuestoVehicularUnknown: true),
+            PazSalvoImpuestoVerificado = true,
+        };
+        TraspasoGates.PasoCompleto(1, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]

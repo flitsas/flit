@@ -24,7 +24,10 @@ public sealed record BiometricValidationDto(
     int? Score,
     DateTimeOffset ExpiresAt,
     DateTimeOffset? ValidadoAt,
-    bool Expired);
+    bool Expired,
+    // HU #10233 (AC9): proveedor de la validación y URL de captura (solo kyverum + en_proceso).
+    string Provider = BiometricProviders.Mock,
+    string? CaptureUrl = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -159,7 +162,13 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
     internal static BiometricValidationDto ToDto(ProcedureInstanceBiometricValidation v, DateTimeOffset now) =>
         new(v.Id, v.Parte, v.Nombre, v.TipoDoc, v.Documento, v.Email, v.Estado,
             v.Intentos, v.MaxIntentos, v.Score, v.ExpiresAt, v.ValidadoAt,
-            v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt);
+            v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt,
+            v.Provider,
+            // AC9: la URL de captura solo se expone para Kyverum mientras la validación está en proceso.
+            string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+                && v.Estado == BiometricEstados.EnProceso
+                    ? v.CaptureUrl
+                    : null);
 }
 
 // ── Handler: listar (autenticado) ───────────────────────────────────────────

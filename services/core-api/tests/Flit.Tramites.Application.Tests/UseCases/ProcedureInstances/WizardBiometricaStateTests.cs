@@ -90,10 +90,13 @@ public sealed class WizardBiometricaStateTests
         instance.Actors.Add(Comprador());
     }
 
-    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    /// <summary>Completa pasos 1-5 de traspaso (placa, documentos, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
     private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        // Los documentos gobiernan el paso 2; se marcan los obligatorios (vía estado manual).
+        instance.ChecklistEstado =
+            "{\"contrato_compraventa\":true,\"impronta\":true,\"soat\":true,\"rtm\":true,\"paz_salvo\":true,\"cedulas\":true}";
         instance.Actors.Add(Vendedor());
         instance.Actors.Add(Comprador("666"));
         instance.PreflightSnapshots.Add(Preflight("green"));

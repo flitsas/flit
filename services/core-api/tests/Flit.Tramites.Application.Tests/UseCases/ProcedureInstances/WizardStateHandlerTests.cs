@@ -65,6 +65,17 @@ public sealed class WizardStateHandlerTests
         instance.Attachments.Add(Attachment("impronta"));
     }
 
+    /// <summary>
+    /// Satisface el checklist obligatorio de traspaso_standard marcando todos sus ítems
+    /// (vía estado manual). Necesario porque los documentos ahora gobiernan el paso 2: sin
+    /// ellos el flujo se bloquea en 2 y los pasos posteriores quedan locked.
+    /// </summary>
+    private static void CompletarDocsTraspaso(ProcedureInstance instance)
+    {
+        instance.ChecklistEstado =
+            "{\"contrato_compraventa\":true,\"impronta\":true,\"soat\":true,\"rtm\":true,\"paz_salvo\":true,\"cedulas\":true}";
+    }
+
     private void Setup(ProcedureInstance instance) =>
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(),
             Arg.Any<CancellationToken>()).Returns(instance);
@@ -161,7 +172,7 @@ public sealed class WizardStateHandlerTests
     public async Task Get_Traspaso_EmptyInstance_FurStepLocked()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("traspaso")); // maxAlcanzable = 3 (radicado + validación ok, vendedor pendiente).
+        Setup(Base("traspaso")); // maxAlcanzable = 1 (sin placa consultada → paso 1 es la frontera).
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -181,6 +192,7 @@ public sealed class WizardStateHandlerTests
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
+        CompletarDocsTraspaso(instance); // docs gobiernan el paso 2; sin ellos FUR queda locked.
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
@@ -227,6 +239,7 @@ public sealed class WizardStateHandlerTests
         var instance = Base("traspaso");
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Actors.Add(Actor("vendedor", "555"));
+        CompletarDocsTraspaso(instance); // habilita pasar el paso 2 (documentos) para evaluar el 3.
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
@@ -246,6 +259,7 @@ public sealed class WizardStateHandlerTests
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
+        CompletarDocsTraspaso(instance); // habilita pasar el paso 2 (documentos) para evaluar el 5.
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
@@ -315,7 +329,7 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_Traspaso_DocsIncompletos_GlobalBlockerAndStep6Reason()
+    public async Task Get_Traspaso_DocsIncompletos_Step2ReasonAndGlobalBlocker()
     {
         var ct = TestContext.Current.CancellationToken;
         // Tipología real → su checklist obligatorio aplica (sin adjuntos = faltan docs).
@@ -329,22 +343,23 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Paso 6 está diferido (biométrica/firma); el blocker GLOBAL es lo que veta el submit.
-        var s6 = result!.Steps.Single(s => s.Index == 6);
-        s6.Reasons.Should().Contain("documentos_incompletos");
+        // Los documentos ahora gobiernan el paso 2: su reason vive ahí; el blocker GLOBAL veta el submit.
+        var s2 = result!.Steps.Single(s => s.Index == 2);
+        s2.Status.Should().Be("incomplete");
+        s2.Reasons.Should().Contain("documentos_incompletos");
         result.Blockers.Should().Contain("documentos_incompletos");
         result.CanSubmit.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Get_Traspaso_Step2RekeyedToValidacion()
+    public async Task Get_Traspaso_Step2KeyIsDocumentos()
     {
         var ct = TestContext.Current.CancellationToken;
         Setup(Base("traspaso"));
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Steps.Single(s => s.Index == 2).Key.Should().Be("validacion");
+        result!.Steps.Single(s => s.Index == 2).Key.Should().Be("documentos");
     }
 
     [Fact]
