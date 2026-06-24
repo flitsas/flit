@@ -21,6 +21,7 @@ import {
   KeyRound,
   LogOut,
   FolderCog,
+  Landmark,
 } from "lucide-react";
 
 export type ModuleId =
@@ -77,8 +78,8 @@ export function Shell({
   }, []);
 
   // Dock balanceado alrededor del FAB: 4 a la izquierda y 4 a la derecha.
-  // La derecha son los 2 últimos módulos del DOCK + las 2 consolas admin
-  // (Compañías y Documental), que se renderizan aparte por tener ruta propia.
+  // La derecha son los 2 últimos módulos del DOCK + las consolas admin
+  // (Compañías, OT/Tránsito y Documental), que se renderizan aparte por ruta propia.
   const left = DOCK.slice(0, 4);
   const right = DOCK.slice(4);
 
@@ -210,6 +211,15 @@ export function Shell({
               active={false}
               onClick={() => {
                 window.location.href = "/admin/companies";
+              }}
+              dark={dark}
+            />
+            {/* Consola de Administración OT — organismos de tránsito (HU #10133). */}
+            <DockBtn
+              item={{ label: "Tránsito", icon: Landmark }}
+              active={false}
+              onClick={() => {
+                window.location.href = "/admin/transit-offices";
               }}
               dark={dark}
             />
