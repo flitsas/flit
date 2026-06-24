@@ -369,27 +369,40 @@ export interface BiometricValidation {
   expiresAt: string;
   validadoAt: string | null;
   expired: boolean;
+  // HU #10233: proveedor de la validación y URL de captura (solo kyverum + en_proceso).
+  provider: string;
+  captureUrl: string | null;
 }
 
-/** Entrada para iniciar una biométrica (espejo de IniciarBiometriaInput). */
+/**
+ * Entrada para iniciar una biométrica (espejo de IniciarBiometriaInput). Los datos del sujeto son
+ * OPCIONALES: si no se envían, el backend los resuelve desde el actor de la parte registrado en el
+ * trámite (el wizard envía solo `parte`). Enviarlos los usa como override (API/Postman directo).
+ */
 export interface IniciarBiometriaInput {
   parte?: BiometricParte | null;
-  nombre: string;
-  tipoDoc: string;
-  documento: string;
-  email: string;
+  nombre?: string;
+  tipoDoc?: string;
+  documento?: string;
+  email?: string;
 }
 
-/** Resultado de iniciar: incluye el token CRUDO y el path del magic-link. */
+/**
+ * Resultado de iniciar. Mock → token CRUDO + magicLinkPath (3 fotos). Kyverum → captureUrl
+ * (captura remota); token/magicLinkPath ausentes. En ambos, validation.captureUrl también trae la URL
+ * cuando aplica.
+ */
 export interface IniciarBiometriaResult {
   validation: BiometricValidation;
-  token: string;
-  magicLinkPath: string;
+  token?: string;
+  magicLinkPath?: string;
+  captureUrl?: string;
 }
 
-/** Respuesta de GET /instances/{id}/biometric. */
+/** Respuesta de GET /instances/{id}/biometric. `provider` = proveedor configurado (mock|kyverum). */
 export interface BiometricValidationsResponse {
   validations: BiometricValidation[];
+  provider: string;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

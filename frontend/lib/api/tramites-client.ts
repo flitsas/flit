@@ -499,6 +499,19 @@ export const tramitesClient = {
     return res?.validations ?? [];
   },
 
+  // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
+  // el botón "Validar identidad" sea provider-aware (kyverum → validación real; mock → simular).
+  getBiometricState: async (
+    instanceId: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<BiometricValidationsResponse> => {
+    const res = await request<BiometricValidationsResponse>(
+      `/api/v1/tramites/instances/${instanceId}/biometric`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return res ?? { validations: [], provider: 'mock' };
+  },
+
   // ── Firma electrónica (Slice 7A) — lado gestor autenticado ──────────
   // POST solicitar firma de una parte de la compraventa. Solo traspaso
   // (matrícula → 409 no_aplica). Idempotente por (parte, docTipo).
