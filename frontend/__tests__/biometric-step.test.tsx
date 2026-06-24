@@ -6,13 +6,15 @@ import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
-  listBiometric: vi.fn(),
+  getBiometricState: vi.fn(),
+  iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
-    listBiometric: mocks.listBiometric,
+    getBiometricState: mocks.getBiometricState,
+    iniciarBiometric: mocks.iniciarBiometric,
     simulateBiometric: mocks.simulateBiometric,
   },
 }));
@@ -35,12 +37,33 @@ const APROBADA: BiometricValidation = {
   expiresAt: '2026-06-20T00:00:00Z',
   validadoAt: '2026-06-19T00:00:00Z',
   expired: false,
+  provider: 'mock',
+  captureUrl: null,
+};
+
+const EN_PROCESO: BiometricValidation = {
+  id: 'val-2',
+  parte: 'comprador',
+  nombre: 'Ana Comprador',
+  tipoDoc: 'CC',
+  documento: '123',
+  email: 'ana@example.com',
+  estado: 'en_proceso',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validadoAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: 'https://verify.kyverum.com/capture.html?t=abc',
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listBiometric.mockResolvedValue([]);
+  mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
   mocks.simulateBiometric.mockResolvedValue(APROBADA);
+  mocks.iniciarBiometric.mockResolvedValue({ validation: EN_PROCESO, captureUrl: EN_PROCESO.captureUrl });
 });
 
 describe('BiometricStep — partes por modalidad', () => {
@@ -52,7 +75,7 @@ describe('BiometricStep — partes por modalidad', () => {
     expect(screen.queryByRole('group', { name: 'Biométrica Vendedor' })).not.toBeInTheDocument();
   });
 
-  it('traspaso muestra comprador y vendedor con un botón de simular cada uno', async () => {
+  it('traspaso muestra comprador y vendedor con un botón de simular cada uno (mock)', async () => {
     render(<BiometricStep instanceId={INSTANCE} modalidad="traspaso" />);
     expect(await screen.findByRole('group', { name: 'Biométrica Comprador' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Biométrica Vendedor' })).toBeInTheDocument();
@@ -62,7 +85,7 @@ describe('BiometricStep — partes por modalidad', () => {
   });
 });
 
-describe('BiometricStep — simular validación', () => {
+describe('BiometricStep — mock (simular)', () => {
   it('simula la validación de la parte y dispara onRefresh', async () => {
     const onRefresh = vi.fn();
     const user = userEvent.setup();
@@ -87,9 +110,38 @@ describe('BiometricStep — simular validación', () => {
   });
 });
 
+describe('BiometricStep — kyverum (validación real)', () => {
+  it('el botón inicia la validación enviando solo la parte (datos del trámite)', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'kyverum' });
+    const user = userEvent.setup();
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Validar identidad' }));
+
+    await waitFor(() => expect(mocks.iniciarBiometric).toHaveBeenCalledTimes(1));
+    const [instanceId, input] = mocks.iniciarBiometric.mock.calls[0];
+    expect(instanceId).toBe(INSTANCE);
+    // Solo la parte: el backend resuelve nombre/documento/email del actor del trámite.
+    expect(input).toEqual({ parte: 'comprador' });
+  });
+
+  it('en proceso muestra el enlace de captura y el QR', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByText(/Esperando validación de Ana Comprador/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: EN_PROCESO.captureUrl! }),
+    ).toHaveAttribute('href', EN_PROCESO.captureUrl);
+    expect(screen.getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
+  });
+});
+
 describe('BiometricStep — resultado verificado', () => {
   it('muestra la tarjeta verde con score cuando la parte ya está aprobada', async () => {
-    mocks.listBiometric.mockResolvedValue([APROBADA]);
+    mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
     render(
       <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />,
     );
@@ -97,9 +149,9 @@ describe('BiometricStep — resultado verificado', () => {
       await screen.findByText('Identidad verificada — 95/100'),
     ).toBeInTheDocument();
     expect(screen.getByText('Ana Comprador')).toBeInTheDocument();
-    // No debe ofrecer el botón de simular cuando ya hay validación aprobada.
+    // No debe ofrecer botón de iniciar/simular cuando ya hay validación aprobada.
     expect(
-      screen.queryByRole('button', { name: 'Simular validación de identidad' }),
+      screen.queryByRole('button', { name: /validación de identidad/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -117,6 +169,6 @@ describe('BiometricStep — resultado verificado', () => {
     await user.click(screen.getByRole('button', { name: 'Actualizar estado biométrico' }));
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
     // 1 carga inicial + 1 al actualizar.
-    expect(mocks.listBiometric.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

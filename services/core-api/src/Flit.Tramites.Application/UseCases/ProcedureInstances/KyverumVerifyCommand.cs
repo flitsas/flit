@@ -42,17 +42,14 @@ public sealed class IniciarKyverumVerifyHandler(
         IniciarBiometriaInput input,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(input.Nombre)
-            || string.IsNullOrWhiteSpace(input.TipoDoc)
-            || string.IsNullOrWhiteSpace(input.Documento)
-            || string.IsNullOrWhiteSpace(input.Email))
-            return (null, "datos_incompletos");
-
         var parte = NormalizeParte(input.Parte);
         if (parte is "invalid")
             return (null, "parte_invalida");
 
-        var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
+        // Se cargan también los actores: el wizard dispara la validación enviando SOLO la parte y los
+        // datos del sujeto se toman del actor del trámite (fuente única de verdad). Mismo repo que
+        // SimularBiometriaHandler.
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
         if (instance.Status != ProcedureInstanceStatus.Draft)
@@ -64,6 +61,19 @@ public sealed class IniciarKyverumVerifyHandler(
         if (existing is not null)
             return (null, "biometria_activa");
 
+        // Datos del sujeto: el body los puede sobreescribir (API/Postman directo); si vienen vacíos, se
+        // resuelven desde el actor de la parte registrado en el trámite (el camino del wizard).
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var nombre = FirstNonEmpty(input.Nombre, actor?.FullName);
+        var tipoDoc = FirstNonEmpty(input.TipoDoc, actor?.DocumentType);
+        var documento = FirstNonEmpty(input.Documento, actor?.DocumentNumber);
+        var email = FirstNonEmpty(input.Email, actor?.Email);
+        if (nombre is null || tipoDoc is null || documento is null || email is null)
+            // Sin datos: si ni siquiera hay actor registrado → actor_requerido; si el actor existe pero le
+            // falta algún dato (p.ej. email) → datos_incompletos.
+            return (null, actor is null ? "actor_requerido" : "datos_incompletos");
+
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
         var validationId = Guid.NewGuid();
@@ -73,7 +83,7 @@ public sealed class IniciarKyverumVerifyHandler(
         try
         {
             provider = await kyverum.StartVerificationAsync(
-                new KyverumVerifyStartRequest(id, validationId, parte, input.Nombre.Trim(), input.TipoDoc.Trim(), input.Documento.Trim(), input.Email.Trim()),
+                new KyverumVerifyStartRequest(id, validationId, parte, nombre, tipoDoc, documento, email),
                 ct);
         }
         catch (KyverumVerifyException ex)
@@ -88,10 +98,10 @@ public sealed class IniciarKyverumVerifyHandler(
             TenantId = tenantId,
             ProcedureInstanceId = id,
             Parte = parte,
-            Nombre = input.Nombre.Trim(),
-            TipoDoc = input.TipoDoc.Trim(),
-            Documento = input.Documento.Trim(),
-            Email = input.Email.Trim(),
+            Nombre = nombre,
+            TipoDoc = tipoDoc,
+            Documento = documento,
+            Email = email,
             Estado = BiometricEstados.EnProceso,
             // Sin magic-link en Kyverum: token_hash aleatorio para cumplir NOT NULL/único.
             TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
@@ -130,13 +140,21 @@ public sealed class IniciarKyverumVerifyHandler(
         return (new IniciarKyverumVerifyResult(dto, provider.CaptureUrl), null);
     }
 
+    // Parte vacía → comprador (matrícula, única parte), igual que SimularBiometriaHandler: así la
+    // validación queda con Parte="comprador" y el gate del wizard (BiometriaAprobada) la reconoce.
     private static string? NormalizeParte(string? parte)
     {
-        if (string.IsNullOrWhiteSpace(parte))
-            return null;
-        var p = parte.Trim().ToLowerInvariant();
+        var p = string.IsNullOrWhiteSpace(parte)
+            ? BiometricRules.ParteComprador
+            : parte.Trim().ToLowerInvariant();
         return p is BiometricRules.ParteComprador or BiometricRules.ParteVendedor ? p : "invalid";
     }
+
+    /// <summary>Primer valor no vacío (recortado), o null si ambos están vacíos.</summary>
+    private static string? FirstNonEmpty(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) ? a.Trim()
+        : !string.IsNullOrWhiteSpace(b) ? b!.Trim()
+        : null;
 }
 
 // ── Handler: webhook Kyverum (público) — AC2/AC3 ──────────────────────────────
