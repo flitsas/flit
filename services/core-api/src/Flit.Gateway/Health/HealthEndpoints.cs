@@ -4,10 +4,9 @@ public static class HealthEndpoints
 {
     public static void MapHealthEndpoints(this WebApplication app)
     {
-        app.MapGet("/health", () => Results.Ok(new { status = "alive" }))
+        app.MapGet("/health", () => Results.Content("""{"status":"alive"}""", "application/json"))
            .AllowAnonymous();
 
-        // HttpContext + GetRequiredService: compatible con PublishAot (no inyectar IHttpClientFactory en el lambda).
         app.MapGet("/ready", async (HttpContext ctx) =>
         {
             var config = ctx.RequestServices.GetRequiredService<IConfiguration>();
@@ -29,7 +28,7 @@ public static class HealthEndpoints
                 return Results.StatusCode(503);
             }
 
-            return Results.Ok(new { status = "ready" });
+            return Results.Content("""{"status":"ready"}""", "application/json");
         }).AllowAnonymous();
     }
 }

@@ -38,7 +38,9 @@ internal sealed class KyverumVerifyClient(
                     Rol: string.IsNullOrWhiteSpace(request.Parte) ? "titular" : request.Parte!,
                     Nombre: request.Nombre,
                     TipoDoc: request.TipoDoc,
-                    Documento: request.Documento),
+                    Documento: request.Documento,
+                    // Kyverum notifica al sujeto el enlace de captura usando este correo (subjects[].email).
+                    Email: string.IsNullOrWhiteSpace(request.Email) ? null : request.Email),
             ]);
 
         try
@@ -142,7 +144,9 @@ internal sealed class KyverumVerifyClient(
         [property: JsonPropertyName("rol")] string Rol,
         [property: JsonPropertyName("nombre")] string Nombre,
         [property: JsonPropertyName("tipoDoc")] string TipoDoc,
-        [property: JsonPropertyName("documento")] string Documento);
+        [property: JsonPropertyName("documento")] string Documento,
+        // Se omite del JSON si es null (Kyverum lo trata como opcional); presente ⇒ Kyverum notifica al sujeto.
+        [property: JsonPropertyName("email"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Email);
 
     private sealed record KyverumCreateValidationResponse(
         [property: JsonPropertyName("id")] string? Id,

@@ -12,7 +12,7 @@ namespace Flit.Infrastructure.Tests.Kyverum;
 public sealed class KyverumVerifyClientTests
 {
     private static readonly KyverumVerifyStartRequest Request =
-        new(Guid.NewGuid(), Guid.NewGuid(), "comprador", "Juan Perez", "CC", "123456");
+        new(Guid.NewGuid(), Guid.NewGuid(), "comprador", "Juan Perez", "CC", "123456", "juan@example.com");
 
     private static KyverumVerifyClient Client(MockHttpMessageHandler handler) =>
         new(
@@ -43,6 +43,9 @@ public sealed class KyverumVerifyClientTests
         handler.LastRequest!.Headers.Contains("Idempotency-Key").Should().BeTrue();
         // POST al endpoint correcto del contrato.
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v1/validations");
+        // El correo del sujeto viaja en el body (subjects[].email) para que Kyverum notifique al usuario.
+        handler.LastBody.Should().Contain("\"email\"");
+        handler.LastBody.Should().Contain("juan@example.com");
     }
 
     [Fact]
@@ -100,9 +103,13 @@ public sealed class KyverumVerifyClientTests
     {
         public HttpRequestMessage? LastRequest { get; private set; }
 
+        /// <summary>Body capturado al enviar: el request se dispone tras la llamada, así que se lee aquí.</summary>
+        public string? LastBody { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             LastRequest = request;
+            LastBody = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             return Task.FromResult(responder(request, cancellationToken));
         }
     }

@@ -101,3 +101,12 @@ public sealed class InvalidInvitationTokenException : Exception
     {
     }
 }
+
+/// <summary>Ya existe un usuario activo con ese email en el sistema — no se puede reinvitar.</summary>
+public sealed class UserAlreadyExistsException : Exception
+{
+    public UserAlreadyExistsException()
+        : base("A user with this email already has an active account.")
+    {
+    }
+}

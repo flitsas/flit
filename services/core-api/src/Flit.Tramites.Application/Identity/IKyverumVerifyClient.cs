@@ -10,13 +10,15 @@ namespace Flit.Tramites.Application.Identity;
 /// <param name="Nombre">Nombre de la persona a validar.</param>
 /// <param name="TipoDoc">Tipo de documento (CC, CE, …).</param>
 /// <param name="Documento">Número de documento.</param>
+/// <param name="Email">Correo de la persona: Kyverum lo usa para notificarle el enlace de captura.</param>
 public sealed record KyverumVerifyStartRequest(
     Guid ProcedureInstanceId,
     Guid CorrelationId,
     string? Parte,
     string Nombre,
     string TipoDoc,
-    string Documento);
+    string Documento,
+    string Email);
 
 /// <summary>
 /// Resultado de iniciar una verificación en Kyverum. El <paramref name="WebhookSecret"/> es el secreto

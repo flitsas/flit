@@ -301,8 +301,15 @@ public static class DevelopmentAuthSeeder
         IPasswordHasher passwordHasher,
         CancellationToken cancellationToken)
     {
-        if (await db.Users.AnyAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken))
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken);
+
+        if (existingUser is not null)
+        {
+            // Reparar si el role assignment fue soft-deleted en una sesión previa
+            await EnsureAdminCompanyRoleAssignmentAsync(db, existingUser.Id, cancellationToken);
             return;
+        }
 
         // AdminCompany vive en su PROPIO tenant (EMPRESA_DEMO), separado del tenant
         // del SuperAdmin (DEMO). Esto garantiza aislamiento real en dev: AdminCompany
@@ -378,6 +385,54 @@ public static class DevelopmentAuthSeeder
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAdminCompanyRoleAssignmentAsync(
+        FlitDbContext db,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var empresaTenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
+        if (empresaTenant is null) return;
+
+        var adminCompanyRole = await db.Roles
+            .FirstOrDefaultAsync(r => r.TenantId == empresaTenant.Id && r.Code == "AdminCompany" && r.DeletedAt == null, ct);
+        if (adminCompanyRole is null) return;
+
+        // La constraint uq_user_role_assignments_user_id_tenant_id es UNIQUE(user_id, tenant_id)
+        // SIN filtrar por deleted_at: solo puede existir UNA fila por (usuario, tenant). Por eso hay
+        // que buscar también las soft-deleted; si filtramos por DeletedAt == null, una fila borrada
+        // lógicamente queda invisible y el INSERT choca con la constraint (23505) en cada arranque.
+        var existing = await db.UserRoleAssignments
+            .FirstOrDefaultAsync(a => a.UserId == userId && a.TenantId == empresaTenant.Id, ct);
+
+        if (existing is not null)
+        {
+            // Reactiva/realinea la fila existente en lugar de insertar (idempotente).
+            if (existing.DeletedAt is not null || existing.RoleId != adminCompanyRole.Id)
+            {
+                existing.DeletedAt = null;
+                existing.DeletedBy = null;
+                existing.RoleId = adminCompanyRole.Id;
+                existing.AssignedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = empresaTenant.Id,
+            UserId = userId,
+            RoleId = adminCompanyRole.Id,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     private static async Task SeedBaseModulesAsync(
