@@ -304,6 +304,38 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
     expect(within(resumen).getByText('Borrador (en preparación)')).toBeInTheDocument();
   });
 
+  it('en traspaso el resumen se rotula "Resumen del traspaso" (no matrícula)', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    expect(
+      await screen.findByRole('region', { name: 'Resumen del traspaso' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Resumen de la matrícula' }),
+    ).toBeNull();
+  });
+
+  it('en traspaso el resumen muestra al vendedor; en matrícula no', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      actors: [
+        { actorType: 'vendedor', fullName: 'Ana Vendedora', documentType: 'CC', documentNumber: '111' },
+        { actorType: 'comprador', fullName: 'Beto Comprador', documentType: 'CC', documentNumber: '222' },
+      ],
+    });
+    const { unmount } = render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const resumen = await screen.findByRole('region', { name: 'Resumen del traspaso' });
+    expect(within(resumen).getByText('Vendedor')).toBeInTheDocument();
+    expect(within(resumen).getByText('Ana Vendedora')).toBeInTheDocument();
+    expect(within(resumen).getByText('Beto Comprador')).toBeInTheDocument();
+
+    // En matrícula (sin vendedor) no aparece la fila Vendedor.
+    unmount();
+    mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const resumenMat = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
+    expect(within(resumenMat).queryByText('Vendedor')).toBeNull();
+  });
+
   it('el expediente digital alterna entre las pestañas Vehículo / Comprador / Documentos', async () => {
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);

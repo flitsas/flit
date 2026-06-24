@@ -1,6 +1,9 @@
 'use client';
 
-import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
+import type {
+  InstanceStatus,
+  WizardModalidad,
+} from '@/lib/api/types/procedure-runtime';
 
 // Resumen consolidado de la matrícula (paso FUR): muestra el estado final de un
 // vistazo (placa, vehículo, comprador, identidad, documentos, organismo) sin
@@ -9,10 +12,14 @@ import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 // datos de FLIT (InstanceStatus + field_values + actors).
 
 interface Props {
+  /** Modalidad del trámite: ajusta el título del resumen (matrícula vs traspaso). */
+  modalidad: WizardModalidad;
   status: InstanceStatus;
   placa: string;
   vehiculo: string;
   vin: string;
+  /** Parte saliente. Solo en traspaso; en matrícula es `null` y no se pinta. */
+  vendedor?: { nombre?: string; documento?: string; tipoDoc?: string } | null;
   comprador: { nombre?: string; documento?: string; tipoDoc?: string } | null;
   archivosCount: number;
   identidadAprobada: boolean;
@@ -46,10 +53,12 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 }
 
 export default function MatriculaResumen({
+  modalidad,
   status,
   placa,
   vehiculo,
   vin,
+  vendedor,
   comprador,
   archivosCount,
   identidadAprobada,
@@ -57,17 +66,20 @@ export default function MatriculaResumen({
 }: Props) {
   const tone = ESTADO_TONE[status];
   const orgTxt = [orgTransito?.nombre, orgTransito?.ciudad].filter(Boolean).join(' · ');
+  // Traspaso y matrícula son procesos distintos: el resumen se rotula acorde.
+  const resumenTitulo =
+    modalidad === 'traspaso' ? 'Resumen del traspaso' : 'Resumen de la matrícula';
 
   return (
     <section
-      aria-label="Resumen de la matrícula"
+      aria-label={resumenTitulo}
       className="rounded-xl border p-4"
       style={{ borderColor: '#DFE5ED' }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="h-5 w-1.5 rounded-full" style={{ background: tone }} aria-hidden="true" />
-          <h4 className="text-xs font-bold uppercase tracking-[0.18em]">Resumen de la matrícula</h4>
+          <h4 className="text-xs font-bold uppercase tracking-[0.18em]">{resumenTitulo}</h4>
         </div>
         <span
           className="rounded-full px-3 py-1 text-[11px] font-semibold"
@@ -89,9 +101,18 @@ export default function MatriculaResumen({
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <Field label="Vehículo" value={vehiculo} />
         <Field label="VIN" value={vin} />
+        {vendedor && (
+          <>
+            <Field label="Vendedor" value={vendedor.nombre} />
+            <Field
+              label="Documento vendedor"
+              value={vendedor.documento ? `${vendedor.tipoDoc || 'CC'} ${vendedor.documento}` : null}
+            />
+          </>
+        )}
         <Field label="Comprador" value={comprador?.nombre} />
         <Field
-          label="Documento"
+          label={vendedor ? 'Documento comprador' : 'Documento'}
           value={comprador?.documento ? `${comprador?.tipoDoc || 'CC'} ${comprador.documento}` : null}
         />
         <Field label="Identidad" value={identidadAprobada ? 'Verificada' : 'Pendiente'} />

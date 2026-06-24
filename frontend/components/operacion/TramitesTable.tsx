@@ -90,7 +90,7 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
     'Generar FUR',
   ],
   traspaso: [
-    'Consulta VIN/Placa',
+    'Consulta del vehículo',
     'Documentos',
     'Vendedor',
     'Comprador',
