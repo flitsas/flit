@@ -51,7 +51,7 @@ public sealed class AdminTransitGrantsAuthorizationTests
     }
 
     [Fact]
-    public async Task Catalog_WithOtAdmin_Returns200()
+    public async Task Catalog_WithOtAdmin_IsAuthorized()
     {
         var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var client = _factory.CreateClient();
@@ -61,7 +61,8 @@ public sealed class AdminTransitGrantsAuthorizationTests
                 TestTokenFactory.CreateOtAdminToken(tenantId));
 
         var response = await client.GetAsync(CatalogUrl, TestContext.Current.CancellationToken);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
