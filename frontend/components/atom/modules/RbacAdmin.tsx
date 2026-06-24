@@ -354,7 +354,6 @@ function RolesTab() {
       setRoles([]);
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRolesLoading(true);
     setRolesError(null);
     superadminClient.listRoles(selectedTenantId)
@@ -668,14 +667,23 @@ function ModuleGrantsModal({
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      superadminClient.listCompanies().then((r) => r.data),
-      superadminClient.listModuleGrants(module.id),
-    ])
-      .then(([c, g]) => { setCompanies(c); setGrants(g); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let active = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const [c, g] = await Promise.all([
+          superadminClient.listCompanies().then((r) => r.data),
+          superadminClient.listModuleGrants(module.id),
+        ]);
+        if (active) { setCompanies(c); setGrants(g); }
+      } catch {
+        // ignore
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => { active = false; };
   }, [module.id]);
 
   const grantedIds = new Set(grants.map((g) => g.tenantId));

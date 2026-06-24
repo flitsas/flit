@@ -75,7 +75,6 @@ export function Usuarios() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUsers();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadRoles();
   }, []);
 
