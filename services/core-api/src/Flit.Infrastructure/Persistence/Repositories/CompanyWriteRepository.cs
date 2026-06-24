@@ -57,8 +57,9 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             CreatedBy = company.CreatedBy,
         };
         _context.Tenants.Add(entity);
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        // Seed the mandatory "AdminCompany" system role for this tenant
+        // Seed the mandatory "AdminCompany" system role (tenant must exist first for FK)
         _context.Roles.Add(new Role
         {
             Id = roleId,
