@@ -73,7 +73,7 @@ public sealed class IniciarKyverumVerifyHandler(
         try
         {
             provider = await kyverum.StartVerificationAsync(
-                new KyverumVerifyStartRequest(id, validationId, parte, input.Nombre.Trim(), input.TipoDoc.Trim(), input.Documento.Trim()),
+                new KyverumVerifyStartRequest(id, validationId, parte, input.Nombre.Trim(), input.TipoDoc.Trim(), input.Documento.Trim(), input.Email.Trim()),
                 ct);
         }
         catch (KyverumVerifyException ex)
