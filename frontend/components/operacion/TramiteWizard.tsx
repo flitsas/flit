@@ -25,9 +25,10 @@ import {
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { PreflightPanel } from './PreflightPanel';
-import { ActorsForm, type ActorsFormHandle } from './ActorsForm';
+import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
@@ -188,8 +189,9 @@ export function TramiteWizard(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { show } = useToast();
-  // Guardar+continuar de los pasos de actores: la shell dispara save() vía ref.
-  const actorsFormRef = useRef<ActorsFormHandle>(null);
+  // Guardar+continuar de los pasos con form embebido (actores y comercial): la
+  // shell dispara save() vía ref desde el footer "Guardar y continuar".
+  const stepFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
@@ -288,27 +290,31 @@ export function TramiteWizard(props: Props) {
   };
 
   const isLast = steps.length > 0 && activeIndex === steps.length - 1;
-  // Pasos de captura de actores: el footer "Continuar" guarda y luego avanza,
-  // así que se habilita aunque el paso aún esté incomplete (el save lo completa).
-  const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
+  // Pasos con form embebido (actores y comercial): el footer "Continuar" guarda
+  // y luego avanza, así que se habilita aunque el paso aún esté incomplete (el
+  // save lo completa).
+  const isSavableStep =
+    activeStep?.key === 'comprador' ||
+    activeStep?.key === 'vendedor' ||
+    activeStep?.key === 'comercial';
   const continueDisabled =
     !activeStep ||
     activeIndex >= steps.length - 1 ||
     continuing ||
-    (!isActorStep && activeStep.status !== 'complete');
+    (!isSavableStep && activeStep.status !== 'complete');
 
-  // "Guardar y continuar" para pasos de actores: valida + PUT /actors (vía ref),
-  // refresca el wizard y avanza solo si el paso quedó complete. Otros pasos:
-  // navegación directa al siguiente.
+  // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
+  // ref), refresca el wizard y avanza solo si el paso quedó complete. Otros
+  // pasos: navegación directa al siguiente.
   const handleContinue = async () => {
-    if (!isActorStep) {
+    if (!isSavableStep) {
       goToStep(activeIndex + 1);
       return;
     }
     setContinuing(true);
     setSubmitError(null);
     try {
-      const ok = await actorsFormRef.current?.save();
+      const ok = await stepFormRef.current?.save();
       if (!ok) {
         setSubmitError('No se pudo guardar. Por favor, reintenta.');
         return;
@@ -459,7 +465,7 @@ export function TramiteWizard(props: Props) {
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
-                actorsRef={actorsFormRef}
+                stepFormRef={stepFormRef}
               />
             </div>
           )}
@@ -505,7 +511,7 @@ export function TramiteWizard(props: Props) {
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
-                {continuing ? 'Guardando…' : isActorStep ? 'Guardar y continuar' : 'Continuar'}
+                {continuing ? 'Guardando…' : isSavableStep ? 'Guardar y continuar' : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
@@ -1038,7 +1044,7 @@ function StepBody({
   preflightLoading,
   onRunPreflight,
   onRefresh,
-  actorsRef,
+  stepFormRef,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1047,7 +1053,7 @@ function StepBody({
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
-  actorsRef: RefObject<ActorsFormHandle | null>;
+  stepFormRef: RefObject<WizardStepFormHandle | null>;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -1082,7 +1088,7 @@ function StepBody({
       return (
         <ActorsForm
           key={step.key}
-          ref={actorsRef}
+          ref={stepFormRef}
           instanceId={instanceId}
           modalidad={modalidad === 'traspaso' ? 'traspaso' : 'matricula_inicial'}
           roles={['comprador']}
@@ -1096,7 +1102,7 @@ function StepBody({
       return (
         <ActorsForm
           key={step.key}
-          ref={actorsRef}
+          ref={stepFormRef}
           instanceId={instanceId}
           modalidad="traspaso"
           roles={['vendedor']}
@@ -1110,9 +1116,17 @@ function StepBody({
       );
 
     case 'comercial':
-      // hideHeader: el h2 + subtítulo ya cubren el título del paso.
+      // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
+      // lo dispara el footer "Guardar y continuar" (vía save() del ref).
       return (
-        <CommercialForm instanceId={instanceId} onSaved={onRefresh} hideHeader />
+        <CommercialForm
+          key={step.key}
+          ref={stepFormRef}
+          instanceId={instanceId}
+          onSaved={onRefresh}
+          hideHeader
+          embeddedInWizard
+        />
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).

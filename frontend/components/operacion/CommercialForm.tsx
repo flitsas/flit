@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly, groupThousands } from '@/lib/format/currency';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import type { WizardStepFormHandle } from './wizard-step-form';
 import type {
   CommercialCausal,
   CommercialData,
 } from '@/lib/api/types/procedure-runtime';
+
+/** Handle imperativo: la shell del wizard dispara guardar+validar. */
+export type CommercialFormHandle = WizardStepFormHandle;
 
 interface Props {
   instanceId: string | null;
@@ -18,6 +22,11 @@ interface Props {
    * ya pinta el título del paso (el wizard lo hace con su h2 + subtítulo).
    */
   hideHeader?: boolean;
+  /**
+   * Embebido en el wizard: oculta el botón "Guardar datos comerciales" propio
+   * (la shell dispara save() vía ref desde el footer "Guardar y continuar").
+   */
+  embeddedInWizard?: boolean;
 }
 
 const CAUSAL_OPTIONS: { value: CommercialCausal; label: string }[] = [
@@ -49,7 +58,11 @@ function numberOrNull(v: string): number | null {
  * impuesto, derechos, método de pago). Carga/guarda vía el cliente; el envío
  * exitoso dispara `onSaved` para que la shell re-consulte el wizard.
  */
-export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Props) {
+export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
+  function CommercialForm(
+    { instanceId, onSaved, hideHeader = false, embeddedInWizard = false },
+    ref,
+  ) {
   // Solo lectura (Track C): inputs deshabilitados + sin botón guardar.
   const readOnly = useWizardReadOnly();
   const [data, setData] = useState<CommercialData>(EMPTY);
@@ -83,9 +96,14 @@ export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Prop
   const valid =
     data.valorVenta != null && data.valorVenta > 0 && data.causal != null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!instanceId || !valid) return;
+  // Valida + persiste. Núcleo compartido por el submit propio y el save() del
+  // ref (footer "Guardar y continuar" del wizard). Devuelve true si persistió.
+  const submit = async (): Promise<boolean> => {
+    if (!instanceId) return false;
+    if (!valid) {
+      setError('Ingresa el valor de venta y la causal para continuar.');
+      return false;
+    }
     setSaving(true);
     setSaved(false);
     setError(null);
@@ -93,13 +111,22 @@ export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Prop
       await tramitesClient.putCommercial(instanceId, data);
       setSaved(true);
       onSaved?.();
+      return true;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Error al guardar los datos comerciales',
       );
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  useImperativeHandle(ref, () => ({ save: submit }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submit();
   };
 
   return (
@@ -256,7 +283,9 @@ export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Prop
       </div>
      </fieldset>
 
-      {!readOnly && (
+      {/* Embebido en el wizard el guardado lo dispara el footer "Guardar y
+          continuar" (vía save() del ref); aquí se omite el botón propio. */}
+      {!readOnly && !embeddedInWizard && (
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
             <span
@@ -284,4 +313,5 @@ export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Prop
       )}
     </form>
   );
-}
+  },
+);

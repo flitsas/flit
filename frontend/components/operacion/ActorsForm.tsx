@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Search, UserRound } from 'lucide-react';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
@@ -22,10 +23,7 @@ import type {
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
 /** Handle imperativo para que la shell del wizard dispare guardar+validar. */
-export interface ActorsFormHandle {
-  /** Valida y guarda; resuelve `true` si persistió, `false` si inválido o falló. */
-  save: () => Promise<boolean>;
-}
+export type ActorsFormHandle = WizardStepFormHandle;
 
 interface Props {
   instanceId: string | null;
