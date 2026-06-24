@@ -4,6 +4,8 @@ public interface IInvitationRepository
 {
     Task<bool> ExistsPendingAsync(Guid tenantId, string email, CancellationToken cancellationToken);
 
+    Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken);
+
     Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken);
 
     Task<Guid> CreateAsync(UserInvitationData invitation, CancellationToken cancellationToken);

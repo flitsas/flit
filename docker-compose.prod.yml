@@ -84,6 +84,14 @@ services:
       VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
       VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
       INTEMPO_MODE: ${INTEMPO_MODE:-mock}
+      # SMTP — vars ya presentes en el .env del VPS
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__UseStartTls: ${SMTP_USE_STARTTLS:-true}
+      Smtp__DisableAuthentication: ${SMTP_DISABLE_AUTH:-false}
+      Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
+      Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
+      Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
       # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
       # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
       # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
