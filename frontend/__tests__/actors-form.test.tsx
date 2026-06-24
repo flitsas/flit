@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
+  getInstance: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,
+    getInstance: mocks.getInstance,
   },
 }));
 
@@ -31,6 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
+  mocks.getInstance.mockResolvedValue({ fieldValues: [] });
 });
 
 describe('ActorsForm — layout split (un comprador)', () => {
@@ -298,6 +301,76 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+  });
+});
+
+describe('ActorsForm — prefill documento del propietario (paso vendedor)', () => {
+  const renderVendedor = () =>
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor']}
+        layout="split"
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+  it('siembra el documento del vendedor desde owner_document_* (editable)', async () => {
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'plate', valueText: 'ABC123' },
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+
+    renderVendedor();
+
+    const numero = await screen.findByLabelText('Número de documento');
+    await waitFor(() => expect(numero).toHaveValue('1090123456'));
+    // Editable: no deshabilitado ni readonly.
+    expect(numero).not.toBeDisabled();
+    expect(numero).not.toHaveAttribute('readonly');
+  });
+
+  it('no pisa el documento del vendedor ya persistido', async () => {
+    mocks.getActors.mockResolvedValue([
+      {
+        rol: 'vendedor',
+        tipoDocumento: 'CC',
+        numeroDocumento: '555',
+        nombreCompleto: 'Ana Vendedora',
+        email: 'ana@example.com',
+      },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+
+    renderVendedor();
+
+    const numero = await screen.findByLabelText('Número de documento');
+    await screen.findByDisplayValue('Ana Vendedora');
+    // El documento persistido manda: el seed no lo sobreescribe.
+    expect(numero).toHaveValue('555');
+  });
+
+  it('sin owner_document_number no siembra nada', async () => {
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [{ fieldKey: 'plate', valueText: 'ABC123' }],
+    });
+
+    renderVendedor();
+
+    const numero = await screen.findByLabelText('Número de documento');
+    // Da tiempo a que resuelva el fetch del seed; debe quedar vacío.
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    expect(numero).toHaveValue('');
   });
 });
 

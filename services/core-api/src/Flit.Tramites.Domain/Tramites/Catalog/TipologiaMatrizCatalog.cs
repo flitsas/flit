@@ -57,7 +57,7 @@ public static class TipologiaMatrizCatalog
             Partes: [Comprador, Vendedor],
             Pasos:
             [
-                new PasoTipologia(1, "Consulta VIN/Placa", Aplica: true, Nota: "Pre-vuelo SOAT/SIMIT/RUNT del vehículo y de ambas partes."),
+                new PasoTipologia(1, "Consulta del vehículo", Aplica: true, Nota: "Pre-vuelo SOAT/SIMIT/RUNT del vehículo por placa y de ambas partes."),
                 new PasoTipologia(2, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo."),
                 new PasoTipologia(3, "Vendedor", Aplica: true, Nota: "Parte saliente; consulta RUNT del vendedor."),
                 new PasoTipologia(4, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),

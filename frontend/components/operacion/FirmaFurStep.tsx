@@ -192,6 +192,11 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
     () => detail?.actors.find((a) => a.actorType === 'comprador') ?? null,
     [detail],
   );
+  // Vendedor: solo existe en traspaso (parte saliente). En matrícula → null.
+  const vendedor = useMemo(
+    () => detail?.actors.find((a) => a.actorType === 'vendedor') ?? null,
+    [detail],
+  );
   // Identidad aprobada si CUALQUIER validación está en estado 'aprobado'.
   const identidadAprobada = useMemo(
     () => biometric.some((b) => b.estado === 'aprobado'),
@@ -235,12 +240,22 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
       />
 
       <MatriculaResumen
+        modalidad={modalidad}
         status={detail?.status ?? 'draft'}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)
           .join(' ')}
         vin={fv('vin')}
+        vendedor={
+          vendedor
+            ? {
+                nombre: vendedor.fullName,
+                documento: vendedor.documentNumber,
+                tipoDoc: vendedor.documentType,
+              }
+            : null
+        }
         comprador={
           comprador
             ? {
@@ -259,6 +274,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         instanceId={instanceId}
         fieldValues={detail?.fieldValues ?? []}
         comprador={comprador}
+        vendedor={vendedor}
         vin={fv('vin')}
         attachments={attachments}
         biometric={biometric}
