@@ -6,6 +6,9 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
 {
     public async Task HandleAsync(AssignRoleCommand cmd, CancellationToken ct)
     {
+        if (cmd.UserId == cmd.AssignedBy)
+            throw new SelfRoleAssignmentException();
+
         // AC3 — verify user belongs to caller's tenant via HomeTenantId
         if (!await repo.UserBelongsToTenantAsync(cmd.UserId, cmd.TenantId, ct))
             throw new UserOutOfScopeException();

@@ -9,6 +9,7 @@ export interface PermissionsState {
   isSuperAdmin: boolean;
   isAdminCompany: boolean;
   tenantId: string | null;
+  userId: string | null;
   roleId: string | null;
   roleCode: string | null;
 }
@@ -22,6 +23,7 @@ export function usePermissions(): PermissionsState {
       isSuperAdmin: checkSuperAdmin(payload),
       isAdminCompany: checkAdminCompany(payload),
       tenantId: (payload?.tenant_id as string) ?? null,
+      userId: (payload?.sub as string) ?? null,
       roleId: (payload?.role_id as string) ?? null,
       roleCode: (payload?.role_code as string) ?? (payload?.role as string) ?? null,
     };

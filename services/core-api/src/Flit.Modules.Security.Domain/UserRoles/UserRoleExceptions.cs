@@ -15,3 +15,11 @@ public sealed class RoleForAssignmentNotFoundException : Exception
     {
     }
 }
+
+public sealed class SelfRoleAssignmentException : Exception
+{
+    public SelfRoleAssignmentException()
+        : base("A user cannot change their own role.")
+    {
+    }
+}
