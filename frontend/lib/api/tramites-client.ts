@@ -83,6 +83,12 @@ export { DEV_TENANT_ID, DEV_USER_ID };
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
 
+// Único constructor de URLs del cliente. El path absoluto (/api/v1/...) toma solo el
+// ORIGEN de BASE_URL e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta
+// el CD) NO se duplica (`…/api/v1/api/v1/…` → 404). Mismo patrón que lib/api/client.ts.
+// Usarlo SIEMPRE; no concatenar `${BASE_URL}${path}` (rompe cuando el base trae sufijo).
+export const apiUrl = (path: string): string => new URL(path, BASE_URL).toString();
+
 const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
 };
@@ -121,9 +127,7 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // El path absoluto (/api/v1/...) toma el ORIGEN de BASE_URL e ignora su path, así un
-  // BASE_URL con sufijo /api/v1 (como el del CD) no se duplica.
-  const res = await fetch(new URL(path, BASE_URL).toString(), {
+  const res = await fetch(apiUrl(path), {
     ...init,
     headers: { ...JSON_HEADERS, ...init?.headers },
   });
@@ -320,7 +324,7 @@ export const tramitesClient = {
     form.append('file', file);
     form.append('tipo', tipo);
     const res = await fetch(
-      `${BASE_URL}/api/v1/tramites/instances/${instanceId}/attachments`,
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments`),
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -345,7 +349,7 @@ export const tramitesClient = {
     tenantId: string = DEV_TENANT_ID,
   ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
     const res = await fetch(
-      `${BASE_URL}/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`,
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
       { headers: tenantHeader(tenantId) },
     );
     if (!res.ok) {
@@ -624,7 +628,7 @@ export const portalPublicClient = {
     form.append('file', file);
     form.append('tipo', tipo);
     const res = await fetch(
-      `${BASE_URL}/api/v1/public/portal/${encodeURIComponent(token)}/documentos`,
+      apiUrl(`/api/v1/public/portal/${encodeURIComponent(token)}/documentos`),
       { method: 'POST', body: form },
     );
     if (!res.ok) {
@@ -680,7 +684,7 @@ export const biometricPublicClient = {
     form.append('cedula_frontal', photos.cedulaFrontal);
     form.append('cedula_reverso', photos.cedulaReverso);
     const res = await fetch(
-      `${BASE_URL}/api/v1/public/biometric/${encodeURIComponent(token)}`,
+      apiUrl(`/api/v1/public/biometric/${encodeURIComponent(token)}`),
       { method: 'POST', body: form },
     );
     if (!res.ok) {
