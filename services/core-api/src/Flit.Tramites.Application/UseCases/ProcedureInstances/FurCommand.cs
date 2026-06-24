@@ -155,7 +155,16 @@ public sealed class GenerarFurHandler(
             Combustible: Get(fv, "vehicle_fuel"),
             Cilindraje: Get(fv, "vehicle_engine_displacement"),
             Vin: Get(fv, "vin"),
-            Placa: Get(fv, "plate"));
+            Placa: Get(fv, "plate"),
+            // HU #10256 — datos ampliados desde RUNT/Verifik (field_values)
+            NumeroMotor: Get(fv, "vehicle_engine_number"),
+            NumeroChasis: Get(fv, "vehicle_chassis"),
+            NumeroSerie: Get(fv, "vehicle_series"),
+            TipoCarroceria: Get(fv, "vehicle_body_type"),
+            TipoServicio: Get(fv, "vehicle_service"),
+            Capacidad: Get(fv, "vehicle_passengers"),
+            PesoBruto: Get(fv, "vehicle_weight"),
+            NumeroEjes: Get(fv, "vehicle_axles"));
 
         var organismo = new OrganismoTransito(
             Codigo: Get(fv, "transit_office_code"),

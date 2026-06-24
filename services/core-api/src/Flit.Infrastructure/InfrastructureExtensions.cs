@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Consultations;
+using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
@@ -6,6 +7,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
@@ -60,6 +62,11 @@ public static class InfrastructureExtensions
         services.AddScoped<ICatalogRepository, CatalogRepository>();
 
         AddAttachmentStorage(services, configuration);
+
+        // HU #10256 — generador PDF real del FUR. Reemplaza al MockFurDocumentGenerator que
+        // producía texto plano. El mock se conserva en Application para los tests unitarios.
+        services.AddSingleton<IFurDocumentGenerator, FurDocumentGenerator>();
+
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
 

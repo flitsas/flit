@@ -58,11 +58,10 @@ public static class DependencyInjection
         services.AddScoped<IniciarKyverumVerifyHandler>();
         services.AddScoped<KyverumWebhookHandler>();
 
-        // Firma electrónica + FUR (Slice 7, mock). El proveedor de firma y el generador de
-        // documentos son MOCKs swappables (contract-first, igual que el scorer biométrico):
-        // se reemplazan por ZapSign / generador PDF real sin tocar los handlers.
+        // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
+        // IFurDocumentGenerator se registra en Infrastructure (FurDocumentGenerator — QuestPDF real, HU #10256).
+        // MockFurDocumentGenerator se conserva para tests; solo se quitó el registro de DI.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
-        services.AddSingleton<Documents.IFurDocumentGenerator, Documents.MockFurDocumentGenerator>();
         services.AddSingleton<Documents.IIdentityCertificateGenerator, Documents.MockIdentityCertificateGenerator>();
         services.AddScoped<SolicitarFirmaHandler>();
         services.AddScoped<ListFirmasHandler>();
