@@ -64,7 +64,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             .ThenByDescending(p => p.Id)
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
-                            .Select(p => Map(p))
+                            .Select(p => new OtClientProcedure
+                            {
+                                Id = p.Id,
+                                ClientTenantId = p.TenantId,
+                                ProcedureTypeId = p.ProcedureTypeId,
+                                ReferenceNumber = p.ReferenceNumber,
+                                Status = p.Status,
+                                TransitOfficeId = p.TransitOfficeId,
+                                CreatedAt = p.CreatedAt,
+                                SubmittedAt = p.SubmittedAt,
+                            })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
 
@@ -207,7 +217,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             {
                 var mapped = await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
                     .Where(p => p.Id == procedureInstanceId)
-                    .Select(p => Map(p))
+                    .Select(p => new OtClientProcedure
+                    {
+                        Id = p.Id,
+                        ClientTenantId = p.TenantId,
+                        ProcedureTypeId = p.ProcedureTypeId,
+                        ReferenceNumber = p.ReferenceNumber,
+                        Status = p.Status,
+                        TransitOfficeId = p.TransitOfficeId,
+                        CreatedAt = p.CreatedAt,
+                        SubmittedAt = p.SubmittedAt,
+                    })
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
