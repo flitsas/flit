@@ -167,7 +167,7 @@ public sealed class DownloadAttachmentHandler(
         if (attachment is null)
             return (null, "not_found");
 
-        var stream = storage.OpenRead(attachment.StoragePath);
+        var stream = await storage.OpenReadAsync(attachment.StoragePath, ct);
         if (stream is null)
             return (null, "file_missing");
 
