@@ -19,14 +19,14 @@ public sealed record VehiculoDatos(
     string? Vin,
     string? Placa,
     // HU #10256 — datos ampliados desde field_values RUNT/Verifik
-    string? NumeroMotor    = null,
-    string? NumeroChasis   = null,
-    string? NumeroSerie    = null,
+    string? NumeroMotor = null,
+    string? NumeroChasis = null,
+    string? NumeroSerie = null,
     string? TipoCarroceria = null,
-    string? TipoServicio   = null,
-    string? Capacidad      = null,
-    string? PesoBruto      = null,
-    string? NumeroEjes     = null);
+    string? TipoServicio = null,
+    string? Capacidad = null,
+    string? PesoBruto = null,
+    string? NumeroEjes = null);
 
 /// <summary>Organismo de tránsito seleccionado (de field_values transit_office_*).</summary>
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);
