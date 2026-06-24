@@ -41,7 +41,7 @@ public sealed class ProcedureDocumentSnapshotImmutabilityTests
             {
                 ActorUserId = Actor,
                 Request = new CreateProcedureInstanceRequest(ProcedureTypeId, ClienteId, null, "TR-2026-0007", null),
-            });
+            }, TestContext.Current.CancellationToken);
             created.Outcome.Should().Be(CreateProcedureInstanceOutcome.Created);
             created.Response!.DocumentCount.Should().Be(2);
             tramiteId = created.Response.Id;
@@ -60,12 +60,12 @@ public sealed class ProcedureDocumentSnapshotImmutabilityTests
                 DefaultSortOrder = 30,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await change.SaveChangesAsync();
+            await change.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         // El GET sigue devolviendo el snapshot original [DocA, DocB], sin DocC.
         await using var ctx = NewContext(db);
-        var result = await GetHandler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = tramiteId });
+        var result = await GetHandler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = tramiteId }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetProcedureDocumentRequirementsOutcome.Found);
         result.Data.Should().HaveCount(2);

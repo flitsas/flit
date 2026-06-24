@@ -36,7 +36,7 @@ public sealed class OtProfileHandlerTests
 
         await using var ctx = NewContext(db);
         var handler = new GetOtProfileHandler(new OtProfileRepository(ctx));
-        var response = await handler.HandleAsync(new GetOtProfileQuery { TenantId = TenantA });
+        var response = await handler.HandleAsync(new GetOtProfileQuery { TenantId = TenantA }, TestContext.Current.CancellationToken);
 
         response.OperationMode.Should().Be(OtOperationModes.Dashboard);
         response.QuipuxReadOnly.Should().BeFalse();
@@ -61,7 +61,7 @@ public sealed class OtProfileHandlerTests
                 TenantId = TenantA,
                 ChangedBy = ChangedBy,
                 Request = new UpdateOtProfileRequest { OperationMode = OtOperationModes.Quipux },
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Profile!.OperationMode.Should().Be(OtOperationModes.Quipux);
@@ -69,7 +69,7 @@ public sealed class OtProfileHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var entity = await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA);
+        var entity = await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken);
         entity.OperationMode.Should().Be(OtOperationModes.Quipux);
         entity.QuipuxReadOnly.Should().BeTrue();
     }
@@ -94,14 +94,14 @@ public sealed class OtProfileHandlerTests
                 FlagId = flagId,
                 ChangedBy = ChangedBy,
                 Request = new UpdateOtFeatureFlagRequest { IsEnabled = true },
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Status.Should().Be(UpdateOtFeatureFlagStatus.Updated);
             result.Flag!.IsEnabled.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
-        var flag = await verify.OtFeatureFlags.SingleAsync(f => f.Id == flagId);
+        var flag = await verify.OtFeatureFlags.SingleAsync(f => f.Id == flagId, cancellationToken: TestContext.Current.CancellationToken);
         flag.IsEnabled.Should().BeTrue();
     }
 
@@ -128,15 +128,15 @@ public sealed class OtProfileHandlerTests
                     OperationMode = OtOperationModes.Quipux,
                     TenantId = TenantB,
                 },
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
-        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA))
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken))
             .OperationMode.Should().Be(OtOperationModes.Quipux);
-        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantB))
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantB, cancellationToken: TestContext.Current.CancellationToken))
             .OperationMode.Should().Be(OtOperationModes.Dashboard);
     }
 
@@ -154,7 +154,7 @@ public sealed class OtProfileHandlerTests
 
         await using var ctx = NewContext(db);
         var guard = new QuipuxReadOnlyGuard(new OtProfileRepository(ctx));
-        var result = await guard.ValidateActionAsync(TenantA, action);
+        var result = await guard.ValidateActionAsync(TenantA, action, TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeFalse();
         result.ErrorCode.Should().Be("QUIPUX_READONLY");
@@ -172,7 +172,7 @@ public sealed class OtProfileHandlerTests
 
         await using var ctx = NewContext(db);
         var guard = new QuipuxReadOnlyGuard(new OtProfileRepository(ctx));
-        var result = await guard.ValidateActionAsync(TenantA, "consultar");
+        var result = await guard.ValidateActionAsync(TenantA, "consultar", TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeTrue();
     }

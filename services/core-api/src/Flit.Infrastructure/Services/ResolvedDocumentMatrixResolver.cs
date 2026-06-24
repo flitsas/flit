@@ -137,52 +137,52 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
             .ConfigureAwait(false);
     }
 
-  private static Dictionary<Guid, short> MergeOtOrder(
-      Dictionary<Guid, short> legacy,
-      Dictionary<Guid, short> adminPrecedence)
-  {
-      if (adminPrecedence.Count == 0)
-      {
-          return legacy;
-      }
+    private static Dictionary<Guid, short> MergeOtOrder(
+        Dictionary<Guid, short> legacy,
+        Dictionary<Guid, short> adminPrecedence)
+    {
+        if (adminPrecedence.Count == 0)
+        {
+            return legacy;
+        }
 
-      var merged = new Dictionary<Guid, short>(legacy);
-      foreach (var (documentTypeId, sortOrder) in adminPrecedence)
-      {
-          merged[documentTypeId] = sortOrder;
-      }
+        var merged = new Dictionary<Guid, short>(legacy);
+        foreach (var (documentTypeId, sortOrder) in adminPrecedence)
+        {
+            merged[documentTypeId] = sortOrder;
+        }
 
-      return merged;
-  }
+        return merged;
+    }
 
-  private async Task<Dictionary<Guid, short>> LoadOtDocumentPrecedenceAsync(
-      Guid procedureTypeId,
-      Guid? transitOfficeId,
-      CancellationToken cancellationToken)
-  {
-      if (transitOfficeId is null || transitOfficeId == Guid.Empty)
-      {
-          return [];
-      }
+    private async Task<Dictionary<Guid, short>> LoadOtDocumentPrecedenceAsync(
+        Guid procedureTypeId,
+        Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (transitOfficeId is null || transitOfficeId == Guid.Empty)
+        {
+            return [];
+        }
 
-      var otTenantId = await _context.TransitOfficeProfiles
-          .AsNoTracking()
-          .Where(p => p.TransitOfficeId == transitOfficeId.Value)
-          .Select(p => (Guid?)p.TenantId)
-          .FirstOrDefaultAsync(cancellationToken)
-          .ConfigureAwait(false);
+        var otTenantId = await _context.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TransitOfficeId == transitOfficeId.Value)
+            .Select(p => (Guid?)p.TenantId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-      if (otTenantId is null)
-      {
-          return [];
-      }
+        if (otTenantId is null)
+        {
+            return [];
+        }
 
-      return await _context.OtDocumentPrecedences
-          .AsNoTracking()
-          .Where(p => p.TenantId == otTenantId && p.ProcedureTypeId == procedureTypeId)
-          .ToDictionaryAsync(p => p.DocumentTypeId, p => p.SortOrder, cancellationToken)
-          .ConfigureAwait(false);
-  }
+        return await _context.OtDocumentPrecedences
+            .AsNoTracking()
+            .Where(p => p.TenantId == otTenantId && p.ProcedureTypeId == procedureTypeId)
+            .ToDictionaryAsync(p => p.DocumentTypeId, p => p.SortOrder, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Carga los estados de obligatoriedad por OT indexados por documento (HU #10198). Si no

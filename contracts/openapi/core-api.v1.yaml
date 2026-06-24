@@ -519,6 +519,7 @@ paths:
       tags: [OT Integrations]
       operationId: otWebhookInboundCallback
       summary: Callback inbound Quipux → FLIT
+      security: []          # endpoint público: autenticación vía HMAC en cabecera
       parameters:
         - name: subscriptionId
           in: path

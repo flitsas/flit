@@ -26,7 +26,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
     public async Task GetProfile_WithoutToken_Returns401()
     {
         var client = _factory.CreateClient();
-        var response = await client.GetAsync(ProfileUrl);
+        var response = await client.GetAsync(ProfileUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -37,10 +37,10 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(ProfileUrl);
+        var response = await client.GetAsync(ProfileUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin u ot_admin");
     }
 
@@ -51,7 +51,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("SuperAdmin"));
 
-        var response = await client.GetAsync(ProfileUrl);
+        var response = await client.GetAsync(ProfileUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -65,7 +65,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
                 "Bearer",
                 TestTokenFactory.CreateOtAdminToken(tenantId, "SuperAdmin"));
 
-        var response = await client.GetAsync(ProfileUrl);
+        var response = await client.GetAsync(ProfileUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
@@ -77,7 +77,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("ot_admin"));
 
-        var response = await client.GetAsync(ProfileUrl);
+        var response = await client.GetAsync(ProfileUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 

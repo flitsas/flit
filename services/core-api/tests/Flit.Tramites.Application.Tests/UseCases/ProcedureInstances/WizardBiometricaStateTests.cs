@@ -44,7 +44,10 @@ public sealed class WizardBiometricaStateTests
             Id = Guid.NewGuid(),
             Parte = parte,
             Estado = estado,
-            Nombre = "X", TipoDoc = "CC", Documento = "1", Email = "x@y.com",
+            Nombre = "X",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -57,15 +60,25 @@ public sealed class WizardBiometricaStateTests
     private static ProcedureInstanceActor Comprador(string doc = "777") =>
         new()
         {
-            Id = Guid.NewGuid(), ActorType = "comprador", DocumentType = "CC", DocumentNumber = doc,
-            FullName = "Maria", Email = "maria@x.com", CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = "Maria",
+            Email = "maria@x.com",
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstanceActor Vendedor(string doc = "555") =>
         new()
         {
-            Id = Guid.NewGuid(), ActorType = "vendedor", DocumentType = "CC", DocumentNumber = doc,
-            FullName = "Juan", Email = "juan@x.com", CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = "Juan",
+            Email = "juan@x.com",
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     private static ProcedureInstancePreflightSnapshot Preflight(string overall) =>
@@ -156,9 +169,16 @@ public sealed class WizardBiometricaStateTests
         var instance = Base("matricula_inicial");
         instance.Actors.Add(new ProcedureInstanceActor
         {
-            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureEntityId = Guid.NewGuid(),
-            ActorType = "comprador", DocumentType = "CC", DocumentNumber = "999",
-            FullName = "Maria", Email = "maria@x.com", Metadata = "{}", CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "999",
+            FullName = "Maria",
+            Email = "maria@x.com",
+            Metadata = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         AgregarVinYDocsMatricula(instance); // pasos 1-3 completos → identidad (4) alcanzable
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, instance.TenantId, ct).Returns(instance);

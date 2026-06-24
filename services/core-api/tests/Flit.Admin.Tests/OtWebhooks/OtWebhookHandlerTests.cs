@@ -45,13 +45,13 @@ public sealed class OtWebhookHandlerTests
                 TargetUrl = "https://hooks.example.com/ot",
                 Secret = "super-secret",
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(CreateOtWebhookStatus.Created);
         result.Webhook!.IsActive.Should().BeTrue();
 
         await using var verify = NewContext(db);
-        var entity = await verify.OtWebhookSubscriptions.SingleAsync();
+        var entity = await verify.OtWebhookSubscriptions.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         entity.SecretHash.Should().Be(OtWebhookSecretHasher.HashSecret("super-secret"));
         entity.IsActive.Should().BeTrue();
     }
@@ -74,7 +74,7 @@ public sealed class OtWebhookHandlerTests
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -88,7 +88,7 @@ public sealed class OtWebhookHandlerTests
             {
                 TargetUrl = "https://hooks.example.com/new",
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(UpdateOtWebhookStatus.Updated);
         result.Webhook!.TargetUrl.Should().Be("https://hooks.example.com/new");
@@ -116,7 +116,7 @@ public sealed class OtWebhookHandlerTests
                 CalledAt = calledAt,
                 CorrelationId = correlationId,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -129,7 +129,7 @@ public sealed class OtWebhookHandlerTests
             To = new DateTimeOffset(2026, 6, 30, 0, 0, 0, TimeSpan.Zero),
             Page = 1,
             PageSize = 50,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(1);
         var log = result.Data.Should().ContainSingle().Subject;
@@ -159,12 +159,12 @@ public sealed class OtWebhookHandlerTests
                 PayloadHash = "hash-b",
                 CalledAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var handler = new ListOtApiLogsHandler(new OtApiCallLogRepository(ctx));
-        var result = await handler.HandleAsync(new ListOtApiLogsQuery { TenantId = TenantA });
+        var result = await handler.HandleAsync(new ListOtApiLogsQuery { TenantId = TenantA }, TestContext.Current.CancellationToken);
 
         result.Data.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -188,12 +188,12 @@ public sealed class OtWebhookHandlerTests
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var handler = new ListOtWebhooksHandler(new OtWebhookSubscriptionRepository(ctx));
-        var result = await handler.HandleAsync(new ListOtWebhooksQuery { TenantId = TenantA });
+        var result = await handler.HandleAsync(new ListOtWebhooksQuery { TenantId = TenantA }, TestContext.Current.CancellationToken);
 
         result.Data.Should().ContainSingle(w => w.Id == subscriptionId);
     }
@@ -218,7 +218,7 @@ public sealed class OtWebhookHandlerTests
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         var services = new ServiceCollection();
@@ -233,10 +233,7 @@ public sealed class OtWebhookHandlerTests
             provider.GetRequiredService<IHttpClientFactory>());
 
         var payload = new { procedure_instance_id = Guid.NewGuid(), to_status = "submitted" };
-        await dispatch.DispatchAsync(
-            TenantA,
-            OtWebhookEventTypes.VehicleStateChanged,
-            payload);
+        await dispatch.DispatchAsync(TenantA, OtWebhookEventTypes.VehicleStateChanged, payload, TestContext.Current.CancellationToken);
 
         recordingHandler.LastRequest.Should().NotBeNull();
         recordingHandler.LastRequest!.Method.Should().Be(HttpMethod.Post);
@@ -250,7 +247,7 @@ public sealed class OtWebhookHandlerTests
         signatures!.Single().Should().Be($"sha256={expectedSignature}");
 
         await using var verify = NewContext(db);
-        var log = await verify.OtApiCallLogs.SingleAsync(l => l.TenantId == TenantA);
+        var log = await verify.OtApiCallLogs.SingleAsync(l => l.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken);
         log.Direction.Should().Be("outbound");
         log.Endpoint.Should().Be(targetUrl);
         log.HttpMethod.Should().Be("POST");

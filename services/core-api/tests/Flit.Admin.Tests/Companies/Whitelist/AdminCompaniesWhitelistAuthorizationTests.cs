@@ -31,7 +31,7 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } });
+        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -41,7 +41,7 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(WhitelistUrl);
+        var response = await client.GetAsync(WhitelistUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -53,7 +53,7 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } });
+        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

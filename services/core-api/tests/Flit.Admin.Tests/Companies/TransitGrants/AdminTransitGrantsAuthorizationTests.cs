@@ -39,14 +39,14 @@ public sealed class AdminTransitGrantsAuthorizationTests
     [Fact]
     public async Task Catalog_WithoutToken_Returns401()
     {
-        var response = await _factory.CreateClient().GetAsync(CatalogUrl);
+        var response = await _factory.CreateClient().GetAsync(CatalogUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task Catalog_WithNonOtModuleRole_Returns403()
     {
-        var response = await Operador().GetAsync(CatalogUrl);
+        var response = await Operador().GetAsync(CatalogUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -60,7 +60,7 @@ public sealed class AdminTransitGrantsAuthorizationTests
                 "Bearer",
                 TestTokenFactory.CreateOtAdminToken(tenantId));
 
-        var response = await client.GetAsync(CatalogUrl);
+        var response = await client.GetAsync(CatalogUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -68,7 +68,7 @@ public sealed class AdminTransitGrantsAuthorizationTests
     public async Task PostGrant_WithoutToken_Returns401()
     {
         var response = await _factory.CreateClient()
-            .PostAsJsonAsync(GrantsUrl, new { transitOfficeId = OfficeId });
+            .PostAsJsonAsync(GrantsUrl, new { transitOfficeId = OfficeId }, cancellationToken: TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -76,35 +76,35 @@ public sealed class AdminTransitGrantsAuthorizationTests
     public async Task PostGrant_WithNonSuperAdmin_Returns403()
     {
         var response = await Operador()
-            .PostAsJsonAsync(GrantsUrl, new { transitOfficeId = OfficeId });
+            .PostAsJsonAsync(GrantsUrl, new { transitOfficeId = OfficeId }, cancellationToken: TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task DeleteGrant_WithoutToken_Returns401()
     {
-        var response = await _factory.CreateClient().DeleteAsync(GrantUrl);
+        var response = await _factory.CreateClient().DeleteAsync(GrantUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetGrants_WithoutToken_Returns401()
     {
-        var response = await _factory.CreateClient().GetAsync(GrantsUrl);
+        var response = await _factory.CreateClient().GetAsync(GrantsUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetAuditLog_WithoutToken_Returns401()
     {
-        var response = await _factory.CreateClient().GetAsync(AuditLogUrl);
+        var response = await _factory.CreateClient().GetAsync(AuditLogUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetAuditLog_WithNonSuperAdmin_Returns403()
     {
-        var response = await Operador().GetAsync(AuditLogUrl);
+        var response = await Operador().GetAsync(AuditLogUrl, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 

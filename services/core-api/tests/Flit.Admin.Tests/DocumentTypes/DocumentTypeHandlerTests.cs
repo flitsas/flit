@@ -42,7 +42,7 @@ public sealed class DocumentTypeHandlerTests
             {
                 CreatedBy = Actor,
                 Request = new CreateDocumentTypeRequest("RUT", "Registro Único Tributario", "Documento fiscal", Obligatorio: true),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Document.Should().NotBeNull();
@@ -54,7 +54,7 @@ public sealed class DocumentTypeHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == created.Id);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == created.Id, cancellationToken: TestContext.Current.CancellationToken);
         row.Code.Should().Be("RUT");
         row.IsActive.Should().BeTrue();
         row.CreatedBy.Should().Be(Actor);
@@ -72,11 +72,11 @@ public sealed class DocumentTypeHandlerTests
         var result = await handler.HandleAsync(new CreateDocumentTypeCommand
         {
             Request = new CreateDocumentTypeRequest("RUT", "Otro", null, null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Error.Should().Contain("RUT");
-        (await ctx.DocumentTypes.CountAsync(d => d.Code == "RUT")).Should().Be(1);
+        (await ctx.DocumentTypes.CountAsync(d => d.Code == "RUT", cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Theory]
@@ -91,11 +91,11 @@ public sealed class DocumentTypeHandlerTests
         var result = await handler.HandleAsync(new CreateDocumentTypeCommand
         {
             Request = new CreateDocumentTypeRequest(codigo, nombre, null, null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Error.Should().NotBeNullOrWhiteSpace();
-        (await ctx.DocumentTypes.CountAsync()).Should().Be(0);
+        (await ctx.DocumentTypes.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- AC2: GET listado paginado ordenado por nombre asc ----------
@@ -112,7 +112,7 @@ public sealed class DocumentTypeHandlerTests
         await using var ctx = NewContext(db);
         var handler = new ListDocumentTypesHandler(new DocumentTypeRepository(ctx));
 
-        var result = await handler.HandleAsync(new ListDocumentTypesQuery { Page = 1, PageSize = 20 });
+        var result = await handler.HandleAsync(new ListDocumentTypesQuery { Page = 1, PageSize = 20 }, TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(2); // el inactivo se excluye por defecto
         result.Data.Select(d => d.Nombre).Should().ContainInOrder("Antecedentes", "Cedula");
@@ -139,7 +139,7 @@ public sealed class DocumentTypeHandlerTests
         await using var ctx = NewContext(db);
         var handler = new ListDocumentTypesHandler(new DocumentTypeRepository(ctx));
 
-        var page2 = await handler.HandleAsync(new ListDocumentTypesQuery { Page = 2, PageSize = 2 });
+        var page2 = await handler.HandleAsync(new ListDocumentTypesQuery { Page = 2, PageSize = 2 }, TestContext.Current.CancellationToken);
 
         page2.TotalCount.Should().Be(5);
         page2.Data.Should().HaveCount(2);
@@ -163,14 +163,14 @@ public sealed class DocumentTypeHandlerTests
                 Id = id,
                 UpdatedBy = Actor,
                 Request = new UpdateDocumentTypeRequest("RUT", "Nombre Nuevo", "Desc nueva"),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
             result.Document!.Nombre.Should().Be("Nombre Nuevo");
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken);
         row.Name.Should().Be("Nombre Nuevo");
         row.Description.Should().Be("Desc nueva");
         row.UpdatedBy.Should().Be(Actor);
@@ -187,7 +187,7 @@ public sealed class DocumentTypeHandlerTests
         {
             Id = Guid.NewGuid(),
             Request = new UpdateDocumentTypeRequest("RUT", "X", null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(UpdateDocumentTypeOutcome.NotFound);
     }
@@ -204,12 +204,12 @@ public sealed class DocumentTypeHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new DeleteDocumentTypeHandler(new DocumentTypeRepository(act));
-            var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = id, DeletedBy = Actor });
+            var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = id, DeletedBy = Actor }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(DeleteDocumentTypeOutcome.Deleted);
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id); // sigue existiendo físicamente
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken); // sigue existiendo físicamente
         row.IsActive.Should().BeFalse();
         row.UpdatedBy.Should().Be(Actor);
     }
@@ -220,7 +220,7 @@ public sealed class DocumentTypeHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new DeleteDocumentTypeHandler(new DocumentTypeRepository(ctx));
 
-        var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(DeleteDocumentTypeOutcome.NotFound);
     }
@@ -245,18 +245,18 @@ public sealed class DocumentTypeHandlerTests
                 DefaultSortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
         {
             var handler = new DeleteDocumentTypeHandler(new DocumentTypeRepository(act));
-            var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = id });
+            var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = id }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(DeleteDocumentTypeOutcome.HasAssociations);
         }
 
         await using var verify = NewContext(db);
-        (await verify.DocumentTypes.SingleAsync(d => d.Id == id)).IsActive.Should().BeTrue();
+        (await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken)).IsActive.Should().BeTrue();
     }
 
     [Fact]
@@ -279,12 +279,12 @@ public sealed class DocumentTypeHandlerTests
                 DefaultSortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var act = NewContext(db);
         var handler = new DeleteDocumentTypeHandler(new DocumentTypeRepository(act));
-        var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = docId });
+        var result = await handler.HandleAsync(new DeleteDocumentTypeCommand { Id = docId }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(DeleteDocumentTypeOutcome.HasAssociations);
         result.Associations.Should().ContainSingle();
@@ -304,12 +304,12 @@ public sealed class DocumentTypeHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(act));
-            var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id, UpdatedBy = Actor });
+            var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id, UpdatedBy = Actor }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.Reactivated);
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken);
         row.IsActive.Should().BeTrue();
         row.UpdatedBy.Should().Be(Actor);
     }
@@ -324,10 +324,10 @@ public sealed class DocumentTypeHandlerTests
         await using var ctx = NewContext(db);
         var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(ctx));
 
-        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id });
+        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = id }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.Reactivated);
-        (await ctx.DocumentTypes.SingleAsync(d => d.Id == id)).IsActive.Should().BeTrue();
+        (await ctx.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken)).IsActive.Should().BeTrue();
     }
 
     [Fact]
@@ -336,7 +336,7 @@ public sealed class DocumentTypeHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new ReactivateDocumentTypeHandler(new DocumentTypeRepository(ctx));
 
-        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new ReactivateDocumentTypeCommand { Id = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.NotFound);
     }

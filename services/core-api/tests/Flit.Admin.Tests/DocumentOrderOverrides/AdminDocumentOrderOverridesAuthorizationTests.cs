@@ -31,9 +31,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            $"{OverridesUrl}?scope=OT",
-            new { procedureTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), orden = 1 });
+        var response = await client.PostAsJsonAsync($"{OverridesUrl}?scope=OT", new { procedureTypeId = Guid.NewGuid(), transitOfficeId = Guid.NewGuid(), documentTypeId = Guid.NewGuid(), orden = 1 }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -43,8 +41,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(
-            $"{OverridesUrl}?procedureTypeId={Guid.NewGuid()}&scope=OT&transitOfficeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{OverridesUrl}?procedureTypeId={Guid.NewGuid()}&scope=OT&transitOfficeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -54,7 +51,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync($"{MatrixUrl}?procedureTypeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{MatrixUrl}?procedureTypeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -66,12 +63,11 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(
-            $"{OverridesUrl}?procedureTypeId={Guid.NewGuid()}&scope=OT&transitOfficeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{OverridesUrl}?procedureTypeId={Guid.NewGuid()}&scope=OT&transitOfficeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
         body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin");
     }
@@ -83,7 +79,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync($"{MatrixUrl}?procedureTypeId={Guid.NewGuid()}");
+        var response = await client.GetAsync($"{MatrixUrl}?procedureTypeId={Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -95,7 +91,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.DeleteAsync($"{OverridesUrl}/{Guid.NewGuid()}");
+        var response = await client.DeleteAsync($"{OverridesUrl}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -107,7 +103,7 @@ public sealed class AdminDocumentOrderOverridesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PutAsJsonAsync($"{OverridesUrl}/{Guid.NewGuid()}", new { orden = 1 });
+        var response = await client.PutAsJsonAsync($"{OverridesUrl}/{Guid.NewGuid()}", new { orden = 1 }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

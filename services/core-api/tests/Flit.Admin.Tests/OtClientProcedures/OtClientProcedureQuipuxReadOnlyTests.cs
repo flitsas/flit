@@ -43,7 +43,7 @@ public sealed class OtClientProcedureQuipuxReadOnlyTests
             OtTenantId = OtTenant,
             ProcedureInstanceId = procedureId,
             ApprovedBy = Guid.NewGuid(),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(ApproveOtClientProcedureStatus.QuipuxReadOnly);
     }

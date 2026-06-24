@@ -34,7 +34,7 @@ public sealed class CreateCompanyHandlerTests
                     Code: "RENTANDINO",
                     TenantType: "RENTING",
                     EstadoActivo: true),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Errors.Should().BeEmpty();
@@ -46,7 +46,7 @@ public sealed class CreateCompanyHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var tenant = await verify.Tenants.SingleAsync(t => t.Code == "RENTANDINO");
+        var tenant = await verify.Tenants.SingleAsync(t => t.Code == "RENTANDINO", cancellationToken: TestContext.Current.CancellationToken);
         tenant.LegalName.Should().Be("Renting Andino S.A.S.");
         tenant.TaxId.Should().Be("900123456-1");
         tenant.TenantType.Should().Be("RENTING");
@@ -63,7 +63,7 @@ public sealed class CreateCompanyHandlerTests
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
             Request = new CreateCompanyRequest("Compañía Sin Estado", "900000000-0", "SINESTADO", "FLIT", EstadoActivo: null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
         result.Company!.EstadoActivo.Should().BeTrue();
@@ -78,10 +78,10 @@ public sealed class CreateCompanyHandlerTests
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
             Request = new CreateCompanyRequest("Concesionario X", "901000000-1", "CONCEX", "concesionario", true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
-        (await ctx.Tenants.SingleAsync(t => t.Code == "CONCEX")).TenantType.Should().Be("CONCESIONARIO");
+        (await ctx.Tenants.SingleAsync(t => t.Code == "CONCEX", cancellationToken: TestContext.Current.CancellationToken)).TenantType.Should().Be("CONCESIONARIO");
     }
 
     [Fact]
@@ -94,13 +94,13 @@ public sealed class CreateCompanyHandlerTests
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
             Request = new CreateCompanyRequest(RazonSocial: "  ", Nit: "", Code: null, TenantType: null, EstadoActivo: null),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Company.Should().BeNull();
         result.Errors.Select(e => e.Field).Should()
             .Contain(["razonSocial", "nit", "code", "tenantType"]);
-        (await ctx.Tenants.CountAsync()).Should().Be(0);
+        (await ctx.Tenants.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class CreateCompanyHandlerTests
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
             Request = new CreateCompanyRequest("Compañía Y", "902000000-2", "COMPY", "BANCO", true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle(e => e.Field == "tenantType");
@@ -135,7 +135,7 @@ public sealed class CreateCompanyHandlerTests
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
@@ -144,14 +144,14 @@ public sealed class CreateCompanyHandlerTests
             var result = await handler.HandleAsync(new CreateCompanyCommand
             {
                 Request = new CreateCompanyRequest("Nueva Compañía", "900222222-2", "DUPLICADO", "RENTING", true),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeFalse();
             result.Errors.Should().ContainSingle(e => e.Field == "code");
         }
 
         await using var verify = NewContext(db);
-        (await verify.Tenants.CountAsync(t => t.Code == "DUPLICADO")).Should().Be(1);
+        (await verify.Tenants.CountAsync(t => t.Code == "DUPLICADO", cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class CreateCompanyHandlerTests
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
             Request = new CreateCompanyRequest("Compañía Z", "903000000-3", new string('X', 33), "RENTING", true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle(e => e.Field == "code");

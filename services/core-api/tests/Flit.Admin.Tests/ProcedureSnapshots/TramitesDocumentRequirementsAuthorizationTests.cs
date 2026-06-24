@@ -28,9 +28,7 @@ public sealed class TramitesDocumentRequirementsAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            TramitesUrl,
-            new { procedureTypeId = Guid.NewGuid(), tenantId = Guid.NewGuid(), referenceNumber = "TR-1" });
+        var response = await client.PostAsJsonAsync(TramitesUrl, new { procedureTypeId = Guid.NewGuid(), tenantId = Guid.NewGuid(), referenceNumber = "TR-1" }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -40,7 +38,7 @@ public sealed class TramitesDocumentRequirementsAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync($"{TramitesUrl}/{Guid.NewGuid()}/document-requirements");
+        var response = await client.GetAsync($"{TramitesUrl}/{Guid.NewGuid()}/document-requirements", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

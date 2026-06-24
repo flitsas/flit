@@ -161,8 +161,12 @@ public sealed class BiometricaHandlerTests
         var instance = Instance(id, tenant);
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), Parte = null, Estado = BiometricEstados.Enviado,
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Parte = null,
+            Estado = BiometricEstados.Enviado,
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
 
@@ -369,8 +373,15 @@ public sealed class BiometricaHandlerTests
         var instance = Instance(id, tenant);
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), Parte = "comprador", Nombre = "A", TipoDoc = "CC", Documento = "1", Email = "a@x.com",
-            Estado = BiometricEstados.Aprobado, TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            Id = Guid.NewGuid(),
+            Parte = "comprador",
+            Nombre = "A",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "a@x.com",
+            Estado = BiometricEstados.Aprobado,
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
@@ -418,9 +429,17 @@ public sealed class BiometricaHandlerTests
         instance.Actors.Add(Actor(tenant, "comprador"));
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), Parte = "comprador", Estado = BiometricEstados.Aprobado, Score = 95,
-            Nombre = "Maria Compradora", TipoDoc = "CC", Documento = "999", Email = "maria@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Parte = "comprador",
+            Estado = BiometricEstados.Aprobado,
+            Score = 95,
+            Nombre = "Maria Compradora",
+            TipoDoc = "CC",
+            Documento = "999",
+            Email = "maria@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
@@ -481,9 +500,16 @@ public sealed class BiometricaHandlerTests
         instance.Actors.Add(Actor(tenant, "comprador"));
         var rejected = new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), Parte = "comprador", Estado = BiometricEstados.Rechazado,
-            Nombre = "Old", TipoDoc = "CC", Documento = "1", Email = "old@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Parte = "comprador",
+            Estado = BiometricEstados.Rechazado,
+            Nombre = "Old",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "old@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.BiometricValidations.Add(rejected);
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);

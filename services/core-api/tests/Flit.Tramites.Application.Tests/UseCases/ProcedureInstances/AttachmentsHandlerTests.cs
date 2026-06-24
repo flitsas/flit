@@ -248,9 +248,16 @@ public sealed class AttachmentsHandlerTests
         var instance = Instance(id, tenant);
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id,
-            Tipo = "factura", Filename = "f.pdf", Mimetype = "application/pdf",
-            SizeBytes = 10, Sha256 = "abc", StoragePath = "p", Source = "user",
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "factura",
+            Filename = "f.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 10,
+            Sha256 = "abc",
+            StoragePath = "p",
+            Source = "user",
             UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
@@ -273,8 +280,11 @@ public sealed class AttachmentsHandlerTests
         var instance = Instance(id, tenant);
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = attachmentId, ProcedureInstanceId = id, Tipo = "factura",
-            StoragePath = "some/path.pdf", UploadedAt = DateTimeOffset.UtcNow,
+            Id = attachmentId,
+            ProcedureInstanceId = id,
+            Tipo = "factura",
+            StoragePath = "some/path.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
 
@@ -385,7 +395,10 @@ public sealed class AttachmentsHandlerTests
         var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), Tipo = "factura", StoragePath = "p", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Tipo = "factura",
+            StoragePath = "p",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
 
@@ -417,7 +430,10 @@ public sealed class AttachmentsHandlerTests
         {
             instance.Attachments.Add(new ProcedureInstanceAttachment
             {
-                Id = Guid.NewGuid(), Tipo = t, StoragePath = "p", UploadedAt = DateTimeOffset.UtcNow,
+                Id = Guid.NewGuid(),
+                Tipo = t,
+                StoragePath = "p",
+                UploadedAt = DateTimeOffset.UtcNow,
             });
         }
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);

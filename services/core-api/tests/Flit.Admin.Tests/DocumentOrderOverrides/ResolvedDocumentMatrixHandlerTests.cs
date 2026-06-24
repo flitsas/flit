@@ -41,7 +41,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
             // DocB: solo override OT → gana OT.
             seed.DocumentOrderOverrides.Add(Override(DocB, "OT", TransitOfficeId, 2));
             // DocC: sin overrides → Default (orden 30 sembrado).
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -50,7 +50,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
             ClienteId = ClienteId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
         result.Data.Should().HaveCount(3);
@@ -83,7 +83,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
         {
             ProcedureTypeId = ProcedureTypeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
         result.Data.Should().OnlyContain(d => d.NivelAplicado == "DEFAULT");
@@ -98,7 +98,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
         {
             ProcedureTypeId = Guid.NewGuid(),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.ProcedureTypeNotFound);
     }
@@ -110,14 +110,14 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         await using (var seed = NewContext(db))
         {
             seed.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
         {
             ProcedureTypeId = ProcedureTypeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
         result.Data.Should().BeEmpty();
@@ -145,7 +145,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
                 SortOrder = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         // Antes del borrado: DocA en nivel CLIENTE.
@@ -156,7 +156,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
                 ProcedureTypeId = ProcedureTypeId,
                 TransitOfficeId = TransitOfficeId,
                 ClienteId = ClienteId,
-            });
+            }, TestContext.Current.CancellationToken);
             matrix.Data.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("CLIENTE");
         }
 
@@ -164,7 +164,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         await using (var act = NewContext(db))
         {
             var delete = new DeleteDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(act));
-            var deleted = await delete.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = clienteOverrideId });
+            var deleted = await delete.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = clienteOverrideId }, TestContext.Current.CancellationToken);
             deleted.Outcome.Should().Be(DeleteDocumentOrderOverrideOutcome.Deleted);
         }
 
@@ -175,7 +175,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
             ClienteId = ClienteId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         var docA = resolved.Data.Single(d => d.DocumentTypeId == DocA);
         docA.NivelAplicado.Should().Be("OT");
@@ -197,7 +197,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
             seed.DocumentRequirementOverrides.Add(RequirementOverride(DocB, "REQUIRED"));
             // DocC → NOT_APPLICABLE → se oculta de la matriz de este OT.
             seed.DocumentRequirementOverrides.Add(RequirementOverride(DocC, "NOT_APPLICABLE"));
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -205,7 +205,7 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         {
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
         // DocC excluido → solo DocA y DocB.
@@ -224,14 +224,14 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         {
             // Aunque exista un NOT_APPLICABLE, sin OT en la consulta no se aplica.
             seed.DocumentRequirementOverrides.Add(RequirementOverride(DocC, "NOT_APPLICABLE"));
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
         {
             ProcedureTypeId = ProcedureTypeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Sin OT → los 3 documentos con su obligatoriedad default.
         result.Data.Should().HaveCount(3);

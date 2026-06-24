@@ -30,7 +30,7 @@ public sealed class AdminDocumentTypesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(BaseUrl);
+        var response = await client.GetAsync(BaseUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -40,8 +40,7 @@ public sealed class AdminDocumentTypesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            BaseUrl, new { codigo = "RUT", nombre = "Doc", descripcion = (string?)null });
+        var response = await client.PostAsJsonAsync(BaseUrl, new { codigo = "RUT", nombre = "Doc", descripcion = (string?)null }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -53,11 +52,11 @@ public sealed class AdminDocumentTypesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(BaseUrl);
+        var response = await client.GetAsync(BaseUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
         body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin");
     }
@@ -69,7 +68,7 @@ public sealed class AdminDocumentTypesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.DeleteAsync($"{BaseUrl}/{Guid.NewGuid()}");
+        var response = await client.DeleteAsync($"{BaseUrl}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -81,7 +80,7 @@ public sealed class AdminDocumentTypesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PostAsync($"{BaseUrl}/{Guid.NewGuid()}/reactivate", content: null);
+        var response = await client.PostAsync($"{BaseUrl}/{Guid.NewGuid()}/reactivate", content: null, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

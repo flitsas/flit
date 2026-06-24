@@ -47,24 +47,39 @@ public sealed class SubmitProcedureInstanceTests
         {
             i.Attachments.Add(new ProcedureInstanceAttachment
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
-                Tipo = t, StoragePath = $"p/{t}", UploadedAt = DateTimeOffset.UtcNow,
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = t,
+                StoragePath = $"p/{t}",
+                UploadedAt = DateTimeOffset.UtcNow,
             });
         }
         // Biométrica del comprador aprobada.
         i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
-            Parte = "comprador", Estado = BiometricEstados.Aprobado,
-            Nombre = "X", TipoDoc = "CC", Documento = "1", Email = "x@y.com",
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            Parte = "comprador",
+            Estado = BiometricEstados.Aprobado,
+            Nombre = "X",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         // Organismo de tránsito seleccionado.
         i.FieldValues.Add(new ProcedureInstanceFieldValue
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
-            FieldKey = "transit_office_code", ValueText = "11001000", Source = "user",
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_code",
+            ValueText = "11001000",
+            Source = "user",
         });
         return i;
     }

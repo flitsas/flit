@@ -29,7 +29,7 @@ public sealed class AdminCompaniesAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync(IndexUrl);
+        var response = await client.GetAsync(IndexUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -41,11 +41,11 @@ public sealed class AdminCompaniesAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.GetAsync(IndexUrl);
+        var response = await client.GetAsync(IndexUrl, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
         body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin");
     }

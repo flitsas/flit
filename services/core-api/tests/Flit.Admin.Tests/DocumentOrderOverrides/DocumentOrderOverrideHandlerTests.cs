@@ -50,7 +50,7 @@ public sealed class DocumentOrderOverrideHandlerTests
                 Scope = DocumentOrderScope.Ot,
                 CreatedBy = Actor,
                 Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, 2),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.Created);
             result.Response!.Scope.Should().Be("OT");
@@ -61,7 +61,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == created.Response!.Id);
+        var row = await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == created.Response!.Id, cancellationToken: TestContext.Current.CancellationToken);
         row.ScopeType.Should().Be("OT");
         row.ScopeRefId.Should().Be(TransitOfficeId);
         row.SortOrder.Should().Be((short)2);
@@ -79,10 +79,10 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, Guid.NewGuid(), null, 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ScopeRefNotFound);
-        (await ctx.DocumentOrderOverrides.CountAsync()).Should().Be(0);
+        (await ctx.DocumentOrderOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, null, 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
@@ -118,7 +118,7 @@ public sealed class DocumentOrderOverrideHandlerTests
                 Scope = DocumentOrderScope.Cliente,
                 CreatedBy = Actor,
                 Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, ClienteId, 1),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.Created);
             result.Response!.Scope.Should().Be("CLIENTE");
@@ -127,7 +127,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == created.Response!.Id);
+        var row = await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == created.Response!.Id, cancellationToken: TestContext.Current.CancellationToken);
         row.ScopeType.Should().Be("CLIENTE");
         row.ScopeRefId.Should().Be(ClienteId);
         row.SortOrder.Should().Be((short)1);
@@ -144,7 +144,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Cliente,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, Guid.NewGuid(), 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ScopeRefNotFound);
     }
@@ -162,7 +162,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(Guid.NewGuid(), DocId, TransitOfficeId, null, 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ProcedureTypeNotFound);
     }
@@ -178,7 +178,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, Guid.NewGuid(), TransitOfficeId, null, 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.DocumentTypeNotFound);
     }
@@ -195,11 +195,11 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, SecondDocId, TransitOfficeId, null, 0),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
         result.Error.Should().Contain("no está asociado");
-        (await ctx.DocumentOrderOverrides.CountAsync()).Should().Be(0);
+        (await ctx.DocumentOrderOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class DocumentOrderOverrideHandlerTests
                 SortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -227,10 +227,10 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, 5),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
-        (await ctx.DocumentOrderOverrides.CountAsync()).Should().Be(1);
+        (await ctx.DocumentOrderOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Theory]
@@ -246,11 +246,11 @@ public sealed class DocumentOrderOverrideHandlerTests
         {
             Scope = DocumentOrderScope.Ot,
             Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, orden),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
-        (await ctx.DocumentOrderOverrides.CountAsync()).Should().Be(0);
+        (await ctx.DocumentOrderOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- AC5: GET lista overrides por scope ----------
@@ -270,7 +270,7 @@ public sealed class DocumentOrderOverrideHandlerTests
                 new DocumentOrderOverride { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = DocId, ScopeType = "OT", ScopeRefId = otherTransitOffice, SortOrder = 0, CreatedAt = DateTimeOffset.UtcNow },
                 // Scope CLIENTE — no debe aparecer.
                 new DocumentOrderOverride { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = DocId, ScopeType = "CLIENTE", ScopeRefId = ClienteId, SortOrder = 0, CreatedAt = DateTimeOffset.UtcNow });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
@@ -281,7 +281,7 @@ public sealed class DocumentOrderOverrideHandlerTests
             ProcedureTypeId = ProcedureTypeId,
             Scope = DocumentOrderScope.Ot,
             ScopeRefId = TransitOfficeId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Should().HaveCount(2);
         result.Data.Select(d => d.Orden).Should().ContainInOrder((short)3, (short)7);
@@ -308,13 +308,13 @@ public sealed class DocumentOrderOverrideHandlerTests
                 SortOrder = 5,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
         {
             var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(act));
-            var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = 30 });
+            var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = 30 }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.Updated);
             result.Response!.Orden.Should().Be((short)30);
@@ -322,7 +322,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         }
 
         await using var verify = NewContext(db);
-        (await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == id)).SortOrder.Should().Be((short)30);
+        (await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == id, cancellationToken: TestContext.Current.CancellationToken)).SortOrder.Should().Be((short)30);
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(ctx));
 
-        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = Guid.NewGuid(), Orden = 1 });
+        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = Guid.NewGuid(), Orden = 1 }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.NotFound);
     }
@@ -356,15 +356,15 @@ public sealed class DocumentOrderOverrideHandlerTests
                 SortOrder = 5,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var handler = new UpdateDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(ctx));
-        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = orden });
+        var result = await handler.HandleAsync(new UpdateDocumentOrderOverrideCommand { Id = id, Orden = orden }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(UpdateDocumentOrderOverrideOutcome.ValidationFailed);
-        (await ctx.DocumentOrderOverrides.SingleAsync(o => o.Id == id)).SortOrder.Should().Be((short)5);
+        (await ctx.DocumentOrderOverrides.SingleAsync(o => o.Id == id, cancellationToken: TestContext.Current.CancellationToken)).SortOrder.Should().Be((short)5);
     }
 
     // ---------- AC6: DELETE borrado físico ----------
@@ -387,18 +387,18 @@ public sealed class DocumentOrderOverrideHandlerTests
                 SortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
         {
             var handler = new DeleteDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(act));
-            var result = await handler.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = id });
+            var result = await handler.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = id }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(DeleteDocumentOrderOverrideOutcome.Deleted);
         }
 
         await using var verify = NewContext(db);
-        (await verify.DocumentOrderOverrides.AnyAsync(o => o.Id == id)).Should().BeFalse();
+        (await verify.DocumentOrderOverrides.AnyAsync(o => o.Id == id, cancellationToken: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -407,7 +407,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new DeleteDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(ctx));
 
-        var result = await handler.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(DeleteDocumentOrderOverrideOutcome.NotFound);
     }

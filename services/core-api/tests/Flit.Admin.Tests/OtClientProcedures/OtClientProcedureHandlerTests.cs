@@ -53,7 +53,7 @@ public sealed class OtClientProcedureHandlerTests
         {
             OtTenantId = OtTenant,
             Status = ProcedureInstanceStatus.PendingOt,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Should().ContainSingle();
         result.Data[0].ProcedureTypeName.Should().Be("Matrícula inicial");
@@ -83,14 +83,14 @@ public sealed class OtClientProcedureHandlerTests
             OtTenantId = OtTenant,
             ProcedureInstanceId = procedureId,
             ApprovedBy = Approver,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(ApproveOtClientProcedureStatus.Approved);
         result.Procedure!.Status.Should().Be(ProcedureInstanceStatus.ApprovedOt);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
-            .SingleAsync(h => h.ProcedureInstanceId == procedureId);
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
         history.ToStatus.Should().Be(ProcedureInstanceStatus.ApprovedOt);
         history.ChangedBy.Should().Be(Approver);
         history.Metadata.Should().Contain(OtTenant.ToString());
@@ -119,14 +119,14 @@ public sealed class OtClientProcedureHandlerTests
             ProcedureInstanceId = procedureId,
             RejectedBy = Approver,
             Request = new() { Reason = reason },
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
         result.Procedure!.Status.Should().Be(ProcedureInstanceStatus.RejectedOt);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
-            .SingleAsync(h => h.ProcedureInstanceId == procedureId);
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
         history.Reason.Should().Be(reason);
     }
 
@@ -150,7 +150,7 @@ public sealed class OtClientProcedureHandlerTests
         {
             OtTenantId = OtherOtTenant,
             ProcedureInstanceId = procedureId,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(GetOtClientProcedureStatus.NotFound);
     }
@@ -180,7 +180,7 @@ public sealed class OtClientProcedureHandlerTests
             ProcedureTypeId = ProcedureTypeA,
             Page = 1,
             PageSize = 20,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(2);
         result.Data.Should().OnlyContain(p => p.ProcedureTypeId == ProcedureTypeA);
@@ -203,7 +203,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx));
-        var result = await handler.HandleAsync(new ListOtClientProceduresQuery { OtTenantId = OtTenant });
+        var result = await handler.HandleAsync(new ListOtClientProceduresQuery { OtTenantId = OtTenant }, TestContext.Current.CancellationToken);
 
         result.Data.Should().BeEmpty();
     }
