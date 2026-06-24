@@ -9,4 +9,5 @@ public sealed record OtFeatureFlagResponse(
 public sealed record OtProfileResponse(
     string OperationMode,
     bool QuipuxReadOnly,
+    Guid TransitOfficeId,
     IReadOnlyList<OtFeatureFlagResponse> FeatureFlags);

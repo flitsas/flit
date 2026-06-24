@@ -13,6 +13,7 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
@@ -39,7 +40,8 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();
         services.AddScoped<IVehicleTenantOwnershipChecker, StubVehicleTenantOwnershipChecker>();
 
-        // HU #10192 — grants de organismos de tránsito + consulta de audit log.
+        // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
+        services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
@@ -86,8 +88,9 @@ public static class AdminInfrastructureExtensions
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();
 
-        // HU #10221 — motor de reglas OT (sobre ot_feature_flags).
+        // HU #10221 — motor de reglas OT (sobre ot_feature_flags) + runtime gate.
         services.AddScoped<IOtRuleRepository, OtRuleRepository>();
+        services.AddScoped<IOtRuleGate, OtRuleGateService>();
 
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();

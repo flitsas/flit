@@ -139,6 +139,18 @@ internal sealed class OtWebhookSubscriptionRepository : IOtWebhookSubscriptionRe
             },
             cancellationToken);
 
+    public async Task<OtWebhookSubscription?> GetBySubscriptionIdAsync(
+        Guid subscriptionId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.OtWebhookSubscriptions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == subscriptionId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : Map(entity);
+    }
+
     private static OtWebhookSubscription Map(OtWebhookSubscriptionEntity entity) => new()
     {
         Id = entity.Id,

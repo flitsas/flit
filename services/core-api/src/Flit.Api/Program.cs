@@ -162,6 +162,7 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
+app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();

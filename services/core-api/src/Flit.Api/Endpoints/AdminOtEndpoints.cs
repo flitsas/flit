@@ -492,6 +492,9 @@ public static class AdminOtEndpoints
         {
             ApproveOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
             ApproveOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            ApproveOtClientProcedureStatus.QuipuxReadOnly => Results.Json(
+                new { error = "QUIPUX_READONLY" },
+                statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Ok(result.Procedure),
         };
     }
@@ -522,6 +525,9 @@ public static class AdminOtEndpoints
         {
             RejectOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
             RejectOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            RejectOtClientProcedureStatus.QuipuxReadOnly => Results.Json(
+                new { error = "QUIPUX_READONLY" },
+                statusCode: StatusCodes.Status403Forbidden),
             RejectOtClientProcedureStatus.ValidationFailed => Results.Json(
                 new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity),

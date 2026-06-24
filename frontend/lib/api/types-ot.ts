@@ -12,11 +12,16 @@ export interface OtFeatureFlag {
 export interface OtProfile {
   operationMode: OtOperationMode;
   quipuxReadOnly: boolean;
+  transitOfficeId: string;
   featureFlags: OtFeatureFlag[];
 }
 
 export interface UpdateOtProfileRequest {
   operationMode?: OtOperationMode;
+}
+
+export interface UpdateOtFeatureFlagRequest {
+  isEnabled: boolean;
 }
 
 export interface OtClientProcedure {

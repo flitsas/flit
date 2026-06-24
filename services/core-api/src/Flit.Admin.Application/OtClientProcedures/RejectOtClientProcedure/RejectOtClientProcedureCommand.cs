@@ -17,6 +17,7 @@ public enum RejectOtClientProcedureStatus
     NotFound,
     InvalidState,
     ValidationFailed,
+    QuipuxReadOnly,
 }
 
 public sealed class RejectOtClientProcedureResult
@@ -38,6 +39,9 @@ public sealed class RejectOtClientProcedureResult
 
     public static RejectOtClientProcedureResult ValidationFailed(params FieldError[] errors) =>
         new() { Status = RejectOtClientProcedureStatus.ValidationFailed, Errors = errors };
+
+    public static RejectOtClientProcedureResult QuipuxReadOnly() =>
+        new() { Status = RejectOtClientProcedureStatus.QuipuxReadOnly };
 }
 
 public sealed record FieldError(string Field, string Message);

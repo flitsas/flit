@@ -31,4 +31,9 @@ public interface IOtWebhookSubscriptionRepository
     Task<IReadOnlyList<OtWebhookSubscription>> ListAllAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lookup global por ID de suscripción (callback inbound sin JWT).</summary>
+    Task<OtWebhookSubscription?> GetBySubscriptionIdAsync(
+        Guid subscriptionId,
+        CancellationToken cancellationToken = default);
 }

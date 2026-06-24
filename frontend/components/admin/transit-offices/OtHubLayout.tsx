@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
+import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
 import {
   OT_HUB_TABS,
@@ -29,6 +30,21 @@ export function OtHubLayout({
 }: OtHubLayoutProps) {
   const router = useRouter();
   const [officeLabel, setOfficeLabel] = useState<string | undefined>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchOtProfile(controller.signal)
+      .then((profile) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (profile.transitOfficeId && profile.transitOfficeId !== transitOfficeId) {
+          router.replace(otHubModulePath(profile.transitOfficeId, activeTab));
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [activeTab, router, transitOfficeId]);
 
   useEffect(() => {
     const controller = new AbortController();

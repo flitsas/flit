@@ -12,6 +12,7 @@ import type {
   OtDocumentPrecedenceListResult,
   OtDocumentTag,
   OtDocumentTagsListResult,
+  OtFeatureFlag,
   OtProfile,
   OtRule,
   OtRulesListResult,
@@ -19,6 +20,7 @@ import type {
   OtWebhooksListResult,
   RejectOtClientProcedureRequest,
   UpdateOtDocumentPrecedenceRequest,
+  UpdateOtFeatureFlagRequest,
   UpdateOtProfileRequest,
   UpdateOtRuleRequest,
   UpdateOtWebhookRequest,
@@ -32,6 +34,13 @@ export function fetchOtProfile(signal?: AbortSignal): Promise<OtProfile> {
 
 export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile> {
   return apiFetch<OtProfile>(`${base}/profile`, { method: "PATCH", body });
+}
+
+export function updateOtFeatureFlag(
+  id: string,
+  body: UpdateOtFeatureFlagRequest,
+): Promise<OtFeatureFlag> {
+  return apiFetch<OtFeatureFlag>(`${base}/feature-flags/${id}`, { method: "PATCH", body });
 }
 
 export function fetchOtClientProcedures(

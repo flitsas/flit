@@ -9,6 +9,7 @@ import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: vi.fn(),
   updateOtProfile: vi.fn(),
+  updateOtFeatureFlag: vi.fn(),
   fetchOtClientProcedures: vi.fn(),
 }));
 
@@ -24,12 +25,14 @@ const PROC_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const dashboardProfile: OtProfile = {
   operationMode: "dashboard",
   quipuxReadOnly: false,
+  transitOfficeId: OT_ID,
   featureFlags: [],
 };
 
 const quipuxReadOnlyProfile: OtProfile = {
   operationMode: "quipux",
   quipuxReadOnly: true,
+  transitOfficeId: OT_ID,
   featureFlags: [],
 };
 

@@ -3,6 +3,7 @@ using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Domain.OtProfile;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
@@ -71,11 +72,12 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
             SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
         }
 
         await using var ctx = NewContext(db);
-        var handler = new ApproveOtClientProcedureHandler(new OtClientProcedureRepository(ctx));
+        var handler = NewApproveHandler(ctx);
         var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
         {
             OtTenantId = OtTenant,
@@ -105,11 +107,12 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
             SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
         }
 
         await using var ctx = NewContext(db);
-        var handler = new RejectOtClientProcedureHandler(new OtClientProcedureRepository(ctx));
+        var handler = NewRejectHandler(ctx);
         var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
         {
             OtTenantId = OtTenant,
@@ -273,6 +276,24 @@ public sealed class OtClientProcedureHandlerTests
         ctx.SaveChanges();
     }
 
+    private static void SeedActorUser(FlitDbContext ctx, Guid userId)
+    {
+        if (ctx.Users.Any(u => u.Id == userId))
+        {
+            return;
+        }
+
+        ctx.Users.Add(new User
+        {
+            Id = userId,
+            Email = $"actor-{userId:N}@test.local",
+            DisplayName = "Actor Test",
+            Status = "active",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        ctx.SaveChanges();
+    }
+
     private static void SeedProcedure(
         FlitDbContext ctx,
         Guid id,
@@ -297,6 +318,21 @@ public sealed class OtClientProcedureHandlerTests
     }
 
     private static string NewDbName() => Guid.NewGuid().ToString();
+
+    private static ApproveOtClientProcedureHandler NewApproveHandler(FlitDbContext ctx) =>
+        new(new OtClientProcedureRepository(ctx), new AllowAllQuipuxGuard());
+
+    private static RejectOtClientProcedureHandler NewRejectHandler(FlitDbContext ctx) =>
+        new(new OtClientProcedureRepository(ctx), new AllowAllQuipuxGuard());
+
+    private sealed class AllowAllQuipuxGuard : IQuipuxReadOnlyGuard
+    {
+        public Task<QuipuxReadOnlyResult> ValidateActionAsync(
+            Guid tenantId,
+            string action,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(QuipuxReadOnlyResult.Allowed());
+    }
 
     private static FlitDbContext NewContext(string dbName) =>
         new(new DbContextOptionsBuilder<FlitDbContext>()

@@ -2,7 +2,7 @@
 -- ⚠️  NO usar en producción. GUIDs fijos para validación E2E del módulo OT:
 --       OT_TENANT_ID      = bbbbbbbb-0001-4000-8000-000000000001
 --       BOGOTA_OFFICE_ID  = aaaaaaaa-0001-4000-8000-000000000001
---       OT_ACTOR_USER_ID  = ec4dddb9-ade5-43e8-b33b-c6036eba49d0 (validacion.otadmin@flit.local)
+--       OT_ACTOR_USER_ID  = ec4dddb9-ade5-43e8-b33b-c6036eba49d0 (otadmin@flit.local)
 -- Idempotente: ON CONFLICT DO NOTHING / WHERE NOT EXISTS.
 
 BEGIN;
@@ -34,6 +34,17 @@ VALUES (
     '900000009-9',
     'transit_office',
     true,
+    now()
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Usuario OT actor (FK changed_by en procedure_instances / status_history)
+INSERT INTO identity.users (id, email, display_name, status, created_at)
+VALUES (
+    'ec4dddb9-ade5-43e8-b33b-c6036eba49d0',
+    'otadmin@flit.local',
+    'Administrador OT Demo',
+    'active',
     now()
 )
 ON CONFLICT (id) DO NOTHING;

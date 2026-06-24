@@ -14,6 +14,7 @@ public enum ApproveOtClientProcedureStatus
     Approved,
     NotFound,
     InvalidState,
+    QuipuxReadOnly,
 }
 
 public sealed class ApproveOtClientProcedureResult
@@ -30,4 +31,7 @@ public sealed class ApproveOtClientProcedureResult
 
     public static ApproveOtClientProcedureResult InvalidState() =>
         new() { Status = ApproveOtClientProcedureStatus.InvalidState };
+
+    public static ApproveOtClientProcedureResult QuipuxReadOnly() =>
+        new() { Status = ApproveOtClientProcedureStatus.QuipuxReadOnly };
 }

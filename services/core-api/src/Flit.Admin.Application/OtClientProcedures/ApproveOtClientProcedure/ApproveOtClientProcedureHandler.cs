@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Admin.Domain.OtProfile;
 
 namespace Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 
@@ -8,10 +9,15 @@ public sealed class ApproveOtClientProcedureHandler
     private const string PendingOt = "pending_ot";
 
     private readonly IOtClientProcedureRepository _repository;
+    private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
 
-    public ApproveOtClientProcedureHandler(IOtClientProcedureRepository repository)
+    public ApproveOtClientProcedureHandler(
+        IOtClientProcedureRepository repository,
+        IQuipuxReadOnlyGuard quipuxReadOnlyGuard)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _quipuxReadOnlyGuard = quipuxReadOnlyGuard
+            ?? throw new ArgumentNullException(nameof(quipuxReadOnlyGuard));
     }
 
     public async Task<ApproveOtClientProcedureResult> HandleAsync(
@@ -19,6 +25,14 @@ public sealed class ApproveOtClientProcedureHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        var guardResult = await _quipuxReadOnlyGuard
+            .ValidateActionAsync(command.OtTenantId, "aprobar", cancellationToken)
+            .ConfigureAwait(false);
+        if (!guardResult.IsAllowed)
+        {
+            return ApproveOtClientProcedureResult.QuipuxReadOnly();
+        }
 
         var existing = await _repository
             .GetByIdAsync(command.OtTenantId, command.ProcedureInstanceId, cancellationToken)

@@ -7,9 +7,10 @@ import { useToast } from "@/components/admin/Toast";
 import {
   fetchOtClientProcedures,
   fetchOtProfile,
+  updateOtFeatureFlag,
   updateOtProfile,
 } from "@/lib/api/admin-ot";
-import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import type { OtClientProcedure, OtFeatureFlag, OtProfile } from "@/lib/api/types-ot";
 import { TramitesProcedureList } from "./TramitesProcedureList";
 
 export type TramitesPanel = "dashboard" | "quipux";
@@ -30,6 +31,11 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const [procedures, setProcedures] = useState<OtClientProcedure[]>([]);
   const [activePanel, setActivePanel] = useState<TramitesPanel>("dashboard");
   const [switchingMode, setSwitchingMode] = useState(false);
+  const [togglingFlagId, setTogglingFlagId] = useState<string | null>(null);
+
+  const operationalFlags = (profile?.featureFlags ?? []).filter(
+    (f) => !f.flagKey.startsWith("rule:"),
+  );
 
   const isQuipuxMode = profile?.operationMode === "quipux";
   const isReadOnly = Boolean(profile?.quipuxReadOnly && isQuipuxMode);
@@ -109,6 +115,41 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
   };
 
+  const handleFlagToggle = async (flag: OtFeatureFlag, checked: boolean) => {
+    if (!profile || togglingFlagId) {
+      return;
+    }
+
+    setTogglingFlagId(flag.id);
+    const previous = profile.featureFlags;
+    setProfile({
+      ...profile,
+      featureFlags: profile.featureFlags.map((f) =>
+        f.id === flag.id ? { ...f, isEnabled: checked } : f,
+      ),
+    });
+
+    try {
+      const updated = await updateOtFeatureFlag(flag.id, { isEnabled: checked });
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              featureFlags: current.featureFlags.map((f) =>
+                f.id === updated.id ? updated : f,
+              ),
+            }
+          : current,
+      );
+      show(`Flag "${flag.flagKey}" ${checked ? "activado" : "desactivado"}.`, "success");
+    } catch {
+      setProfile((current) => (current ? { ...current, featureFlags: previous } : current));
+      show("No se pudo actualizar el feature flag.", "error");
+    } finally {
+      setTogglingFlagId(null);
+    }
+  };
+
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, panel: TramitesPanel) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -160,6 +201,32 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           />
         </div>
       </div>
+
+      {operationalFlags.length > 0 && (
+        <div
+          className="rounded-2xl border bg-white p-4"
+          style={{ borderColor: "#DFE5ED" }}
+          aria-labelledby={`${tabsId}-flags-heading`}
+        >
+          <h3 id={`${tabsId}-flags-heading`} className="mb-3 text-xs font-bold">
+            Feature flags operativos
+          </h3>
+          <ul className="space-y-2">
+            {operationalFlags.map((flag) => (
+              <li key={flag.id}>
+                <ToggleSwitch
+                  id={`${tabsId}-flag-${flag.id}`}
+                  label={flag.flagKey}
+                  description="Hot-swap sin reinicio de servicio"
+                  checked={flag.isEnabled}
+                  disabled={togglingFlagId === flag.id}
+                  onChange={(checked) => void handleFlagToggle(flag, checked)}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div role="tablist" aria-label="Paneles de trámites" className="flex gap-2">
         <button

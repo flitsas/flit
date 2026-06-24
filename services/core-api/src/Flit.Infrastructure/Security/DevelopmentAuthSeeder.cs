@@ -23,6 +23,10 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtDevTenantId =
         Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
 
+    /// <summary>Usuario ot_admin fijo — alineado con seed SQL y FK changed_by en trámites.</summary>
+    public static readonly Guid OtAdminUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d0");
+
     public static async Task SeedAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
@@ -176,7 +180,7 @@ public static class DevelopmentAuthSeeder
             return;
         }
 
-        var userId = Guid.CreateVersion7();
+        var userId = OtAdminUserId;
         var roleId = Guid.CreateVersion7();
         var now = DateTimeOffset.UtcNow;
 

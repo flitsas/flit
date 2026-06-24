@@ -167,10 +167,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
+                var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
+                    .ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
                 entity.Status = targetStatus;
                 entity.UpdatedAt = now;
-                entity.UpdatedBy = changedBy;
+                entity.UpdatedBy = resolvedChangedBy;
 
                 _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
                 {
@@ -180,7 +182,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     FromStatus = expectedStatus,
                     ToStatus = targetStatus,
                     ChangedAt = now,
-                    ChangedBy = changedBy,
+                    ChangedBy = resolvedChangedBy,
                     Reason = reason,
                     Metadata = JsonSerializer.Serialize(new
                     {
@@ -381,6 +383,22 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         }
 
         return await action().ConfigureAwait(false);
+    }
+
+    /// <summary>Evita violación FK si el JWT sub no existe en identity.users.</summary>
+    private async Task<Guid?> ResolveChangedByAsync(Guid? changedBy, CancellationToken cancellationToken)
+    {
+        if (changedBy is null || changedBy == Guid.Empty)
+        {
+            return null;
+        }
+
+        var exists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == changedBy.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+        return exists ? changedBy : null;
     }
 
     private static OtClientProcedure Map(ProcedureInstance entity) => new()

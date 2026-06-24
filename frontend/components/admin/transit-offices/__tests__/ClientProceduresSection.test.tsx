@@ -8,6 +8,7 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
 }));
@@ -31,6 +32,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
 import {
   approveOtClientProcedure,
   fetchOtClientProcedures,
+  fetchOtProfile,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 
@@ -56,6 +58,12 @@ function renderSection() {
 describe("ClientProceduresSection — HU #10220", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchOtProfile).mockResolvedValue({
+      operationMode: "dashboard",
+      quipuxReadOnly: false,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      featureFlags: [],
+    });
     vi.mocked(fetchOtClientProcedures).mockResolvedValue({
       data: [procedure],
       totalCount: 1,

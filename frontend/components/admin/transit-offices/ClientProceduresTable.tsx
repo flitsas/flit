@@ -13,6 +13,7 @@ export interface ClientProceduresTableProps {
   onPageChange: (page: number) => void;
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
+  showApprovalActions?: boolean;
 }
 
 /** Tabla paginada trámites clientes OT — patrón CompanyListTable (HU #10220). */
@@ -24,6 +25,7 @@ export function ClientProceduresTable({
   onPageChange,
   onApprove,
   onReject,
+  showApprovalActions = true,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -78,7 +80,7 @@ export function ClientProceduresTable({
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
                 style={{ borderColor: "#DFE5ED" }}
               >
-                {row.status === "pending_ot" && (
+                {row.status === "pending_ot" && showApprovalActions && (
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"

@@ -8,9 +8,10 @@ import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametriza
 import {
   approveOtClientProcedure,
   fetchOtClientProcedures,
+  fetchOtProfile,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
-import type { OtClientProcedure } from "@/lib/api/types-ot";
+import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
@@ -30,6 +31,19 @@ export function ClientProceduresSection() {
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [acting, setActing] = useState(false);
+  const [profile, setProfile] = useState<OtProfile | null>(null);
+
+  const isReadOnly = Boolean(
+    profile?.operationMode === "quipux" && profile?.quipuxReadOnly,
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchOtProfile(controller.signal)
+      .then(setProfile)
+      .catch(() => setProfile(null));
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     tramitesClient
@@ -110,6 +124,19 @@ export function ClientProceduresSection() {
 
   return (
     <div className="space-y-4">
+      {isReadOnly && (
+        <div className="flex items-center gap-2">
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ background: "#FFF4EC", color: "#FF4E00" }}
+          >
+            Solo lectura
+          </span>
+          <span className="text-[11px] opacity-60">
+            Modo QX activo — no se pueden aprobar ni rechazar trámites.
+          </span>
+        </div>
+      )}
       <form
         className={OT_FILTER_FORM_CLS}
         style={{ borderColor: "#DFE5ED" }}
@@ -175,6 +202,7 @@ export function ClientProceduresSection() {
           onPageChange={setPage}
           onApprove={setApproveTarget}
           onReject={setRejectTarget}
+          showApprovalActions={!isReadOnly}
         />
       </UiStateBoundary>
 

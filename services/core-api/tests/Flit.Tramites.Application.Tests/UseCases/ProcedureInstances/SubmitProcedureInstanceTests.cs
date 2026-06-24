@@ -21,7 +21,8 @@ public sealed class SubmitProcedureInstanceTests
         _sut = new SubmitProcedureInstanceHandler(
             _repo,
             _typeRepo,
-            NullProcedureStateChangeNotifier.Instance);
+            NullProcedureStateChangeNotifier.Instance,
+            NullOtRuleGate.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
