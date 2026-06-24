@@ -18,7 +18,7 @@ namespace Flit.Admin.Tests.Companies.TransitGrants;
 /// </summary>
 public sealed class StaticTransitOfficeCatalogTests
 {
-    private readonly ITransitOfficeCatalog _catalog = new StaticTransitOfficeCatalog();
+    private readonly StaticTransitOfficeCatalog _catalog = new StaticTransitOfficeCatalog();
 
     [Fact]
     public void All_HasAtLeastFiveEntries()
