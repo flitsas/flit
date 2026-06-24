@@ -76,13 +76,52 @@ public sealed class WizardFurStateTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(instance);
 
+    private static ProcedureInstanceActor Comprador(string doc = "777") =>
+        new()
+        {
+            Id = Guid.NewGuid(), ActorType = "comprador", DocumentType = "CC", DocumentNumber = doc,
+            FullName = "Maria", Email = "maria@x.com", CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceActor Vendedor(string doc = "555") =>
+        new()
+        {
+            Id = Guid.NewGuid(), ActorType = "vendedor", DocumentType = "CC", DocumentNumber = doc,
+            FullName = "Juan", Email = "juan@x.com", CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    /// <summary>Completa pasos 1-4 de matrícula (VIN, docs, comprador+RUNT, biométrica) → FUR (5) alcanzable.</summary>
+    private static void CompletarHastaFurMatricula(ProcedureInstance instance)
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.Actors.Add(Comprador());
+        instance.Attachments.Add(Doc("factura"));
+        instance.Attachments.Add(Doc("aduana"));
+        instance.Attachments.Add(Doc("impronta"));
+        instance.BiometricValidations.Add(Bio("comprador")); // identidad (4) completa
+    }
+
+    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Vendedor());
+        instance.Actors.Add(Comprador("666"));
+        instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot { Id = Guid.NewGuid(), Overall = "green", Checks = "[]", CreatedAt = DateTimeOffset.UtcNow });
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+    }
+
     // ── Matrícula paso 5 (fur) — sin firma ───────────────────────────────────────
+    // Nota cascada: los pasos diferidos solo se evalúan cuando son ALCANZABLES; por eso
+    // cada test completa primero los pasos previos (de lo contrario el paso sería 'locked').
 
     [Fact]
     public async Task Matricula_NoFur_Step5IncompleteWithFurPendiente()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("matricula_inicial"));
+        var instance = Base("matricula_inicial");
+        CompletarHastaFurMatricula(instance); // FUR (5) alcanzable
+        Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -97,6 +136,7 @@ public sealed class WizardFurStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
+        CompletarHastaFurMatricula(instance); // FUR (5) alcanzable
         instance.Attachments.Add(Fur());
         Setup(instance);
 
@@ -112,6 +152,7 @@ public sealed class WizardFurStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
         instance.BiometricValidations.Add(Bio("comprador"));
         instance.BiometricValidations.Add(Bio("vendedor"));
         // firma + fur faltan
@@ -131,6 +172,7 @@ public sealed class WizardFurStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
         instance.BiometricValidations.Add(Bio("comprador"));
         instance.BiometricValidations.Add(Bio("vendedor"));
         instance.Signatures.Add(Firma("comprador"));

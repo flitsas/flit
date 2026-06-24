@@ -6,6 +6,13 @@ public interface IProcedureInstanceRepository
 {
     Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct = default);
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con únicamente sus <c>Actors</c>. Query lean para operaciones
+    /// PUT/GET de actores que no necesitan FieldValues ni StatusHistory.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con TODO el grafo del wizard: actores, field values, adjuntos,

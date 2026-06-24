@@ -51,8 +51,11 @@ export interface CompanyItem {
   estadoActivo: boolean;
 }
 
-/** Same-origin relative paths; Next.js rewrites proxy to core-api in dev. */
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+// Misma resolución de base que lib/api/client.ts: el CD inyecta NEXT_PUBLIC_API_BASE_URL
+// (api.<env>.flitsas.online). Compat con NEXT_PUBLIC_API_URL (local) y localhost. ANTES leía
+// solo NEXT_PUBLIC_API_URL → vacío en DEV → caía al mismo origen (Next.js) → 500.
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
 
 const SUPERADMIN_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
@@ -61,7 +64,8 @@ const SUPERADMIN_HEADERS: HeadersInit = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== 'undefined' ? getToken() : null;
-  const res = await fetch(`${BASE_URL}${path}`, {
+  // Path absoluto → toma el ORIGEN de BASE_URL e ignora su path (evita duplicar /api/v1).
+  const res = await fetch(new URL(path, BASE_URL).toString(), {
     ...init,
     headers: {
       ...SUPERADMIN_HEADERS,

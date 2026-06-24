@@ -36,6 +36,13 @@ vi.mock('@/lib/api/tramites-client', () => ({
   DEV_USER_ID: 'user-dev',
 }));
 
+// El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para
+// no exigir <ToastProvider> en cada render y poder asertar el mensaje.
+const toastShow = vi.hoisted(() => vi.fn());
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: toastShow }),
+}));
+
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 const CONFIG: ProcedureConfiguration = {
@@ -76,6 +83,23 @@ const TRASPASO_WIZARD: WizardState = {
     { index: 3, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'complete', reasons: [] },
     { index: 5, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
+  ],
+};
+
+// Wizard con TODOS los pasos completos: el caso típico de un trámite ya enviado
+// a tránsito (submitted), navegable de extremo a extremo en solo lectura.
+const SUBMITTED_WIZARD: WizardState = {
+  modalidad: 'matricula_inicial',
+  tipologiaCodigo: 'matricula_inicial',
+  totalSteps: 5,
+  canSubmit: true,
+  blockers: [],
+  steps: [
+    { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
+    { index: 3, key: 'identidad', label: 'Identidad', status: 'complete', reasons: [] },
+    { index: 4, key: 'fur', label: 'FUR', status: 'complete', reasons: [] },
   ],
 };
 
@@ -149,6 +173,95 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
   });
 });
 
+describe('TramiteWizard — instancia existente (Track B)', () => {
+  it('con existingInstanceId NO crea instancia y carga el wizard de ese id', async () => {
+    render(<TramiteWizard existingInstanceId="inst-99" onExit={() => {}} />);
+
+    // El wizard server-driven se hidrata con el id de la URL...
+    const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
+    expect(stepButtons).toHaveLength(5);
+    expect(mocks.getWizardState).toHaveBeenCalledWith('inst-99', expect.anything());
+    // ...y NO dispara un POST /instances (F5 reabre, no re-crea).
+    expect(mocks.createInstance).not.toHaveBeenCalled();
+  });
+
+  it('reanuda en la frontera (primer paso incompleto), no en el paso 1', async () => {
+    // MATRICULA_WIZARD: paso 1 (Consulta VIN) completo, paso 2 (Documentos) incompleto.
+    // Al abrir la instancia existente, el cuerpo debe arrancar en Documentos.
+    render(<TramiteWizard existingInstanceId="inst-99" onExit={() => {}} />);
+
+    // El título del paso activo (h2 del cuerpo) es "Documentos", no "Consulta VIN".
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Consulta VIN' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('un trámite sin avance (paso 1 = frontera) abre en el paso 1', async () => {
+    // Todos los pasos incompletos: la frontera es el paso 1 (Consulta VIN).
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: [
+        { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'incomplete', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Documentos', status: 'locked', reasons: [] },
+        { index: 2, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
+        { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
+        { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+      ],
+    });
+    render(<TramiteWizard existingInstanceId="inst-77" onExit={() => {}} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Consulta VIN' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — solo lectura (Track C)', () => {
+  beforeEach(() => {
+    mocks.getWizardState.mockResolvedValue(SUBMITTED_WIZARD);
+    // El estado submitted activa el modo solo lectura.
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-sub',
+      status: 'submitted',
+      fieldValues: [],
+    });
+  });
+
+  it('muestra el banner de solo lectura y oculta Continuar/Finalizar', async () => {
+    render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
+
+    expect(await screen.findByText(/solo visualización/i)).toBeInTheDocument();
+    // El botón de salida pasa a "Volver al listado".
+    expect(
+      screen.getByRole('button', { name: /Volver al listado/ }),
+    ).toBeInTheDocument();
+    // Sin acciones de edición en el footer.
+    expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Continuar/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Guardar y continuar/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('los inputs del paso de consulta están deshabilitados y sin Consultar RUNT', async () => {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
+
+    // Consulta VIN es un paso completo → navegable en solo lectura.
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await user.click(consultaTab);
+
+    const vin = await screen.findByLabelText('Número VIN');
+    expect(vin).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Consultar RUNT' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('TramiteWizard — status y reasons traducidos', () => {
   it('traduce los códigos de reason a copy amigable', async () => {
     renderWizard();
@@ -162,6 +275,30 @@ describe('TramiteWizard — status y reasons traducidos', () => {
     await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
     const locked = screen.getByRole('button', { name: /^Paso 4: Identidad \(locked\)/ });
     expect(locked).toBeDisabled();
+  });
+});
+
+describe('TramiteWizard — navegación en cascada (frontera)', () => {
+  it('Identidad no es clickeable cuando Comprador (paso previo) está incompleto', async () => {
+    // Defensa de frontend: aunque el backend devolviera Identidad como 'incomplete'
+    // (no 'locked'), solo se navega a pasos completos o a la frontera (primer
+    // incompleto = Comprador). Identidad queda fuera de alcance → no clickeable.
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: [
+        { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+        { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
+        { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente'] },
+        { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
+      ],
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    // Comprador es la frontera → navegable.
+    expect(screen.getByRole('button', { name: /^Paso 3: Comprador/ })).toBeEnabled();
+    // Identidad está más allá de la frontera → NO navegable, pese a no estar 'locked'.
+    expect(screen.getByRole('button', { name: /^Paso 4: Identidad/ })).toBeDisabled();
   });
 });
 
@@ -196,21 +333,30 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
   });
 
-  it('Finalizar habilitado cuando canSubmit', async () => {
+  it('Finalizar envía, dispara toast de éxito y vuelve al listado (sin pantalla intermedia)', async () => {
     mocks.getWizardState.mockResolvedValue({
       ...TRASPASO_WIZARD,
       canSubmit: true,
       blockers: [],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     });
+    const onExit = vi.fn();
     const user = userEvent.setup();
-    renderWizard();
+    render(
+      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
+    );
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
     const finish = screen.getByRole('button', { name: /Finalizar/ });
     expect(finish).toBeEnabled();
     await user.click(finish);
+
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    // Toast de éxito + redirección inmediata (onExit), sin pantalla intermedia.
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/enviado a tránsito/i), 'success');
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('¡Trámite enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Volver a Operación' })).not.toBeInTheDocument();
   });
 });
 
@@ -222,8 +368,9 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     // 1 carga inicial del wizard.
     await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(1));
 
-    // Captura el VIN en el input del paso consulta_vin.
-    await user.type(screen.getByLabelText(/^VIN$/), '9BWZZZ377VT004251');
+    // Captura el VIN en el input del paso consulta_vin (aria-label "Número VIN"
+    // tras el rediseño del card de matrícula).
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
 
     // Orden de llamadas observado para verificar persist→preflight.
     const calls: string[] = [];
@@ -307,6 +454,76 @@ describe('TramiteWizard — creación única de instancia (StrictMode)', () => {
     mocks.createInstance.mockRejectedValueOnce(new Error('reference_number duplicado'));
     renderWizard();
     expect(await screen.findByRole('alert')).toHaveTextContent(/reference_number duplicado/);
+  });
+});
+
+describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
+  // Traspaso con consulta+validación completas y vendedor como frontera.
+  const VENDEDOR_FRONTIER: WizardState = {
+    modalidad: 'traspaso',
+    tipologiaCodigo: 'traspaso',
+    totalSteps: 6,
+    canSubmit: false,
+    blockers: [],
+    steps: [
+      { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
+      { index: 1, key: 'validacion', label: 'Validación', status: 'complete', reasons: [] },
+      { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
+      { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
+      { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
+      { index: 5, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+    ],
+  };
+  // Tras guardar el vendedor: vendedor complete, comprador pasa a ser la frontera.
+  const VENDEDOR_DONE: WizardState = {
+    ...VENDEDOR_FRONTIER,
+    steps: VENDEDOR_FRONTIER.steps.map((s) =>
+      s.index === 2
+        ? { ...s, status: 'complete', reasons: [] as string[] }
+        : s.index === 3
+          ? { ...s, status: 'incomplete', reasons: ['comprador_incompleto'] }
+          : s,
+    ),
+  };
+
+  it('Continuar en paso vendedor dispara save (PUT actors) ANTES de refrescar y avanzar', async () => {
+    const user = userEvent.setup();
+    const order: string[] = [];
+    let wizardCalls = 0;
+    mocks.getWizardState.mockImplementation(async () => {
+      wizardCalls += 1;
+      order.push('wizard');
+      return wizardCalls === 1 ? VENDEDOR_FRONTIER : VENDEDOR_DONE;
+    });
+    mocks.getActors.mockResolvedValue([
+      { rol: 'vendedor', tipoDocumento: 'CC', numeroDocumento: '999', nombreCompleto: 'Pedro Vendedor', email: 'pedro@x.com' },
+    ]);
+    mocks.saveActors.mockImplementation(async () => {
+      order.push('save');
+    });
+
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+
+    // Navega al paso Vendedor (frontera).
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
+    // El form hidrata al vendedor cargado.
+    await screen.findByDisplayValue('Pedro Vendedor');
+
+    // Footer del wizard: "Guardar y continuar" (no el botón propio del form).
+    await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
+
+    // 1) Se guardó el set de actores con el vendedor.
+    await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
+    const [instanceId, actors] = mocks.saveActors.mock.calls[0];
+    expect(instanceId).toBe('inst-1');
+    expect(actors[0]).toMatchObject({ rol: 'vendedor', numeroDocumento: '999' });
+
+    // 2) El save ocurre ANTES del refresh que decide el avance.
+    expect(order.indexOf('save')).toBeLessThan(order.lastIndexOf('wizard'));
+
+    // 3) Con el vendedor ya complete, el wizard avanza al paso Comprador.
+    expect(await screen.findByText(/Identificación · Comprador/)).toBeInTheDocument();
   });
 });
 

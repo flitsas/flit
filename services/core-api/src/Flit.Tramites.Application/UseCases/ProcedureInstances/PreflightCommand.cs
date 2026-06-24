@@ -49,6 +49,7 @@ public sealed class RunPreflightHandler(
     private const string ProviderVerifik = "verifik";
     private const string ProviderVerifikSimit = "verifik_simit";
     private const string ProviderVerifikRnmc = "verifik_rnmc";
+    private const string ConsultationSource = "consultation";
 
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -74,13 +75,14 @@ public sealed class RunPreflightHandler(
 
         var checks = new List<PreflightCheckDto>();
         var providersUsed = new SortedSet<string>(StringComparer.Ordinal);
+        IReadOnlyList<HydratedField> vehicleFields;
 
         if (modalidad == TramiteModalidadEntrada.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
             // antes de que exista el actor vendedor); de ahí lo toma el provider.
-            await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
+            vehicleFields = await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
             // SIMIT del comprador y del vendedor (comparendos).
             await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, ct);
             await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, ct);
@@ -90,8 +92,14 @@ public sealed class RunPreflightHandler(
         else
         {
             // Matrícula inicial: vehículo por VIN (primera matrícula, sin propietario previo).
-            await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
+            vehicleFields = await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
         }
+
+        // Una sola consulta a Verifik alimenta AMBAS secciones: el proveedor del vehículo ya
+        // devolvió los atributos del RUNT (marca/línea/color/…). Los persistimos en field_values
+        // (source="consultation") para la tarjeta "Datos del vehículo", evitando una segunda
+        // consulta dedicada. Idempotente: upsert por field_key.
+        UpsertHydratedFields(instance, tenantId, vehicleFields);
 
         // Composición del overall con la regla del dominio.
         var overall = ComposeOverall(checks);
@@ -143,7 +151,7 @@ public sealed class RunPreflightHandler(
         return "green";
     }
 
-    private async Task RunVehiculoAsync(
+    private async Task<IReadOnlyList<HydratedField>> RunVehiculoAsync(
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
         string? vin,
@@ -155,7 +163,7 @@ public sealed class RunPreflightHandler(
         if (provider is null)
         {
             checks.Add(new PreflightCheckDto("vehiculo", "Vehículo RUNT", "unknown", ProviderVerifik, "Proveedor de vehículo no disponible"));
-            return;
+            return [];
         }
 
         providersUsed.Add(ProviderVerifik);
@@ -169,7 +177,7 @@ public sealed class RunPreflightHandler(
         if (!string.IsNullOrWhiteSpace(ownerDocType)) fv["owner_document_type"] = ownerDocType;
         if (!string.IsNullOrWhiteSpace(ownerDocNumber)) fv["owner_document_number"] = ownerDocNumber;
 
-        await RunProviderAsync(checks, provider, fv, ct);
+        return await RunProviderAsync(checks, provider, fv, ct);
     }
 
     private async Task RunSimitAsync(
@@ -234,9 +242,11 @@ public sealed class RunPreflightHandler(
 
     /// <summary>
     /// Ejecuta un provider con un contexto a medida y vuelca sus checks en el snapshot.
-    /// Cualquier excepción inesperada degrada a un check unknown (no propaga 500).
+    /// Devuelve los <see cref="HydratedField"/> que el provider extrajo de la MISMA respuesta
+    /// (p. ej. los atributos del vehículo del RUNT), para persistirlos en field_values sin una
+    /// segunda consulta. Cualquier excepción inesperada degrada a un check unknown (no propaga 500).
     /// </summary>
-    private static async Task RunProviderAsync(
+    private static async Task<IReadOnlyList<HydratedField>> RunProviderAsync(
         List<PreflightCheckDto> checks,
         IConsultationProvider provider,
         IReadOnlyDictionary<string, string?> fieldValues,
@@ -252,6 +262,8 @@ public sealed class RunPreflightHandler(
                 var key = keyPrefix is null ? c.Key : $"{keyPrefix}_{c.Key}";
                 checks.Add(new PreflightCheckDto(key, c.Label, c.Status, c.Source, c.Message));
             }
+
+            return result.HydratedFields;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -261,6 +273,54 @@ public sealed class RunPreflightHandler(
         {
             var key = keyPrefix ?? "provider";
             checks.Add(new PreflightCheckDto(key, provider.Key, "unknown", provider.Key, $"Error inesperado: {ex.Message}"));
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Persiste (upsert por field_key) los atributos del vehículo que el proveedor RUNT extrajo
+    /// en la misma consulta del preflight, con Source="consultation". Reusa la convención de
+    /// valores "loose" (FormFieldId null) de <c>RunConsultationHandler</c>. Idempotente.
+    /// </summary>
+    private void UpsertHydratedFields(
+        ProcedureInstance instance,
+        Guid tenantId,
+        IReadOnlyList<HydratedField> hydratedFields)
+    {
+        if (hydratedFields.Count == 0)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var field in hydratedFields)
+        {
+            var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == field.FieldKey);
+            if (existing is not null)
+            {
+                existing.ValueText = field.ValueText;
+                existing.ValueJson = field.ValueJson;
+                existing.Source = ConsultationSource;
+                existing.UpdatedAt = now;
+            }
+            else
+            {
+                var fieldValue = new ProcedureInstanceFieldValue
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ProcedureInstanceId = instance.Id,
+                    FormFieldId = null,
+                    FieldKey = field.FieldKey,
+                    ValueText = field.ValueText,
+                    ValueJson = field.ValueJson,
+                    Source = ConsultationSource,
+                    CreatedAt = now,
+                };
+                instance.FieldValues.Add(fieldValue);
+                // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
+                // INSERT (sin esto EF infiere Modified por la PK no-default → UPDATE de 0 filas).
+                repo.Add(fieldValue);
+            }
         }
     }
 

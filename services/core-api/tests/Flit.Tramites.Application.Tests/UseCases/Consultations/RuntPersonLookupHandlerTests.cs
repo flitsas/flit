@@ -44,12 +44,17 @@ public sealed class RuntPersonLookupHandlerTests
 
     private static ConsultationResult FoundResult() =>
         new("verifik_conductor", "green",
-            [new ConsultationCheck("conductor", "Persona en RUNT", "ok", "verifik_conductor", null)],
+            [new ConsultationCheck("conductor_identidad", "Persona en RUNT", "ok", "verifik_conductor", null)],
             [
                 new HydratedField("person_full_name", "JUAN CARLOS PEREZ GOMEZ", null),
                 new HydratedField("person_first_name", "JUAN CARLOS", null),
                 new HydratedField("person_last_name", "PEREZ GOMEZ", null),
                 new HydratedField("person_license_status", "ACTIVO", null),
+                new HydratedField("person_citizen_status", "ACTIVA", null),
+                new HydratedField("person_has_pending_fines", "false", null),
+                new HydratedField("person_paz_y_salvo", "PAZ-Y-SALVO-001", null),
+                new HydratedField("person_has_active_license", "true", null),
+                new HydratedField("person_license_categories", "B1", null),
             ]);
 
     private static ConsultationResult NotFoundResult() =>
@@ -146,5 +151,41 @@ public sealed class RuntPersonLookupHandlerTests
         result.LastName.Should().BeNull();
         result.LicenseStatus.Should().BeNull();
         result.DocumentNumber.Should().Be("999999999");
+    }
+
+    [Fact]
+    public async Task HandleAsync_Found_MapeaCamposEnriquecidos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        var provider = new FakeProvider(FoundResult());
+        _registry.Resolve("verifik_conductor").Returns(provider);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.CitizenStatus.Should().Be("ACTIVA");
+        result.HasPendingFines.Should().BeFalse();
+        result.HasActiveLicense.Should().BeTrue();
+        result.LicenseCategories.Should().Be("B1");
+        result.NroPazYSalvo.Should().Be("PAZ-Y-SALVO-001");
+    }
+
+    [Fact]
+    public async Task HandleAsync_NIT_RetornaUnsupportedDocumentType()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _registry.Resolve("verifik_conductor").Returns(new FakeProvider(FoundResult()));
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "NIT", "900123456", ct);
+
+        error.Should().Be("unsupported_document_type");
+        result.Should().BeNull();
     }
 }

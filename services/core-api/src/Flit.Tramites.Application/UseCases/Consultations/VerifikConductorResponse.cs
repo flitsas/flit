@@ -33,8 +33,56 @@ public sealed class VerifikConductorData
     [JsonPropertyName("fullName")]
     public string? FullName { get; set; }
 
+    [JsonPropertyName("citizenStatus")]
+    public string? CitizenStatus { get; set; }
+
+    [JsonPropertyName("driverStatus")]
+    public string? DriverStatus { get; set; }
+
+    [JsonPropertyName("totalLicenses")]
+    public string? TotalLicenses { get; set; }
+
+    [JsonPropertyName("licenses")]
+    public List<VerifikConductorLicense>? Licenses { get; set; }
+
+    [JsonPropertyName("infractions")]
+    public VerifikConductorInfractions? Infractions { get; set; }
+
     [JsonPropertyName("identityValidationAttempts")]
     public VerifikConductorIdentityValidation? IdentityValidationAttempts { get; set; }
+}
+
+public sealed class VerifikConductorLicense
+{
+    [JsonPropertyName("category")]
+    public string? Category { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("dueDate")]
+    public string? DueDate { get; set; }
+
+    [JsonPropertyName("expeditionDate")]
+    public string? ExpeditionDate { get; set; }
+
+    [JsonPropertyName("licenceNumber")]
+    public string? LicenceNumber { get; set; }
+
+    [JsonPropertyName("otExpide")]
+    public string? OtExpide { get; set; }
+
+    [JsonPropertyName("restrictions")]
+    public string? Restrictions { get; set; }
+}
+
+public sealed class VerifikConductorInfractions
+{
+    [JsonPropertyName("nroPazYSalvo")]
+    public string? NroPazYSalvo { get; set; }
+
+    [JsonPropertyName("tieneMultas")]
+    public string? TieneMultas { get; set; }
 }
 
 public sealed class VerifikConductorIdentityValidation

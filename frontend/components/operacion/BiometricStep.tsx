@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -14,6 +15,12 @@ interface Props {
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras simular/refrescar (server-driven). */
   onRefresh?: () => void;
+  /**
+   * Oculta el párrafo introductorio cuando el contenedor ya describe el paso
+   * (paso `identidad`: el h2 + subtítulo del wizard lo cubren). En `fur` NO se
+   * oculta: ahí la biométrica es una subsección dentro de "Generar FUR".
+   */
+  hideIntro?: boolean;
 }
 
 /** Partes que requieren biométrica por modalidad. */
@@ -34,8 +41,10 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
  * verde con "Identidad verificada — {score}/100". El status/gating lo decide el
  * wizard server-driven: este paso solo refresca tras simular.
  */
-export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
+export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = false }: Props) {
   const partes = partesFor(modalidad);
+  // Solo lectura (Track C): sin Actualizar ni simular validación.
+  const readOnly = useWizardReadOnly();
 
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,21 +80,27 @@ export function BiometricStep({ instanceId, modalidad, onRefresh }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs opacity-70">
-          Validación de identidad de cada parte. La biométrica real llegará en una
-          iteración futura; por ahora puedes simular la validación de cada parte.
-        </p>
-        <button
-          type="button"
-          onClick={() => void handleRefresh()}
-          disabled={loading || !instanceId}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Actualizar estado biométrico"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        {hideIntro ? (
+          <span />
+        ) : (
+          <p className="text-xs opacity-70">
+            Validación de identidad de cada parte. La biométrica real llegará en una
+            iteración futura; por ahora puedes simular la validación de cada parte.
+          </p>
+        )}
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            disabled={loading || !instanceId}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            aria-label="Actualizar estado biométrico"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        )}
       </div>
 
       {error && (
@@ -187,6 +202,7 @@ function SimulateAction({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const readOnly = useWizardReadOnly();
 
   const handleSimulate = async () => {
     if (!instanceId) return;
@@ -203,6 +219,13 @@ function SimulateAction({
       setSubmitting(false);
     }
   };
+
+  // En solo lectura no se simula: solo se informa que la identidad quedó pendiente.
+  if (readOnly) {
+    return (
+      <p className="text-[11px] opacity-60">Validación de identidad pendiente.</p>
+    );
+  }
 
   return (
     <div className="space-y-3">

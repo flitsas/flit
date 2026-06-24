@@ -51,7 +51,14 @@ function HomeContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
+  // Track B — Trámites vive en /tramites (ruta propia): el dock y el CTA del
+  // dashboard navegan allá. El resto de módulos viven en esta SPA y sincronizan
+  // su estado con la URL (?m=) para soportar back/forward y deep-links.
   function handleNav(m: ModuleId) {
+    if (m === "tramites") {
+      router.push("/tramites");
+      return;
+    }
     setModule(m);
     router.replace(`/?m=${m}`, { scroll: false });
   }

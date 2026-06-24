@@ -59,7 +59,7 @@ public sealed class ActorsHandlerTests
     public async Task Put_InstanceNotFound_ReturnsNotFound()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        _repo.GetByIdWithActorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
 
         var (result, error) = await _put.HandleAsync(Guid.NewGuid(), Guid.NewGuid(),
             new PutActorsRequest([Comprador()]), ct);
@@ -76,7 +76,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: status));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: status));
 
         var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
 
@@ -93,7 +93,7 @@ public sealed class ActorsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, modalidad: "matricula_inicial");
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
 
@@ -116,7 +116,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
 
         var (result, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Comprador(), Vendedor()]), ct);
@@ -132,7 +132,7 @@ public sealed class ActorsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, modalidad: "traspaso");
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(), Comprador()]), ct);
@@ -149,7 +149,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
 
         var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
 
@@ -165,7 +165,7 @@ public sealed class ActorsHandlerTests
         var tenant = Guid.NewGuid();
         // modalidad ambigua pero tipología fija traspaso_standard
         var instance = Instance(id, tenant, modalidad: "traspaso", tipologia: "traspaso_standard");
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (_, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(), Comprador()]), ct);
@@ -181,7 +181,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
 
         var (result, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(doc: "555"), Comprador(doc: "555")]), ct);
@@ -196,7 +196,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
 
         var (result, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(email: "same@x.com"), Comprador(email: "SAME@x.com")]), ct);
@@ -213,7 +213,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
 
         var bad = new ActorInput("comprador", "XX", "123", "Juan", "j@x.com", null);
         var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([bad]), ct);
@@ -227,7 +227,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
 
         var bad = new ActorInput("comprador", "CC", "123", "Juan", "not-an-email", null);
         var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([bad]), ct);
@@ -241,7 +241,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
 
         var bad = new ActorInput("heredero", "CC", "123", "Juan", "j@x.com", null);
         var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([bad]), ct);
@@ -255,7 +255,7 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
 
         var (_, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Comprador(doc: "1"), Comprador(doc: "2")]), ct);
@@ -279,7 +279,7 @@ public sealed class ActorsHandlerTests
             DocumentNumber = "OLD",
             ProcedureEntityId = BuyerEntityId,
         });
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(), Comprador(doc: "NEW")]), ct);
@@ -295,7 +295,7 @@ public sealed class ActorsHandlerTests
     public async Task Get_NotFound_ReturnsNotFound()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        _repo.GetByIdWithActorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
 
         var (result, error) = await _get.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -321,7 +321,7 @@ public sealed class ActorsHandlerTests
             Phone = "3001112233",
             ProcedureEntityId = BuyerEntityId,
         });
-        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _get.HandleAsync(id, tenant, ct);
 
@@ -334,5 +334,83 @@ public sealed class ActorsHandlerTests
         dto.NombreCompleto.Should().Be("Juan Comprador");
         dto.Email.Should().Be("comprador@x.com");
         dto.Telefono.Should().Be("3001112233");
+    }
+
+    // ── Ciudad / dirección (metadata JSON) ─────────────────────────────────────
+
+    [Fact]
+    public async Task Put_PersistsCiudadDireccion_InActorMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var comprador = new ActorInput("comprador", "CC", "123", "Juan Comprador", "comprador@x.com", "3001112233", "Medellin", "Calle 10 #20-30");
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([comprador]), ct);
+
+        error.Should().BeNull();
+        // El handler vuelca ciudad/dirección en metadata JSON del actor persistido…
+        var saved = instance.Actors.Should().ContainSingle().Subject;
+        saved.Metadata.Should().Contain("Medellin").And.Contain("Calle 10 #20-30");
+        // …y el DTO de respuesta los re-expone leyendo ese metadata.
+        result!.Actors[0].Ciudad.Should().Be("Medellin");
+        result.Actors[0].Direccion.Should().Be("Calle 10 #20-30");
+    }
+
+    [Fact]
+    public async Task Get_ReadsCiudadDireccion_FromActorMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            FullName = "Juan Comprador",
+            Email = "comprador@x.com",
+            Phone = "3001112233",
+            ProcedureEntityId = BuyerEntityId,
+            Metadata = "{\"ciudad\":\"Cali\",\"direccion\":\"Av Siempre Viva 742\"}",
+        });
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _get.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var dto = result!.Actors[0];
+        dto.Ciudad.Should().Be("Cali");
+        dto.Direccion.Should().Be("Av Siempre Viva 742");
+    }
+
+    [Fact]
+    public async Task Get_EmptyMetadata_CiudadDireccionNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            FullName = "Juan Comprador",
+            Email = "comprador@x.com",
+            ProcedureEntityId = BuyerEntityId,
+            Metadata = "{}",
+        });
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, _) = await _get.HandleAsync(id, tenant, ct);
+
+        result!.Actors[0].Ciudad.Should().BeNull();
+        result.Actors[0].Direccion.Should().BeNull();
     }
 }

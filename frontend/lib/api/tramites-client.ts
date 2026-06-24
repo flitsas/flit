@@ -75,15 +75,55 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
-/** Same-origin relative paths; Next.js rewrites proxy to core-api in dev. */
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+// La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
+// NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Compat con
+// NEXT_PUBLIC_API_URL (entornos locales) y localhost para dev. ANTES leía solo
+// NEXT_PUBLIC_API_URL → en DEV quedaba vacío → las llamadas caían al mismo origen
+// (el frontend Next.js, que no sirve /api) y devolvían 500.
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
 
 const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
 };
 
+/**
+ * Returns true only for transient network failures that are safe to retry
+ * (ECONNRESET, DNS/TCP drops, generic fetch failure).
+ * 4xx/5xx responses are NOT network errors — their messages start with the
+ * HTTP status code (e.g. "400 Bad Request") so they never match here.
+ */
+function isNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('econnreset') ||
+    msg.includes('fetch failed') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    (msg.includes('network') && !msg.match(/^\d{3}/))
+  );
+}
+
+/**
+ * Executes `fn` and, if it throws a transient network error, waits 300 ms
+ * and retries exactly once. Non-network errors (4xx/5xx) propagate immediately.
+ */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+    return fn();
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  // El path absoluto (/api/v1/...) toma el ORIGEN de BASE_URL e ignora su path, así un
+  // BASE_URL con sufijo /api/v1 (como el del CD) no se duplica.
+  const res = await fetch(new URL(path, BASE_URL).toString(), {
     ...init,
     headers: { ...JSON_HEADERS, ...init?.headers },
   });
@@ -189,16 +229,20 @@ export const tramitesClient = {
   },
 
   // PUT set completo de actores (reemplaza el conjunto guardado).
+  // withRetry: 1 reintento tras 300 ms solo si el error es de red (ECONNRESET /
+  // fetch failed / network). Errores 4xx/5xx se propagan sin reintentar.
   saveActors: (
     instanceId: string,
     actors: ProcedureActor[],
     tenantId: string = DEV_TENANT_ID,
   ) =>
-    request<void>(`/api/v1/tramites/instances/${instanceId}/actors`, {
-      method: 'PUT',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ actors }),
-    }),
+    withRetry(() =>
+      request<void>(`/api/v1/tramites/instances/${instanceId}/actors`, {
+        method: 'PUT',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ actors }),
+      }),
+    ),
 
   // Slice M3 — autopopulado del actor desde RUNT por documento. Siempre 200
   // ante petición válida; `found=false` => fallback manual (no bloquea captura).
