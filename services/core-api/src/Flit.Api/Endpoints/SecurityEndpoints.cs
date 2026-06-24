@@ -98,6 +98,12 @@ public static class SecurityEndpoints
                     new ErrorResponse("INVITATION_ALREADY_PENDING", "Ya existe una invitación pendiente para este correo."),
                     statusCode: StatusCodes.Status409Conflict);
             }
+            catch (UserAlreadyExistsException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
         });
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT

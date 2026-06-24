@@ -11,6 +11,9 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
             x => x.TenantId == tenantId && x.Email == email && x.Status == "pending",
             cancellationToken);
 
+    public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken) =>
+        db.Users.AnyAsync(u => u.Email == email && u.DeletedAt == null, cancellationToken);
+
     public Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken) =>
         db.Roles.AnyAsync(
             x => x.TenantId == tenantId && x.Id == roleId && x.DeletedAt == null,

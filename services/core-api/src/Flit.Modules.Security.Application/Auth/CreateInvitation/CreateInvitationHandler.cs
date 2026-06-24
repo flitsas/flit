@@ -29,6 +29,10 @@ public sealed partial class CreateInvitationHandler(
         if (hasPending)
             throw new InvitationAlreadyPendingException();
 
+        var userExists = await invitationRepository.UserExistsWithEmailAsync(email, cancellationToken);
+        if (userExists)
+            throw new UserAlreadyExistsException();
+
         var token = tokenGenerator.Generate();
 
         var invitationId = await invitationRepository.CreateAsync(
