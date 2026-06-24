@@ -274,6 +274,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         instanceId={instanceId}
         fieldValues={detail?.fieldValues ?? []}
         comprador={comprador}
+        vendedor={vendedor}
         vin={fv('vin')}
         attachments={attachments}
         biometric={biometric}
