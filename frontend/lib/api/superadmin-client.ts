@@ -10,6 +10,7 @@ import type {
   ExternalDataSource,
   ConsultationTemplate,
 } from './types/procedure-parametrization';
+import { getToken } from './client';
 
 export interface RbacModule {
   id: string;
@@ -59,9 +60,14 @@ const SUPERADMIN_HEADERS: HeadersInit = {
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = typeof window !== 'undefined' ? getToken() : null;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: { ...SUPERADMIN_HEADERS, ...init?.headers },
+    headers: {
+      ...SUPERADMIN_HEADERS,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
