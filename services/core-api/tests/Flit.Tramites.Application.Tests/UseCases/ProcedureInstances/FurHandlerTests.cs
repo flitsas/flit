@@ -42,7 +42,8 @@ public sealed class FurHandlerTests
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
 
-        public Stream? OpenRead(string storagePath) => null;
+        public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<Stream?>(null);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>

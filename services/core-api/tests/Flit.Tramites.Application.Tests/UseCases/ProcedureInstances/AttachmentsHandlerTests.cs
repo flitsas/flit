@@ -50,8 +50,9 @@ public sealed class AttachmentsHandlerTests
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
 
-        public Stream? OpenRead(string storagePath) =>
-            Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null;
+        public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<Stream?>(
+                Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null);
     }
 
     private static ProcedureInstance Instance(
