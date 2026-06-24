@@ -17,6 +17,9 @@ public static class DevelopmentAuthSeeder
     public const string DemoPassword = "DemoPass1!";
     public const string DemoTenantCode = "DEMO";
 
+    public const string DemoAdminCompanyEmail = "admin@empresa.local";
+    public const string DemoAdminCompanyPassword = "AdminPass1!";
+
     public static async Task SeedAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
@@ -26,17 +29,19 @@ public static class DevelopmentAuthSeeder
         if (!environment.IsDevelopment())
             return;
 
-        // Seed DEV de Operación: tenant 11111111 + user 22222222 + publicación de
-        // MATRICULA_NUEVA. Estos IDs son destino de las FK de procedure_instances
-        // (tenant_id, created_by_user_id); sin ellos, crear un trámite falla. El SQL es
-        // idempotente (ON CONFLICT / WHERE NOT EXISTS) y se ejecuta en CADA arranque en
-        // Development → es self-healing: NO depende del gate de la migración HU10200_DevSeed,
-        // que queda como no-op permanente si esa migración llegó a aplicarse fuera de Development.
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
-        // Mirror de traspaso: publica TRASPASO_STANDARD (modalidad "traspaso"). Mismo patrón
-        // idempotente y env-gated en su migración (TramitesTraspasoDevSeed) → también self-healing.
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
 
+        await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
+        await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
+        await SeedBaseModulesAsync(db, cancellationToken);
+    }
+
+    private static async Task SeedSuperAdminAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
         if (await db.Users.AnyAsync(u => u.Email == DemoEmail, cancellationToken))
             return;
 
@@ -59,7 +64,6 @@ public static class DevelopmentAuthSeeder
             RowVersion = 0,
         });
 
-        // Persist tenant first: roles.role_permissions FK → identity.tenants.
         await db.SaveChangesAsync(cancellationToken);
 
         db.Users.Add(new User
@@ -109,10 +113,6 @@ public static class DevelopmentAuthSeeder
         {
             Id = roleId,
             TenantId = tenantId,
-            // El claim "role" del JWT se emite con este Code (RsaJwtTokenIssuer) y la policy
-            // del módulo Admin exige RequireRole("SuperAdmin") (AdminAuthorization.SuperAdminRole).
-            // Debe ser exactamente "SuperAdmin" para que el usuario demo acceda a la consola
-            // de administración (compañías, OT, documental).
             Code = "SuperAdmin",
             Name = "Super Administrador",
             IsSystem = true,
@@ -143,11 +143,158 @@ public static class DevelopmentAuthSeeder
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    // Ejecuta un script SQL embebido crudo SIN pasar por el parser de format-string
-    // de ExecuteSqlRaw, que interpreta '{' como placeholder posicional ({0}) y revienta
-    // con FormatException ante literales jsonb como '{}'. Va por el DbConnection directo.
-    // Los seeds DEV son idempotentes (ON CONFLICT / WHERE NOT EXISTS), así que ejecutarlos
-    // fuera de la estrategia de reintentos es aceptable durante el arranque.
+    private static async Task SeedAdminCompanyUserAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        if (await db.Users.AnyAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken))
+            return;
+
+        var demoTenant = await db.Tenants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Code == DemoTenantCode, cancellationToken);
+
+        if (demoTenant is null)
+            return;
+
+        var userId = Guid.CreateVersion7();
+        var roleId = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Roles.Add(new Role
+        {
+            Id = roleId,
+            TenantId = demoTenant.Id,
+            Code = "AdminCompany",
+            Name = "Administrador de Compañía",
+            IsSystem = true,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Email = DemoAdminCompanyEmail,
+            DisplayName = "Admin Empresa Demo",
+            Status = "active",
+            HomeTenantId = demoTenant.Id,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = userId,
+            PasswordHash = passwordHasher.Hash(DemoAdminCompanyPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = demoTenant.Id,
+            UserId = userId,
+            RoleId = roleId,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedBaseModulesAsync(
+        FlitDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (await db.SecurityModules.AnyAsync(m => m.Code == "dashboard", cancellationToken))
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        var modules = new SecurityModule[]
+        {
+            new() { Id = Guid.CreateVersion7(), Code = "dashboard",    Name = "Dashboard",                SortOrder = 1, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "tramites",     Name = "Trámites",                 SortOrder = 2, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "reportes",     Name = "Reportes",                 SortOrder = 3, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "validaciones", Name = "Validaciones",             SortOrder = 4, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now },
+        };
+
+        db.SecurityModules.AddRange(modules);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var mid = modules.ToDictionary(m => m.Code, m => m.Id);
+
+        var actions = new RbacAction[]
+        {
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["dashboard"],    Slug = "dashboard.read",        Name = "Ver dashboard",                 HttpMethod = "GET",  RoutePattern = "/api/v1/dashboard",                  IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.read",         Name = "Ver trámites",                  HttpMethod = "GET",  RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.create",       Name = "Crear trámite",                 HttpMethod = "POST", RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["reportes"],     Slug = "reportes.read",         Name = "Ver reportes",                  HttpMethod = "GET",  RoutePattern = "/api/v1/reportes",                   IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["validaciones"], Slug = "validaciones.read",     Name = "Ver validaciones",              HttpMethod = "GET",  RoutePattern = "/api/v1/validaciones",               IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["validaciones"], Slug = "validaciones.manage",   Name = "Gestionar validaciones",        HttpMethod = "PUT",  RoutePattern = "/api/v1/validaciones/{id}/approve",  IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["usuarios"],     Slug = "usuarios.manage",       Name = "Gestionar usuarios y permisos", HttpMethod = "GET",  RoutePattern = "/api/v1/security/users",             IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["rbac"],         Slug = "rbac.manage",           Name = "Administrar RBAC",              HttpMethod = "GET",  RoutePattern = "/api/v1/superadmin/modules",         IsActive = true, CreatedAt = now },
+        };
+
+        db.RbacActions.AddRange(actions);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // SuperAdmin: todos los permisos
+        var superAdminRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == "SuperAdmin", cancellationToken);
+        if (superAdminRole is not null)
+        {
+            var existingSA = await db.RoleGrants
+                .Where(g => g.RoleId == superAdminRole.Id)
+                .Select(g => g.PermissionId)
+                .ToListAsync(cancellationToken);
+
+            db.RoleGrants.AddRange(actions
+                .Where(a => !existingSA.Contains(a.Id))
+                .Select(a => new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = superAdminRole.TenantId,
+                    RoleId = superAdminRole.Id,
+                    PermissionId = a.Id,
+                    CreatedAt = now,
+                }));
+        }
+
+        // AdminCompany: todo excepto rbac.manage
+        var adminCompanyRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == "AdminCompany", cancellationToken);
+        if (adminCompanyRole is not null)
+        {
+            var existingAC = await db.RoleGrants
+                .Where(g => g.RoleId == adminCompanyRole.Id)
+                .Select(g => g.PermissionId)
+                .ToListAsync(cancellationToken);
+
+            db.RoleGrants.AddRange(actions
+                .Where(a => a.Slug != "rbac.manage" && !existingAC.Contains(a.Id))
+                .Select(a => new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = adminCompanyRole.TenantId,
+                    RoleId = adminCompanyRole.Id,
+                    PermissionId = a.Id,
+                    CreatedAt = now,
+                }));
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     private static async Task ExecuteRawSqlScriptAsync(FlitDbContext db, string sql, CancellationToken cancellationToken)
     {
         var connection = db.Database.GetDbConnection();

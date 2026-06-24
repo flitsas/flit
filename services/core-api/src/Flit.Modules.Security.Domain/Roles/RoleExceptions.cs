@@ -31,3 +31,11 @@ public sealed class RoleHasActiveUsersException : Exception
     {
     }
 }
+
+public sealed class InsufficientPermissionsForDelegationException : Exception
+{
+    public InsufficientPermissionsForDelegationException()
+        : base("Cannot assign permissions that the caller does not possess.")
+    {
+    }
+}

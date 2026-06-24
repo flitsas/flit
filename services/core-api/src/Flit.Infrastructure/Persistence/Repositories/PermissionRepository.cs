@@ -95,4 +95,16 @@ public sealed class PermissionRepository(FlitDbContext db) : IPermissionReposito
 
         return rows;
     }
+
+    public async Task<IReadOnlyList<Guid>> ResolveActiveSlugIdsAsync(IReadOnlyList<string> slugs, CancellationToken ct)
+    {
+        if (slugs.Count == 0)
+            return [];
+
+        return await db.RbacActions
+            .AsNoTracking()
+            .Where(x => slugs.Contains(x.Slug) && x.IsActive && x.DeletedAt == null)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+    }
 }

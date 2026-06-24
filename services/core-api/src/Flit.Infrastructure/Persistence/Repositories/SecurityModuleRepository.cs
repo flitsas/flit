@@ -103,4 +103,33 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
                 x.Id, x.Code, x.Name, x.Description, x.SortOrder, x.IsActive, x.PermissionCount))
             .ToList();
     }
+
+    public async Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(
+        IReadOnlyList<string> permissionSlugs,
+        bool includeAll,
+        CancellationToken ct)
+    {
+        var query = from m in db.SecurityModules.AsNoTracking()
+                    join a in db.RbacActions.AsNoTracking() on m.Id equals a.ModuleId
+                    where m.IsActive && m.DeletedAt == null && a.IsActive && a.DeletedAt == null
+                    select new { m.Id, m.Code, m.Name, m.SortOrder, ActionId = a.Id, ActionSlug = a.Slug, ActionName = a.Name };
+
+        if (!includeAll)
+            query = query.Where(x => permissionSlugs.Contains(x.ActionSlug));
+
+        var rows = await query
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.ActionSlug)
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(x => new { x.Id, x.Code, x.Name, x.SortOrder })
+            .Select(g => new AccessibleModuleDto(
+                g.Key.Id,
+                g.Key.Code,
+                g.Key.Name,
+                g.Key.SortOrder,
+                g.Select(x => new AccessibleActionDto(x.ActionId, x.ActionSlug, x.ActionName)).ToList()))
+            .ToList();
+    }
 }

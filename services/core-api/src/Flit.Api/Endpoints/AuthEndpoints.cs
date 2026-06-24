@@ -198,14 +198,15 @@ public static class AuthEndpoints
             var roleCode = user.FindFirstValue("role_code");
             var permissions = user.FindAll("permissions").Select(c => c.Value).ToArray();
 
-            if (userId is null || email is null || tenantId is null || roleId is null)
+            if (userId is null || email is null || tenantId is null)
                 return Results.Unauthorized();
 
+            var parsedRoleId = Guid.TryParse(roleId, out var rid) && rid != Guid.Empty ? (Guid?)rid : null;
             return Results.Ok(new CurrentUserResponse(
                 Guid.Parse(userId),
                 email,
                 Guid.Parse(tenantId),
-                Guid.Parse(roleId),
+                parsedRoleId,
                 roleCode ?? string.Empty,
                 permissions));
         }).RequireAuthorization();
@@ -233,7 +234,7 @@ public static class AuthEndpoints
         Guid UserId,
         string Email,
         Guid TenantId,
-        Guid RoleId,
+        Guid? RoleId,
         string RoleCode,
         IReadOnlyList<string> Permissions);
 

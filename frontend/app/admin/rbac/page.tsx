@@ -1,5 +1,5 @@
-"use client";
-import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
-export default function RbacPage() {
-  return <RbacAdmin />;
+import { redirect } from "next/navigation";
+
+export default function RbacRedirectPage() {
+  redirect("/?m=rbac");
 }

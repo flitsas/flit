@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useRef, useState } from "react";
+import { decodeJwtPayload, isAdminCompany, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -22,6 +23,7 @@ import {
   LogOut,
   FolderCog,
   Lock,
+  Briefcase,
 } from "lucide-react";
 
 export type ModuleId =
@@ -30,7 +32,8 @@ export type ModuleId =
   | "reportes"
   | "validaciones"
   | "usuarios"
-  | "ayuda";
+  | "ayuda"
+  | "rbac";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -53,19 +56,62 @@ function useTheme() {
   return { dark, toggle: () => setDark((d) => !d) };
 }
 
+function useCurrentUser() {
+  const [user, setUser] = useState<{
+    displayName: string;
+    email: string;
+    roleLabel: string;
+    isSuperAdmin: boolean;
+    isAdminCompany: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const token =
+      typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
+    const payload = decodeJwtPayload(token);
+    if (!payload) return;
+
+    const roleCode =
+      (payload.role_code as string | undefined) ?? (payload.role as string | undefined) ?? "";
+    const roleLabel =
+      roleCode === "SuperAdmin"
+        ? "Super Admin"
+        : roleCode === "AdminCompany"
+          ? "Admin de Compañía"
+          : roleCode || "Usuario";
+
+    setUser({
+      displayName:
+        (payload.display_name as string | undefined) ??
+        (payload.email as string | undefined) ??
+        "Usuario",
+      email: (payload.email as string | undefined) ?? "",
+      roleLabel,
+      isSuperAdmin: isSuperAdmin(payload),
+      isAdminCompany: isAdminCompany(payload),
+    });
+  }, []);
+
+  return user;
+}
+
 export function Shell({
   children,
   active,
   onNav,
   onLogout,
+  visibleModuleCodes,
 }: {
   children: ReactNode;
   active: ModuleId;
   onNav: (v: ModuleId) => void;
   onLogout?: () => void;
+  /** When provided, only dock items whose id is in this list are shown. */
+  visibleModuleCodes?: string[];
 }) {
   const { dark, toggle } = useTheme();
   const logoSrc = dark ? logoWhite : logoDark;
+  const currentUser = useCurrentUser();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -77,11 +123,13 @@ export function Shell({
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Dock balanceado alrededor del FAB: 4 a la izquierda y 4 a la derecha.
-  // La derecha son los 2 últimos módulos del DOCK + las 2 consolas admin
-  // (Compañías y Documental), que se renderizan aparte por tener ruta propia.
-  const left = DOCK.slice(0, 4);
-  const right = DOCK.slice(4);
+  // Dock balanceado alrededor del FAB: 4 a la izquierda y resto a la derecha.
+  const visibleDock = visibleModuleCodes
+    ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
+    : DOCK;
+  const midpoint = Math.min(4, Math.ceil(visibleDock.length / 2));
+  const left = visibleDock.slice(0, midpoint);
+  const right = visibleDock.slice(midpoint);
 
   return (
     <div
@@ -120,15 +168,23 @@ export function Shell({
             <span className="absolute top-1 right-1 h-4 w-4 text-[9px] font-bold rounded-full grid place-items-center text-white" style={{ background: "#FF4E00" }}>1</span>
           </button>
           <div className="hidden sm:flex flex-col items-end leading-tight">
-            <span className="text-[10px] font-medium" style={{ color: "#557EFF" }}>Súper Admin / Tenant</span>
-            <span className="text-xs font-semibold">Mateo Ruiz Gil</span>
+            <span className="text-[10px] font-medium" style={{ color: "#557EFF" }}>
+              {currentUser?.roleLabel ?? "—"}
+            </span>
+            <span className="text-xs font-semibold">
+              {currentUser?.displayName ?? currentUser?.email ?? "—"}
+            </span>
           </div>
-          <img
-            src="https://i.pravatar.cc/80?img=12"
-            alt="Mateo Ruiz Gil"
-            className="h-9 w-9 rounded-full object-cover border-2"
-            style={{ borderColor: "#00DBD5" }}
-          />
+          <div
+            className="h-9 w-9 rounded-full grid place-items-center border-2 text-xs font-bold text-white select-none"
+            style={{
+              borderColor: "#00DBD5",
+              background: "linear-gradient(135deg,#557EFF,#00DBD5)",
+            }}
+            aria-label="Avatar"
+          >
+            {(currentUser?.displayName?.[0] ?? currentUser?.email?.[0] ?? "U").toUpperCase()}
+          </div>
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen((v) => !v)}
@@ -205,31 +261,39 @@ export function Shell({
             {right.map((it) => (
               <DockBtn key={it.id} item={it} active={active === it.id} onClick={() => onNav(it.id)} dark={dark} />
             ))}
-            {/* Consola de Administración de Compañías (ruta aparte, gate SuperAdmin). */}
-            <DockBtn
-              item={{ label: "Compañías", icon: Building2 }}
-              active={false}
-              onClick={() => {
-                window.location.href = "/admin/companies";
-              }}
-              dark={dark}
-            />
-            {/* Consola de Gestión Documental (ruta aparte, gate SuperAdmin). */}
-            <DockBtn
-              item={{ label: "Documental", icon: FolderCog }}
-              active={false}
-              onClick={() => {
-                window.location.href = "/admin/documents";
-              }}
-              dark={dark}
-            />
-            {/* RBAC Admin (ruta aparte, gate SuperAdmin) */}
-            <DockBtn
-              item={{ label: "RBAC Admin", icon: Lock }}
-              active={false}
-              onClick={() => { window.location.href = "/admin/rbac"; }}
-              dark={dark}
-            />
+            {/* Botones admin: solo SuperAdmin */}
+            {currentUser?.isSuperAdmin && (
+              <>
+                <DockBtn
+                  item={{ label: "Compañías", icon: Building2 }}
+                  active={false}
+                  onClick={() => { window.location.href = "/admin/companies"; }}
+                  dark={dark}
+                />
+                <DockBtn
+                  item={{ label: "Documental", icon: FolderCog }}
+                  active={false}
+                  onClick={() => { window.location.href = "/admin/documents"; }}
+                  dark={dark}
+                />
+                <DockBtn
+                  item={{ label: "RBAC Admin", icon: Lock }}
+                  active={active === "rbac"}
+                  onClick={() => onNav("rbac")}
+                  dark={dark}
+                />
+              </>
+            )}
+
+            {/* Mi Empresa: solo AdminCompany */}
+            {currentUser?.isAdminCompany && (
+              <DockBtn
+                item={{ label: "Mi Empresa", icon: Briefcase }}
+                active={false}
+                onClick={() => { window.location.href = "/empresa/usuarios"; }}
+                dark={dark}
+              />
+            )}
           </div>
         </div>
       </main>

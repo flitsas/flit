@@ -10,9 +10,12 @@ public interface ISecurityModuleRepository
     Task<bool> HasActivePermissionsAsync(Guid id, CancellationToken ct);
     Task SoftDeleteAsync(Guid id, CancellationToken ct);
     Task<IReadOnlyList<SecurityModuleSummary>> ListAsync(CancellationToken ct);
+    Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(IReadOnlyList<string> permissionSlugs, bool includeAll, CancellationToken ct);
 }
 
 public sealed record SecurityModuleData(string Code, string Name, string? Description, short SortOrder);
 public sealed record UpdateModuleData(string Name, string? Description, short SortOrder);
 public sealed record SecurityModuleDetail(Guid Id, string Code, string Name, string? Description, short SortOrder, bool IsActive, DateTimeOffset? DeletedAt);
 public sealed record SecurityModuleSummary(Guid Id, string Code, string Name, string? Description, short SortOrder, bool IsActive, int PermissionCount);
+public sealed record AccessibleModuleDto(Guid Id, string Code, string Name, short SortOrder, IReadOnlyList<AccessibleActionDto> Actions);
+public sealed record AccessibleActionDto(Guid Id, string Slug, string Name);

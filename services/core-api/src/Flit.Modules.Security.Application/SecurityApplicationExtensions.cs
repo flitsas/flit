@@ -47,6 +47,10 @@ public static class SecurityApplicationExtensions
         // HU #10164 — Asignación única de rol por usuario tenant
         services.AddScoped<AssignRoleHandler>();
 
+        // Fase 2 — Endpoints AdminCompañía
+        services.AddScoped<ListAccessibleModulesHandler>();
+        services.AddScoped<SetTenantRolePermissionsHandler>();
+
         return services;
     }
 }

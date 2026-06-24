@@ -10,6 +10,7 @@ public interface IPermissionRepository
     Task SoftDeleteAsync(Guid id, CancellationToken ct);
     Task<bool> ExistsAsync(Guid id, CancellationToken ct);
     Task<IReadOnlyList<PermissionSummary>> ListByModuleAsync(Guid? moduleId, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> ResolveActiveSlugIdsAsync(IReadOnlyList<string> slugs, CancellationToken ct);
 }
 
 public sealed record CreatePermissionData(

@@ -90,6 +90,9 @@ builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorization
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
+// Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
+builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
+
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
 builder.Services.AddFlitSwagger();

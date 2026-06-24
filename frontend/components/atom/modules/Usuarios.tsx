@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Building2, Users, Shield } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, TenantUser, TenantRole } from "@/lib/api/security";
+import { Plus, Search, X, Building2, Users, Shield, Ban, ShieldOff } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
+import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import type { CompanyListItem } from "@/lib/api/types";
+import { superadminClient, type RbacRole } from "@/lib/api/superadmin-client";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const COMPANIES = [
   { name: "FLIT SAS", nit: "900.123.456-7", estado: "Activa", plan: "Enterprise", users: 250 },
@@ -34,6 +38,7 @@ const STATUS_BADGE: Record<TenantUser["status"], { color: string; label: string 
 };
 
 export function Usuarios() {
+  const { isSuperAdmin } = usePermissions();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -41,6 +46,7 @@ export function Usuarios() {
   const [error, setError] = useState<string | null>(null);
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
+  const [suspendTarget, setSuspendTarget] = useState<TenantUser | null>(null);
 
   async function loadUsers() {
     setLoading(true);
@@ -73,6 +79,16 @@ export function Usuarios() {
   }, []);
 
   function handleInviteSuccess() {
+    loadUsers();
+  }
+
+  async function handleSuspend(userId: string, reason: string, endsAt: string) {
+    await blockUser(userId, reason, endsAt);
+    loadUsers();
+  }
+
+  async function handleUnsuspend(userId: string) {
+    await unblockUser(userId);
     loadUsers();
   }
 
@@ -166,7 +182,29 @@ export function Usuarios() {
                       </span>
                     </div>
                     <div className="col-span-3 opacity-70">{u.createdAt ?? "—"}</div>
-                    <div className="col-span-1" />
+                    <div className="col-span-1 flex justify-end">
+                      {u.status !== "pending" && (
+                        u.isSuspended ? (
+                          <button
+                            title="Desbloquear usuario"
+                            onClick={() => handleUnsuspend(u.id)}
+                            className="p-1.5 rounded-lg transition hover:bg-green-50"
+                            style={{ color: "#00DBD5" }}
+                          >
+                            <ShieldOff className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            title="Bloquear usuario"
+                            onClick={() => setSuspendTarget(u)}
+                            className="p-1.5 rounded-lg transition hover:bg-red-50"
+                            style={{ color: "#FF4E00" }}
+                          >
+                            <Ban className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -260,7 +298,17 @@ export function Usuarios() {
         </div>
       )}
 
-      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} />}
+      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} isSuperAdmin={isSuperAdmin} />}
+      {suspendTarget && (
+        <SuspendModal
+          user={suspendTarget}
+          onClose={() => setSuspendTarget(null)}
+          onConfirm={async (reason, endsAt) => {
+            await handleSuspend(suspendTarget.id, reason, endsAt);
+            setSuspendTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -314,19 +362,135 @@ function RoleDropdown({
   );
 }
 
+function SuspendModal({
+  user,
+  onClose,
+  onConfirm,
+}: {
+  user: TenantUser;
+  onClose: () => void;
+  onConfirm: (reason: string, endsAt: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const defaultEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 16);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm(reason.trim(), new Date(endsAt || defaultEndsAt).toISOString());
+    } catch {
+      setError("No se pudo aplicar la suspensión. Inténtalo de nuevo.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold">Bloquear usuario</h3>
+            <p className="text-xs opacity-70 mt-0.5">
+              <strong>{user.fullName}</strong> no podrá iniciar sesión durante el periodo indicado.
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold block mb-1">Motivo de suspensión *</label>
+            <textarea
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Ej. Incumplimiento de políticas de uso"
+              rows={3}
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00] resize-none"
+              style={{ borderColor: "#DFE5ED" }}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1">Bloqueado hasta *</label>
+            <input
+              type="datetime-local"
+              required
+              value={endsAt || defaultEndsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00]"
+              style={{ borderColor: "#DFE5ED" }}
+            />
+          </div>
+          {error && (
+            <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold border transition"
+              style={{ borderColor: "#DFE5ED" }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition"
+              style={{ background: "#FF4E00" }}
+            >
+              {busy ? "Aplicando…" : "Bloquear usuario"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function InviteModal({
-  onClose, onSuccess, roles,
+  onClose, onSuccess, roles, isSuperAdmin,
 }: {
   onClose: () => void;
   onSuccess: () => void;
   roles: TenantRole[];
+  isSuperAdmin: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [tenantRoles, setTenantRoles] = useState<{ id: string; name: string }[]>([]);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
   const [invitedEmail, setInvitedEmail] = useState("");
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    setTenantsLoading(true);
+    fetchCompaniesIndex({ pageSize: 200 })
+      .then((r) => setCompanies(r.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial }))))
+      .catch(() => { /* silencioso */ })
+      .finally(() => setTenantsLoading(false));
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!selectedTenantId) { setTenantRoles([]); return; }
+    superadminClient.listRoles(selectedTenantId)
+      .then((r) => setTenantRoles((r as RbacRole[]).map((role) => ({ id: role.id, name: role.name }))))
+      .catch(() => setTenantRoles([]));
+  }, [selectedTenantId]);
 
   const isDone = status === "done" || status === "done_no_email";
 
@@ -339,6 +503,7 @@ function InviteModal({
         email.trim(),
         fullName.trim(),
         selectedRoleId || undefined,
+        isSuperAdmin ? selectedTenantId || undefined : undefined,
       );
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
@@ -393,6 +558,25 @@ function InviteModal({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
+            {isSuperAdmin && (
+              <div>
+                <label htmlFor="invite-tenant" className="text-xs font-semibold block mb-1">Empresa destino *</label>
+                <select
+                  id="invite-tenant"
+                  required
+                  value={selectedTenantId}
+                  onChange={(e) => { setSelectedTenantId(e.target.value); setSelectedRoleId(""); }}
+                  disabled={tenantsLoading}
+                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                  style={{ borderColor: "#DFE5ED" }}
+                >
+                  <option value="">{tenantsLoading ? "Cargando empresas…" : "Seleccionar empresa…"}</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label htmlFor="invite-name" className="text-xs font-semibold block mb-1">Nombre completo *</label>
               <input
@@ -419,23 +603,26 @@ function InviteModal({
                 style={{ borderColor: "#DFE5ED" }}
               />
             </div>
-            {roles.length > 0 && (
-              <div>
-                <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
-                <select
-                  id="invite-role"
-                  value={selectedRoleId}
-                  onChange={(e) => setSelectedRoleId(e.target.value)}
-                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                  style={{ borderColor: "#DFE5ED" }}
-                >
-                  <option value="">Sin rol asignado</option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {(() => {
+              const rolesForDropdown = isSuperAdmin ? tenantRoles : roles;
+              return rolesForDropdown.length > 0 ? (
+                <div>
+                  <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
+                  <select
+                    id="invite-role"
+                    value={selectedRoleId}
+                    onChange={(e) => setSelectedRoleId(e.target.value)}
+                    className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                    style={{ borderColor: "#DFE5ED" }}
+                  >
+                    <option value="">Sin rol asignado</option>
+                    {rolesForDropdown.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null;
+            })()}
             {error && (
               <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
             )}
