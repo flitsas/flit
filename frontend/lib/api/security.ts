@@ -17,6 +17,8 @@ export interface TenantUser {
   status: "active" | "inactive" | "pending";
   createdAt: string | null;
   isSuspended: boolean;
+  tenantId?: string | null;
+  tenantName?: string | null;
 }
 
 export interface TenantRole {

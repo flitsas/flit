@@ -7,7 +7,6 @@ import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
-import { superadminClient, type RbacRole } from "@/lib/api/superadmin-client";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const COMPANIES = [
@@ -139,12 +138,20 @@ export function Usuarios() {
           </div>
 
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
-              <div className="col-span-4">Usuario</div>
-              <div className="col-span-2">Rol</div>
-              <div className="col-span-2">Estado</div>
-              <div className="col-span-3">Fecha</div>
-              <div className="col-span-1" />
+            <div
+              className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+              style={{
+                gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
+                background: "#DFE5ED",
+                color: "#162744",
+              }}
+            >
+              <div>Usuario</div>
+              {isSuperAdmin && <div>Empresa</div>}
+              <div>Rol</div>
+              <div>Estado</div>
+              <div>Fecha</div>
+              <div />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2 pt-2">
@@ -155,18 +162,30 @@ export function Usuarios() {
                 <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{error}</div>
               )}
               {!loading && !error && users.length === 0 && (
-                <div className="py-12 text-center text-sm opacity-60">No hay usuarios en este tenant. Invita al primero.</div>
+                <div className="py-12 text-center text-sm opacity-60">
+                  {isSuperAdmin ? "No hay usuarios en ninguna compañía." : "No hay usuarios en este tenant. Invita al primero."}
+                </div>
               )}
               {!loading && !error && users.map((u) => {
                 const badge = STATUS_BADGE[u.status];
                 return (
-                  <div key={u.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
-                    <div className="col-span-4">
+                  <div
+                    key={u.id}
+                    className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                    style={{
+                      gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
+                      borderColor: "#DFE5ED",
+                    }}
+                  >
+                    <div>
                       <p className="font-semibold">{u.fullName}</p>
                       <p className="text-[10px] opacity-60">{u.email}</p>
                     </div>
-                    <div className="col-span-2">
-                      {u.status !== "pending" ? (
+                    {isSuperAdmin && (
+                      <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
+                    )}
+                    <div>
+                      {u.status !== "pending" && !isSuperAdmin ? (
                         <RoleDropdown
                           userId={u.id}
                           currentRoleName={u.role}
@@ -175,17 +194,17 @@ export function Usuarios() {
                           onAssigned={loadUsers}
                         />
                       ) : (
-                        <span className="opacity-60">—</span>
+                        <span className="opacity-70">{u.role ?? "—"}</span>
                       )}
                     </div>
-                    <div className="col-span-2">
+                    <div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: badge.color }}>
                         {badge.label}
                       </span>
                     </div>
-                    <div className="col-span-3 opacity-70">{u.createdAt ?? "—"}</div>
-                    <div className="col-span-1 flex justify-end">
-                      {u.status !== "pending" && (
+                    <div className="opacity-70">{u.createdAt ?? "—"}</div>
+                    <div className="flex justify-end">
+                      {u.status !== "pending" && !isSuperAdmin && (
                         u.isSuspended ? (
                           <button
                             title="Desbloquear usuario"
@@ -473,7 +492,6 @@ function InviteModal({
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [tenantRoles, setTenantRoles] = useState<{ id: string; name: string }[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -489,29 +507,24 @@ function InviteModal({
       .finally(() => setTenantsLoading(false));
   }, [isSuperAdmin]);
 
-  useEffect(() => {
-    if (!selectedTenantId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTenantRoles([]);
-      return;
-    }
-    superadminClient.listRoles(selectedTenantId)
-      .then((r) => setTenantRoles((r as RbacRole[]).map((role) => ({ id: role.id, name: role.name }))))
-      .catch(() => setTenantRoles([]));
-  }, [selectedTenantId]);
-
   const isDone = status === "done" || status === "done_no_email";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (isSuperAdmin && !selectedTenantId) {
+      setError("Debes seleccionar la empresa destino.");
+      return;
+    }
+
     setStatus("loading");
     try {
       const result = await createInvitation(
         email.trim(),
         fullName.trim(),
-        selectedRoleId || undefined,
-        isSuperAdmin ? selectedTenantId || undefined : undefined,
+        isSuperAdmin ? undefined : (selectedRoleId || undefined),
+        isSuperAdmin ? selectedTenantId : undefined,
       );
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
@@ -523,7 +536,9 @@ function InviteModal({
           ? "Ya existe una invitación pendiente para este correo."
           : s === 404
             ? "El rol especificado no existe en el tenant."
-            : "No se pudo enviar la invitación. Inténtalo de nuevo."
+            : s === 400
+              ? "Debes seleccionar una empresa destino válida."
+              : "No se pudo enviar la invitación. Inténtalo de nuevo."
       );
       setStatus("idle");
     }
@@ -611,26 +626,28 @@ function InviteModal({
                 style={{ borderColor: "#DFE5ED" }}
               />
             </div>
-            {(() => {
-              const rolesForDropdown = isSuperAdmin ? tenantRoles : roles;
-              return rolesForDropdown.length > 0 ? (
-                <div>
-                  <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
-                  <select
-                    id="invite-role"
-                    value={selectedRoleId}
-                    onChange={(e) => setSelectedRoleId(e.target.value)}
-                    className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                    style={{ borderColor: "#DFE5ED" }}
-                  >
-                    <option value="">Sin rol asignado</option>
-                    {rolesForDropdown.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : null;
-            })()}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
+                <Shield className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />
+                <span>Se creará como <strong>Administrador de Compañía</strong></span>
+              </div>
+            ) : roles.length > 0 ? (
+              <div>
+                <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
+                <select
+                  id="invite-role"
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                  style={{ borderColor: "#DFE5ED" }}
+                >
+                  <option value="">Sin rol asignado</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             {error && (
               <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
             )}
@@ -647,7 +664,7 @@ function InviteModal({
             </div>
             <button
               type="submit"
-              disabled={status === "loading"}
+              disabled={status === "loading" || (isSuperAdmin && !selectedTenantId)}
               className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition"
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >

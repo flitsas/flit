@@ -30,6 +30,7 @@ public static class SecurityEndpoints
             [FromBody] CreateInvitationRequest request,
             ClaimsPrincipal caller,
             CreateInvitationHandler handler,
+            FlitDbContext db,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
@@ -44,12 +45,35 @@ public static class SecurityEndpoints
             var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
             var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
 
-            // SuperAdmin puede invitar a otro tenant; AdminCompany siempre usa el propio
-            var targetTenantId = isSuperAdmin && request.TargetTenantId.HasValue
-                ? request.TargetTenantId.Value
-                : callerTenantId;
+            Guid targetTenantId;
+            Guid? roleId;
 
-            Guid? roleId = Guid.TryParse(request.RoleId, out var parsed) ? parsed : null;
+            if (isSuperAdmin)
+            {
+                // SuperAdmin DEBE especificar empresa destino y no puede invitar a su propio tenant
+                if (!request.TargetTenantId.HasValue)
+                    return Results.Json(
+                        new ErrorResponse("TARGET_TENANT_REQUIRED", "El SuperAdmin debe especificar la empresa destino."),
+                        statusCode: StatusCodes.Status400BadRequest);
+
+                if (request.TargetTenantId.Value == callerTenantId)
+                    return Results.Json(
+                        new ErrorResponse("CANNOT_INVITE_TO_OWN_TENANT", "El SuperAdmin no puede invitar usuarios a su propio tenant."),
+                        statusCode: StatusCodes.Status400BadRequest);
+
+                targetTenantId = request.TargetTenantId.Value;
+
+                // Rol siempre forzado a AdminCompany en el tenant destino
+                var adminCompanyRole = await db.Roles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == AdminAuthorization.AdminCompanyRole, cancellationToken);
+                roleId = adminCompanyRole?.Id;
+            }
+            else
+            {
+                targetTenantId = callerTenantId;
+                roleId = Guid.TryParse(request.RoleId, out var parsed) ? parsed : null;
+            }
 
             try
             {
@@ -242,17 +266,68 @@ public static class SecurityEndpoints
             }
         });
 
-        // GET /users — lista usuarios activos + invitaciones pendientes del tenant
+        // GET /users — lista usuarios activos + invitaciones pendientes
+        // SuperAdmin ve todos los usuarios de todas las compañías (excluye su propio tenant interno)
         group.MapGet("/users", async (
             ClaimsPrincipal caller,
             FlitDbContext db,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
                 return Results.Unauthorized();
 
+            var callerRoleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
+            var isSuperAdmin = callerRoleCode == AdminAuthorization.SuperAdminRole;
             var now = DateTimeOffset.UtcNow;
+
+            if (isSuperAdmin)
+            {
+                // SuperAdmin ve todos los usuarios de todos los tenants (excepto el propio DEMO)
+                var allUsers = await (
+                    from a in db.UserRoleAssignments.AsNoTracking()
+                    join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                    join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                    join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
+                    where a.TenantId != callerTenantId && a.DeletedAt == null && u.DeletedAt == null
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        r.Name,
+                        r.Code,
+                        a.RoleId,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName)
+                ).ToListAsync(cancellationToken);
+
+                var allPending = await (
+                    from i in db.UserInvitations.AsNoTracking()
+                    join t in db.Tenants.AsNoTracking() on i.TenantId equals t.Id
+                    where i.TenantId != callerTenantId && i.Status == "pending"
+                    orderby i.CreatedAt descending
+                    select new TenantUserDto(
+                        i.Id.ToString(),
+                        i.FullName,
+                        i.Email,
+                        null,
+                        null,
+                        null,
+                        "pending",
+                        i.CreatedAt,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName)
+                ).ToListAsync(cancellationToken);
+
+                return Results.Ok(allUsers.Concat(allPending).ToList());
+            }
+
+            // AdminCompany: solo ve su tenant
+            var tenantId = callerTenantId;
 
             var activeUsers = await (
                 from a in db.UserRoleAssignments.AsNoTracking()
@@ -269,7 +344,9 @@ public static class SecurityEndpoints
                     u.Status == "active" ? "active" : "inactive",
                     null,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                    null,
+                    null)
             ).ToListAsync(cancellationToken);
 
             var usersWithoutRole = await (
@@ -287,7 +364,9 @@ public static class SecurityEndpoints
                     "inactive",
                     null,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                    null,
+                    null)
             ).ToListAsync(cancellationToken);
 
             var pending = await db.UserInvitations
@@ -303,15 +382,12 @@ public static class SecurityEndpoints
                     null,
                     "pending",
                     x.CreatedAt,
-                    false))
+                    false,
+                    null,
+                    null))
                 .ToListAsync(cancellationToken);
 
-            var result = activeUsers
-                .Concat(usersWithoutRole)
-                .Concat(pending)
-                .ToList();
-
-            return Results.Ok(result);
+            return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
         });
 
         // POST /security/users/{userId}/suspend — AdminCompany bloquea usuario temporalmente
@@ -427,7 +503,7 @@ public static class SecurityEndpoints
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended);
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName);
 
     private sealed record ErrorResponse(string Code, string Message);
 }
