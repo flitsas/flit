@@ -68,7 +68,13 @@ public static class SecurityEndpoints
                 var adminCompanyRole = await db.Roles
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == AdminAuthorization.AdminCompanyRole, cancellationToken);
-                roleId = adminCompanyRole?.Id;
+
+                if (adminCompanyRole is null)
+                    return Results.Json(
+                        new ErrorResponse("ADMIN_ROLE_NOT_FOUND", "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
+                        statusCode: StatusCodes.Status409Conflict);
+
+                roleId = adminCompanyRole.Id;
             }
             else
             {
@@ -261,6 +267,12 @@ public static class SecurityEndpoints
                     cancellationToken);
                 return Results.Ok();
             }
+            catch (SelfRoleAssignmentException)
+            {
+                return Results.Json(
+                    new ErrorResponse("SELF_ROLE_ASSIGNMENT", "No puedes cambiar tu propio rol."),
+                    statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
             catch (UserOutOfScopeException)
             {
                 return Results.Json(
@@ -323,6 +335,27 @@ public static class SecurityEndpoints
                         t.LegalName)
                 ).ToListAsync(cancellationToken);
 
+                // SuperAdmin also sees users that belong to other tenants but have no role assignment
+                var allUsersWithoutRole = await (
+                    from u in db.Users.AsNoTracking()
+                    join t in db.Tenants.AsNoTracking() on u.HomeTenantId equals t.Id
+                    where u.HomeTenantId != callerTenantId
+                          && u.DeletedAt == null
+                          && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.DeletedAt == null)
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        null,
+                        null,
+                        null,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName)
+                ).ToListAsync(cancellationToken);
+
                 var allPending = await (
                     from i in db.UserInvitations.AsNoTracking()
                     join t in db.Tenants.AsNoTracking() on i.TenantId equals t.Id
@@ -342,7 +375,7 @@ public static class SecurityEndpoints
                         t.LegalName)
                 ).ToListAsync(cancellationToken);
 
-                return Results.Ok(allUsers.Concat(allPending).ToList());
+                return Results.Ok(allUsers.Concat(allUsersWithoutRole).Concat(allPending).ToList());
             }
 
             // AdminCompany: solo ve su tenant
