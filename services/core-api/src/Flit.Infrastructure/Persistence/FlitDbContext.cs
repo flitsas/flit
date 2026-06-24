@@ -4,13 +4,19 @@ using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Tramites.Domain.Entities;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence;
 
-public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbContext(options)
+public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    // Keyring de ASP.NET Data Protection persistido en Postgres (HU #10233): compartido entre
+    // réplicas y estable entre reinicios, para poder descifrar el secreto HMAC del webhook Kyverum.
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<User> Users => Set<User>();
 
