@@ -30,6 +30,10 @@ public sealed record TraspasoGateContext
 {
     public bool TramiteRadicado { get; init; }
 
+    /// <summary>El vehículo ya fue consultado por placa (identificador persistido). Paridad con
+    /// <see cref="MatriculaGateContext.VehiculoConsultado"/>: sin consulta, el paso 1 no se completa.</summary>
+    public bool VehiculoConsultado { get; init; }
+
     public PreflightSnapshot? Preflight { get; init; }
     public bool PazSalvoImpuestoVerificado { get; init; }
 

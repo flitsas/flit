@@ -91,7 +91,7 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
   ],
   traspaso: [
     'Consulta VIN/Placa',
-    'Documentos / Preflight',
+    'Documentos',
     'Vendedor',
     'Comprador',
     'Datos comerciales',
