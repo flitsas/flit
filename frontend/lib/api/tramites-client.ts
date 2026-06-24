@@ -75,8 +75,13 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
-/** Same-origin relative paths; Next.js rewrites proxy to core-api in dev. */
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+// La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
+// NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Compat con
+// NEXT_PUBLIC_API_URL (entornos locales) y localhost para dev. ANTES leía solo
+// NEXT_PUBLIC_API_URL → en DEV quedaba vacío → las llamadas caían al mismo origen
+// (el frontend Next.js, que no sirve /api) y devolvían 500.
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
 
 const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
@@ -116,7 +121,9 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  // El path absoluto (/api/v1/...) toma el ORIGEN de BASE_URL e ignora su path, así un
+  // BASE_URL con sufijo /api/v1 (como el del CD) no se duplica.
+  const res = await fetch(new URL(path, BASE_URL).toString(), {
     ...init,
     headers: { ...JSON_HEADERS, ...init?.headers },
   });
