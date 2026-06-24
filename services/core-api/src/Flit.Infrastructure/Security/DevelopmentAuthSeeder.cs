@@ -301,8 +301,15 @@ public static class DevelopmentAuthSeeder
         IPasswordHasher passwordHasher,
         CancellationToken cancellationToken)
     {
-        if (await db.Users.AnyAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken))
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken);
+
+        if (existingUser is not null)
+        {
+            // Reparar si el role assignment fue soft-deleted en una sesión previa
+            await EnsureAdminCompanyRoleAssignmentAsync(db, existingUser.Id, cancellationToken);
             return;
+        }
 
         // AdminCompany vive en su PROPIO tenant (EMPRESA_DEMO), separado del tenant
         // del SuperAdmin (DEMO). Esto garantiza aislamiento real en dev: AdminCompany
@@ -378,6 +385,37 @@ public static class DevelopmentAuthSeeder
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAdminCompanyRoleAssignmentAsync(
+        FlitDbContext db,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var empresaTenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
+        if (empresaTenant is null) return;
+
+        var hasActiveAssignment = await db.UserRoleAssignments
+            .AnyAsync(a => a.UserId == userId && a.TenantId == empresaTenant.Id && a.DeletedAt == null, ct);
+        if (hasActiveAssignment) return;
+
+        var adminCompanyRole = await db.Roles
+            .FirstOrDefaultAsync(r => r.TenantId == empresaTenant.Id && r.Code == "AdminCompany" && r.DeletedAt == null, ct);
+        if (adminCompanyRole is null) return;
+
+        var now = DateTimeOffset.UtcNow;
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = empresaTenant.Id,
+            UserId = userId,
+            RoleId = adminCompanyRole.Id,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     private static async Task SeedBaseModulesAsync(

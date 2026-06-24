@@ -11,6 +11,7 @@ using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using IRoleRepository = Flit.Modules.Security.Domain.Roles.IRoleRepository;
 using AuthRoleNotFoundException = Flit.Modules.Security.Domain.Auth.RoleNotFoundException;
 using RolesRoleNotFoundException = Flit.Modules.Security.Domain.Roles.RoleNotFoundException;
@@ -234,8 +235,10 @@ public static class SecurityEndpoints
             [FromBody] AssignRoleRequest request,
             ClaimsPrincipal caller,
             AssignRoleHandler handler,
+            ILoggerFactory lf,
             CancellationToken cancellationToken) =>
         {
+            var logger = lf.CreateLogger(nameof(SecurityEndpoints));
             var tenantClaim = caller.FindFirstValue("tenant_id");
             if (!Guid.TryParse(tenantClaim, out var tenantId))
                 return Results.Unauthorized();
@@ -263,6 +266,16 @@ public static class SecurityEndpoints
                 return Results.Json(
                     new ErrorResponse("ROLE_NOT_FOUND", "Rol no encontrado o inactivo."),
                     statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (Exception ex)
+            {
+#pragma warning disable CA1848
+                logger.LogError(ex, "Error inesperado al asignar rol {RoleId} al usuario {UserId} en tenant {TenantId}",
+                    request.RoleId, userId, tenantId);
+#pragma warning restore CA1848
+                return Results.Json(
+                    new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
+                    statusCode: StatusCodes.Status500InternalServerError);
             }
         });
 
@@ -361,7 +374,7 @@ public static class SecurityEndpoints
                     null,
                     null,
                     null,
-                    "inactive",
+                    u.Status == "active" ? "active" : "inactive",
                     null,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
                         && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
