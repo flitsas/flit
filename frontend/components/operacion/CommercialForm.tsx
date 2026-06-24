@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { digitsOnly, groupThousands } from '@/lib/format/currency';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   CommercialCausal,
@@ -148,17 +149,32 @@ export function CommercialForm({ instanceId, onSaved, hideHeader = false }: Prop
             Valor de venta
             <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
           </label>
-          <input
-            id="comercial-valor"
-            type="number"
-            min={0}
-            value={data.valorVenta ?? ''}
-            onChange={(e) =>
-              setData((d) => ({ ...d, valorVenta: numberOrNull(e.target.value) }))
-            }
-            className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
-          />
+          <div className="relative">
+            <span
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs opacity-60"
+              aria-hidden="true"
+            >
+              $
+            </span>
+            <input
+              id="comercial-valor"
+              type="text"
+              inputMode="numeric"
+              // Formato COP en vivo: el estado guarda el entero de pesos; aquí se
+              // pinta agrupado con separador de miles y se parsea a dígitos.
+              value={data.valorVenta != null ? groupThousands(String(data.valorVenta)) : ''}
+              onChange={(e) => {
+                const digits = digitsOnly(e.target.value);
+                setData((d) => ({
+                  ...d,
+                  valorVenta: digits === '' ? null : Number(digits),
+                }));
+              }}
+              placeholder="0"
+              className={`${INPUT_BASE} pl-7 font-mono`}
+              style={{ borderColor: '#DFE5ED' }}
+            />
+          </div>
         </div>
 
         <div>
