@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<!--
+  ============================================================================
+  PLANTILLA FUR — Formulario Único Nacional de Solicitud de Trámites RNA
+  HU #10256 · Origen: formulario_transportev3.html (Ministerio de Transporte)
+  ============================================================================
+
+  CONVENCIÓN DE TOKENS (motor de plantillas del generador FUR):
+
+    {{Campo}}        → se proyecta un VALOR. Si el dato no existe → "-".
+    {{X_Cond}}       → se marca con "X" si la condición es verdadera; si no → "" (vacío).
+
+  INFERENCIA — dónde se marca con X (casillas) y dónde se proyecta un valor:
+
+  · TRÁMITE SOLICITADO (sección 3): casilla X según el tipo de trámite.
+    Matrícula inicial ⇒ {{X_Tramite_Matricula}} = "X" (opción 1).
+  · COMBUSTIBLE (sección 7): X en la casilla del combustible del vehículo (field_value vehicle_fuel).
+  · CLASE DE VEHÍCULO (sección 4): X en la clase (field_value vehicle_class).
+  · CARROCERÍA (sección 15): código + tipo de carrocería como VALOR.
+  · IDENTIFICACIÓN (sección 16): No. motor/chasis/serie/VIN como VALOR; "REGRABADO SI/NO" como X.
+  · TIPO DE SERVICIO (sección 18): X en el servicio (field_value vehicle_service).
+  · DATOS DEL PROPIETARIO (21) / COMPRADOR (22): apellidos, nombres, dirección, ciudad,
+    teléfono y No. documento como VALOR; tipo de documento (C/N/X/P/E/T/U/D) como X.
+  · DATOS DE ALERTA (20) / IMPORTACIÓN-REMATE (17) / BLINDAJE (12-13): X (no capturados aún ⇒ vacío).
+  · Celdas "NO ESCRIBA" (uso del organismo de tránsito) se dejan vacías.
+
+  Campos aún no capturados por el sistema (domicilio, factura, importación, consecutivo,
+  blindaje, alertas, empresa vinculadora) se proyectan como "-" o quedan vacíos sin fallar.
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Solicitud de Trámites del Registro Nacional Automotor</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+        }
+        .page {
+            width: 100%;
+            padding: 1cm;
+            page-break-after: always;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        td, th {
+            border: 1px solid black;
+            padding: 2px;
+            text-align: center;
+            vertical-align: middle;
+            word-wrap: break-word;
+        }
+        .no-border {
+            border: none;
+        }
+        .left {
+            text-align: left;
+        }
+        .val {
+            font-weight: bold;
+        }
+        .xmark {
+            font-weight: bold;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- PÁGINA 1: Filas 1-51 -->
+<div class="page">
+    <table>
+        <!-- Fila 1: Encabezado -->
+        <tr>
+            <td colspan="19">MINISTERIO DE TRANSPORTE</td>
+            <td colspan="6" rowspan="2">FORMULARIO DE SOLICITUD DE TRAMITES DEL REGISTRO NACIONAL AUTOMOTOR</td>
+            <td colspan="8">1. ORGANISMO DE TRÁNSITO</td>
+            <td colspan="2">2. PLACA</td>
+        </tr>
+        <!-- Fila 2 -->
+        <tr>
+            <td colspan="19" rowspan="3"></td>
+            <td colspan="8">NOMBRE</td>
+            <td>LETRAS</td>
+            <td>NÚMEROS</td>
+        </tr>
+        <!-- Fila 3 -->
+        <tr>
+            <td colspan="6" class="val">{{OrganismoNombre}}</td>
+            <td colspan="2">CIUDAD</td>
+            <td colspan="3">CODIGO</td>
+            <td colspan="3">FECHA DE TRAMITE</td>
+            <td class="val">{{PlacaLetras}}</td>
+            <td rowspan="2" class="val">{{PlacaNumeros}}</td>
+        </tr>
+        <!-- Fila 4 -->
+        <tr>
+            <td colspan="6" class="val">{{OrganismoCiudad}}</td>
+            <td colspan="2" class="val">{{OrganismoCodigo}}</td>
+            <td colspan="3" class="no-border"></td>
+            <td class="val">{{FechaDia}}</td>
+            <td class="val">{{FechaMes}}</td>
+            <td class="val">{{FechaAnio}}</td>
+            <td></td>
+        </tr>
+        <!-- Fila 5: Espacio -->
+        <tr>
+            <td colspan="35" class="no-border"></td>
+        </tr>
+        <!-- Fila 6: Sección 3 y características -->
+        <tr>
+            <td colspan="21">3. TRAMITE SOLICITADO</td>
+            <td colspan="3">5. MARCA</td>
+            <td colspan="2">6. LINEA</td>
+            <td colspan="9">7. COMBUSTIBLE</td>
+        </tr>
+        <!-- Fila 7: Opciones de trámite -->
+        <tr>
+            <td rowspan="2">1</td>
+            <td colspan="2" rowspan="2">MATRICULA/<br>REGISTRO</td>
+            <td rowspan="7" class="xmark">{{X_Tramite_Matricula}}</td>
+            <td rowspan="2">2</td>
+            <td colspan="2" rowspan="2">TRASPASO</td>
+            <td rowspan="7" class="xmark">{{X_Tramite_Traspaso}}</td>
+            <td rowspan="2">3</td>
+            <td colspan="3" rowspan="2">TRANSLADO MATRICULA / REGISTRO</td>
+            <td rowspan="7" class="xmark">{{X_Tramite_Traslado}}</td>
+            <td rowspan="2">4</td>
+            <td rowspan="2">RADICADO MATRICULA / REGISTRO</td>
+            <td rowspan="5" class="xmark">{{X_Tramite_Radicado}}</td>
+            <td rowspan="2">5</td>
+            <td rowspan="2">CAMBIO DE COLOR</td>
+            <td rowspan="5" class="xmark">{{X_Tramite_CambioColor}}</td>
+            <td rowspan="2">6</td>
+            <td rowspan="2">CAMBIO DE SERVICIO</td>
+            <td colspan="3" rowspan="2" class="val">{{Marca}}</td>
+            <td colspan="2" rowspan="2" class="val">{{Linea}}</td>
+            <td colspan="2">GASOLINA</td>
+            <td>DIESEL</td>
+            <td>GAS.</td>
+            <td>MIXTO</td>
+            <td>ELECTRICO</td>
+            <td>HIDROGEN.</td>
+            <td>ETANOL</td>
+            <td>BIODIESEL</td>
+        </tr>
+        <!-- Fila 8: marca X de combustible -->
+        <tr>
+            <td colspan="2" class="xmark">{{X_Comb_Gasolina}}</td>
+            <td class="xmark">{{X_Comb_Diesel}}</td>
+            <td class="xmark">{{X_Comb_Gas}}</td>
+            <td class="xmark">{{X_Comb_Mixto}}</td>
+            <td class="xmark">{{X_Comb_Electrico}}</td>
+            <td class="xmark">{{X_Comb_Hidrogeno}}</td>
+            <td class="xmark">{{X_Comb_Etanol}}</td>
+            <td class="xmark">{{X_Comb_Biodiesel}}</td>
+        </tr>
+        <!-- Fila 9: Más opciones de trámite -->
+        <tr>
+            <td rowspan="3">7</td>
+            <td colspan="2" rowspan="3">REGRABAR MOTOR</td>
+            <td rowspan="3">8</td>
+            <td colspan="2" rowspan="3">REGRABAR CHASIS</td>
+            <td rowspan="3">9</td>
+            <td colspan="3" rowspan="3">TRANSFORMACION</td>
+            <td rowspan="3">10</td>
+            <td rowspan="3">DUPLICADO LICENCIA TRANSITO</td>
+            <td rowspan="3">11</td>
+            <td rowspan="3">INSCRIPC. PRENDA</td>
+            <td rowspan="3">12</td>
+            <td rowspan="3">LEVANTA. PRENDA</td>
+            <td>8. COLORES</td>
+            <td colspan="4"></td>
+            <td colspan="2">9. MODELO</td>
+            <td colspan="3">10. CILINDRADA</td>
+        </tr>
+        <tr>
+            <td colspan="5" rowspan="2" class="val">{{Colores}}</td>
+            <td colspan="2" rowspan="2" class="val">{{Modelo}}</td>
+            <td colspan="3" rowspan="2" class="val">{{Cilindrada}}</td>
+        </tr>
+        <tr></tr>
+        <!-- Fila 12-13: Más opciones -->
+        <tr>
+            <td rowspan="2">13</td>
+            <td colspan="2" rowspan="2">CANCELACION MATRICULA / REGISTRO</td>
+            <td rowspan="2">14</td>
+            <td colspan="2" rowspan="2">CAMBIO DE PLACAS</td>
+            <td rowspan="2">15</td>
+            <td colspan="3" rowspan="2">DUPLICADO DE PLACAS</td>
+            <td rowspan="2">16</td>
+            <td rowspan="2">REMATRICULA</td>
+            <td></td>
+            <td rowspan="2">17</td>
+            <td rowspan="2">CAMBIO DE CARROCERIA</td>
+            <td></td>
+            <td rowspan="2">18</td>
+            <td rowspan="2">OTROS</td>
+            <td colspan="3">11. CAPACIDAD Kg/Psj</td>
+            <td colspan="4">12. BLINDAJE SI NO</td>
+            <td colspan="4">13. DESMONTE BLIND. SI NO</td>
+            <td colspan="3">14. POTENCIA/HP</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td></td>
+            <td colspan="3" class="val">{{Capacidad}}</td>
+            <td colspan="4">Resolución No (DD/MM/AÑO)</td>
+            <td colspan="4">Resolución No (DD/MM/AÑO)</td>
+            <td colspan="3" class="val">{{Potencia}}</td>
+        </tr>
+        <!-- Fila 14: Espacio -->
+        <tr>
+            <td colspan="35" class="no-border"></td>
+        </tr>
+        <!-- Fila 15: Clase de vehículo -->
+        <tr>
+            <td colspan="21">4. CLASE DE VEHICULO</td>
+            <td colspan="7">15. CARROCERIA</td>
+            <td colspan="7">16. IDENTIFICACION INTERNA DEL VEHICULO</td>
+        </tr>
+        <!-- Fila 16-17: Tipos de vehículo -->
+        <tr>
+            <td colspan="3">AUTOMOVIL</td>
+            <td colspan="4">BUS</td>
+            <td colspan="4">BUSETA</td>
+            <td colspan="3">CAMIÓN</td>
+            <td>CAMIONETA</td>
+            <td colspan="3">CAMPERO</td>
+            <td colspan="3">MICROBUS</td>
+            <td colspan="7">CODIGO</td>
+            <td colspan="5">No. DE MOTOR</td>
+            <td colspan="2">REGRABADO</td>
+        </tr>
+        <tr>
+            <td colspan="3" class="xmark">{{X_Clase_Automovil}}</td>
+            <td colspan="4" class="xmark">{{X_Clase_Bus}}</td>
+            <td colspan="4" class="xmark">{{X_Clase_Buseta}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Camion}}</td>
+            <td class="xmark">{{X_Clase_Camioneta}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Campero}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Microbus}}</td>
+            <td colspan="7" class="val">{{CarroceriaCodigo}}</td>
+            <td colspan="5" class="val">{{NumeroMotor}}</td>
+            <td colspan="2">SI NO</td>
+        </tr>
+        <!-- Fila 18-20: Más tipos de vehículo -->
+        <tr>
+            <td colspan="3">TRACTOCAMIÓN</td>
+            <td colspan="4">MOTOCICLETA</td>
+            <td colspan="4">MOTOCARRO</td>
+            <td colspan="3">MOTOTRICICLO</td>
+            <td>CUATRIMOTO</td>
+            <td colspan="3">VOLQUETA</td>
+            <td colspan="3">OTRO</td>
+            <td colspan="7">TIPO</td>
+            <td colspan="5">No. DE CHASIS</td>
+            <td colspan="2">REGRABADO</td>
+        </tr>
+        <tr>
+            <td colspan="3" class="xmark">{{X_Clase_Tractocamion}}</td>
+            <td colspan="4" class="xmark">{{X_Clase_Motocicleta}}</td>
+            <td colspan="4" class="xmark">{{X_Clase_Motocarro}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Mototriciclo}}</td>
+            <td class="xmark">{{X_Clase_Cuatrimoto}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Volqueta}}</td>
+            <td colspan="3" class="xmark">{{X_Clase_Otro}}</td>
+            <td colspan="7" rowspan="2" class="val">{{TipoCarroceria}}</td>
+            <td colspan="5" rowspan="2" class="val">{{NumeroChasis}}</td>
+            <td colspan="2" rowspan="2">SI NO</td>
+        </tr>
+        <tr>
+            <td colspan="3"></td>
+            <td colspan="4"></td>
+            <td colspan="4"></td>
+            <td colspan="10"></td>
+        </tr>
+        <!-- Fila 21-22: Datos propietario -->
+        <tr>
+            <td colspan="21" rowspan="2">21. DATOS DEL PROPIETARIO</td>
+            <td colspan="7"></td>
+            <td colspan="5">No. DE SERIE</td>
+            <td colspan="2">REGRABADO</td>
+        </tr>
+        <tr>
+            <td colspan="7">17. IMPORTACIÓN O REMATE</td>
+            <td colspan="5" class="val">{{NumeroSerie}}</td>
+            <td colspan="2">SI NO</td>
+        </tr>
+        <!-- Fila 23-30: Datos propietario detalle -->
+        <tr>
+            <td colspan="8">PRIMER APELLIDO</td>
+            <td colspan="7">SEGUNDO APELLIDO</td>
+            <td colspan="6">NOMBRES</td>
+            <td colspan="2">IMPORTACION</td>
+            <td colspan="5">REMATE</td>
+            <td colspan="7">No. DE VIN VEHICULOS AUTOMOTORES</td>
+        </tr>
+        <tr>
+            <td colspan="8" class="val">{{PropPrimerApellido}}</td>
+            <td colspan="7" class="val">{{PropSegundoApellido}}</td>
+            <td colspan="6" class="val">{{PropNombres}}</td>
+            <td rowspan="2">MANIF. O ACTA 1</td>
+            <td rowspan="2">DEC. DE IMPOR. 2</td>
+            <td rowspan="2">ACTA 3</td>
+            <td rowspan="2">ENTIDAD 4</td>
+            <td rowspan="2">LUGAR (CIUDAD) 5</td>
+            <td colspan="2" rowspan="2">CODIGO 6</td>
+            <td colspan="7" rowspan="2" class="val">{{Vin}}</td>
+        </tr>
+        <tr>
+            <td colspan="2">C.C</td>
+            <td>NIT</td>
+            <td colspan="3">N.N</td>
+            <td colspan="3">PASAPORTE</td>
+            <td colspan="2">C.EXTRANJ.</td>
+            <td colspan="3">T.IDENTI.</td>
+            <td>NUIP</td>
+            <td colspan="3">C. DIPLOMATICO</td>
+            <td colspan="3">No. DOCUMENTO</td>
+        </tr>
+        <tr>
+            <td colspan="2" rowspan="2" class="xmark">{{X_PropDoc_CC}}</td>
+            <td rowspan="2" class="xmark">{{X_PropDoc_NIT}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_PropDoc_NN}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_PropDoc_Pasaporte}}</td>
+            <td colspan="2" rowspan="2" class="xmark">{{X_PropDoc_CExtranj}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_PropDoc_TIdent}}</td>
+            <td rowspan="2" class="xmark">{{X_PropDoc_NUIP}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_PropDoc_CDiplomatico}}</td>
+            <td colspan="3" class="val">{{PropNumeroDocumento}}</td>
+            <td colspan="4">FECHA</td>
+            <td colspan="7"></td>
+        </tr>
+        <tr>
+            <td colspan="3"></td>
+            <td colspan="3" rowspan="3"></td>
+            <td>DIA</td>
+            <td>MES</td>
+            <td colspan="2">AÑO</td>
+            <td colspan="7">18. TIPO DE SERVICIO</td>
+        </tr>
+        <tr>
+            <td>DIRECCION</td>
+            <td colspan="11" class="val left">{{PropDireccion}}</td>
+            <td>CIUDAD</td>
+            <td colspan="5" class="val">{{PropCiudad}}</td>
+            <td>TELEFONO</td>
+            <td colspan="2" class="val">{{PropTelefono}}</td>
+            <td rowspan="2"></td>
+            <td rowspan="2"></td>
+            <td colspan="2" rowspan="2"></td>
+            <td>PARTICUL</td>
+            <td>PUBLICO</td>
+            <td>DIPLOMATI.</td>
+            <td>OFICIAL</td>
+            <td>ESPECIAL</td>
+            <td colspan="2">OTROS</td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td class="xmark">{{X_Serv_Particular}}</td>
+            <td class="xmark">{{X_Serv_Publico}}</td>
+            <td class="xmark">{{X_Serv_Diplomatico}}</td>
+            <td class="xmark">{{X_Serv_Oficial}}</td>
+            <td class="xmark">{{X_Serv_Especial}}</td>
+            <td colspan="2" class="xmark">{{X_Serv_Otros}}</td>
+        </tr>
+        <tr>
+            <td colspan="21">FIRMA DEL PROPIETARIO</td>
+            <td colspan="7">20. DATOS DE ALERTA</td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td rowspan="4">HURTO 1</td>
+            <td colspan="2" rowspan="4">LIM. PROPIEDAD 2</td>
+            <td rowspan="4">EMBARGO 3</td>
+            <td rowspan="4">OTRO 4</td>
+            <td colspan="2" rowspan="4">A FAVOR DE: 5</td>
+            <td colspan="7">19. EMPRESA VINCULADORA</td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td>NOMBRE</td>
+            <td colspan="4" class="val">{{EmpresaVinculadoraNombre}}</td>
+            <td colspan="2" rowspan="4">NIT</td>
+        </tr>
+        <!-- Fila 34-35: Datos comprador -->
+        <tr>
+            <td colspan="21" rowspan="2">22. DATOS DEL COMPRADOR (TRASPASO)</td>
+            <td colspan="5"></td>
+        </tr>
+        <tr>
+            <td colspan="5"></td>
+        </tr>
+        <tr>
+            <td colspan="8">PRIMER APELLIDO</td>
+            <td colspan="7">SEGUNDO APELLIDO</td>
+            <td colspan="6">NOMBRES</td>
+            <td colspan="14"></td>
+        </tr>
+        <tr>
+            <td colspan="8" class="val">{{CompPrimerApellido}}</td>
+            <td colspan="7" rowspan="3" class="val">{{CompSegundoApellido}}</td>
+            <td colspan="6" rowspan="3" class="val">{{CompNombres}}</td>
+            <td colspan="14">23. OBSERVACIONES</td>
+        </tr>
+        <tr>
+            <td colspan="8"></td>
+            <td colspan="14" class="left">ESPECIFIQUE LA PALABRA OTRO Y TRANSFORMACIÓN EFECTUADA AL VEHICULO, AMPLEI EL TIPO DE ALERTA O LO QUE ESTIME</td>
+        </tr>
+        <tr>
+            <td colspan="8"></td>
+            <td colspan="14" class="val left">{{Observaciones}}</td>
+        </tr>
+        <tr>
+            <td colspan="2">C.C</td>
+            <td>NIT</td>
+            <td colspan="3">N.N</td>
+            <td colspan="3">PASAPORTE</td>
+            <td colspan="2">C.EXTRANJ.</td>
+            <td colspan="3">T.IDENTI.</td>
+            <td>NUIP</td>
+            <td colspan="3">C. DIPLOMATICO</td>
+            <td colspan="3">No. DOCUMENTO</td>
+            <td colspan="14"></td>
+        </tr>
+        <tr>
+            <td colspan="2" rowspan="2" class="xmark">{{X_CompDoc_CC}}</td>
+            <td rowspan="2" class="xmark">{{X_CompDoc_NIT}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_CompDoc_NN}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_CompDoc_Pasaporte}}</td>
+            <td colspan="2" rowspan="2" class="xmark">{{X_CompDoc_CExtranj}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_CompDoc_TIdent}}</td>
+            <td rowspan="2" class="xmark">{{X_CompDoc_NUIP}}</td>
+            <td colspan="3" rowspan="2" class="xmark">{{X_CompDoc_CDiplomatico}}</td>
+            <td colspan="3" rowspan="2" class="val">{{CompNumeroDocumento}}</td>
+            <td colspan="14" rowspan="2"></td>
+        </tr>
+        <tr></tr>
+        <tr>
+            <td>DIRECCION</td>
+            <td colspan="11" class="val left">{{CompDireccion}}</td>
+            <td>CIUDAD</td>
+            <td colspan="5" class="val">{{CompCiudad}}</td>
+            <td>TELEFONO</td>
+            <td colspan="2" class="val">{{CompTelefono}}</td>
+            <td colspan="14" class="left">OBSERVACIONES (PARA TRASPASO DE VEHICULOS AUTOMOTORES ANTES DE RUNT)</td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td colspan="14" rowspan="2" class="left">SI SU VEHICULO AUTOMOTOR HA SIDO MATRICULADO ANTES DEL RUNT TRANSCRIBA EN ESTE CAMPO EL TIPO DE CARROCERIA Y LA CLASE DE VEHICULO QUE SE ENCUENTRA REGISTRADA EN SU LICENCIA DE TRÁNSITO O CUALQUIER OTRO ASPECTO QUE CONSIDERE NECESARIO PARA DAR EXACTITUD A LA INFORMACIÓN.</td>
+        </tr>
+        <tr>
+            <td colspan="21">FIRMA DEL COMPRADOR</td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td colspan="14"></td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td colspan="14" rowspan="2"></td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+        </tr>
+        <tr>
+            <td colspan="21"></td>
+            <td colspan="14" rowspan="3"></td>
+        </tr>
+        <tr>
+            <td colspan="21" rowspan="2">NOTA: VER INSTRUCCIONES AL RESPALDO</td>
+        </tr>
+        <tr></tr>
+    </table>
+</div>
+
+<!-- PÁGINA 2: Filas 54-103 (Instrucciones) -->
+<div class="page">
+    <table>
+        <tr>
+            <td colspan="35">INSTRUCCIONES</td>
+        </tr>
+        <tr>
+            <td colspan="35" rowspan="2" class="left">EL FORMULARIO DE SOLICITUD DE TRAMITES DE VEHICULOS, ES UN DOCUMENTO A TRAVÉS DEL CUAL LA PERSONA NATURAL O JURÍDICA SOLICITA ANTE LA AUTORIDAD COMPETENTE, LA REALIZACIÓN DE UN TRÁMITE.</td>
+        </tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" class="left">1. NO ESCRIBA EN ESTE ESPACIO DEBE SER DILIGENCIADO POR EL ORGANISMO DE TRANSITO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">2. ESCRIBA LAS LETRAS Y NUMEROS DE LAS PLACAS DEL VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">3. SEÑALE CON UNA EQUIS (X) EL CUADRO CORRESPONDIENTE AL TRAMITE SOLICITADO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">4. SEÑALE CON UNA EQUIS (X) EL CAMPO CORRESPONDIENTE A LA CLASE DEL VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">5. ESPECIFIQUE LA MARCA DEL VEHICULO. EJEMPLO: CHEVROLET, NISSAN, RENAULT.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">6. ESPECIFIQUE LA LINEA DEL VEHICULO. EJEMPLO: AVEO, SENTRA, LOGAN.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">7. SEÑALE CON UNA EQUIS (X) EL TIPO DE COMBUSTIBLE QUE UTILIZA EL VEHICULO, (GASOLINA, DIESEL)</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">8. ESPECIFIQUE EL (LOS) COLOR (ES) PREDOMINANTE(S), MAXIMO TRES.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">9. ESPECIFIQUE EL AÑO MODELO DEL VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">10. ESPECIFIQUE LA CILINDRADA DEL VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">11. ESPECIFIQUE LA CAPACIDAD, SI ES DE CARGA EN KILOGRAMOS, SI ES DE TRANSPORTE EN PASAJEROS.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">12. SEÑALE CON UNA EQUIS (X) EL CUADRO CORRESPONDIENTE A BLINDAJE O DESMONTE DE BLINDAJE, EN CASO AFIRMATIVO ESPECIFIQUE LA RESOLUCIÓN EXPEDIDA POR LA SUPERINTENDENCIA DE VIGILANCIA Y SEGURIDAD PRIVADA.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">13. SEÑALE CON UNA EQUIS (X) EL CUADRO CORRESPONDIENTE A DESMONTE DE BLINDAJE, EN CASO AFIRMATIVO ESPECIFIQUE LA RESOLUCIÓN EXPEDIDA POR LA SUPERINTENDENCIA DE VIGILANCIA Y SEGURIDAD PRIVADA.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">14. ESPECIFIQUE POTENCIA EN CABALLOS DE FUERZAS (HP)</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">15. SELECCIONE EL CODIGO Y EL TIPO DE CARROCERIA QUE CORRESPONDE A SU VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" rowspan="2" class="left">16. TRANSCRIBA EL NUMERO CORRESPONDIENTE AL MOTOR, CHASIS, SERIE, VIN DE VEHICULOS AUTOMOTORES. SI UNO DE ESTOS HA SIDO REGRABADO, SEÑALE CON UNA EQUIS (X) LA CASILLA RESPECTIVA.</td>
+        </tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" rowspan="3" class="left">17. SI EL VEHICULO ES IMPORTADO INDIQUE CON UNA EQUIS (X) EL DOCUMENTO RESPECTIVO, SI ES DE REMATE INDIQUE LA ENTIDAD, EN AMBOS CASOS LA CIUDAD DONDE SE HIZO EL DOCUMENTO NO ESCRIBA EN LA CASILLA CORRESPONDIENTE A CODIGO DE ADUANA, SERA SUMINISTRADO POR LA OFICINA DE TRANSITO CORRESPONDIENTE.</td>
+        </tr>
+        <tr></tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" class="left">18. ESPECIFIQUE TIPO DE SERVICIO: PARTICULAR, PÚBLICO, DIPLOMATICO, OFICIAL, ESPECIAL Y OTROS.</td>
+        </tr>
+        <tr>
+            <td colspan="35" class="left">19. ESPECIFIQUE EL NOMBRE DE LA EMPRESA VINCULADORA Y SU CORRESPONDIENTE NIT.</td>
+        </tr>
+        <tr>
+            <td colspan="35" rowspan="2" class="left">20. SEÑALE CON UNA EQUIS (X) EL DATO DE ALERTA CORRESPONDIENTE YA SEA POR HURTO, LIMITACIÓN DE LA PROPIEDAD, EMBARGO, OTRO, A FAVOR DE PERSONA O RAZON SOCIAL U OTRA ENTIDAD.</td>
+        </tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" rowspan="2" class="left">21. TRANSCRIBA LOS DATOS PERSONALES DEL PROPIETARIO ACTUAL DEL VEHICULO, SEÑALANDO CON UNA EQUIS (X) EL TIPO DE DOCUMENTO DE IDENTIDAD CON SU CORRESPONDIENTE NUMERO, DIRECCIÓN, CIUDAD, TELEFONO Y FIRMA.</td>
+        </tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" rowspan="3" class="left">22. EN CASO DE TRASPASO, TRANSCRIBA LOS DATOS PERSONALES DEL NUEVO PROPIETARIO, SEÑALE CON UNA EQUIS (X) EL TIPO DE DOCUMENTO DE IDENTIDAD CON SU CORRESPONDIENTE NUMERO, DIRECCION, CIUDAD, TELEFONO Y FIRMA. EN CASO DE TRASPASO A PERSONA INDETERMINADA, EN EL CAMPO CORRESPONDIENTE A COMPRADOR SE REGISTRA PERSONA INDETERMINADA.</td>
+        </tr>
+        <tr></tr>
+        <tr></tr>
+        <tr>
+            <td colspan="35" class="left">23. OBSERVACIONES: ESCRIBA O ACLARE LA PALABRA OTRO Y DESCRIBA LA TRANSFORMACIÓN EFECTUADA AL VEHICULO.</td>
+        </tr>
+        <tr>
+            <td colspan="35" rowspan="4" class="left">NOTA: EL SISTEMA REGISTRO ÚNICO NACIONAL DE TRÁNSITO-RUNT MANTENDRA ACTUALIZADO LOS CODIGOS Y EL CONTENIDO DE LA INFORMACIÓN DE LOS DIFERENTES CAMPOS DE ESTE FORMULARIO.</td>
+        </tr>
+        <tr></tr>
+        <tr></tr>
+        <tr></tr>
+        <!-- Sección de improntas -->
+        <tr>
+            <td colspan="22"></td>
+            <td colspan="13" rowspan="6">IMPRONTAS DEL MOTOR O SERIE</td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+            <td colspan="13" rowspan="6">IMPRONTAS CHASIS O SERIAL</td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="22"></td>
+        </tr>
+        <tr>
+            <td colspan="35"></td>
+        </tr>
+    </table>
+</div>
+
+</body>
+</html>
