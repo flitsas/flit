@@ -1103,6 +1103,9 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          // El vendedor es el propietario registrado validado en el paso 1:
+          // siembra su documento (editable) desde owner_document_* de la consulta.
+          seedDocumentoFromOwner
         />
       );
 

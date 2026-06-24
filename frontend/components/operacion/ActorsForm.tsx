@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useState,
@@ -47,6 +48,14 @@ interface Props {
    * explícitamente o de forma implícita cuando el form es de un solo comprador.
    */
   layout?: 'split';
+  /**
+   * Siembra el documento del actor (tipo + número) desde el documento del
+   * propietario capturado en el paso 1 de la consulta (`owner_document_*` en
+   * field_values), cuando el actor aún no tiene documento. Pensado para el paso
+   * "vendedor" del traspaso: en un traspaso estándar el vendedor ES el
+   * propietario registrado que validó el vehículo. El valor queda editable.
+   */
+  seedDocumentoFromOwner?: boolean;
 }
 
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
@@ -171,8 +180,19 @@ type RuntState =
  *
  * Expone `save()` vía ref para el patrón "Guardar y continuar" del wizard.
  */
+/** Tipos de documento válidos del selector (para validar el seed del paso 1). */
+const DOC_VALUES = new Set<ActorDocumentType>(DOC_OPTIONS.map((o) => o.value));
+
 export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsForm(
-  { instanceId, modalidad, roles: rolesProp, onSaved, embeddedInWizard = false, layout },
+  {
+    instanceId,
+    modalidad,
+    roles: rolesProp,
+    onSaved,
+    embeddedInWizard = false,
+    layout,
+    seedDocumentoFromOwner = false,
+  },
   ref,
 ) {
   const roles = useMemo(
@@ -192,6 +212,42 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
 
+  // Documento del propietario capturado en el paso 1 (`owner_document_*` en
+  // field_values), para sembrar el documento del vendedor cuando aún no lo tiene.
+  const [ownerSeed, setOwnerSeed] = useState<{
+    tipo: ActorDocumentType;
+    numero: string;
+  } | null>(null);
+
+  // Carga el documento del propietario desde los field_values de la instancia.
+  // Solo aplica cuando `seedDocumentoFromOwner` (paso vendedor del traspaso).
+  useEffect(() => {
+    if (!seedDocumentoFromOwner || !instanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(instanceId)
+      .then((detail) => {
+        if (!active || !detail?.fieldValues) return;
+        const byKey = (key: string) =>
+          detail.fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
+        const numero = byKey('owner_document_number');
+        if (!numero) return;
+        const tipoRaw = byKey('owner_document_type') as ActorDocumentType;
+        setOwnerSeed({ numero, tipo: DOC_VALUES.has(tipoRaw) ? tipoRaw : 'CC' });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [seedDocumentoFromOwner, instanceId]);
+
+  // Aplica el documento del propietario (paso 1) a un actor sin documento. No
+  // pisa un documento ya escrito/persistido: solo siembra el campo vacío.
+  const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
+    ownerSeed && !a.numeroDocumento.trim()
+      ? { ...a, numeroDocumento: ownerSeed.numero, tipoDocumento: ownerSeed.tipo }
+      : a;
+
   // Rehidrata desde el backend cuando llegan actores cargados, respetando los
   // roles de la modalidad (rellena los faltantes con vacíos).
   const loadedKey = state.actors
@@ -203,10 +259,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors(
       roles.map((rol) => {
         const found = state.actors?.find((a) => a.rol === rol);
-        return found ? { ...emptyActor(rol), ...found } : emptyActor(rol);
+        return withOwnerSeed(found ? { ...emptyActor(rol), ...found } : emptyActor(rol));
       }),
     );
   }
+
+  // El seed puede llegar después de la rehidratación (fetch async). Cuando
+  // aterriza, completa el documento del actor si seguía vacío.
+  useEffect(() => {
+    if (!ownerSeed) return;
+    setActors((prev) => prev.map(withOwnerSeed));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerSeed]);
 
   // Split implícito: un único comprador. Explícito: layout='split'.
   const isSplit =
