@@ -235,10 +235,17 @@ public static class InfrastructureExtensions
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
     {
-        // HU #10233 — Kyverum Verify. Config primero (appsettings/`Kyverum__*`), fallback a env crudas
-        // KYVERUM_* (mismo patrón que Verifik). La API key y el secreto del webhook NUNCA se loguean.
-        string? Cfg(string key, string env) =>
-            configuration[key] ?? Environment.GetEnvironmentVariable(env);
+        // HU #10233 — Kyverum Verify. Env var CRUDA primero (override de deploy 12-factor),
+        // fallback a configuration (appsettings/user-secrets/`Kyverum__*`). Es OBLIGATORIO este
+        // orden: appsettings.json base define valores no-nulos (Provider="mock", ApiKey="") que,
+        // con la precedencia inversa, "taparían" las env vars del contenedor y nunca se leerían.
+        // Un env var vacío/whitespace se trata como ausente → cae al fallback de config.
+        // La API key y el secreto del webhook NUNCA se loguean.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
 
         // Feature flag de proveedor (AC4): mock por defecto ⇒ no rompe la regresión Slice 6.
         var biometrics = new BiometricsProviderOptions
