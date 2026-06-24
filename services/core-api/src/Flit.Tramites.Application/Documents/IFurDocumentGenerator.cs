@@ -3,7 +3,11 @@ namespace Flit.Tramites.Application.Documents;
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
 public sealed record DocumentParte(string Rol, string? Nombre, string? Documento, string? Email);
 
-/// <summary>Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).</summary>
+/// <summary>
+/// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
+/// Los campos HU #10256 (motor, chasis, serie, carrocería, servicio, capacidad, peso, ejes)
+/// son opcionales para compatibilidad con call-sites existentes; el PDF los muestra como "-".
+/// </summary>
 public sealed record VehiculoDatos(
     string? Marca,
     string? Linea,
@@ -13,7 +17,16 @@ public sealed record VehiculoDatos(
     string? Combustible,
     string? Cilindraje,
     string? Vin,
-    string? Placa);
+    string? Placa,
+    // HU #10256 — datos ampliados desde field_values RUNT/Verifik
+    string? NumeroMotor    = null,
+    string? NumeroChasis   = null,
+    string? NumeroSerie    = null,
+    string? TipoCarroceria = null,
+    string? TipoServicio   = null,
+    string? Capacidad      = null,
+    string? PesoBruto      = null,
+    string? NumeroEjes     = null);
 
 /// <summary>Organismo de tránsito seleccionado (de field_values transit_office_*).</summary>
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);
