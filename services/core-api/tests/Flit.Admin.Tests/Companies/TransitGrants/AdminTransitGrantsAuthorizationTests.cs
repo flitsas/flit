@@ -9,9 +9,8 @@ namespace Flit.Admin.Tests.Companies.TransitGrants;
 
 /// <summary>
 /// Contrato de autorización de la API de organismos de tránsito y audit log
-/// (HU #10192): el catálogo (AC1), los grants (AC2/AC3/AC5) y el historial (AC4)
-/// exigen rol SuperAdmin — sin token → 401; con rol no SuperAdmin → 403. La
-/// autorización corta la petición antes de tocar la base de datos.
+/// (HU #10192): el catálogo (AC1) exige SuperAdmin u ot_admin; los grants (AC2/AC3/AC5)
+/// y el historial (AC4) exigen rol SuperAdmin — sin token → 401; con rol no autorizado → 403.
 ///
 /// Uso de ejemplo:
 /// <code>
@@ -45,10 +44,24 @@ public sealed class AdminTransitGrantsAuthorizationTests
     }
 
     [Fact]
-    public async Task Catalog_WithNonSuperAdmin_Returns403()
+    public async Task Catalog_WithNonOtModuleRole_Returns403()
     {
         var response = await Operador().GetAsync(CatalogUrl);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Catalog_WithOtAdmin_Returns200()
+    {
+        var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                TestTokenFactory.CreateOtAdminToken(tenantId));
+
+        var response = await client.GetAsync(CatalogUrl);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

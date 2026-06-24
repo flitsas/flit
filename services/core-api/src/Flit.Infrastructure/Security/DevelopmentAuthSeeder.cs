@@ -15,6 +15,8 @@ public static class DevelopmentAuthSeeder
 {
     public const string DemoEmail = "demo@flit.local";
     public const string DemoPassword = "DemoPass1!";
+    public const string OtAdminEmail = "otadmin@flit.local";
+    public const string OtAdminPassword = "OtAdminPass1!";
     public const string DemoTenantCode = "DEMO";
 
     public static async Task SeedAsync(
@@ -38,7 +40,10 @@ public static class DevelopmentAuthSeeder
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
 
         if (await db.Users.AnyAsync(u => u.Email == DemoEmail, cancellationToken))
+        {
+            await EnsureOtAdminUserAsync(db, passwordHasher, cancellationToken: cancellationToken);
             return;
+        }
 
         var tenantId = Guid.CreateVersion7();
         var userId = Guid.CreateVersion7();
@@ -133,6 +138,80 @@ public static class DevelopmentAuthSeeder
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
+            UserId = userId,
+            RoleId = roleId,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await EnsureOtAdminUserAsync(db, passwordHasher, tenantId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Usuario demo ot_admin para validar el módulo OT en Development (HU #10218).
+    /// Comparte el tenant DEMO con el SuperAdmin de prueba.
+    /// </summary>
+    private static async Task EnsureOtAdminUserAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        Guid? tenantId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (await db.Users.AnyAsync(u => u.Email == OtAdminEmail, cancellationToken))
+            return;
+
+        var resolvedTenantId = tenantId
+            ?? await db.Tenants
+                .Where(t => t.Code == DemoTenantCode)
+                .Select(t => t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        if (resolvedTenantId == Guid.Empty)
+            return;
+
+        var userId = Guid.CreateVersion7();
+        var roleId = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Email = OtAdminEmail,
+            DisplayName = "Administrador OT Demo",
+            Status = "active",
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = userId,
+            PasswordHash = passwordHasher.Hash(OtAdminPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.Roles.Add(new Role
+        {
+            Id = roleId,
+            TenantId = resolvedTenantId,
+            Code = "ot_admin",
+            Name = "Administrador OT",
+            IsSystem = true,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = resolvedTenantId,
             UserId = userId,
             RoleId = roleId,
             AssignedAt = now,

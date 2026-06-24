@@ -9,7 +9,7 @@ using Xunit;
 namespace Flit.Admin.Tests.OtProfile;
 
 /// <summary>
-/// Autorización de endpoints OT admin (HU #10215) — exigen rol ot_admin y tenant_id en JWT.
+/// Autorización de endpoints OT admin (HU #10215) — exigen SuperAdmin u ot_admin y tenant_id en JWT.
 /// </summary>
 public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -31,7 +31,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
     }
 
     [Fact]
-    public async Task GetProfile_WithNonOtAdminRole_Returns403()
+    public async Task GetProfile_WithNonOtModuleRole_Returns403()
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization =
@@ -41,7 +41,33 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
-        body!.Error.Should().Be("Acceso restringido: se requiere rol ot_admin");
+        body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin u ot_admin");
+    }
+
+    [Fact]
+    public async Task GetProfile_WithSuperAdminToken_Returns401WhenMissingTenantClaim()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("SuperAdmin"));
+
+        var response = await client.GetAsync(ProfileUrl);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetProfile_WithSuperAdminAndTenant_IsAuthorized()
+    {
+        var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                TestTokenFactory.CreateOtAdminToken(tenantId, "SuperAdmin"));
+
+        var response = await client.GetAsync(ProfileUrl);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

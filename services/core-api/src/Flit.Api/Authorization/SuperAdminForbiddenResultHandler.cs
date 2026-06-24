@@ -44,6 +44,12 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
             .SelectMany(r => r.AllowedRoles)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        if (roles.Contains(AdminAuthorization.OtAdminRole)
+            && roles.Contains(AdminAuthorization.SuperAdminRole))
+        {
+            return AdminAuthorization.OtModuleForbiddenMessage;
+        }
+
         return roles.Contains(AdminAuthorization.OtAdminRole)
             ? AdminAuthorization.OtAdminForbiddenMessage
             : AdminAuthorization.ForbiddenMessage;

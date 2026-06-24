@@ -6,7 +6,8 @@ namespace Flit.Api.Endpoints;
 
 /// <summary>
 /// Endpoint del catálogo estático de organismos de tránsito (HU #10192, RF13, AC1).
-/// Exige rol SuperAdmin (RF01). El catálogo es estático en memoria — no consulta BD.
+/// Exige rol SuperAdmin u ot_admin (módulo OT — HU #10218 / #10236). El catálogo es
+/// estático en memoria — no consulta BD.
 /// </summary>
 public static class AdminTransitOfficesEndpoints
 {
@@ -16,7 +17,7 @@ public static class AdminTransitOfficesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/transit-offices")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.OtModulePolicy)
             .WithTags("Admin · Compañías");
 
         // GET /api/v1/admin/transit-offices?search= — catálogo con búsqueda opcional (#10192 AC1).
@@ -24,7 +25,7 @@ public static class AdminTransitOfficesEndpoints
             .WithName("AdminTransitOfficesSearch")
             .WithSummary("Busca en el catálogo de Organismos de Tránsito")
             .WithDescription("Catálogo estático (en memoria) de Organismos de Tránsito con búsqueda opcional "
-                + "por nombre/código vía el parámetro search. Requiere SuperAdmin.")
+                + "por nombre/código vía el parámetro search. Requiere SuperAdmin u ot_admin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);

@@ -42,7 +42,7 @@ public static class AdminOtEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/ot")
-            .RequireAuthorization(AdminAuthorization.OtAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.OtModulePolicy)
             .WithTags("Admin · OT");
 
         group.MapGet("/profile", GetProfileAsync)
