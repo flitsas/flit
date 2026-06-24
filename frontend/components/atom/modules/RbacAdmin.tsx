@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, X } from "lucide-react";
-import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem } from "@/lib/api/superadmin-client";
+import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, X } from "lucide-react";
+import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
@@ -21,6 +21,7 @@ export function RbacAdmin() {
   const [permissions, setPermissions] = useState<Record<string, RbacPermission[]>>({});
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [createPermissionForModule, setCreatePermissionForModule] = useState<RbacModule | null>(null);
+  const [grantsForModule, setGrantsForModule] = useState<RbacModule | null>(null);
 
   async function loadModules() {
     setLoading(true);
@@ -60,6 +61,15 @@ export function RbacAdmin() {
   async function handleDeactivateModule(id: string) {
     try {
       await superadminClient.deactivateModule(id);
+      loadModules();
+    } catch {
+      /* silent */
+    }
+  }
+
+  async function handleActivateModule(id: string) {
+    try {
+      await superadminClient.activateModule(id);
       loadModules();
     } catch {
       /* silent */
@@ -133,7 +143,7 @@ export function RbacAdmin() {
         <div
           className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
           style={{
-            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
+            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
             background: "#DFE5ED",
             color: "#162744",
           }}
@@ -144,6 +154,7 @@ export function RbacAdmin() {
           <div>Descripción</div>
           <div className="text-center">Permisos</div>
           <div className="text-center">Activo</div>
+          <div className="text-center">Empresas</div>
           <div className="text-right">Acciones</div>
         </div>
 
@@ -167,7 +178,7 @@ export function RbacAdmin() {
               <div
                 className="grid items-center px-4 py-3 border-b text-xs"
                 style={{
-                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
+                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
                   borderColor: "#DFE5ED",
                 }}
               >
@@ -196,8 +207,18 @@ export function RbacAdmin() {
                     {mod.isActive ? "Activo" : "Inactivo"}
                   </span>
                 </div>
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => setGrantsForModule(mod)}
+                    aria-label="Gestionar empresas"
+                    className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
+                    style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 <div className="flex justify-end gap-1">
-                  {mod.isActive && (
+                  {mod.isActive ? (
                     <button
                       onClick={() => handleDeactivateModule(mod.id)}
                       aria-label="Desactivar módulo"
@@ -205,6 +226,15 @@ export function RbacAdmin() {
                       style={{ borderColor: "#DFE5ED" }}
                     >
                       <PowerOff className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleActivateModule(mod.id)}
+                      aria-label="Activar módulo"
+                      className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
+                      style={{ borderColor: "#DFE5ED", color: "#00DBD5" }}
+                    >
+                      <Power className="h-3.5 w-3.5" />
                     </button>
                   )}
                   <button
@@ -273,6 +303,14 @@ export function RbacAdmin() {
             setShowCreateModule(false);
             loadModules();
           }}
+        />
+      )}
+
+      {/* Modal gestión empresas (grants) */}
+      {grantsForModule && (
+        <ModuleGrantsModal
+          module={grantsForModule}
+          onClose={() => setGrantsForModule(null)}
         />
       )}
 
@@ -612,6 +650,102 @@ function CreateModuleModal({
             {loading ? "Creando…" : "Crear módulo"}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function ModuleGrantsModal({
+  module,
+  onClose,
+}: {
+  module: RbacModule;
+  onClose: () => void;
+}) {
+  const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [grants, setGrants] = useState<TenantModuleGrantItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      superadminClient.listCompanies().then((r) => r.data),
+      superadminClient.listModuleGrants(module.id),
+    ])
+      .then(([c, g]) => { setCompanies(c); setGrants(g); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [module.id]);
+
+  const grantedIds = new Set(grants.map((g) => g.tenantId));
+
+  async function handleToggle(tenantId: string, isGranted: boolean) {
+    setBusy((b) => ({ ...b, [tenantId]: true }));
+    try {
+      if (isGranted) {
+        await superadminClient.revokeModuleFromTenant(module.id, tenantId);
+        setGrants((g) => g.filter((x) => x.tenantId !== tenantId));
+      } else {
+        await superadminClient.grantModuleToTenant(module.id, tenantId);
+        const company = companies.find((c) => c.id === tenantId);
+        if (company) setGrants((g) => [...g, { tenantId, tenantName: company.razonSocial }]);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setBusy((b) => ({ ...b, [tenantId]: false }));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-lg font-bold">Empresas con acceso</h3>
+          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
+        </div>
+        <p className="text-xs opacity-60 mb-4">
+          Módulo: <strong>{module.name}</strong> ({module.code})
+        </p>
+        {loading ? (
+          <div className="py-8 text-center text-sm opacity-60">Cargando empresas…</div>
+        ) : companies.length === 0 ? (
+          <div className="py-8 text-center text-sm opacity-60">No hay empresas registradas.</div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {companies.map((c) => {
+              const granted = grantedIds.has(c.id);
+              return (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-[#F8FAFF] border"
+                  style={{ borderColor: granted ? "#00DBD5" : "#DFE5ED" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={granted}
+                    disabled={busy[c.id]}
+                    onChange={() => handleToggle(c.id, granted)}
+                    className="h-4 w-4 accent-[#557EFF]"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{c.razonSocial}</p>
+                    <p className="text-[11px] opacity-60">{c.nit}</p>
+                  </div>
+                  {busy[c.id] && <span className="ml-auto text-[10px] opacity-50">…</span>}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <button
+          onClick={onClose}
+          className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold text-white"
+          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+        >
+          Listo
+        </button>
       </div>
     </div>
   );

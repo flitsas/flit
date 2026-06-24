@@ -7,10 +7,11 @@ public interface ISecurityModuleRepository
     Task<SecurityModuleDetail?> GetByIdAsync(Guid id, CancellationToken ct);
     Task UpdateAsync(Guid id, UpdateModuleData data, CancellationToken ct);
     Task DeactivateAsync(Guid id, CancellationToken ct);
+    Task ActivateAsync(Guid id, CancellationToken ct);
     Task<bool> HasActivePermissionsAsync(Guid id, CancellationToken ct);
     Task SoftDeleteAsync(Guid id, CancellationToken ct);
     Task<IReadOnlyList<SecurityModuleSummary>> ListAsync(CancellationToken ct);
-    Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(IReadOnlyList<string> permissionSlugs, bool includeAll, CancellationToken ct);
+    Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(IReadOnlyList<string> permissionSlugs, bool includeAll, Guid? tenantId, CancellationToken ct);
 }
 
 public sealed record SecurityModuleData(string Code, string Name, string? Description, short SortOrder);

@@ -44,6 +44,11 @@ export interface RbacRole {
   createdAt: string;
 }
 
+export interface TenantModuleGrantItem {
+  tenantId: string;
+  tenantName: string;
+}
+
 export interface CompanyItem {
   id: string;
   nit: string;
@@ -158,10 +163,18 @@ export const superadminClient = {
     request<RbacModule[]>('/api/v1/superadmin/modules'),
   createModule: (body: { code: string; name: string; description?: string; sortOrder?: number }) =>
     request<RbacModule>('/api/v1/superadmin/modules', { method: 'POST', body: JSON.stringify(body) }),
+  activateModule: (id: string) =>
+    request<void>(`/api/v1/superadmin/modules/${id}/activate`, { method: 'PATCH' }),
   deactivateModule: (id: string) =>
     request<void>(`/api/v1/superadmin/modules/${id}/deactivate`, { method: 'PATCH' }),
   deleteModule: (id: string) =>
     request<void>(`/api/v1/superadmin/modules/${id}`, { method: 'DELETE' }),
+  listModuleGrants: (moduleId: string) =>
+    request<TenantModuleGrantItem[]>(`/api/v1/superadmin/modules/${moduleId}/grants`),
+  grantModuleToTenant: (moduleId: string, tenantId: string) =>
+    request<void>(`/api/v1/superadmin/modules/${moduleId}/grants/${tenantId}`, { method: 'POST' }),
+  revokeModuleFromTenant: (moduleId: string, tenantId: string) =>
+    request<void>(`/api/v1/superadmin/modules/${moduleId}/grants/${tenantId}`, { method: 'DELETE' }),
 
   // Permisos RBAC
   listPermissions: (moduleId: string) =>

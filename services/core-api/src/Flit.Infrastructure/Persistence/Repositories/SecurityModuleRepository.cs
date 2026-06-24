@@ -65,6 +65,16 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
                 ct);
     }
 
+    public async Task ActivateAsync(Guid id, CancellationToken ct)
+    {
+        await db.SecurityModules
+            .Where(x => x.Id == id && x.DeletedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.IsActive, true)
+                .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow),
+                ct);
+    }
+
     public async Task<bool> HasActivePermissionsAsync(Guid id, CancellationToken ct)
     {
         return await db.RbacActions
@@ -107,6 +117,7 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
     public async Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(
         IReadOnlyList<string> permissionSlugs,
         bool includeAll,
+        Guid? tenantId,
         CancellationToken ct)
     {
         var query = from m in db.SecurityModules.AsNoTracking()
@@ -115,7 +126,17 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
                     select new { m.Id, m.Code, m.Name, m.SortOrder, ActionId = a.Id, ActionSlug = a.Slug, ActionName = a.Name };
 
         if (!includeAll)
+        {
             query = query.Where(x => permissionSlugs.Contains(x.ActionSlug));
+
+            if (tenantId.HasValue)
+            {
+                var tid = tenantId.Value;
+                var hasGrants = await db.TenantModuleGrants.AnyAsync(g => g.TenantId == tid, ct);
+                if (hasGrants)
+                    query = query.Where(x => db.TenantModuleGrants.Any(g => g.TenantId == tid && g.ModuleId == x.Id));
+            }
+        }
 
         var rows = await query
             .OrderBy(x => x.SortOrder)

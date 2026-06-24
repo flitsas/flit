@@ -84,8 +84,9 @@ public static class SecurityEndpoints
             var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
             var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
             var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
+            Guid? tenantId = Guid.TryParse(caller.FindFirstValue("tenant_id"), out var tid) ? tid : null;
 
-            var modules = await handler.HandleAsync(permissions, isSuperAdmin, ct);
+            var modules = await handler.HandleAsync(permissions, isSuperAdmin, tenantId, ct);
             return Results.Ok(modules);
         }).WithName("ListAccessibleModules");
 

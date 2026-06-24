@@ -19,6 +19,7 @@ public static class DevelopmentAuthSeeder
 
     public const string DemoAdminCompanyEmail = "admin@empresa.local";
     public const string DemoAdminCompanyPassword = "AdminPass1!";
+    public const string DemoEmpresaTenantCode = "EMPRESA_DEMO";
 
     public static async Task SeedAsync(
         FlitDbContext db,
@@ -35,6 +36,7 @@ public static class DevelopmentAuthSeeder
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
+        await SeedTenantModuleGrantsAsync(db, cancellationToken);
     }
 
     private static async Task SeedSuperAdminAsync(
@@ -151,12 +153,28 @@ public static class DevelopmentAuthSeeder
         if (await db.Users.AnyAsync(u => u.Email == DemoAdminCompanyEmail, cancellationToken))
             return;
 
-        var demoTenant = await db.Tenants
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Code == DemoTenantCode, cancellationToken);
+        // AdminCompany vive en su PROPIO tenant (EMPRESA_DEMO), separado del tenant
+        // del SuperAdmin (DEMO). Esto garantiza aislamiento real en dev: AdminCompany
+        // solo ve usuarios de su propia compañía, no los del SuperAdmin.
+        var empresaTenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, cancellationToken);
 
-        if (demoTenant is null)
-            return;
+        if (empresaTenant is null)
+        {
+            empresaTenant = new Tenant
+            {
+                Id = Guid.CreateVersion7(),
+                Code = DemoEmpresaTenantCode,
+                LegalName = "Empresa Demo S.A.S",
+                TaxId = "9000000002",
+                TenantType = "standard",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                RowVersion = 0,
+            };
+            db.Tenants.Add(empresaTenant);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var userId = Guid.CreateVersion7();
         var roleId = Guid.CreateVersion7();
@@ -165,7 +183,7 @@ public static class DevelopmentAuthSeeder
         db.Roles.Add(new Role
         {
             Id = roleId,
-            TenantId = demoTenant.Id,
+            TenantId = empresaTenant.Id,
             Code = "AdminCompany",
             Name = "Administrador de Compañía",
             IsSystem = true,
@@ -179,7 +197,7 @@ public static class DevelopmentAuthSeeder
             Email = DemoAdminCompanyEmail,
             DisplayName = "Admin Empresa Demo",
             Status = "active",
-            HomeTenantId = demoTenant.Id,
+            HomeTenantId = empresaTenant.Id,
             CreatedAt = now,
             RowVersion = 0,
         });
@@ -200,7 +218,7 @@ public static class DevelopmentAuthSeeder
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {
             Id = Guid.CreateVersion7(),
-            TenantId = demoTenant.Id,
+            TenantId = empresaTenant.Id,
             UserId = userId,
             RoleId = roleId,
             AssignedAt = now,
@@ -293,6 +311,38 @@ public static class DevelopmentAuthSeeder
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedTenantModuleGrantsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var empresaTenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
+        if (empresaTenant is null) return;
+
+        // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac intencionalmente)
+        var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
+
+        var modules = await db.SecurityModules
+            .Where(m => grantedCodes.Contains(m.Code) && m.DeletedAt == null)
+            .ToListAsync(ct);
+
+        var existingModuleIds = await db.TenantModuleGrants
+            .Where(g => g.TenantId == empresaTenant.Id)
+            .Select(g => g.ModuleId)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var m in modules.Where(m => !existingModuleIds.Contains(m.Id)))
+        {
+            db.TenantModuleGrants.Add(new Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant
+            {
+                TenantId = empresaTenant.Id,
+                ModuleId = m.Id,
+                GrantedAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private static async Task ExecuteRawSqlScriptAsync(FlitDbContext db, string sql, CancellationToken cancellationToken)
