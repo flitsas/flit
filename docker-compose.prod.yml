@@ -84,14 +84,14 @@ services:
       VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
       VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
       INTEMPO_MODE: ${INTEMPO_MODE:-mock}
-      # SMTP — configurar en el .env del VPS (ver .env.prod.example)
+      # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
       Smtp__UseStartTls: ${SMTP_USE_STARTTLS:-true}
       Smtp__DisableAuthentication: ${SMTP_DISABLE_AUTH:-false}
-      Smtp__DefaultSenderEmail: ${SMTP_SENDER_EMAIL:-}
-      Smtp__DefaultSenderPassword: ${SMTP_SENDER_PASSWORD:-}
-      Smtp__DefaultSenderName: ${SMTP_SENDER_NAME:-FLIT Trámites}
+      Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
+      Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
+      Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:

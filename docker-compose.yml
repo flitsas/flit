@@ -26,20 +26,19 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
-      # SMTP → Mailhog (captura local, sin autenticación)
-      Smtp__Host: mailhog
-      Smtp__Port: "1025"
-      Smtp__UseStartTls: "false"
-      Smtp__DisableAuthentication: "true"
-      Smtp__DefaultSenderEmail: noreply@flit.local
-      Smtp__DefaultSenderName: FLIT Trámites
+      # SMTP → Office365
+      Smtp__Host: smtp.office365.com
+      Smtp__Port: "587"
+      Smtp__UseStartTls: "true"
+      Smtp__DisableAuthentication: "false"
+      Smtp__DefaultSenderEmail: tramitesvehiculos@flitsas.com
+      Smtp__DefaultSenderPassword: "TramitesNoti2024*"
+      Smtp__DefaultSenderName: FLIT Tramites
     ports:
       - "4003:8081"
     depends_on:
       postgres:
         condition: service_healthy
-      mailhog:
-        condition: service_started
     # volume configuration can be added if code changes need to be reflected dynamically (though usually require rebuilding for .NET unless dotnet watch is configured inside container)
 
   # ── Frontend: Next.js ─────────────────────────────────────────────────────
