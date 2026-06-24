@@ -57,7 +57,7 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
 
-        AddAttachmentStorage(services, configuration, environment);
+        AddAttachmentStorage(services, configuration);
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
 
@@ -120,25 +120,36 @@ public static class InfrastructureExtensions
         return services;
     }
 
-    private static void AddAttachmentStorage(
-        IServiceCollection services,
-        IConfiguration configuration,
-        IHostEnvironment environment)
+    private static void AddAttachmentStorage(IServiceCollection services, IConfiguration configuration)
     {
-        // Raíz configurable: ATTACHMENTS_ROOT (env) > sección Attachments:Root (config) >
-        // default {ContentRoot}/uploads/tramites. Relativa ⇒ se ancla al content root.
-        var configured = Environment.GetEnvironmentVariable("ATTACHMENTS_ROOT")
-            ?? configuration[$"{AttachmentStorageOptions.SectionName}:Root"];
+        // Adjuntos en el file-manager de la empresa (S3 vía presigned URLs). Sin disco, sin
+        // credenciales AWS en flit. Config primero (appsettings/`FileManager__*`), fallback a
+        // env crudas FILE_MANAGER_* (mismo patrón que Verifik/Kyverum).
+        string? Cfg(string key, string env) =>
+            configuration[key] ?? Environment.GetEnvironmentVariable(env);
 
-        string root;
-        if (string.IsNullOrWhiteSpace(configured))
-            root = Path.Combine(environment.ContentRootPath, "uploads", "tramites");
-        else if (Path.IsPathRooted(configured))
-            root = configured;
-        else
-            root = Path.Combine(environment.ContentRootPath, configured);
+        services.Configure<FileManagerOptions>(o =>
+        {
+            o.BaseUrl = Cfg("FileManager:BaseUrl", "FILE_MANAGER_BASE_URL") ?? o.BaseUrl;
+            o.FilesPath = Cfg("FileManager:FilesPath", "FILE_MANAGER_FILES_PATH") ?? o.FilesPath;
+            o.Category = Cfg("FileManager:Category", "FILE_MANAGER_CATEGORY") ?? o.Category;
+            o.TimeoutSeconds = int.TryParse(Cfg("FileManager:TimeoutSeconds", "FILE_MANAGER_TIMEOUT_SECONDS"), out var t)
+                ? t : o.TimeoutSeconds;
+            o.AuthToken = Cfg("FileManager:AuthToken", "FILE_MANAGER_AUTH_TOKEN") ?? o.AuthToken;
+        });
 
-        services.AddSingleton<IAttachmentStorage>(_ => new DiskAttachmentStorage(root));
+        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum). El BaseAddress apunta
+        // al file-manager; las subidas/descargas a S3 usan la presigned URL absoluta (lo ignora).
+        services.AddHttpClient<IAttachmentStorage, FileManagerAttachmentStorage>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FileManagerOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(o.BaseUrl))
+                throw new InvalidOperationException(
+                    "FileManager:BaseUrl (o FILE_MANAGER_BASE_URL) es obligatoria para el almacenamiento de adjuntos.");
+            var baseUrl = o.BaseUrl.EndsWith('/') ? o.BaseUrl : o.BaseUrl + "/";
+            c.BaseAddress = new Uri(baseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
     }
 
     private static void AddConsultationProviders(IServiceCollection services, IConfiguration configuration)
