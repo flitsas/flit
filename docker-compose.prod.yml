@@ -84,6 +84,15 @@ services:
       VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
       VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
       INTEMPO_MODE: ${INTEMPO_MODE:-mock}
+      # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
+      # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
+      # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
+      BIOMETRICS_PROVIDER: ${BIOMETRICS_PROVIDER:-mock}
+      KYVERUM_API_KEY: ${KYVERUM_API_KEY:-}
+      KYVERUM_BASE_URL: ${KYVERUM_BASE_URL:-https://verify.kyverum.com}
+      KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
+      KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
+      KYVERUM_WEBHOOK_CALLBACK_URL: ${KYVERUM_WEBHOOK_CALLBACK_URL:-}
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
