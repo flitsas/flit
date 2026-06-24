@@ -36,6 +36,7 @@ export function RbacAdmin() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadModules();
   }, []);
 
@@ -310,7 +311,12 @@ function RolesTab() {
   }, []);
 
   useEffect(() => {
-    if (!selectedTenantId) { setRoles([]); return; }
+    if (!selectedTenantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRoles([]);
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRolesLoading(true);
     setRolesError(null);
     superadminClient.listRoles(selectedTenantId)

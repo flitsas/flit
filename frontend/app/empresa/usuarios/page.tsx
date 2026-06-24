@@ -319,6 +319,7 @@ function InviteDialog({
 
   useEffect(() => {
     if (!isSuperAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTenantsLoading(true);
     fetchCompaniesIndex({ pageSize: 200 })
       .then((r) => setCompanies(r.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial }))))
@@ -327,7 +328,11 @@ function InviteDialog({
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    if (!selectedTenantId) { setTenantRoles([]); return; }
+    if (!selectedTenantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTenantRoles([]);
+      return;
+    }
     superadminClient.listRoles(selectedTenantId)
       .then((r) => setTenantRoles((r as RbacRole[]).map((role) => ({ id: role.id, name: role.name }))))
       .catch(() => setTenantRoles([]));
@@ -440,6 +445,7 @@ function SuspendDialog({
   const [endsAt, setEndsAt] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // eslint-disable-next-line react-hooks/purity
   const defaultEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 16);

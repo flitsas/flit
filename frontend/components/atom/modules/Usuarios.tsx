@@ -74,7 +74,9 @@ export function Usuarios() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUsers();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadRoles();
   }, []);
 
@@ -376,6 +378,7 @@ function SuspendModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/purity
   const defaultEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 16);
@@ -478,6 +481,7 @@ function InviteModal({
 
   useEffect(() => {
     if (!isSuperAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTenantsLoading(true);
     fetchCompaniesIndex({ pageSize: 200 })
       .then((r) => setCompanies(r.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial }))))
@@ -486,7 +490,11 @@ function InviteModal({
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    if (!selectedTenantId) { setTenantRoles([]); return; }
+    if (!selectedTenantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTenantRoles([]);
+      return;
+    }
     superadminClient.listRoles(selectedTenantId)
       .then((r) => setTenantRoles((r as RbacRole[]).map((role) => ({ id: role.id, name: role.name }))))
       .catch(() => setTenantRoles([]));

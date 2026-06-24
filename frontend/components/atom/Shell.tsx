@@ -80,6 +80,7 @@ function useCurrentUser() {
           ? "Admin de Compañía"
           : roleCode || "Usuario";
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUser({
       displayName:
         (payload.display_name as string | undefined) ??

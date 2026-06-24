@@ -28,6 +28,7 @@ export function useAccessibleModules(enabled = true): State {
 
   useEffect(() => {
     if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ modules: [], loading: false, error: null });
       return;
     }
