@@ -22,6 +22,7 @@ public sealed class CreateInvitationHandlerTests
     private static readonly Guid InvitedBy = Guid.NewGuid();
     private static readonly Guid InvitationId = Guid.NewGuid();
     private const string Email = "nuevo@flit.local";
+    private const string FullName = "Nuevo Usuario";
 
     public CreateInvitationHandlerTests()
     {
@@ -39,7 +40,7 @@ public sealed class CreateInvitationHandlerTests
         _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.HandleAsync(
-            new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+            new CreateInvitationCommand(TenantId, Email, FullName, RoleId, InvitedBy),
             CancellationToken.None);
 
         result.InvitationId.Should().Be(InvitationId);
@@ -49,12 +50,32 @@ public sealed class CreateInvitationHandlerTests
             Arg.Is<UserInvitationData>(d =>
                 d.TenantId == TenantId &&
                 d.Email == Email &&
+                d.FullName == FullName &&
                 d.RoleId == RoleId &&
                 d.TokenHash == "hash-abc" &&
                 d.InvitedBy == InvitedBy),
             Arg.Any<CancellationToken>());
         await _email.Received(1).SendAsync(
             Arg.Is<EmailMessage>(m => m.ToEmail == Email && m.HtmlBody.Contains("raw-token-abc")),
+            Arg.Any<CancellationToken>());
+    }
+
+    // AC: rol nulo → se omite validación de rol, se crea invitación sin rol
+    [Fact]
+    public async Task HandleAsync_NullRole_SkipsRoleValidationAndCreatesInvitation()
+    {
+        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.HandleAsync(
+            new CreateInvitationCommand(TenantId, Email, FullName, null, InvitedBy),
+            CancellationToken.None);
+
+        result.InvitationId.Should().Be(InvitationId);
+        result.EmailSent.Should().BeTrue();
+        await _repo.DidNotReceiveWithAnyArgs().RoleExistsInTenantAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).CreateAsync(
+            Arg.Is<UserInvitationData>(d => d.RoleId == null),
             Arg.Any<CancellationToken>());
     }
 
@@ -68,7 +89,7 @@ public sealed class CreateInvitationHandlerTests
             .ThrowsAsync(new InvalidOperationException("SMTP host unreachable"));
 
         var result = await _handler.HandleAsync(
-            new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+            new CreateInvitationCommand(TenantId, Email, FullName, RoleId, InvitedBy),
             CancellationToken.None);
 
         result.InvitationId.Should().Be(InvitationId);
@@ -85,7 +106,7 @@ public sealed class CreateInvitationHandlerTests
 
         await _handler
             .Invoking(h => h.HandleAsync(
-                new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+                new CreateInvitationCommand(TenantId, Email, FullName, RoleId, InvitedBy),
                 CancellationToken.None))
             .Should().ThrowAsync<InvitationAlreadyPendingException>();
 
@@ -104,7 +125,7 @@ public sealed class CreateInvitationHandlerTests
         _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.HandleAsync(
-            new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+            new CreateInvitationCommand(TenantId, Email, FullName, RoleId, InvitedBy),
             CancellationToken.None);
 
         result.InvitationId.Should().Be(InvitationId);
@@ -119,7 +140,7 @@ public sealed class CreateInvitationHandlerTests
 
         await _handler
             .Invoking(h => h.HandleAsync(
-                new CreateInvitationCommand(TenantId, Email, RoleId, InvitedBy),
+                new CreateInvitationCommand(TenantId, Email, FullName, RoleId, InvitedBy),
                 CancellationToken.None))
             .Should().ThrowAsync<RoleNotFoundException>();
 

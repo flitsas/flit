@@ -117,7 +117,7 @@ export function Login({
       >
         <ParticlesCanvas />
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
-          <img src={logo} alt="FLIT 2.0" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain brightness-0 invert" />
+          <img src={logo} alt="FLIT 2.0" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
         </div>
         <a
           href="#"

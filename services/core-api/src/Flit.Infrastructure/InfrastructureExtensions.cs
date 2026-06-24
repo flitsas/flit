@@ -11,6 +11,10 @@ using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.Modules;
+using Flit.Modules.Security.Domain.Permissions;
+using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
@@ -72,6 +76,18 @@ public static class InfrastructureExtensions
         // Recuperación de contraseña (HU #10169): repos, generador de token y email.
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+
+        // HU #10161 — CRUD módulos dinámicos Super Admin
+        services.AddScoped<ISecurityModuleRepository, SecurityModuleRepository>();
+
+        // HU #10162 — CRUD permisos granulares Super Admin
+        services.AddScoped<IPermissionRepository, PermissionRepository>();
+
+        // HU #10163 — CRUD roles y asociación de permisos Super Admin
+        services.AddScoped<IRoleRepository, RoleRepository>();
+
+        // HU #10164 — Asignación única de rol por usuario tenant
+        services.AddScoped<IUserRoleAssignmentRepository, UserRoleAssignmentRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();

@@ -11,6 +11,12 @@ public static class AdminAuthorization
     /// <summary>Valor del claim de rol que concede acceso multi-tenant.</summary>
     public const string SuperAdminRole = "SuperAdmin";
 
+    /// <summary>Nombre de la policy que permite acceso a AdminCompany o SuperAdmin.</summary>
+    public const string AdminCompanyPolicy = "AdminCompany";
+
+    /// <summary>Valor del claim de rol para administradores de compañía.</summary>
+    public const string AdminCompanyRole = "AdminCompany";
+
     /// <summary>
     /// Tipo de claim donde viaja el rol en el JWT FLIT. Se configura como
     /// <c>RoleClaimType</c> para que <c>RequireRole</c> / <c>IsInRole</c> lo evalúen.

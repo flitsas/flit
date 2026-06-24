@@ -1,11 +1,13 @@
-// Lógica pura del gate de acceso a /admin/* (HU #10194, AC6; HU #10218 OT admin).
+// Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "./jwt";
+import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
 
+export type UserRole = "superadmin" | "admincompany" | "user";
+
 export interface AdminAccessDecision {
-  /** `true` si el token corresponde a un SuperAdmin válido. */
+  /** `true` si el token corresponde a un usuario con acceso permitido. */
   allowed: boolean;
   /** Ruta de redirección cuando `allowed` es `false`. */
   redirectTo?: string;
@@ -39,6 +41,30 @@ export function evaluateAdminAccess(
   }
 
   return { allowed: false, redirectTo: FORBIDDEN_PATH };
+}
+
+/**
+ * Evalúa si un token habilita el acceso a la sección de empresa (/empresa/*).
+ * Permitido para AdminCompany y SuperAdmin.
+ */
+export function evaluateEmpresaAccess(token: string | null | undefined): AdminAccessDecision {
+  const payload = decodeJwtPayload(token);
+
+  if (payload && (isSuperAdmin(payload) || isAdminCompany(payload))) {
+    return { allowed: true };
+  }
+
+  return { allowed: false, redirectTo: FORBIDDEN_PATH };
+}
+
+/**
+ * Devuelve el rol del usuario a partir del token JWT.
+ */
+export function getUserRole(token: string | null | undefined): UserRole {
+  const payload = decodeJwtPayload(token);
+  if (payload && isSuperAdmin(payload)) return "superadmin";
+  if (payload && isAdminCompany(payload)) return "admincompany";
+  return "user";
 }
 
 /** Ruta de inicio (dashboard) a la que vuelve un usuario ya autenticado. */

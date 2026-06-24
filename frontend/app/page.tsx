@@ -10,21 +10,29 @@ import { Reportes } from "@/components/atom/modules/Reportes";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
+import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { getToken } from "@/lib/api/client";
 import { clearToken, getRememberedEmail } from "@/lib/auth/session";
+import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 
-const VALID_MODULES: ModuleId[] = ["dashboard", "tramites", "reportes", "validaciones", "usuarios", "ayuda"];
+const ALL_MODULE_IDS: ModuleId[] = ["dashboard", "tramites", "reportes", "validaciones", "usuarios", "ayuda", "rbac"];
 
-function parseModule(raw: string | null): ModuleId {
-  return VALID_MODULES.includes(raw as ModuleId) ? (raw as ModuleId) : "dashboard";
+function parseModule(raw: string | null, valid: ModuleId[]): ModuleId {
+  const allowed = valid.length > 0 ? valid : ALL_MODULE_IDS;
+  return allowed.includes(raw as ModuleId) ? (raw as ModuleId) : "dashboard";
 }
 
 function HomeContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [authed, setAuthed] = useState(false);
-  const [module, setModule] = useState<ModuleId>(() => parseModule(params.get("m")));
   const [hydrated, setHydrated] = useState(false);
+  const { modules: accessibleModules } = useAccessibleModules(authed);
+
+  const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
+  const validModules = accessibleCodes.length > 0 ? accessibleCodes : ALL_MODULE_IDS;
+
+  const [module, setModule] = useState<ModuleId>(() => parseModule(params.get("m"), []));
 
   useEffect(() => {
     // Token solo disponible en cliente; se lee tras el montaje.
@@ -35,7 +43,7 @@ function HomeContent() {
 
   // Sync active module with URL so the browser back/forward and deep-links work.
   useEffect(() => {
-    const fromUrl = parseModule(params.get("m"));
+    const fromUrl = parseModule(params.get("m"), validModules);
     if (fromUrl !== module) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setModule(fromUrl);
@@ -76,13 +84,19 @@ function HomeContent() {
   }
 
   return (
-    <Shell active={module} onNav={handleNav} onLogout={handleLogout}>
+    <Shell
+      active={module}
+      onNav={handleNav}
+      onLogout={handleLogout}
+      visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}
+    >
       {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
       {module === "tramites"     && <Tramites />}
       {module === "reportes"     && <Reportes />}
       {module === "validaciones" && <Validaciones />}
       {module === "usuarios"     && <Usuarios />}
       {module === "ayuda"        && <Ayuda />}
+      {module === "rbac"         && <RbacAdmin />}
     </Shell>
   );
 }

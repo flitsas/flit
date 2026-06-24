@@ -73,6 +73,9 @@ public static class ApiSecurityExtensions
             .AddPolicy(AdminAuthorization.SuperAdminPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireRole(AdminAuthorization.SuperAdminRole))
+            .AddPolicy(AdminAuthorization.AdminCompanyPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .AddRequirements(new AdminCompanyRequirement()))
             .AddPolicy(AdminAuthorization.OtAdminPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireRole(AdminAuthorization.OtAdminRole))

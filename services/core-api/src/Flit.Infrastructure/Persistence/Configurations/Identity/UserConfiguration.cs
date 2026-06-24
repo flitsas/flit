@@ -19,6 +19,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(x => x.DisplayName).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.HomeTenantId).IsRequired(false);
 
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();

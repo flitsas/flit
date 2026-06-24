@@ -5,7 +5,7 @@ import { clearToken, emitSessionExpired } from "@/lib/auth/session";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4002";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 /**
  * Obtiene el JWT en cliente: primero cookie `flit_token`, luego localStorage
@@ -54,7 +54,8 @@ export interface RequestOptions {
  */
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, signal } = options;
-  const url = new URL(path, API_BASE_URL);
+  const base = API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(path, base);
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {

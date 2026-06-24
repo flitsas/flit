@@ -5,7 +5,11 @@
 export interface JwtPayload {
   sub?: string;
   role?: string;
+  role_code?: string;
   roles?: string[];
+  permissions?: string[];
+  tenant_id?: string;
+  role_id?: string;
   exp?: number;
   [key: string]: unknown;
 }
@@ -16,8 +20,11 @@ export const TOKEN_COOKIE = "flit_token";
 /** Clave de localStorage de respaldo para el JWT en cliente. */
 export const TOKEN_STORAGE_KEY = "flit:jwt";
 
-/** Rol requerido para la consola de administración de compañías. */
+/** Rol requerido para la consola de administración global. */
 export const SUPER_ADMIN_ROLE = "SuperAdmin";
+
+/** Rol requerido para administración de empresa. */
+export const ADMIN_COMPANY_ROLE = "AdminCompany";
 
 /** Rol requerido para la consola OT (HU #10218). */
 export const OT_ADMIN_ROLE = "ot_admin";
@@ -56,11 +63,31 @@ export function isSuperAdmin(payload: JwtPayload | null): boolean {
   }
 
   const target = SUPER_ADMIN_ROLE.toLowerCase();
+  if (typeof payload.role_code === "string" && payload.role_code.toLowerCase() === target) {
+    return true;
+  }
   if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
     return true;
   }
-
   return Array.isArray(payload.roles) && payload.roles.some((r) => r?.toLowerCase() === target);
+}
+
+/**
+ * Indica si el payload contiene el rol AdminCompany.
+ */
+export function isAdminCompany(payload: JwtPayload | null): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  const target = ADMIN_COMPANY_ROLE.toLowerCase();
+  if (typeof payload.role_code === "string" && payload.role_code.toLowerCase() === target) {
+    return true;
+  }
+  if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -85,11 +112,9 @@ function base64UrlDecode(value: string): string {
 
   if (typeof atob === "function") {
     const binary = atob(padded);
-    // Reconstituye UTF-8 a partir de los bytes latin1 que devuelve atob.
     const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
     return new TextDecoder().decode(bytes);
   }
 
-  // Respaldo Node (tests/SSR sin atob).
   return Buffer.from(padded, "base64").toString("utf8");
 }

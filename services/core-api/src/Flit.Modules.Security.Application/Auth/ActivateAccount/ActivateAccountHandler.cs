@@ -28,6 +28,7 @@ public sealed class ActivateAccountHandler(
             new ActivationData(
                 invitation.InvitationId,
                 invitation.Email,
+                invitation.FullName,
                 passwordHash,
                 invitation.TenantId,
                 invitation.RoleId,

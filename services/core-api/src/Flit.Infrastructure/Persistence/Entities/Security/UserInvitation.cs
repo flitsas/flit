@@ -8,7 +8,9 @@ public sealed class UserInvitation : AuditableEntity
 
     public string Email { get; set; } = string.Empty;
 
-    public Guid RoleId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+
+    public Guid? RoleId { get; set; }
 
     public string TokenHash { get; set; } = string.Empty;
 
