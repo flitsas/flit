@@ -1,5 +1,6 @@
 using System.Text;
 using Flit.Tramites.Application.Biometrics;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
@@ -27,7 +28,7 @@ public sealed class BiometricaHandlerTests
         _iniciar = new IniciarBiometriaHandler(_repo);
         _getByToken = new GetBiometriaByTokenHandler(_repo);
         _completar = new CompletarBiometriaHandler(_repo, _storage, _scorer);
-        _list = new ListBiometriaHandler(_repo);
+        _list = new ListBiometriaHandler(_repo, new BiometricsProviderOptions());
         _simular = new SimularBiometriaHandler(_repo);
     }
 
