@@ -35,6 +35,19 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
+        // HU #10233 — Kyverum Verify.
+        builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired().HasDefaultValue("mock");
+        builder.Property(x => x.KyverumVerificationId).HasColumnName("kyverum_verification_id").HasMaxLength(200);
+        builder.Property(x => x.CaptureUrl).HasColumnName("capture_url").HasMaxLength(2000);
+        builder.Property(x => x.WebhookSecretEncrypted).HasColumnName("webhook_secret_encrypted").HasMaxLength(2000);
+        builder.Property(x => x.ProviderStatus).HasColumnName("provider_status").HasMaxLength(40);
+        builder.Property(x => x.ProviderPayload).HasColumnName("provider_payload").HasColumnType("jsonb");
+
+        builder.HasIndex(x => x.KyverumVerificationId)
+            .IsUnique()
+            .HasDatabaseName("uq_procedure_instance_biometric_validations_kyverum_verification_id")
+            .HasFilter("kyverum_verification_id IS NOT NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_biometric_validations_tenant_id_instance");
 

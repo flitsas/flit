@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -12,12 +13,16 @@ internal static class BiometricaEndpoints
     {
         var group = app.MapGroup("/api/v1/tramites");
 
-        // POST iniciar biométrica de una parte -> 201 { validation, token, magicLinkPath }
+        // POST iniciar biométrica de una parte. Según el flag Biometrics:Provider (AC4):
+        //  - mock     -> 201 { validation, token, magicLinkPath } (flujo Slice 6, magic-link 3 fotos)
+        //  - kyverum  -> 201 { validation, captureUrl } (HU #10233, captura remota + webhook)
         group.MapPost("/instances/{id:guid}/biometric", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             [FromBody] IniciarBiometriaInput? body,
-            IniciarBiometriaHandler handler,
+            BiometricsProviderOptions providerOptions,
+            IniciarBiometriaHandler mockHandler,
+            IniciarKyverumVerifyHandler kyverumHandler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -25,7 +30,23 @@ internal static class BiometricaEndpoints
             if (body is null)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body, ct);
+            if (providerOptions.IsKyverum)
+            {
+                var (kResult, kError) = await kyverumHandler.HandleAsync(id, tenantId.Value, body, ct);
+                return kError switch
+                {
+                    "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
+                    "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
+                    "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado draft."),
+                    "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
+                    "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                    "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                    _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{kResult!.Validation.Id}", kResult),
+                };
+            }
+
+            var (result, error) = await mockHandler.HandleAsync(id, tenantId.Value, body, ct);
             return error switch
             {
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
