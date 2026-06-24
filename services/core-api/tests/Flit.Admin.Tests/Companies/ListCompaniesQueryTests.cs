@@ -26,7 +26,7 @@ public sealed class ListCompaniesQueryTests
             Company("900100002", "Beta SAS", active: true, created: "2026-03-15"),
             Company("900100003", "Gamma SAS", active: false, created: "2026-02-20"));
 
-        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 1, PageSize = 20 });
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 1, PageSize = 20 }, TestContext.Current.CancellationToken);
 
         result.Page.Should().Be(1);
         result.PageSize.Should().Be(20);
@@ -45,8 +45,8 @@ public sealed class ListCompaniesQueryTests
             Company("900200002", "Dos", active: true, created: "2026-01-02"),
             Company("900200003", "Tres", active: true, created: "2026-01-03"));
 
-        var page1 = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 1, PageSize = 2 });
-        var page2 = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 2, PageSize = 2 });
+        var page1 = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 1, PageSize = 2 }, TestContext.Current.CancellationToken);
+        var page2 = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 2, PageSize = 2 }, TestContext.Current.CancellationToken);
 
         page1.TotalCount.Should().Be(3);
         page1.Data.Select(c => c.RazonSocial).Should().ContainInOrder("Tres", "Dos");
@@ -60,7 +60,7 @@ public sealed class ListCompaniesQueryTests
         await using var ctx = NewContext();
         Seed(ctx, Company("900300001", "Solo", active: true, created: "2026-01-01"));
 
-        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 0, PageSize = null });
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 0, PageSize = null }, TestContext.Current.CancellationToken);
 
         result.Page.Should().Be(ListCompaniesHandler.DefaultPage);
         result.PageSize.Should().Be(ListCompaniesHandler.DefaultPageSize);
@@ -73,8 +73,7 @@ public sealed class ListCompaniesQueryTests
         await using var ctx = NewContext();
         Seed(ctx, Company("900400001", "Solo", active: true, created: "2026-01-01"));
 
-        var result = await Handler(ctx).HandleAsync(
-            new ListCompaniesQuery { Page = 1, PageSize = ListCompaniesHandler.MaxPageSize + 50 });
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Page = 1, PageSize = ListCompaniesHandler.MaxPageSize + 50 }, TestContext.Current.CancellationToken);
 
         result.PageSize.Should().Be(ListCompaniesHandler.MaxPageSize);
     }
@@ -89,7 +88,7 @@ public sealed class ListCompaniesQueryTests
             Company("900111111", "Alfa", active: true, created: "2026-01-01"),
             Company("800222222", "Beta", active: true, created: "2026-01-02"));
 
-        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Nit = "900" });
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Nit = "900" }, TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(1);
         result.Data.Should().ContainSingle().Which.Nit.Should().Be("900111111");
@@ -103,7 +102,7 @@ public sealed class ListCompaniesQueryTests
             Company("900111111", "FLIT Logística SAS", active: true, created: "2026-01-01"),
             Company("900222222", "Otra Empresa", active: true, created: "2026-01-02"));
 
-        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { RazonSocial = "flit" });
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { RazonSocial = "flit" }, TestContext.Current.CancellationToken);
 
         result.Data.Should().ContainSingle().Which.RazonSocial.Should().Be("FLIT Logística SAS");
     }
@@ -116,8 +115,8 @@ public sealed class ListCompaniesQueryTests
             Company("900111111", "Activa", active: true, created: "2026-01-01"),
             Company("900222222", "Inactiva", active: false, created: "2026-01-02"));
 
-        var actives = await Handler(ctx).HandleAsync(new ListCompaniesQuery { EstadoActivo = true });
-        var inactives = await Handler(ctx).HandleAsync(new ListCompaniesQuery { EstadoActivo = false });
+        var actives = await Handler(ctx).HandleAsync(new ListCompaniesQuery { EstadoActivo = true }, TestContext.Current.CancellationToken);
+        var inactives = await Handler(ctx).HandleAsync(new ListCompaniesQuery { EstadoActivo = false }, TestContext.Current.CancellationToken);
 
         actives.Data.Should().ContainSingle().Which.RazonSocial.Should().Be("Activa");
         inactives.Data.Should().ContainSingle().Which.RazonSocial.Should().Be("Inactiva");
@@ -137,7 +136,7 @@ public sealed class ListCompaniesQueryTests
         {
             FechaDesde = new DateOnly(2026, 1, 1),
             FechaHasta = new DateOnly(2026, 12, 31),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Select(c => c.RazonSocial).Should().BeEquivalentTo("Dentro1", "Dentro2");
     }
@@ -156,7 +155,7 @@ public sealed class ListCompaniesQueryTests
             Nit = "900",
             RazonSocial = "flit",
             EstadoActivo = true,
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Data.Should().ContainSingle().Which.RazonSocial.Should().Be("FLIT Activa");
     }
@@ -169,7 +168,7 @@ public sealed class ListCompaniesQueryTests
             Company("900111111", "A", active: true, created: "2026-01-01"),
             Company("900222222", "B", active: false, created: "2026-01-02"));
 
-        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery());
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery(), TestContext.Current.CancellationToken);
 
         result.TotalCount.Should().Be(2);
     }

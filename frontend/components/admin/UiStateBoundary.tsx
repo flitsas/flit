@@ -10,7 +10,7 @@ export type UiStatus = "loading" | "empty" | "error" | "ready";
 
 export interface UiStateBoundaryProps {
   status: UiStatus;
-  children: ReactNode;
+  children?: ReactNode;
   /** Texto del estado vacío. */
   emptyMessage?: string;
   /** CTA opcional del estado vacío. */

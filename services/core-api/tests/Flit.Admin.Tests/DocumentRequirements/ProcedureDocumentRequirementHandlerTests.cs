@@ -43,7 +43,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
             {
                 CreatedBy = Actor,
                 Request = new CreateProcedureDocumentRequirementRequest(ProcedureTypeId, ActiveDocId, 2, true),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.Created);
             result.Response.Should().NotBeNull();
@@ -55,7 +55,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.ProcedureDocumentRequirements.SingleAsync(r => r.Id == created.Response!.Id);
+        var row = await verify.ProcedureDocumentRequirements.SingleAsync(r => r.Id == created.Response!.Id, cancellationToken: TestContext.Current.CancellationToken);
         row.ProcedureTypeId.Should().Be(ProcedureTypeId);
         row.DocumentTypeId.Should().Be(ActiveDocId);
         row.DefaultSortOrder.Should().Be((short)2);
@@ -73,10 +73,10 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateProcedureDocumentRequirementCommand
         {
             Request = new CreateProcedureDocumentRequirementRequest(Guid.NewGuid(), ActiveDocId, 0, true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.ProcedureTypeNotFound);
-        (await ctx.ProcedureDocumentRequirements.CountAsync()).Should().Be(0);
+        (await ctx.ProcedureDocumentRequirements.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateProcedureDocumentRequirementCommand
         {
             Request = new CreateProcedureDocumentRequirementRequest(ProcedureTypeId, Guid.NewGuid(), 0, true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.DocumentTypeNotFound);
     }
@@ -110,17 +110,17 @@ public sealed class ProcedureDocumentRequirementHandlerTests
                 DefaultSortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var result = await Create(ctx).HandleAsync(new CreateProcedureDocumentRequirementCommand
         {
             Request = new CreateProcedureDocumentRequirementRequest(ProcedureTypeId, ActiveDocId, 1, false),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.ValidationFailed);
-        (await ctx.ProcedureDocumentRequirements.CountAsync()).Should().Be(1);
+        (await ctx.ProcedureDocumentRequirements.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Theory]
@@ -136,11 +136,11 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateProcedureDocumentRequirementCommand
         {
             Request = new CreateProcedureDocumentRequirementRequest(ProcedureTypeId, ActiveDocId, orden, obligatorio),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
-        (await ctx.ProcedureDocumentRequirements.CountAsync()).Should().Be(0);
+        (await ctx.ProcedureDocumentRequirements.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- AC5: documento inactivo rechazado ----------
@@ -155,11 +155,11 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateProcedureDocumentRequirementCommand
         {
             Request = new CreateProcedureDocumentRequirementRequest(ProcedureTypeId, InactiveDocId, 0, true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateProcedureDocumentRequirementOutcome.ValidationFailed);
         result.Error.Should().Be("El tipo de documento está inactivo y no puede asociarse a un trámite");
-        (await ctx.ProcedureDocumentRequirements.CountAsync()).Should().Be(0);
+        (await ctx.ProcedureDocumentRequirements.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     // ---------- AC2: GET lista por orden default asc ----------
@@ -175,13 +175,13 @@ public sealed class ProcedureDocumentRequirementHandlerTests
                 new ProcedureDocumentRequirement { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = InactiveDocId, IsMandatory = false, DefaultSortOrder = 5, CreatedAt = DateTimeOffset.UtcNow },
                 new ProcedureDocumentRequirement { Id = Guid.NewGuid(), ProcedureTypeId = ProcedureTypeId, DocumentTypeId = ActiveDocId, IsMandatory = true, DefaultSortOrder = 1, CreatedAt = DateTimeOffset.UtcNow },
                 new ProcedureDocumentRequirement { Id = Guid.NewGuid(), ProcedureTypeId = Guid.NewGuid(), DocumentTypeId = ActiveDocId, IsMandatory = true, DefaultSortOrder = 0, CreatedAt = DateTimeOffset.UtcNow });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var handler = new ListProcedureDocumentRequirementsHandler(new ProcedureDocumentRequirementRepository(ctx));
 
-        var result = await handler.HandleAsync(new ListProcedureDocumentRequirementsQuery { ProcedureTypeId = ProcedureTypeId });
+        var result = await handler.HandleAsync(new ListProcedureDocumentRequirementsQuery { ProcedureTypeId = ProcedureTypeId }, TestContext.Current.CancellationToken);
 
         result.Data.Should().HaveCount(2); // solo las del trámite consultado
         result.Data.Select(d => d.OrdenDefault).Should().ContainInOrder((short)1, (short)5);
@@ -208,7 +208,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
                 DefaultSortOrder = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
@@ -218,7 +218,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
             {
                 Id = id,
                 Request = new UpdateProcedureDocumentRequirementRequest(3, false),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(UpdateProcedureDocumentRequirementOutcome.Updated);
             result.Response!.OrdenDefault.Should().Be((short)3);
@@ -226,7 +226,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var row = await verify.ProcedureDocumentRequirements.SingleAsync(r => r.Id == id);
+        var row = await verify.ProcedureDocumentRequirements.SingleAsync(r => r.Id == id, cancellationToken: TestContext.Current.CancellationToken);
         row.DefaultSortOrder.Should().Be((short)3);
         row.IsMandatory.Should().BeFalse();
     }
@@ -241,7 +241,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
         {
             Id = Guid.NewGuid(),
             Request = new UpdateProcedureDocumentRequirementRequest(0, true),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(UpdateProcedureDocumentRequirementOutcome.NotFound);
     }
@@ -265,7 +265,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
                 DefaultSortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
@@ -273,12 +273,12 @@ public sealed class ProcedureDocumentRequirementHandlerTests
             var handler = new DeleteProcedureDocumentRequirementHandler(
                 new ProcedureDocumentRequirementRepository(act),
                 new AllowDeleteUsageGuard());
-            var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = id });
+            var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = id }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(DeleteProcedureDocumentRequirementOutcome.Deleted);
         }
 
         await using var verify = NewContext(db);
-        (await verify.ProcedureDocumentRequirements.AnyAsync(r => r.Id == id)).Should().BeFalse();
+        (await verify.ProcedureDocumentRequirements.AnyAsync(r => r.Id == id, cancellationToken: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
             new ProcedureDocumentRequirementRepository(ctx),
             new AllowDeleteUsageGuard());
 
-        var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(DeleteProcedureDocumentRequirementOutcome.NotFound);
     }
@@ -315,7 +315,7 @@ public sealed class ProcedureDocumentRequirementHandlerTests
                 DefaultSortOrder = 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using (var act = NewContext(db))
@@ -323,12 +323,12 @@ public sealed class ProcedureDocumentRequirementHandlerTests
             var handler = new DeleteProcedureDocumentRequirementHandler(
                 new ProcedureDocumentRequirementRepository(act),
                 new BlockDeleteUsageGuard());
-            var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = id });
+            var result = await handler.HandleAsync(new DeleteProcedureDocumentRequirementCommand { Id = id }, TestContext.Current.CancellationToken);
             result.Outcome.Should().Be(DeleteProcedureDocumentRequirementOutcome.InUse);
         }
 
         await using var verify = NewContext(db);
-        (await verify.ProcedureDocumentRequirements.AnyAsync(r => r.Id == id)).Should().BeTrue();
+        (await verify.ProcedureDocumentRequirements.AnyAsync(r => r.Id == id, cancellationToken: TestContext.Current.CancellationToken)).Should().BeTrue();
     }
 
     // ---------- Helpers ----------

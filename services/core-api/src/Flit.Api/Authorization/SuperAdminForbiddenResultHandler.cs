@@ -1,15 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Authorization.Policy;
 
 namespace Flit.Api.Authorization;
 
 /// <summary>
 /// Personaliza la respuesta 403 cuando la autorización falla por falta de rol
-/// (usuario autenticado pero sin SuperAdmin) devolviendo el cuerpo JSON
-/// <c>{ error: "Acceso restringido: se requiere rol SuperAdmin" }</c> (AC3).
+/// devolviendo un cuerpo JSON con el mensaje según la policy (SuperAdmin u ot_admin).
 ///
-/// El caso "no autenticado" (challenge → 401, AC4) se delega al handler por
-/// defecto, que no escribe cuerpo.
+/// El caso "no autenticado" (challenge → 401) se delega al handler por defecto.
 /// </summary>
 public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -28,7 +27,7 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response
-                .WriteAsJsonAsync(new { error = AdminAuthorization.ForbiddenMessage })
+                .WriteAsJsonAsync(new { error = ResolveForbiddenMessage(policy) })
                 .ConfigureAwait(false);
             return;
         }
@@ -36,5 +35,23 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
         await _defaultHandler
             .HandleAsync(next, context, policy, authorizeResult)
             .ConfigureAwait(false);
+    }
+
+    private static string ResolveForbiddenMessage(AuthorizationPolicy policy)
+    {
+        var roles = policy.Requirements
+            .OfType<RolesAuthorizationRequirement>()
+            .SelectMany(r => r.AllowedRoles)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (roles.Contains(AdminAuthorization.OtAdminRole)
+            && roles.Contains(AdminAuthorization.SuperAdminRole))
+        {
+            return AdminAuthorization.OtModuleForbiddenMessage;
+        }
+
+        return roles.Contains(AdminAuthorization.OtAdminRole)
+            ? AdminAuthorization.OtAdminForbiddenMessage
+            : AdminAuthorization.ForbiddenMessage;
     }
 }

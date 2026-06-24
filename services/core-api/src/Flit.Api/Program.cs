@@ -161,6 +161,8 @@ app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAn
 app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminOtEndpoints();
+app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();

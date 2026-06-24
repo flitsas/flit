@@ -43,7 +43,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
         await SeedTramiteWithSnapshotAsync(db, payload);
 
         await using var ctx = NewContext(db);
-        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = TramiteId });
+        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = TramiteId }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetProcedureDocumentRequirementsOutcome.Found);
         result.Data.Select(d => d.DocumentTypeId).Should().ContainInOrder(DocA, DocC, DocB);
@@ -61,7 +61,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
     {
         await using var ctx = NewContext(NewDbName());
 
-        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = Guid.NewGuid() });
+        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetProcedureDocumentRequirementsOutcome.NotFound);
     }
@@ -82,11 +82,11 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
                 CreatedByUserId = Guid.NewGuid(),
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            await seed.SaveChangesAsync();
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
-        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = TramiteId });
+        var result = await Handler(ctx).HandleAsync(new GetProcedureDocumentRequirementsQuery { TramiteId = TramiteId }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetProcedureDocumentRequirementsOutcome.NotFound);
     }

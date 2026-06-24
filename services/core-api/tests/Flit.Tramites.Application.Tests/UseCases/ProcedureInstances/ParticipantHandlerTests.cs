@@ -124,8 +124,13 @@ public sealed class ParticipantHandlerTests
         var instance = Instance(id, tenant);
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = Guid.NewGuid(), Rol = "comprador", Nombre = "Otro", Email = "o@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Rol = "comprador",
+            Nombre = "Otro",
+            Email = "o@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(2),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 
@@ -143,9 +148,14 @@ public sealed class ParticipantHandlerTests
         var instance = Instance(id, tenant);
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = Guid.NewGuid(), Rol = "comprador", Nombre = "Otro", Email = "o@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(2),
-            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Rol = "comprador",
+            Nombre = "Otro",
+            Email = "o@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(2),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 
@@ -177,8 +187,13 @@ public sealed class ParticipantHandlerTests
         var instance = Instance(id, tenant);
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = Guid.NewGuid(), Rol = "vendedor", Nombre = "V", Email = "v@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Rol = "vendedor",
+            Nombre = "V",
+            Email = "v@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(2),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 
@@ -201,8 +216,13 @@ public sealed class ParticipantHandlerTests
         var pid = Guid.NewGuid();
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = pid, Rol = "comprador", Nombre = "J", Email = "j@x.com",
-            TokenHash = oldHash, ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = pid,
+            Rol = "comprador",
+            Nombre = "J",
+            Email = "j@x.com",
+            TokenHash = oldHash,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 
@@ -229,9 +249,14 @@ public sealed class ParticipantHandlerTests
         var pid = Guid.NewGuid();
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = pid, Rol = "comprador", Nombre = "J", Email = "j@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-            LastReminderAt = DateTimeOffset.UtcNow.AddHours(-1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = pid,
+            Rol = "comprador",
+            Nombre = "J",
+            Email = "j@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            LastReminderAt = DateTimeOffset.UtcNow.AddHours(-1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 
@@ -250,9 +275,14 @@ public sealed class ParticipantHandlerTests
         var pid = Guid.NewGuid();
         instance.Participants.Add(new ProcedureInstanceParticipant
         {
-            Id = pid, Rol = "comprador", Nombre = "J", Email = "j@x.com",
-            TokenHash = "h", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-            CompletedAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = pid,
+            Rol = "comprador",
+            Nombre = "J",
+            Email = "j@x.com",
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithParticipantsAsync(id, tenant, ct).Returns(instance);
 

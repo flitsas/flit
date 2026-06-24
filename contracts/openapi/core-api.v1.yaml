@@ -459,11 +459,11 @@ paths:
     get:
       tags: [Admin · Compañías]
       operationId: adminTransitOfficesSearch
-      summary: Catálogo estático de organismos de tránsito con búsqueda (RF13, AC1)
+      summary: Catálogo de organismos de tránsito con búsqueda (RF13, AC1)
       description: >
-        Retorna el catálogo estático en memoria de organismos de tránsito. El parámetro
-        opcional `search` filtra por nombre o código (case-insensitive e insensible a
-        tildes). No consulta base de datos. Requiere JWT con rol SuperAdmin (RF01).
+        Retorna el catálogo de organismos de tránsito desde `catalogs.transit_offices`.
+        El parámetro opcional `search` filtra por nombre o código (case-insensitive e
+        insensible a tildes). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
       security:
         - bearerAuth: []
       parameters:
@@ -484,11 +484,54 @@ paths:
         "401":
           description: No autenticado (sin token JWT).
         "403":
-          description: Autenticado pero sin rol SuperAdmin.
+          description: Autenticado pero sin rol SuperAdmin u ot_admin.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/profile:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetProfile
+      summary: Perfil OT del tenant autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags).
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+    patch:
+      tags: [Admin · OT]
+      operationId: adminOtPatchProfile
+      summary: Actualizar modo Dashboard/QX
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil actualizado.
+
+  /api/v1/integrations/ot/webhooks/{subscriptionId}/callback:
+    post:
+      tags: [OT Integrations]
+      operationId: otWebhookInboundCallback
+      summary: Callback inbound Quipux → FLIT
+      security: []          # endpoint público: autenticación vía HMAC en cabecera
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Callback procesado.
+        "401":
+          description: Firma HMAC inválida.
+        "404":
+          description: Suscripción no encontrada.
 
   /api/v1/admin/companies/{tenantId}/transit-grants:
     parameters:

@@ -49,7 +49,7 @@ public sealed class TenantSettingsHandlerTests
                     EnrutamientoSMTP: "TENANT_API",
                     NotificationTarget: "COMPRADOR",
                     MetodosRecaudo: ["pse", "efecty"]),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
             result.Settings!.NotificationTarget.Should().Be("COMPRADOR");
@@ -59,7 +59,7 @@ public sealed class TenantSettingsHandlerTests
         // Verificación en un contexto nuevo: persistido de verdad, no solo trackeado.
         await using var verify = NewContext(db);
 
-        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
         policy.AllowInitialRegistration.Should().BeFalse();
         policy.AllowMiscNewVehicles.Should().BeFalse();
         policy.OnlyOwnVehicles.Should().BeTrue();
@@ -70,7 +70,7 @@ public sealed class TenantSettingsHandlerTests
 
         var audits = await verify.TenantConfigAuditLogs
             .Where(a => a.TenantId == tenantId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         // 3 switches + baúl + canal + destino + métodos = 7 campos modificados.
         audits.Should().HaveCount(7);
@@ -113,11 +113,11 @@ public sealed class TenantSettingsHandlerTests
                     EnrutamientoSMTP: "FLIT_SMTP",
                     NotificationTarget: "RADICADOR",
                     MetodosRecaudo: []),
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         await using var verify = NewContext(db);
-        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync();
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         audits.Should().ContainSingle()
             .Which.FieldName.Should().Be("signature_vault_enabled");
     }
@@ -140,15 +140,15 @@ public sealed class TenantSettingsHandlerTests
                     EnrutamientoSMTP: "TENANT_API",
                     NotificationTarget: "NINGUNO",
                     MetodosRecaudo: ["pse"]),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
-        (await verify.TenantOperationalPolicies.CountAsync(p => p.TenantId == tenantId)).Should().Be(1);
+        (await verify.TenantOperationalPolicies.CountAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
         // Se audita cada campo distinto de los defaults del DDL.
-        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId)).Should().BeGreaterThan(0);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
     // ---------- AC2: validación 422 sin persistir ni auditar ----------
@@ -178,7 +178,7 @@ public sealed class TenantSettingsHandlerTests
                     EnrutamientoSMTP: "FLIT_SMTP",
                     NotificationTarget: "INVALIDO",
                     MetodosRecaudo: ["pse"]),
-            });
+            }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeFalse();
             result.Settings.Should().BeNull();
@@ -186,12 +186,12 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var verify = NewContext(db);
-        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
         // Sin cambios respecto a lo sembrado.
         policy.NotificationTarget.Should().Be("RADICADOR");
         policy.OnlyOwnVehicles.Should().BeFalse();
         policy.SignatureVaultEnabled.Should().BeFalse();
-        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId)).Should().Be(0);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public sealed class TenantSettingsHandlerTests
                 EnrutamientoSMTP: "CORREO_RARO",
                 NotificationTarget: "COMPRADOR",
                 MetodosRecaudo: []),
-        });
+        }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle(e => e.Field == "enrutamientoSMTP");
@@ -233,7 +233,7 @@ public sealed class TenantSettingsHandlerTests
         await using var ctx = NewContext(db);
         var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
 
-        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId });
+        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.TenantId.Should().Be(tenantId);
@@ -251,7 +251,7 @@ public sealed class TenantSettingsHandlerTests
         await using var ctx = NewContext(NewDbName());
         var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
 
-        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = Guid.NewGuid() });
+        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }

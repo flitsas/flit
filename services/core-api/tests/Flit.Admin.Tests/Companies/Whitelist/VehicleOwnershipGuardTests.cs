@@ -30,7 +30,7 @@ public sealed class VehicleOwnershipGuardTests
             TenantId, "ABC123", "operador@empresa.com",
             PolicyWithOnlyOwnVehicles(true));
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeFalse();
         result.Error.Should().Be("Vehículo no es propiedad de la compañía jurídica del tenant");
@@ -47,7 +47,7 @@ public sealed class VehicleOwnershipGuardTests
             TenantId, "ABC123", "operador@empresa.com",
             PolicyWithOnlyOwnVehicles(true));
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeTrue();
         result.Error.Should().BeNull();
@@ -65,7 +65,7 @@ public sealed class VehicleOwnershipGuardTests
             TenantId, "ABC123", "operador@empresa.com",
             PolicyWithOnlyOwnVehicles(false));
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeTrue();
     }
@@ -84,7 +84,7 @@ public sealed class VehicleOwnershipGuardTests
             TenantId, "ABC123", "VIP@empresa.com", // …pero el correo está exento (case-insensitive)
             PolicyWithOnlyOwnVehicles(true));
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         result.IsAllowed.Should().BeTrue();
         result.Error.Should().BeNull();
@@ -111,7 +111,7 @@ public sealed class VehicleOwnershipGuardTests
         var context = new VehicleOwnershipCheckContext(
             TenantId, "ABC123", "operador@empresa.com", effective);
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         // El trámite continúa porque su snapshot tenía la regla desactivada.
         result.IsAllowed.Should().BeTrue();
@@ -132,7 +132,7 @@ public sealed class VehicleOwnershipGuardTests
         var context = new VehicleOwnershipCheckContext(
             TenantId, "ABC123", "operador@empresa.com", effective);
 
-        var result = await guard.ValidateTransferStartAsync(context);
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
         // Una radicación nueva sí aplica la política live (regla activa) → bloquea.
         result.IsAllowed.Should().BeFalse();

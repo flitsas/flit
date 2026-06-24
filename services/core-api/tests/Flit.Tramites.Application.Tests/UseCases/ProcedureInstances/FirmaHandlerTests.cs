@@ -107,10 +107,15 @@ public sealed class FirmaHandlerTests
         var instance = Instance(id, tenant);
         var existing = new ProcedureInstanceSignature
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id,
-            Parte = "comprador", DocTipo = SignatureDocTipos.Compraventa,
-            Estado = SignatureEstados.Enviada, EnvelopeId = "env-1",
-            SolicitadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Parte = "comprador",
+            DocTipo = SignatureDocTipos.Compraventa,
+            Estado = SignatureEstados.Enviada,
+            EnvelopeId = "env-1",
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Signatures.Add(existing);
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
@@ -133,10 +138,15 @@ public sealed class FirmaHandlerTests
         var instance = Instance(id, tenant);
         var sig = new ProcedureInstanceSignature
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id,
-            Parte = "comprador", DocTipo = SignatureDocTipos.Compraventa,
-            Estado = estado, EnvelopeId = "env-1",
-            SolicitadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Parte = "comprador",
+            DocTipo = SignatureDocTipos.Compraventa,
+            Estado = estado,
+            EnvelopeId = "env-1",
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Signatures.Add(sig);
         _repo.GetByIdWithSignaturesAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
@@ -240,8 +250,12 @@ public sealed class FirmaHandlerTests
     private static ProcedureInstanceSignature Sig(string parte, string estado) =>
         new()
         {
-            Id = Guid.NewGuid(), Parte = parte, DocTipo = SignatureDocTipos.Compraventa,
-            Estado = estado, SolicitadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Parte = parte,
+            DocTipo = SignatureDocTipos.Compraventa,
+            Estado = estado,
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 }
 

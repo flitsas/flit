@@ -1,6 +1,6 @@
-// Lógica pura del gate de acceso a /admin/* (HU #10194, AC6). Extraída del
-// middleware para poder probarla sin el runtime de Next.js.
-import { decodeJwtPayload, isSuperAdmin } from "./jwt";
+// Lógica pura del gate de acceso a /admin/* (HU #10194, AC6; HU #10218 OT admin).
+// Extraída del middleware para poder probarla sin el runtime de Next.js.
+import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
 
@@ -16,19 +16,25 @@ export interface AdminAccessDecision {
  *
  * Reglas:
  * - Sin token o token malformado → no renderizar, redirigir a /403.
- * - Rol distinto de SuperAdmin → redirigir a /403.
- * - SuperAdmin → permitido.
- *
- * Uso de ejemplo:
- * ```ts
- * const { allowed, redirectTo } = evaluateAdminAccess(req.cookies.get("flit_token")?.value);
- * if (!allowed) return NextResponse.redirect(new URL(redirectTo!, req.url));
- * ```
+ * - SuperAdmin → permitido en todo /admin/*.
+ * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
+ * - Otros roles → redirigir a /403.
  */
-export function evaluateAdminAccess(token: string | null | undefined): AdminAccessDecision {
+export function evaluateAdminAccess(
+  token: string | null | undefined,
+  pathname?: string,
+): AdminAccessDecision {
   const payload = decodeJwtPayload(token);
 
   if (payload && isSuperAdmin(payload)) {
+    return { allowed: true };
+  }
+
+  if (
+    pathname?.startsWith("/admin/transit-offices") &&
+    payload &&
+    isOtAdmin(payload)
+  ) {
     return { allowed: true };
   }
 

@@ -62,17 +62,27 @@ public sealed class FurHandlerTests
     private static void WithOrganismo(ProcedureInstance instance) =>
         instance.FieldValues.Add(new ProcedureInstanceFieldValue
         {
-            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureInstanceId = instance.Id,
-            FieldKey = "transit_office_code", ValueText = "11001000", Source = "user",
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "transit_office_code",
+            ValueText = "11001000",
+            Source = "user",
         });
 
     private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
         new()
         {
-            Id = Guid.NewGuid(), Parte = parte, Estado = BiometricEstados.Aprobado,
-            Nombre = "X", TipoDoc = "CC", Documento = "1", Email = "x@y.com",
+            Id = Guid.NewGuid(),
+            Parte = parte,
+            Estado = BiometricEstados.Aprobado,
+            Nombre = "X",
+            TipoDoc = "CC",
+            Documento = "1",
+            Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         };
 
     [Fact]
@@ -172,9 +182,15 @@ public sealed class FurHandlerTests
         instance.BiometricValidations.Add(Bio(parte: "comprador"));
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id,
-            Tipo = "fur", Filename = "old.txt", Mimetype = "text/plain",
-            StoragePath = "old/fur", Source = "system", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "fur",
+            Filename = "old.txt",
+            Mimetype = "text/plain",
+            StoragePath = "old/fur",
+            Source = "system",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 

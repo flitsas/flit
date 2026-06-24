@@ -29,7 +29,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
         await SeedSnapshotAsync(db, "draft", DocA);
 
         await using var ctx = NewContext(db);
-        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId);
+        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId, TestContext.Current.CancellationToken);
 
         inUse.Should().BeTrue();
     }
@@ -42,7 +42,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
         await SeedSnapshotAsync(db, "draft", DocB); // snapshot congeló otro documento
 
         await using var ctx = NewContext(db);
-        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId);
+        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId, TestContext.Current.CancellationToken);
 
         inUse.Should().BeFalse();
     }
@@ -57,7 +57,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
         await SeedSnapshotAsync(db, status, DocA);
 
         await using var ctx = NewContext(db);
-        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId);
+        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId, TestContext.Current.CancellationToken);
 
         inUse.Should().BeFalse();
     }
@@ -67,7 +67,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
     {
         await using var ctx = NewContext(NewDbName());
 
-        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(Guid.NewGuid());
+        var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(Guid.NewGuid(), TestContext.Current.CancellationToken);
 
         inUse.Should().BeFalse();
     }

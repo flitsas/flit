@@ -7,10 +7,18 @@ export interface ToggleSwitchProps {
   label: string;
   description?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }
 
-export function ToggleSwitch({ id, label, description, checked, onChange }: ToggleSwitchProps) {
+export function ToggleSwitch({
+  id,
+  label,
+  description,
+  checked,
+  disabled = false,
+  onChange,
+}: ToggleSwitchProps) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border bg-white px-4 py-3 dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
       <div>
@@ -19,12 +27,16 @@ export function ToggleSwitch({ id, label, description, checked, onChange }: Togg
         </label>
         {description && <p className="mt-0.5 text-[11px] opacity-60">{description}</p>}
       </div>
-      <label htmlFor={id} className="relative inline-flex shrink-0 cursor-pointer">
+      <label
+        htmlFor={id}
+        className={`relative inline-flex shrink-0 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      >
         <input
           id={id}
           type="checkbox"
           role="switch"
           checked={checked}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
           className="peer sr-only"
         />
