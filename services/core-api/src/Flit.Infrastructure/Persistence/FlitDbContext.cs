@@ -94,6 +94,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options) : DbC
     // Trámites — biométrica (Slice 6, mock)
     public DbSet<ProcedureInstanceBiometricValidation> ProcedureInstanceBiometricValidations => Set<ProcedureInstanceBiometricValidation>();
 
+    // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
+    public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
+
     // Trámites — firma electrónica (Slice 7, mock)
     public DbSet<ProcedureInstanceSignature> ProcedureInstanceSignatures => Set<ProcedureInstanceSignature>();
 

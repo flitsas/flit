@@ -126,10 +126,11 @@ public sealed class WizardFurStateTests
         instance.BiometricValidations.Add(Bio("comprador")); // identidad (4) completa
     }
 
-    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    /// <summary>Completa pasos 1-5 de traspaso (placa, documentos, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
     private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        CompletarDocsTraspaso(instance); // los documentos gobiernan el paso 2; sin ellos FUR queda locked.
         instance.Actors.Add(Vendedor());
         instance.Actors.Add(Comprador("666"));
         instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot { Id = Guid.NewGuid(), Overall = "green", Checks = "[]", CreatedAt = DateTimeOffset.UtcNow });

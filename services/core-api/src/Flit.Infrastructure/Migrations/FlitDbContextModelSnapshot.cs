@@ -1940,6 +1940,66 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("form_fields", "tramites");
                 });
 
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.IdentityValidationOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("event_type");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("ValidationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("validation_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_identity_validation_outbox");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("ix_identity_validation_outbox_unpublished")
+                        .HasFilter("published_at IS NULL");
+
+                    b.HasIndex("ValidationId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_identity_validation_outbox_completed")
+                        .HasFilter("event_type = 'identity_validation.completed'");
+
+                    b.ToTable("identity_validation_outbox", "tramites");
+                });
+
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2298,6 +2358,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<string>("CaptureUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("capture_url");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2351,6 +2416,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("intentos");
 
+                    b.Property<string>("KyverumVerificationId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("kyverum_verification_id");
+
                     b.Property<int>("MaxIntentos")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2371,6 +2441,23 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("ProcedureInstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("mock")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ProviderPayload")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("provider_payload");
+
+                    b.Property<string>("ProviderStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("provider_status");
 
                     b.Property<int?>("Score")
                         .HasColumnType("integer")
@@ -2400,8 +2487,18 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("validado_at");
 
+                    b.Property<string>("WebhookSecretEncrypted")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("webhook_secret_encrypted");
+
                     b.HasKey("Id")
                         .HasName("pk_procedure_instance_biometric_validations");
+
+                    b.HasIndex("KyverumVerificationId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_instance_biometric_validations_kyverum_verification_id")
+                        .HasFilter("kyverum_verification_id IS NOT NULL");
 
                     b.HasIndex("ProcedureInstanceId")
                         .HasDatabaseName("ix_procedure_instance_biometric_validations_procedure_instance");

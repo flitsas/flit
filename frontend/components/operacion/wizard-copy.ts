@@ -8,6 +8,10 @@ const REASON_COPY: Record<string, string> = {
   // consultas RUNT por actor
   runt_comprador: 'Consulta RUNT del comprador',
   runt_vendedor: 'Consulta RUNT del vendedor',
+  // consulta inicial del vehículo
+  consulta_pendiente: 'Consulta el vehículo por placa',
+  vin_pendiente: 'Consulta el VIN del vehículo',
+  impuesto_pendiente: 'Confirma el paz y salvo de impuesto vehicular',
   // preflight / semáforo legal
   preflight_pendiente: 'Falta correr el pre-vuelo',
   preflight_red: 'Hay bloqueos críticos',

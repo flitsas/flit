@@ -11,6 +11,7 @@
     <Project Path="src/Flit.Modules.Security.Domain/Flit.Modules.Security.Domain.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Flit.Infrastructure.Tests/Flit.Infrastructure.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Application.Tests/Flit.Tramites.Application.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Domain.Tests/Flit.Tramites.Domain.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />

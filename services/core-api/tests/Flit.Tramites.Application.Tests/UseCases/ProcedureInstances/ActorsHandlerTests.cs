@@ -143,18 +143,63 @@ public sealed class ActorsHandlerTests
         instance.Actors.Should().Contain(a => a.ActorType == "comprador" && a.ProcedureEntityId == BuyerEntityId);
     }
 
+    // PUT incremental (upsert por rol): el wizard guarda un rol por paso, así que un PUT
+    // con un solo rol NO debe fallar por "faltan partes obligatorias".
+
     [Fact]
-    public async Task Put_Traspaso_MissingVendedor_ReturnsMissingRequired()
+    public async Task Put_Traspaso_OnlyVendedor_ShouldSucceed()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
+        var instance = Instance(id, tenant, modalidad: "traspaso");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Vendedor()]), ct);
+
+        error.Should().BeNull();
+        result!.Actors.Should().ContainSingle().Which.Rol.Should().Be("vendedor");
+        instance.Actors.Should().ContainSingle()
+            .Which.ProcedureEntityId.Should().Be(OwnerEntityId);
+    }
+
+    [Fact]
+    public async Task Put_Traspaso_OnlyComprador_ShouldSucceed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "traspaso");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
 
-        error.Should().Be("missing_required_rol");
-        result.Should().BeNull();
+        error.Should().BeNull();
+        result!.Actors.Should().ContainSingle().Which.Rol.Should().Be("comprador");
+        instance.Actors.Should().ContainSingle()
+            .Which.ProcedureEntityId.Should().Be(BuyerEntityId);
+    }
+
+    [Fact]
+    public async Task Put_Traspaso_VendedorThenComprador_MergesToTwoActors()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "traspaso");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        // Paso 3: guarda solo vendedor.
+        var (_, err1) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Vendedor()]), ct);
+        err1.Should().BeNull();
+
+        // Paso 4: guarda solo comprador → NO borra al vendedor; el set efectivo tiene ambos.
+        var (result, err2) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
+
+        err2.Should().BeNull();
+        result!.Actors.Should().HaveCount(2);
+        instance.Actors.Should().Contain(a => a.ActorType == "vendedor" && a.ProcedureEntityId == OwnerEntityId);
+        instance.Actors.Should().Contain(a => a.ActorType == "comprador" && a.ProcedureEntityId == BuyerEntityId);
     }
 
     [Fact]

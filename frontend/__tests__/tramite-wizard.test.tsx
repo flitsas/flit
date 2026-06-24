@@ -78,7 +78,7 @@ const TRASPASO_WIZARD: WizardState = {
   blockers: ['preflight_red'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-    { index: 1, key: 'validacion', label: 'Validación', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
     { index: 2, key: 'vendedor', label: 'Vendedor', status: 'complete', reasons: [] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'complete', reasons: [] },
@@ -168,7 +168,7 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     renderWizard();
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(6);
-    expect(screen.getByText('Validación')).toBeInTheDocument();
+    expect(screen.getByText('Documentos')).toBeInTheDocument();
     expect(screen.getByText('Comercial')).toBeInTheDocument();
   });
 });
@@ -458,7 +458,7 @@ describe('TramiteWizard — creación única de instancia (StrictMode)', () => {
 });
 
 describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
-  // Traspaso con consulta+validación completas y vendedor como frontera.
+  // Traspaso con consulta+documentos completos y vendedor como frontera.
   const VENDEDOR_FRONTIER: WizardState = {
     modalidad: 'traspaso',
     tipologiaCodigo: 'traspaso',
@@ -467,7 +467,7 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     blockers: [],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-      { index: 1, key: 'validacion', label: 'Validación', status: 'complete', reasons: [] },
+      { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
       { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
       { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
       { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
@@ -524,6 +524,52 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
 
     // 3) Con el vendedor ya complete, el wizard avanza al paso Comprador.
     expect(await screen.findByText(/Identificación · Comprador/)).toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split)', () => {
+  const traspasoSteps = (vendedorStatus: 'locked' | 'incomplete'): WizardState => ({
+    modalidad: 'traspaso',
+    tipologiaCodigo: 'traspaso',
+    totalSteps: 6,
+    canSubmit: false,
+    blockers: [],
+    steps: [
+      { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
+      {
+        index: 1,
+        key: 'documentos',
+        label: 'Documentos',
+        status: vendedorStatus === 'locked' ? 'incomplete' : 'complete',
+        reasons: vendedorStatus === 'locked' ? ['documentos_incompletos'] : [],
+      },
+      { index: 2, key: 'vendedor', label: 'Vendedor', status: vendedorStatus, reasons: [] },
+      { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
+      { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
+      { index: 5, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
+    ],
+  });
+
+  it('el paso 2 (documentos) renderiza el checklist de documentos, no el preflight', async () => {
+    mocks.getWizardState.mockResolvedValue(traspasoSteps('locked'));
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole('button', { name: /^Paso 2: Documentos/ }));
+
+    expect(
+      await screen.findByRole('region', { name: 'Documentos del trámite' }),
+    ).toBeInTheDocument();
+    expect(mocks.getChecklist).toHaveBeenCalled();
+  });
+
+  it('el paso vendedor usa layout split (Identificación · Vendedor + Datos de contacto)', async () => {
+    mocks.getWizardState.mockResolvedValue(traspasoSteps('incomplete'));
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole('button', { name: /^Paso 3: Vendedor/ }));
+
+    expect(await screen.findByText(/Identificación · Vendedor/)).toBeInTheDocument();
+    expect(screen.getByText('Datos de contacto')).toBeInTheDocument();
   });
 });
 

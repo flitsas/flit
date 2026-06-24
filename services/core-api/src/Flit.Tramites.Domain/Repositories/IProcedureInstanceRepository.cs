@@ -55,6 +55,14 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct = default);
 
+    /// <summary>
+    /// Resuelve una validación biométrica por su id (acceso PÚBLICO vía webhook de Kyverum, sin tenant).
+    /// La correlación del webhook se hace por este id porque viaja incrustado en la <c>webhookUrl</c>
+    /// registrada (el cuerpo del webhook no lo repite). Devuelve null si no existe — el caller NO debe
+    /// filtrar existencia (HU #10233, AC2/AC3).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con sus participantes del portal (Slice 7 Part B, vista del gestor).</summary>
     Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
