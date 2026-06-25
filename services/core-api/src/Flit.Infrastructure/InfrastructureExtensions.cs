@@ -20,6 +20,8 @@ using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -279,7 +281,13 @@ public static class InfrastructureExtensions
         });
 
         // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
-        services.AddDataProtection();
+        // El keyring se persiste en Postgres (tabla data_protection_keys vía FlitDbContext) y se
+        // fija un ApplicationName estable: así todas las réplicas comparten las mismas llaves y
+        // sobreviven a reinicios. Sin esto, las llaves quedan en el filesystem efímero de cada pod
+        // y el secreto HMAC del webhook de Kyverum no se puede descifrar tras un restart/otra réplica.
+        services.AddDataProtection()
+            .PersistKeysToDbContext<FlitDbContext>()
+            .SetApplicationName("flit-core-api");
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
 
         // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).

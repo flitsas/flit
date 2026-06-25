@@ -19,19 +19,15 @@ interface Props {
   instanceId: string | null;
   fieldValues: FieldValue[];
   comprador: Actor | null;
+  /** Parte saliente. Solo en traspaso; en matrícula es `null` (sin pestaña Vendedor). */
+  vendedor?: Actor | null;
   vin: string;
   attachments: ProcedureAttachment[];
   biometric: BiometricValidation[];
   orgTransito: { nombre?: string; ciudad?: string; codigo?: string };
 }
 
-type MainTab = 'vehiculo' | 'comprador' | 'documentos';
-
-const MAIN_TABS: { key: MainTab; label: string; Icon: typeof Car }[] = [
-  { key: 'vehiculo', label: 'Vehículo', Icon: Car },
-  { key: 'comprador', label: 'Comprador', Icon: User },
-  { key: 'documentos', label: 'Documentos', Icon: FileText },
-];
+type MainTab = 'vehiculo' | 'vendedor' | 'comprador' | 'documentos';
 
 const BLUE = '#557EFF';
 const BORDER = '#DFE5ED';
@@ -58,6 +54,7 @@ export default function ExpedienteVisor({
   instanceId,
   fieldValues,
   comprador,
+  vendedor,
   vin,
   attachments,
   biometric,
@@ -80,6 +77,23 @@ export default function ExpedienteVisor({
       null,
     [biometric],
   );
+  // Validación del vendedor (solo traspaso): parte 'vendedor'.
+  const vendedorBio = useMemo(
+    () => biometric.find((b) => b.parte === 'vendedor') ?? null,
+    [biometric],
+  );
+
+  // Pestañas: el Vendedor solo aplica en traspaso (parte saliente). Se inserta
+  // antes del Comprador (saliente → entrante), espejo del resumen.
+  const tabs = useMemo<{ key: MainTab; label: string; Icon: typeof Car }[]>(
+    () => [
+      { key: 'vehiculo', label: 'Vehículo', Icon: Car },
+      ...(vendedor ? [{ key: 'vendedor' as const, label: 'Vendedor', Icon: User }] : []),
+      { key: 'comprador', label: 'Comprador', Icon: User },
+      { key: 'documentos', label: 'Documentos', Icon: FileText },
+    ],
+    [vendedor],
+  );
 
   const furDoc = attachments.find((a) => a.tipo === 'fur') ?? null;
 
@@ -87,7 +101,7 @@ export default function ExpedienteVisor({
     <section aria-label="Expediente digital" className="rounded-xl border" style={{ borderColor: BORDER }}>
       {/* Tabs principales */}
       <div className="flex border-b" style={{ borderColor: BORDER }} role="tablist">
-        {MAIN_TABS.map(({ key, label, Icon }) => {
+        {tabs.map(({ key, label, Icon }) => {
           const active = mainTab === key;
           return (
             <button
@@ -164,6 +178,28 @@ export default function ExpedienteVisor({
                 <D label="N. Chasis" value={fv('vehicle_chassis')} />
                 <D label="N. Serie" value={fv('vehicle_series')} />
               </div>
+            </div>
+          </>
+        )}
+
+        {mainTab === 'vendedor' && vendedor && (
+          <>
+            <div>
+              <SectionTitle>Datos del vendedor</SectionTitle>
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
+                style={{ borderColor: BORDER }}
+              >
+                <D label="Nombre" value={vendedor?.fullName} />
+                <D label="Tipo doc" value={vendedor?.documentType || 'CC'} />
+                <D label="Número" value={vendedor?.documentNumber} />
+                <D label="Email" value={vendedorBio?.email} />
+              </div>
+            </div>
+
+            <div>
+              <SectionTitle>Validación de identidad</SectionTitle>
+              <IdentidadBlock bio={vendedorBio} />
             </div>
           </>
         )}

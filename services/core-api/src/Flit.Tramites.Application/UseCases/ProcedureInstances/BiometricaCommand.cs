@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Tramites.Application.Biometrics;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -35,7 +36,14 @@ public sealed record IniciarBiometriaResult(
     string Token,
     string MagicLinkPath);
 
-public sealed record BiometricValidationsResponse(IReadOnlyList<BiometricValidationDto> Validations);
+/// <summary>
+/// Lista de validaciones + el proveedor biométrico CONFIGURADO (no por-validación): el frontend lo usa
+/// para que el botón "Validar identidad" sea provider-aware (kyverum → validación real Kyverum; mock →
+/// simular). Default mock por compatibilidad.
+/// </summary>
+public sealed record BiometricValidationsResponse(
+    IReadOnlyList<BiometricValidationDto> Validations,
+    string Provider = BiometricProviders.Mock);
 
 /// <summary>Entrada para iniciar una biométrica de una parte.</summary>
 public sealed record IniciarBiometriaInput(
@@ -174,7 +182,7 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
 // ── Handler: listar (autenticado) ───────────────────────────────────────────
 
 /// <summary>Lista las validaciones biométricas de una instancia (vista del gestor).</summary>
-public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo)
+public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, BiometricsProviderOptions providerOptions)
 {
     public async Task<(BiometricValidationsResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -190,7 +198,7 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo)
             .OrderBy(v => v.CreatedAt)
             .Select(v => IniciarBiometriaHandler.ToDto(v, now))
             .ToList();
-        return (new BiometricValidationsResponse(dtos), null);
+        return (new BiometricValidationsResponse(dtos, providerOptions.Provider), null);
     }
 }
 

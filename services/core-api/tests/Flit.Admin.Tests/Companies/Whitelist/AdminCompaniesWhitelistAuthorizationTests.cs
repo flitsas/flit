@@ -19,6 +19,8 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
     private const string WhitelistUrl =
         "/api/v1/admin/companies/22222222-2222-2222-2222-222222222222/whitelist";
 
+    private static readonly string[] SingleTestEmail = ["a@co.com"];
+
     private readonly WebApplicationFactory<Program> _factory;
 
     public AdminCompaniesWhitelistAuthorizationTests(WebApplicationFactory<Program> factory)
@@ -31,7 +33,7 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
     {
         var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } }, cancellationToken: TestContext.Current.CancellationToken);
+        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = SingleTestEmail }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -53,7 +55,7 @@ public sealed class AdminCompaniesWhitelistAuthorizationTests
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
 
-        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = new[] { "a@co.com" } }, cancellationToken: TestContext.Current.CancellationToken);
+        var response = await client.PostAsJsonAsync(WhitelistUrl, new { emails = SingleTestEmail }, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

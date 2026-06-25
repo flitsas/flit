@@ -27,7 +27,7 @@ namespace Flit.Admin.Tests.Companies.TransitGrants;
 public sealed class TransitGrantHandlerTests
 {
     private static readonly Guid ChangedBy = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly ITransitOfficeCatalog Catalog = new StaticTransitOfficeCatalog();
+    private static readonly StaticTransitOfficeCatalog Catalog = new StaticTransitOfficeCatalog();
     private static Guid KnownOfficeId => Catalog.All[0].Id;
 
     // ---------- AC2: alta + auditoría ----------

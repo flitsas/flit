@@ -586,4 +586,44 @@ describe('TramiteWizard — paso comercial', () => {
     expect(screen.getByLabelText(/Valor de venta/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Causal/)).toBeInTheDocument();
   });
+
+  it('embebido: no muestra el botón propio "Guardar datos comerciales"', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Comercial/ }));
+    await screen.findByRole('form', { name: 'Datos comerciales del trámite' });
+    // El guardado vive en el footer del wizard, no en un botón propio del form.
+    expect(
+      screen.queryByRole('button', { name: /Guardar datos comerciales/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Guardar y continuar/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('"Guardar y continuar" persiste los datos comerciales (PUT) vía el footer', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getCommercial.mockResolvedValue({
+      valorVenta: 50_000_000,
+      causal: 'COMPRAVENTA',
+      tasaImpuesto: null,
+      derechos: null,
+      metodoPago: null,
+    });
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Comercial/ }));
+    // El form hidrata el valor formateado (COP agrupado).
+    await screen.findByDisplayValue('50.000.000');
+
+    await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
+
+    await waitFor(() => expect(mocks.putCommercial).toHaveBeenCalledTimes(1));
+    const [instanceId, data] = mocks.putCommercial.mock.calls[0];
+    expect(instanceId).toBe('inst-1');
+    expect(data).toMatchObject({ valorVenta: 50_000_000, causal: 'COMPRAVENTA' });
+  });
 });

@@ -30,7 +30,7 @@ export default function EmpresaUsuariosPage() {
 
 function UsuariosList() {
   const { show } = useToast();
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, userId: currentUserId } = usePermissions();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [roles, setRoles] = useState<TenantRole[]>([]);
@@ -170,6 +170,7 @@ function UsuariosList() {
                         currentRoleId={u.roleId}
                         currentRoleName={u.role}
                         roles={roles}
+                        disabled={u.id === currentUserId}
                         onChange={(rid) => handleAssignRole(u.id, rid)}
                       />
                     ) : (
@@ -254,11 +255,13 @@ function RoleSelector({
   currentRoleId,
   currentRoleName,
   roles,
+  disabled,
   onChange,
 }: {
   currentRoleId: string | null;
   currentRoleName: string | null;
   roles: TenantRole[];
+  disabled?: boolean;
   onChange: (roleId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -266,12 +269,19 @@ function RoleSelector({
   return (
     <div className="relative inline-block">
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition hover:border-blue-400"
-        style={{ borderColor: "#DFE5ED", color: "#162744" }}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        title={disabled ? "No puedes cambiar tu propio rol" : undefined}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition"
+        style={{
+          borderColor: "#DFE5ED",
+          color: disabled ? "#9CA3AF" : "#162744",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.6 : 1,
+        }}
       >
         {currentRoleName ?? "Sin rol"}
-        <ChevronDown className="h-3 w-3 opacity-60" />
+        {!disabled && <ChevronDown className="h-3 w-3 opacity-60" />}
       </button>
       {open && (
         <div
