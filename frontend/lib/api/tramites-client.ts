@@ -77,18 +77,22 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 export { DEV_TENANT_ID, DEV_USER_ID };
 
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
-// NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Compat con
-// NEXT_PUBLIC_API_URL (entornos locales) y localhost para dev. ANTES leía solo
-// NEXT_PUBLIC_API_URL → en DEV quedaba vacío → las llamadas caían al mismo origen
-// (el frontend Next.js, que no sirve /api) y devolvían 500.
+// NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
+// en dev local, las peticiones van al origen del frontend (localhost:3000) y Next.js
+// las reescribe a core-api (:4003) vía next.config.ts — no hace falta levantar el gateway.
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
 
 // Único constructor de URLs del cliente. El path absoluto (/api/v1/...) toma solo el
 // ORIGEN de BASE_URL e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta
 // el CD) NO se duplica (`…/api/v1/api/v1/…` → 404). Mismo patrón que lib/api/client.ts.
 // Usarlo SIEMPRE; no concatenar `${BASE_URL}${path}` (rompe cuando el base trae sufijo).
-export const apiUrl = (path: string): string => new URL(path, BASE_URL).toString();
+export const apiUrl = (path: string): string => {
+  const base =
+    BASE_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+  return new URL(path, base).toString();
+};
 
 const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',

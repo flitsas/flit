@@ -8,16 +8,18 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>
 /// Gate server-side que se evalúa ANTES de transicionar Draft→Submitted. Reusa la misma lógica de
 /// completitud que el wizard server-driven (<see cref="GetWizardStateHandler"/>): documentos
-/// obligatorios, biométrica del comprador, FUR generado y organismo seleccionado.
+/// obligatorios y biométrica del comprador. El FUR y el expediente consolidado son opcionales en
+/// radicación y pueden generarse a posteriori vía POST /fur y POST /consolidado.
 ///
-/// <para><b>Matrícula</b> exige: documentos completos (factura+aduana+impronta), biométrica del
-/// comprador aprobada, FUR generado (adjunto tipo 'fur') y organismo (field_value transit_office_code).</para>
+/// <para><b>Matrícula</b> exige: documentos completos (factura+aduana+impronta) y biométrica del
+/// comprador aprobada. FUR, consolidado y organismo de tránsito NO bloquean el envío.</para>
 /// <para><b>Traspaso</b> aplica el gate análogo (ambas biométricas + firma compraventa + FUR + docs +
 /// organismo) SOLO en bajo riesgo. Si los datos del traspaso aún no satisfacen el gate, se deja pasar
 /// para no romper los flujos existentes (deuda M5: endurecer traspaso cuando el flujo esté completo).</para>
 ///
 /// Devuelve la lista de códigos de error (vacía = puede radicar). Códigos: documentos_incompletos,
-/// identidad_requerida, fur_requerido, organismo_requerido.
+/// identidad_requerida. Los códigos fur_requerido y organismo_requerido se conservan como constantes
+/// para otros endpoints (p.ej. generación de consolidado) pero no aplican al submit.
 /// </summary>
 public static class SubmitGate
 {
@@ -50,10 +52,6 @@ public static class SubmitGate
             errors.Add(DocumentosIncompletos);
         if (!BiometriaAprobada(instance, "comprador"))
             errors.Add(IdentidadRequerida);
-        if (!FurGenerado(instance))
-            errors.Add(FurRequerido);
-        if (!OrganismoSeleccionado(instance))
-            errors.Add(OrganismoRequerido);
 
         return errors;
     }

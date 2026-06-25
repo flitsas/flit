@@ -35,8 +35,10 @@ describe('tramites-client · apiUrl', () => {
     expect(apiUrl(PATH)).toBe(EXPECTED);
   });
 
-  it('con BASE_URL con sufijo y barra final tampoco duplica', async () => {
-    const apiUrl = await loadApiUrl('https://api.example.com/api/v1/');
-    expect(apiUrl(PATH)).toBe(EXPECTED);
+  it('sin variables de entorno usa el origen local (proxy Next → core-api)', async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    const mod = await import('../tramites-client');
+    expect(mod.apiUrl(PATH)).toBe(`http://localhost:3000${PATH}`);
   });
 });

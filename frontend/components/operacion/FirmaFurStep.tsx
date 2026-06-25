@@ -328,11 +328,11 @@ function OrganismoSection({
         <div>
           <h4 className="text-sm font-bold">Organismo de tránsito</h4>
           <p className="text-xs opacity-70">
-            El organismo donde se radicará el trámite. Es obligatorio para
-            generar el FUR y enviar a tránsito.
+            El organismo donde se radicará el trámite. Es necesario para generar
+            el FUR, pero no bloquea guardar ni enviar el trámite.
           </p>
         </div>
-        {!readOnly && (
+        {!readOnly || !organismoSelected ? (
           <button
             type="button"
             onClick={onOpenModal}
@@ -342,7 +342,7 @@ function OrganismoSection({
             <Building2 className="h-3 w-3" />
             {organismoSelected ? 'Cambiar' : 'Seleccionar'}
           </button>
-        )}
+        ) : null}
       </div>
 
       {organismoSelected ? (
@@ -1059,7 +1059,6 @@ function FurSection({
   const [error, setError] = useState<string | null>(null);
   const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
-  const readOnly = useWizardReadOnly();
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1136,8 +1135,10 @@ function FurSection({
         <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
         <p className="text-xs opacity-70">
           Genera el FUR y el certificado de identidad (y, en traspaso, el
-          contrato de compraventa) con los datos del trámite. Requiere la
-          biométrica aprobada de las partes y el organismo seleccionado.
+          contrato de compraventa) con los datos del trámite. Este paso es
+          opcional para guardar o enviar el trámite: puedes generar los PDF
+          ahora o más adelante. Requiere biométrica aprobada y organismo
+          seleccionado.
         </p>
       </div>
 
@@ -1152,21 +1153,19 @@ function FurSection({
         </div>
       )}
 
-      {!readOnly && (
-        <button
-          type="button"
-          onClick={() => void handleGenerate()}
-          disabled={generating || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-        >
-          {generating
-            ? 'Generando…'
-            : generated
-              ? 'Re-generar FUR / certificado'
-              : 'Generar FUR / certificado'}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => void handleGenerate()}
+        disabled={generating || !instanceId}
+        className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      >
+        {generating
+          ? 'Generando…'
+          : generated
+            ? 'Re-generar FUR / certificado'
+            : 'Generar FUR / certificado'}
+      </button>
 
       {generated && (
         <ul className="space-y-2" aria-label="Documentos generados">
@@ -1197,7 +1196,8 @@ function FurSection({
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
               Un solo PDF con el FUR, el certificado de identidad y los documentos
-              cargados en el trámite, en orden de prelación.
+              cargados en el trámite. Opcional: puedes generarlo cuando el FUR
+              esté listo.
             </p>
           </div>
 
@@ -1212,21 +1212,19 @@ function FurSection({
             </div>
           )}
 
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => void handleGenerateConsolidado()}
-              disabled={generatingConsolidado || !instanceId}
-              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: '#162744' }}
-            >
-              {generatingConsolidado
-                ? 'Generando consolidado…'
-                : consolidadoGenerated
-                  ? 'Re-generar consolidado'
-                  : 'Generar consolidado'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => void handleGenerateConsolidado()}
+            disabled={generatingConsolidado || !instanceId}
+            className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+            style={{ background: '#162744' }}
+          >
+            {generatingConsolidado
+              ? 'Generando consolidado…'
+              : consolidadoGenerated
+                ? 'Re-generar consolidado'
+                : 'Generar consolidado'}
+          </button>
 
           {consolidadoGenerated && consolidado && (
             <div
