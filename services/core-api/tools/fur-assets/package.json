@@ -1,0 +1,14 @@
+{
+  "name": "@flit/fur-assets",
+  "private": true,
+  "type": "module",
+  "description": "Generación ONE-TIME de plantillas PDF blank FUR (no es runtime de core-api).",
+  "scripts": {
+    "generate-blanks": "node generate-blanks.mjs"
+  },
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "handlebars-helpers": "^0.10.0",
+    "puppeteer-core": "^24.2.0"
+  }
+}

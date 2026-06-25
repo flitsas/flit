@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>FurPreview</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\src\Flit.Infrastructure\Documents\Fur\Templates\*.pdf"
+             Link="Documents\Fur\Templates\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

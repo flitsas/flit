@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
+using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
@@ -63,9 +64,8 @@ public static class InfrastructureExtensions
 
         AddAttachmentStorage(services, configuration);
 
-        // HU #10256 — generador PDF real del FUR. Reemplaza al MockFurDocumentGenerator que
-        // producía texto plano. El mock se conserva en Application para los tests unitarios.
-        services.AddSingleton<IFurDocumentGenerator, FurDocumentGenerator>();
+        // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
+        services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
 
         AddConsultationProviders(services, configuration);

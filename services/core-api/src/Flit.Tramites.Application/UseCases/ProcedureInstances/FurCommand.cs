@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
@@ -181,7 +182,9 @@ public sealed class GenerarFurHandler(
             Partes: partes,
             ValorVenta: instance.Commercial?.ValorVenta,
             Causal: instance.Commercial?.Causal,
-            SellosFirma: sellos);
+            SellosFirma: sellos,
+            FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
+            Observaciones: Get(fv, "fur_observations"));
     }
 
     /// <summary>
@@ -215,7 +218,44 @@ public sealed class GenerarFurHandler(
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
-        partes.Add(new DocumentParte(rol, a?.FullName, a?.DocumentNumber, a?.Email));
+        var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        partes.Add(new DocumentParte(
+            rol,
+            a?.FullName,
+            a?.DocumentNumber,
+            a?.Email,
+            string.IsNullOrWhiteSpace(a?.DocumentType) ? null : a.DocumentType.Trim(),
+            string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
+            direccion,
+            ciudad));
+    }
+
+    private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);
+
+    private static (string? Ciudad, string? Direccion) ParseActorMetadata(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
+            return (null, null);
+        try
+        {
+            var m = JsonSerializer.Deserialize<ActorMetadataDto>(metadata, ActorMetadataJson);
+            return (m?.Ciudad, m?.Direccion);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    private sealed record ActorMetadataDto(string? Ciudad, string? Direccion);
+
+    private static DateTime? ParseFechaTramite(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt)
+            ? dt
+            : null;
     }
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
