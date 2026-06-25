@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
+  listTransitOffices: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -134,6 +135,7 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.listTransitOffices.mockResolvedValue([]);
 });
 
 function renderWizard() {

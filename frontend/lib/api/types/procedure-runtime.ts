@@ -77,6 +77,18 @@ export interface InstancesResponse {
   items: InstanceSummary[];
 }
 
+/** Organismo de tránsito habilitado para la empresa (catálogo + grant). */
+export interface TransitOfficeOption {
+  id: string;
+  code: string;
+  name: string;
+  cityCode: string;
+}
+
+export interface TransitOfficesResponse {
+  items: TransitOfficeOption[];
+}
+
 export interface FieldValue {
   formFieldId: string;
   fieldKey: string;

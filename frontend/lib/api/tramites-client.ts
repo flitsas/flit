@@ -17,6 +17,8 @@ import type {
   GenerarFurResult,
   InstanceSummary,
   InstancesResponse,
+  TransitOfficeOption,
+  TransitOfficesResponse,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
   InvitarParticipanteInput,
@@ -204,6 +206,18 @@ export const tramitesClient = {
   ): Promise<InstanceSummary[]> => {
     const res = await request<InstancesResponse>(
       '/api/v1/tramites/instances',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.items ?? [];
+  },
+
+  // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
+  // El operador solo puede elegir/enviar a estos en el FUR.
+  listTransitOffices: async (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<TransitOfficeOption[]> => {
+    const res = await request<TransitOfficesResponse>(
+      '/api/v1/tramites/transit-offices',
       { headers: tenantHeader(tenantId) },
     );
     return res?.items ?? [];

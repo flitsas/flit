@@ -1,4 +1,6 @@
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
+using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Microsoft.AspNetCore.Builder;
@@ -62,6 +64,31 @@ internal static class ProcedureInstanceEndpoints
             var items = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(new { items });
         }).WithName("ListProcedureInstances");
+
+        // GET /api/v1/tramites/transit-offices — Organismos de tránsito HABILITADOS para la
+        // empresa (tenant del header). #2: el operador solo puede elegir/enviar a los OT que la
+        // empresa tiene habilitados (admin.tenant_transit_office_grants), resueltos contra el
+        // catálogo. Lista vacía si la empresa no tiene ninguno habilitado.
+        group.MapGet("/transit-offices", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetTransitGrantsHandler grantsHandler,
+            ITransitOfficeCatalog catalog,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var grants = await grantsHandler.HandleAsync(
+                new GetTransitGrantsQuery { TenantId = tenantId.Value }, ct);
+
+            var items = grants.TransitOfficeIds
+                .Select(catalog.GetById)
+                .Where(o => o is not null)
+                .Select(o => new TransitOfficeOptionDto(o!.Id, o.Code, o.Name, o.CityCode))
+                .ToList();
+
+            return Results.Ok(new { items });
+        }).WithName("ListEnabledTransitOffices");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -133,3 +160,9 @@ internal static class ProcedureInstanceEndpoints
             TramiteModalidadEntradaCodes.MatriculaInicial,
             StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// Organismo de tránsito habilitado para una empresa (proyección catálogo + grant)
+/// que el operador puede elegir en el FUR.
+/// </summary>
+internal sealed record TransitOfficeOptionDto(Guid Id, string Code, string Name, string CityCode);
