@@ -1,4 +1,6 @@
+using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,8 +17,25 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances", async (
             CreateProcedureInstanceRequest request,
             CreateProcedureInstanceHandler handler,
+            GetTenantSettingsHandler settingsHandler,
             CancellationToken ct) =>
         {
+            // #5 — La compañía puede deshabilitar la matrícula inicial vía el toggle
+            // "Permitir matrícula inicial" (admin/companies). Si está en off para el
+            // tenant, no se permite crear ese trámite. Sin fila de settings → permisivo
+            // (default de la columna allow_initial_registration = true), para no romper
+            // tenants aún no configurados.
+            if (EsMatriculaInicial(request.Modalidad))
+            {
+                var settings = await settingsHandler.HandleAsync(
+                    new GetTenantSettingsQuery { TenantId = request.TenantId }, ct);
+                if (settings is { SwitchesMatricula.AllowInitialRegistration: false })
+                    return Results.Problem(
+                        statusCode: 422,
+                        title: "Unprocessable Entity",
+                        detail: "La compañía no tiene habilitada la matrícula inicial.");
+            }
+
             var (result, error) = await handler.HandleAsync(request, ct);
             return error switch
             {
@@ -106,4 +125,11 @@ internal static class ProcedureInstanceEndpoints
 
         return app;
     }
+
+    /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
+    private static bool EsMatriculaInicial(string? modalidad) =>
+        string.Equals(
+            modalidad?.Trim(),
+            TramiteModalidadEntradaCodes.MatriculaInicial,
+            StringComparison.OrdinalIgnoreCase);
 }
