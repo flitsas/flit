@@ -1,7 +1,15 @@
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
-public sealed record DocumentParte(string Rol, string? Nombre, string? Documento, string? Email);
+public sealed record DocumentParte(
+    string Rol,
+    string? Nombre,
+    string? Documento,
+    string? Email,
+    string? DocumentType = null,
+    string? Phone = null,
+    string? Address = null,
+    string? City = null);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
@@ -45,7 +53,10 @@ public sealed record FurDocumentData(
     IReadOnlyList<DocumentParte> Partes,
     decimal? ValorVenta,
     string? Causal,
-    IReadOnlyList<string> SellosFirma)
+    IReadOnlyList<string> SellosFirma,
+    DateTime? FechaTramite = null,
+    string? Observaciones = null,
+    IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

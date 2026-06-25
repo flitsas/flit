@@ -61,7 +61,7 @@ public static class DependencyInjection
         services.AddScoped<KyverumWebhookHandler>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
-        // IFurDocumentGenerator se registra en Infrastructure (FurDocumentGenerator — QuestPDF real, HU #10256).
+        // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).
         // MockFurDocumentGenerator se conserva para tests; solo se quitó el registro de DI.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
         services.AddSingleton<Documents.IIdentityCertificateGenerator, Documents.MockIdentityCertificateGenerator>();
@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        services.AddScoped<GenerarConsolidadoHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los

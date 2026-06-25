@@ -25,7 +25,14 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             return (null, "not_found");
 
         if (instance.Status != ProcedureInstanceStatus.Draft)
-            return (null, "not_draft");
+        {
+            // Tras el envío solo se permiten claves de organismo de tránsito (generación
+            // diferida del FUR). Cualquier otro campo sigue bloqueado en not_draft.
+            var blocked = request.Items.Where(i =>
+                !IsPostSubmitTransitOfficeKey(i.FieldKey)).ToList();
+            if (blocked.Count > 0)
+                return (null, "not_draft");
+        }
 
         var now = DateTimeOffset.UtcNow;
 
@@ -80,4 +87,9 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 
         return (GetProcedureInstanceHandler.ToDetail(instance), null);
     }
+
+    private static bool IsPostSubmitTransitOfficeKey(string fieldKey) =>
+        string.Equals(fieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(fieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase);
 }

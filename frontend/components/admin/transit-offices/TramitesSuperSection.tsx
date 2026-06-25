@@ -43,7 +43,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     setProfileStatus("loading");
     try {
-      const data = await fetchOtProfile(signal);
+      const data = await fetchOtProfile(signal, { transitOfficeId });
       if (signal?.aborted) {
         return;
       }
@@ -55,7 +55,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         setProfileStatus("error");
       }
     }
-  }, []);
+  }, [transitOfficeId]);
 
   const loadProcedures = useCallback(async (signal?: AbortSignal) => {
     setListStatus("loading");
@@ -63,6 +63,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       const data = await fetchOtClientProcedures(
         { status: "pending_ot", page: 1, pageSize: PAGE_SIZE },
         signal,
+        { transitOfficeId },
       );
       if (signal?.aborted) {
         return;
@@ -74,7 +75,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         setListStatus("error");
       }
     }
-  }, []);
+  }, [transitOfficeId]);
 
   useEffect(() => {
     const controller = new AbortController();

@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Persistence\Sql\Ddl\*.sql" />
+    <EmbeddedResource Include="Documents\Fur\fur-field-manifest.json" />
+    <Content Include="Documents\Fur\Templates\*.pdf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,6 +45,7 @@
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
     <!-- HU #10256 — generador PDF real del FUR (QuestPDF Community). Versión pineada en Directory.Packages.props. -->
     <PackageReference Include="QuestPDF" />
+    <PackageReference Include="PdfSharpCore" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />

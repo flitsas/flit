@@ -10,9 +10,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class OtProfileRepository : IOtProfileRepository
 {
-    /// <summary>OT por defecto para bootstrap cuando no hay grant (tests / dev).</summary>
+    /// <summary>OT por defecto para bootstrap cuando no hay grant (tests / dev). Debe existir en <c>catalogs.transit_offices</c>.</summary>
     internal static readonly Guid DefaultTransitOfficeId =
-        Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
 
     private readonly FlitDbContext _context;
 
@@ -56,6 +56,7 @@ internal sealed class OtProfileRepository : IOtProfileRepository
         string operationMode,
         bool quipuxReadOnly,
         Guid? changedBy,
+        Guid? transitOfficeId = null,
         CancellationToken cancellationToken = default) =>
         ExecuteInTenantScopeAsync(
             tenantId,
@@ -66,14 +67,18 @@ internal sealed class OtProfileRepository : IOtProfileRepository
                     .FirstOrDefaultAsync(p => p.TenantId == tenantId, cancellationToken)
                     .ConfigureAwait(false);
 
+                var resolvedOfficeId = await ResolveTransitOfficeIdAsync(
+                    tenantId,
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
                 if (entity is null)
                 {
                     entity = new TransitOfficeProfile
                     {
                         Id = Guid.NewGuid(),
                         TenantId = tenantId,
-                        TransitOfficeId = await ResolveTransitOfficeIdAsync(tenantId, cancellationToken)
-                            .ConfigureAwait(false),
+                        TransitOfficeId = resolvedOfficeId,
                         CreatedAt = now,
                         CreatedBy = changedBy,
                     };
@@ -83,6 +88,10 @@ internal sealed class OtProfileRepository : IOtProfileRepository
                 {
                     entity.UpdatedAt = now;
                     entity.UpdatedBy = changedBy;
+                    if (transitOfficeId is Guid explicitOfficeId && explicitOfficeId != Guid.Empty)
+                    {
+                        entity.TransitOfficeId = explicitOfficeId;
+                    }
                 }
 
                 entity.OperationMode = operationMode;
@@ -103,8 +112,14 @@ internal sealed class OtProfileRepository : IOtProfileRepository
 
     private async Task<Guid> ResolveTransitOfficeIdAsync(
         Guid tenantId,
+        Guid? explicitTransitOfficeId,
         CancellationToken cancellationToken)
     {
+        if (explicitTransitOfficeId is Guid explicitId && explicitId != Guid.Empty)
+        {
+            return explicitId;
+        }
+
         var grantOfficeId = await _context.TenantTransitOfficeGrants
             .AsNoTracking()
             .Where(g => g.TenantId == tenantId && g.IsEnabled)

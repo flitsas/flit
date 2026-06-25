@@ -24,6 +24,7 @@ using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
 using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -203,6 +204,8 @@ public static class AdminOtEndpoints
     private static async Task<IResult> GetProfileAsync(
         HttpContext httpContext,
         GetOtProfileHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -212,8 +215,23 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        var scopedOfficeId = default(Guid?);
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var response = await handler.HandleAsync(
-            new GetOtProfileQuery { TenantId = tenantId },
+            new GetOtProfileQuery
+            {
+                TenantId = tenantId,
+                TransitOfficeId = scopedOfficeId,
+            },
             cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(response);
@@ -282,6 +300,38 @@ public static class AdminOtEndpoints
     {
         var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
         return Guid.TryParse(claim, out tenantId);
+    }
+
+    private static bool IsSuperAdmin(ClaimsPrincipal user) =>
+        user.IsInRole(AdminAuthorization.SuperAdminRole);
+
+    /// <summary>
+    /// SuperAdmin puede fijar la OT del hub vía query; ot_admin ignora el parámetro
+    /// y usa su perfil persistido.
+    /// </summary>
+    private static bool TryResolveScopedTransitOfficeId(
+        ClaimsPrincipal user,
+        Guid? transitOfficeId,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        out Guid? scopedOfficeId,
+        out IResult? errorResult)
+    {
+        scopedOfficeId = null;
+        errorResult = null;
+
+        if (!IsSuperAdmin(user) || transitOfficeId is null || transitOfficeId == Guid.Empty)
+        {
+            return true;
+        }
+
+        if (!transitOfficeCatalog.Exists(transitOfficeId.Value))
+        {
+            errorResult = Results.BadRequest(new { error = "transitOfficeId no existe en el catálogo OT" });
+            return false;
+        }
+
+        scopedOfficeId = transitOfficeId.Value;
+        return true;
     }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
@@ -411,10 +461,12 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListClientProceduresAsync(
         HttpContext httpContext,
         ListOtClientProceduresHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
         Guid? procedureTypeId,
         int? page,
         int? pageSize,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -424,9 +476,21 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        var scopedOfficeId = default(Guid?);
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery
         {
             OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
             Status = status,
             ProcedureTypeId = procedureTypeId,
             Page = page,

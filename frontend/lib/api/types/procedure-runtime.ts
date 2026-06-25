@@ -545,6 +545,21 @@ export interface GenerarFurResult {
   documents: FurDocument[];
 }
 
+// ── Expediente consolidado (matrícula inicial) ───────────────────────
+// POST /api/v1/tramites/instances/{id}/consolidado -> { document } (201)
+// Fusiona FUR + certificado de identidad + adjuntos del trámite en un PDF único.
+
+export interface ConsolidadoDocument {
+  attachmentId: string;
+  tipo: string;
+  filename: string;
+  sha256: string;
+}
+
+export interface GenerarConsolidadoResult {
+  document: ConsolidadoDocument;
+}
+
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
 // Contrato FIJO acordado con backend:
 //   POST /api/v1/tramites/instances/{id}/participants               -> InvitarParticipanteResult (201)

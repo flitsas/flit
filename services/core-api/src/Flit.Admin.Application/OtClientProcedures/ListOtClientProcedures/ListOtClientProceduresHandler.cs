@@ -34,6 +34,7 @@ public sealed class ListOtClientProceduresHandler
                 Page = page,
                 PageSize = pageSize,
             },
+            query.TransitOfficeId,
             cancellationToken).ConfigureAwait(false);
 
         return new ListOtClientProceduresResult

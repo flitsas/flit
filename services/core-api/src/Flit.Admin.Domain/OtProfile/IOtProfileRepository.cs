@@ -9,5 +9,6 @@ public interface IOtProfileRepository
         string operationMode,
         bool quipuxReadOnly,
         Guid? changedBy,
+        Guid? transitOfficeId = null,
         CancellationToken cancellationToken = default);
 }

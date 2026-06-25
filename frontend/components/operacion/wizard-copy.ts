@@ -29,7 +29,7 @@ const REASON_COPY: Record<string, string> = {
   identidad_pendiente: 'Validación biométrica pendiente',
   pendiente_biometria: 'Validación biométrica pendiente',
   pendiente_firma: 'Firma de la compraventa pendiente',
-  fur_pendiente: 'Falta generar el FUR',
+  fur_pendiente: 'FUR pendiente (opcional)',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -41,7 +41,7 @@ const BLOCKER_COPY: Record<string, string> = {
   identidad_pendiente: 'Validación biométrica pendiente',
   pendiente_biometria: 'Validación biométrica pendiente',
   pendiente_firma: 'Firma de la compraventa pendiente',
-  fur_pendiente: 'Falta generar el FUR',
+  fur_pendiente: 'FUR pendiente (opcional)',
   pasos_incompletos: 'Hay pasos sin completar',
 };
 

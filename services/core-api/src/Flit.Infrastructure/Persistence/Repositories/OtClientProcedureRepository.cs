@@ -24,9 +24,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     public Task<PagedResult<OtClientProcedure>> ListAsync(
         Guid otTenantId,
         OtClientProcedureFilter filter,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         ExecuteOtScopedAsync(
             otTenantId,
+            transitOfficeIdOverride,
             async transitOfficeId =>
             {
                 var clientTenantIds = await ListGrantedClientTenantIdsAsync(
@@ -283,11 +285,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     private async Task<T> ExecuteOtScopedAsync<T>(
         Guid otTenantId,
+        Guid? transitOfficeIdOverride,
         Func<Guid, Task<T>> action,
         CancellationToken cancellationToken)
     {
-        var transitOfficeId = await ResolveTransitOfficeIdAsync(otTenantId, cancellationToken)
-            .ConfigureAwait(false);
+        Guid? transitOfficeId = transitOfficeIdOverride is Guid overrideId && overrideId != Guid.Empty
+            ? overrideId
+            : await ResolveTransitOfficeIdAsync(otTenantId, cancellationToken).ConfigureAwait(false);
 
         if (transitOfficeId is null)
         {
@@ -298,6 +302,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
         return await action(transitOfficeId.Value).ConfigureAwait(false);
     }
+
+    private async Task<T> ExecuteOtScopedAsync<T>(
+        Guid otTenantId,
+        Func<Guid, Task<T>> action,
+        CancellationToken cancellationToken) =>
+        await ExecuteOtScopedAsync(otTenantId, null, action, cancellationToken).ConfigureAwait(false);
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,

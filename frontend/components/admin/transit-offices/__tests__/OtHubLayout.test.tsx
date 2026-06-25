@@ -22,6 +22,24 @@ vi.mock("@/lib/api/admin-companies", () => ({
   ]),
 }));
 
+vi.mock("@/lib/api/admin-ot", () => ({
+  fetchOtProfile: vi.fn().mockResolvedValue({
+    operationMode: "dashboard",
+    quipuxReadOnly: false,
+    transitOfficeId: "ot-1",
+    featureFlags: [],
+  }),
+}));
+
+vi.mock("@/lib/api/client", () => ({
+  getToken: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/auth/jwt", () => ({
+  decodeJwtPayload: vi.fn().mockReturnValue(null),
+  isSuperAdmin: vi.fn().mockReturnValue(false),
+}));
+
 describe("OtHubLayout — HU #10236", () => {
   beforeEach(() => {
     vi.clearAllMocks();

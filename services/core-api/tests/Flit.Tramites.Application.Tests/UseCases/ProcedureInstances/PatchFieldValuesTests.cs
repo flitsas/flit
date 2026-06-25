@@ -46,18 +46,44 @@ public sealed class PatchFieldValuesTests
     [Theory]
     [InlineData("submitted")]
     [InlineData("completed")]
-    public async Task HandleAsync_NotDraft_ReturnsNotDraft(string status)
+    public async Task HandleAsync_NotDraft_NonTransitField_ReturnsNotDraft(string status)
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId, status));
 
-        var request = new PatchFieldValuesRequest([]);
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "plate", "ABC123", null)]);
         var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
 
         error.Should().Be("not_draft");
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_Submitted_TransitOfficeKeys_Allowed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Submitted);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
+
+        var request = new PatchFieldValuesRequest(
+        [
+            new FieldValueInput(null, "transit_office_code", "11001000", null),
+            new FieldValueInput(null, "transit_office_name", "SDM", null),
+            new FieldValueInput(null, "transit_office_city", "Bogotá", null),
+        ]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().HaveCount(3);
+        result.Should().NotBeNull();
+        await _repo.Received(1).SaveChangesAsync(ct);
     }
 
     [Fact]

@@ -28,8 +28,18 @@ import type {
 
 const base = "/api/v1/admin/ot";
 
-export function fetchOtProfile(signal?: AbortSignal): Promise<OtProfile> {
-  return apiFetch<OtProfile>(`${base}/profile`, { signal });
+export interface OtApiScope {
+  transitOfficeId?: string;
+}
+
+export function fetchOtProfile(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtProfile> {
+  return apiFetch<OtProfile>(`${base}/profile`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
 }
 
 export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile> {
@@ -46,9 +56,13 @@ export function updateOtFeatureFlag(
 export function fetchOtClientProcedures(
   params: OtClientProceduresParams = {},
   signal?: AbortSignal,
+  scope?: OtApiScope,
 ): Promise<OtClientProcedurePagedResult> {
   return apiFetch<OtClientProcedurePagedResult>(`${base}/client-procedures`, {
-    query: { ...params },
+    query: {
+      ...params,
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
     signal,
   });
 }

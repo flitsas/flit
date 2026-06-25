@@ -310,8 +310,11 @@ public sealed class AttachmentsHandlerTests
         instance.ChecklistEstado = "{\"rtm\":true}";
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = attachmentId, ProcedureInstanceId = id, Tipo = "rtm",
-            StoragePath = "p/rtm.pdf", UploadedAt = DateTimeOffset.UtcNow,
+            Id = attachmentId,
+            ProcedureInstanceId = id,
+            Tipo = "rtm",
+            StoragePath = "p/rtm.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
 
@@ -333,13 +336,19 @@ public sealed class AttachmentsHandlerTests
         instance.ChecklistEstado = "{\"rtm\":true}";
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = attachmentId, ProcedureInstanceId = id, Tipo = "rtm",
-            StoragePath = "p/rtm-1.pdf", UploadedAt = DateTimeOffset.UtcNow,
+            Id = attachmentId,
+            ProcedureInstanceId = id,
+            Tipo = "rtm",
+            StoragePath = "p/rtm-1.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), ProcedureInstanceId = id, Tipo = "rtm",
-            StoragePath = "p/rtm-2.pdf", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ProcedureInstanceId = id,
+            Tipo = "rtm",
+            StoragePath = "p/rtm-2.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
 

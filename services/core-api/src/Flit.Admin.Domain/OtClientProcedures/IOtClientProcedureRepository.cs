@@ -10,6 +10,7 @@ public interface IOtClientProcedureRepository
     Task<PagedResult<OtClientProcedure>> ListAsync(
         Guid otTenantId,
         OtClientProcedureFilter filter,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> GetByIdAsync(

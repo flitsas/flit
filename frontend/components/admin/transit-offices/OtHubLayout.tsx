@@ -6,6 +6,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
 import {
   OT_HUB_TABS,
@@ -33,12 +35,17 @@ export function OtHubLayout({
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchOtProfile(controller.signal)
+    const superAdmin = isSuperAdmin(decodeJwtPayload(getToken()));
+    void fetchOtProfile(controller.signal, { transitOfficeId: transitOfficeId })
       .then((profile) => {
         if (controller.signal.aborted) {
           return;
         }
-        if (profile.transitOfficeId && profile.transitOfficeId !== transitOfficeId) {
+        if (
+          !superAdmin &&
+          profile.transitOfficeId &&
+          profile.transitOfficeId !== transitOfficeId
+        ) {
           router.replace(otHubModulePath(profile.transitOfficeId, activeTab));
         }
       })

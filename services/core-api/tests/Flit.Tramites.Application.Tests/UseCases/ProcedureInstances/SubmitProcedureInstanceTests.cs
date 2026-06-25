@@ -249,7 +249,7 @@ public sealed class SubmitProcedureInstanceTests
     }
 
     [Fact]
-    public async Task HandleAsync_FurRequerido_ReturnsGateError()
+    public async Task HandleAsync_SinFur_TransitionsToSubmitted()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -259,24 +259,28 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (_, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
 
-        error.Should().Be("fur_requerido");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);
     }
 
     [Fact]
-    public async Task HandleAsync_OrganismoRequerido_ReturnsGateError()
+    public async Task HandleAsync_SinOrganismo_TransitionsToSubmitted()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
-        instance.FieldValues.Clear(); // docs+biométrica+fur ok, falta organismo
+        instance.FieldValues.Clear();
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (_, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
 
-        error.Should().Be("organismo_requerido");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);
     }
 }

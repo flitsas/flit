@@ -89,6 +89,7 @@ const STEP_SUBTITLE: Record<string, string> = {
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
   documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
   comercial: 'Valor de la venta, causal e impuestos del traspaso.',
+  fur: 'Generación opcional del FUR y expediente consolidado. Puedes enviar el trámite y generarlos después.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
@@ -366,7 +367,8 @@ export function TramiteWizard(props: Props) {
             <span className="font-semibold" style={{ color: '#557EFF' }}>
               Enviado a tránsito — solo visualización.
             </span>{' '}
-            Este trámite ya no puede editarse.
+            Este trámite ya no puede editarse, pero aún puedes generar o
+            descargar el FUR y el expediente consolidado.
           </span>
         </div>
       )}
