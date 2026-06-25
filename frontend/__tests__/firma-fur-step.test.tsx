@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
   downloadAttachment: vi.fn(),
+  listTransitOffices: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -40,6 +41,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
     downloadAttachment: mocks.downloadAttachment,
+    listTransitOffices: mocks.listTransitOffices,
   },
 }));
 
@@ -116,6 +118,7 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listBiometric.mockResolvedValue([]);
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
+  mocks.listTransitOffices.mockResolvedValue([]);
   mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'submitted' });
   mocks.downloadAttachment.mockResolvedValue({
     blob: new Blob(['x'], { type: 'text/plain' }),
@@ -250,18 +253,27 @@ describe('FirmaFurStep — organismo de tránsito', () => {
     ).toBeInTheDocument();
   });
 
-  it('persiste el organismo elegido vía patchFieldValues con las 3 keys', async () => {
+  it('lista solo los OT habilitados de la empresa y persiste el elegido (con id)', async () => {
     mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, fieldValues: [] });
+    // El catálogo del modal proviene del endpoint de OT habilitados de la empresa.
+    mocks.listTransitOffices.mockResolvedValue([
+      { id: 'aaaaaaaa-0001-4000-8000-000000000003', code: '76001', name: 'Cali — STTMP', cityCode: '76001' },
+    ]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const dialog = await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' });
-    await user.click(within(dialog).getByRole('button', { name: /Secretaría de Movilidad de Cali/ }));
+    await user.click(await within(dialog).findByRole('button', { name: /Cali/ }));
+
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalledTimes(1));
-    const items = mocks.patchFieldValues.mock.calls[0][1];
-    const keys = items.map((i: { fieldKey: string }) => i.fieldKey);
-    expect(keys).toEqual(
-      expect.arrayContaining(['transit_office_code', 'transit_office_name', 'transit_office_city']),
-    );
+    const items = mocks.patchFieldValues.mock.calls[0][1] as {
+      fieldKey: string;
+      valueText: string;
+    }[];
+    const byKey = Object.fromEntries(items.map((i) => [i.fieldKey, i.valueText]));
+    // Persiste el id real del catálogo (no solo el texto), además de code/name/city.
+    expect(byKey.transit_office_id).toBe('aaaaaaaa-0001-4000-8000-000000000003');
+    expect(byKey.transit_office_code).toBe('76001');
+    expect(byKey.transit_office_name).toBe('Cali — STTMP');
   });
 });
 

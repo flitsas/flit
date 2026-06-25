@@ -41,6 +41,42 @@ public sealed class MatriculaGatesTests
     }
 
     [Fact]
+    public void Paso2_PreflightRed_Bloquea()
+    {
+        var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false) };
+        TraspasoGatesShared(ctx, 2, "preflight_red");
+    }
+
+    [Fact]
+    public void Paso2_RiesgoPreflightAceptado_BypassPreflightRed()
+    {
+        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso 2.
+        var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), RiesgoPreflightAceptado = true };
+        MatriculaGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
+    {
+        // El riesgo NO afloja el gating de documentos obligatorios.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false),
+            RiesgoPreflightAceptado = true,
+            DocumentosObligatoriosCompletos = false,
+        };
+        TraspasoGatesShared(ctx, 2, "documentos_incompletos");
+    }
+
+    [Fact]
+    public void Paso4_RiesgoPreflightAceptado_NoBypassIdentidad()
+    {
+        // A diferencia de ForzarContinuar, el riesgo NO omite la validación de identidad.
+        var ctx = BaseCtx() with { IdentidadAprobada = false, RiesgoPreflightAceptado = true };
+        TraspasoGatesShared(ctx, 4, "identidad_pendiente");
+    }
+
+    [Fact]
     public void Paso1_SinConsultarVin_Bloquea()
     {
         var ctx = BaseCtx() with { VehiculoConsultado = false };

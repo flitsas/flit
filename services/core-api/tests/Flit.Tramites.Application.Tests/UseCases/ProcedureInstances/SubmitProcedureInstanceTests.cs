@@ -14,15 +14,22 @@ public sealed class SubmitProcedureInstanceTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IProcedureTypeRepository _typeRepo = Substitute.For<IProcedureTypeRepository>();
+    private readonly ITransitOfficeGrantGate _grantGate = Substitute.For<ITransitOfficeGrantGate>();
     private readonly SubmitProcedureInstanceHandler _sut;
 
     public SubmitProcedureInstanceTests()
     {
+        // Por defecto, cualquier OT se considera habilitado (la restricción se ejercita
+        // explícitamente en los tests que la cubren).
+        _grantGate
+            .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new SubmitProcedureInstanceHandler(
             _repo,
             _typeRepo,
             NullProcedureStateChangeNotifier.Instance,
-            NullOtRuleGate.Instance);
+            NullOtRuleGate.Instance,
+            _grantGate);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
@@ -146,6 +153,65 @@ public sealed class SubmitProcedureInstanceTests
         // El status_history NUEVO se marca Added explícito → INSERT (PK store-generated con Id ya seteado).
         _repo.Received(1).Add(Arg.Any<ProcedureInstanceStatusHistory>());
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    private static readonly Guid BogotaOfficeId =
+        Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
+
+    private static void SeleccionarOt(ProcedureInstance instance, Guid officeId)
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "transit_office_id",
+            ValueText = officeId.ToString(),
+            Source = "user",
+        });
+    }
+
+    [Fact]
+    public async Task HandleAsync_OrganismoNoHabilitado_BloqueaSinRadicar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
+        _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(false); // OT NO habilitado para la empresa
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+
+        error.Should().Be("organismo_no_habilitado");
+        result.Should().BeNull();
+        instance.Status.Should().Be(ProcedureInstanceStatus.Draft); // no transiciona
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OrganismoHabilitado_PromueveTransitOfficeIdYRadica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        instance.TransitOfficeId.Should().BeNull(); // el FUR solo persistía field_values
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
+        _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+
+        error.Should().BeNull();
+        // El id se promueve a la columna para el motor de reglas OT y los listados.
+        instance.TransitOfficeId.Should().Be(BogotaOfficeId);
+        instance.Status.Should().Be(ProcedureInstanceStatus.Submitted);
     }
 
     [Fact]

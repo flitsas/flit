@@ -53,6 +53,14 @@ public sealed record TraspasoGateContext
 
     /// <summary>Override del gestor que omite bloqueos no críticos (paridad <c>forzarContinuar</c>).</summary>
     public bool ForzarContinuar { get; init; }
+
+    /// <summary>
+    /// El gestor marcó "Asumo el riesgo de rechazo en el OT" ante un preflight rojo subsanable
+    /// (p.ej. estado del vehículo distinto de ACTIVO). A diferencia de <see cref="ForzarContinuar"/>,
+    /// SOLO desbloquea el gate de preflight rojo (paso 2) y el blocker global del submit; NO omite
+    /// impuesto, SIMIT ni biometría.
+    /// </summary>
+    public bool RiesgoPreflightAceptado { get; init; }
 }
 
 /// <summary>
@@ -72,4 +80,11 @@ public sealed record MatriculaGateContext
     public bool DocumentosObligatoriosCompletos { get; init; }
 
     public bool ForzarContinuar { get; init; }
+
+    /// <summary>
+    /// El gestor marcó "Asumo el riesgo de rechazo en el OT" ante un preflight rojo subsanable
+    /// (p.ej. estado del vehículo distinto de ACTIVO). SOLO desbloquea el gate de preflight rojo
+    /// (paso 2) y el blocker global del submit; NO omite identidad ni documentos.
+    /// </summary>
+    public bool RiesgoPreflightAceptado { get; init; }
 }

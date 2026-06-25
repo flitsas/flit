@@ -27,7 +27,7 @@ public static class MatriculaGates
                     : GateResult.Block("vin_pendiente", "Consulta el VIN del vehículo antes de continuar");
 
             case 2:
-                if (!forzar && ctx.Preflight?.Overall == "red")
+                if (!forzar && !ctx.RiesgoPreflightAceptado && ctx.Preflight?.Overall == "red")
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos en los documentos. Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)
                     return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");

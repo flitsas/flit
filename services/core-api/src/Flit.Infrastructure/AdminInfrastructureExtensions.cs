@@ -92,6 +92,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtRuleRepository, OtRuleRepository>();
         services.AddScoped<IOtRuleGate, OtRuleGateService>();
 
+        // #2 — validación de OT habilitado por empresa en el submit de trámites.
+        services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

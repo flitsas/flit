@@ -47,7 +47,8 @@ public static class TraspasoGates
 
             case 2:
                 // Paso 2 = Documentos (paridad con MatriculaGates paso 2): preflight crítico + checklist.
-                if (PreflightBloquea(ctx.Preflight, forzar))
+                // El gestor puede asumir el riesgo de un preflight rojo subsanable (sin tocar docs).
+                if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)
                     return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");

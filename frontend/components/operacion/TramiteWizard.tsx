@@ -756,6 +756,7 @@ function ConsultaStep({
   // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
+  const [riesgoSaving, setRiesgoSaving] = useState(false);
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -875,6 +876,26 @@ function ConsultaStep({
       onRefresh();
     } finally {
       setPazSalvoSaving(false);
+    }
+  };
+
+  // "Asumo el riesgo" ante un preflight rojo subsanable (p.ej. estado del vehículo
+  // distinto de ACTIVO): persiste riesgo_aceptado en field_values y refresca el
+  // wizard para que el backend desbloquee el paso 2 (documentos) sin tocar identidad.
+  const riesgoAceptado =
+    fieldValues.find((f) => f.fieldKey === 'riesgo_aceptado')?.valueText === 'true';
+
+  const handleRiesgo = async (checked: boolean) => {
+    if (!instanceId) return;
+    setRiesgoSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'riesgo_aceptado', valueText: checked ? 'true' : 'false', valueJson: null },
+      ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setRiesgoSaving(false);
     }
   };
 
@@ -1024,8 +1045,9 @@ function ConsultaStep({
         snapshot={preflight}
         loading={loading}
         onRun={() => void handleRun()}
-        riesgoAceptado={false}
-        onToggleRiesgo={() => {}}
+        riesgoAceptado={riesgoAceptado}
+        onToggleRiesgo={(v) => void handleRiesgo(v)}
+        saving={riesgoSaving}
         showRunButton={false}
       />
     </div>

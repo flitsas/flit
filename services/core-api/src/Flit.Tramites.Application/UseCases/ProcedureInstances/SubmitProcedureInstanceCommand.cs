@@ -9,7 +9,8 @@ public sealed class SubmitProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
     IProcedureTypeRepository typeRepo,
     IProcedureStateChangeNotifier stateChangeNotifier,
-    IOtRuleGate otRuleGate)
+    IOtRuleGate otRuleGate,
+    ITransitOfficeGrantGate transitOfficeGrantGate)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -30,6 +31,22 @@ public sealed class SubmitProcedureInstanceHandler(
         var gateErrors = SubmitGate.Evaluate(instance);
         if (gateErrors.Count > 0)
             return (null, gateErrors[0]);
+
+        // #2 — el OT elegido en el FUR (transit_office_id en field_values) debe estar
+        // HABILITADO para la empresa. Además se promueve a la columna TransitOfficeId para
+        // que el motor de reglas OT y los listados operen sobre el id real (antes el FUR
+        // solo persistía field_values de texto y la columna quedaba en null).
+        var selectedOfficeId = TransitOfficeIdFromFieldValues(instance);
+        if (selectedOfficeId is { } officeId)
+        {
+            var enabled = await transitOfficeGrantGate
+                .IsEnabledForTenantAsync(tenantId, officeId, ct)
+                .ConfigureAwait(false);
+            if (!enabled)
+                return (null, "organismo_no_habilitado");
+
+            instance.TransitOfficeId = officeId;
+        }
 
         var ruleResult = await otRuleGate.EvaluateSubmissionAsync(
             instance.TransitOfficeId,
@@ -71,5 +88,18 @@ public sealed class SubmitProcedureInstanceHandler(
             ct).ConfigureAwait(false);
 
         return (CreateProcedureInstanceHandler.ToSummary(instance), null);
+    }
+
+    /// <summary>
+    /// Id del organismo de tránsito elegido en el FUR, leído del field_value
+    /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
+    /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
+    /// </summary>
+    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
+    {
+        var raw = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
+
+        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 }

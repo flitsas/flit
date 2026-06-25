@@ -101,6 +101,9 @@ public sealed class RunPreflightHandler(
         // consulta dedicada. Idempotente: upsert por field_key.
         UpsertHydratedFields(instance, tenantId, vehicleFields);
 
+        // Matrícula inicial: el estado del vehículo no debe bloquear (ver RelajarEstadoVehiculoMatricula).
+        RelajarEstadoVehiculoMatricula(checks, modalidad);
+
         // Composición del overall con la regla del dominio.
         var overall = ComposeOverall(checks);
         var provider = providersUsed.Count == 0 ? null : string.Join(",", providersUsed);
@@ -149,6 +152,28 @@ public sealed class RunPreflightHandler(
         if (hasWarn)
             return "yellow";
         return "green";
+    }
+
+    /// <summary>
+    /// En MATRÍCULA INICIAL el estado del vehículo en RUNT suele ser <c>"REGISTRADO"</c> (registrado
+    /// pero aún no activo/matriculado), no <c>"ACTIVO"</c>: es el estado ESPERADO para un 0 km, así que
+    /// NO debe bloquear. Se degrada el check <c>estado_vehiculo</c> de <c>fail</c> a <c>warn</c>
+    /// (informativo, amarillo) para que nunca pinte el preflight en rojo. En traspaso se exige
+    /// <c>"ACTIVO"</c> (vehículo en circulación) → el <c>fail</c> se mantiene intacto.
+    /// </summary>
+    private static void RelajarEstadoVehiculoMatricula(
+        List<PreflightCheckDto> checks,
+        TramiteModalidadEntrada? modalidad)
+    {
+        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
+            return;
+
+        for (var i = 0; i < checks.Count; i++)
+        {
+            var c = checks[i];
+            if (string.Equals(c.Key, "estado_vehiculo", StringComparison.Ordinal) && c.Status == "fail")
+                checks[i] = c with { Status = "warn" };
+        }
     }
 
     private async Task<IReadOnlyList<HydratedField>> RunVehiculoAsync(

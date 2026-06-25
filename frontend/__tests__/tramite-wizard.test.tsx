@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
+  listTransitOffices: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -134,6 +135,7 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.listTransitOffices.mockResolvedValue([]);
 });
 
 function renderWizard() {
@@ -438,6 +440,61 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
       ]),
     );
     await waitFor(() => expect(mocks.runPreflight).toHaveBeenCalledWith('inst-1'));
+  });
+});
+
+describe('TramiteWizard — aceptar riesgo de preflight rojo', () => {
+  const RED_PREFLIGHT: PreflightSnapshot = {
+    overall: 'red',
+    checks: [
+      {
+        key: 'estado_vehiculo',
+        label: 'Estado del vehículo',
+        status: 'fail',
+        source: 'RUNT',
+        message: 'Estado: registrado',
+      },
+    ],
+    createdAt: '2026-06-18T00:00:00Z',
+  };
+
+  it('marca el checkbox y persiste riesgo_aceptado + refresca el wizard', async () => {
+    // Preflight rojo en el paso 1 → aparece el checkbox "Asumo el riesgo…".
+    mocks.getPreflight.mockResolvedValue(RED_PREFLIGHT);
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    const checkbox = await screen.findByRole('checkbox', {
+      name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
+    });
+    expect(checkbox).not.toBeChecked();
+
+    await user.click(checkbox);
+
+    // Persiste el flag en field_values…
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-1', [
+        { formFieldId: null, fieldKey: 'riesgo_aceptado', valueText: 'true', valueJson: null },
+      ]),
+    );
+    // …y refresca el estado autoritativo del wizard para desbloquear el paso 2.
+    await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalled());
+  });
+
+  it('refleja riesgo ya aceptado (checkbox marcado) desde field_values', async () => {
+    mocks.getPreflight.mockResolvedValue(RED_PREFLIGHT);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      fieldValues: [{ fieldKey: 'riesgo_aceptado', valueText: 'true', valueJson: null }],
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    const checkbox = await screen.findByRole('checkbox', {
+      name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
+    });
+    await waitFor(() => expect(checkbox).toBeChecked());
   });
 });
 
