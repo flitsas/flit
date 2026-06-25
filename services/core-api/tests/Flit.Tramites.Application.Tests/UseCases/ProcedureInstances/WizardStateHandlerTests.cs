@@ -287,6 +287,30 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
+    public async Task Get_PreflightRed_RiesgoAceptado_LiftsBlockerAndStep2Completes()
+    {
+        // "Asumo el riesgo" (riesgo_aceptado=true en field_values) levanta el blocker de
+        // preflight rojo subsanable: el paso 2 (documentos) deja de bloquearse por preflight
+        // y el submit ya no se veta por ese motivo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "riesgo_aceptado", ValueText = "true", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("red"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().NotContain("preflight_red");
+        // Paso 2 completo: preflight rojo ya no bloquea y los docs obligatorios están.
+        result.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
+        // Pasos 1-3 completos; 4-5 diferidos → submit habilitado.
+        result.CanSubmit.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Get_Matricula_AllNonDeferredComplete_CanSubmitTrue()
     {
         var ct = TestContext.Current.CancellationToken;

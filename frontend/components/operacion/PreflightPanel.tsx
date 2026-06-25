@@ -16,6 +16,8 @@ interface Props {
   onRun: () => void;
   riesgoAceptado: boolean;
   onToggleRiesgo: (v: boolean) => void;
+  /** Persistiendo la aceptación de riesgo: deshabilita el checkbox para evitar dobles clics. */
+  saving?: boolean;
   // El disparo de la consulta puede vivir fuera del panel (p. ej. junto al campo
   // VIN en matrícula). En ese caso el panel es solo presentacional (semáforo).
   showRunButton?: boolean;
@@ -58,6 +60,7 @@ export function PreflightPanel({
   onRun,
   riesgoAceptado,
   onToggleRiesgo,
+  saving = false,
   showRunButton = true,
 }: Props) {
   // En solo lectura nunca se ofrece el disparo de la consulta (Track C).
@@ -168,7 +171,7 @@ export function PreflightPanel({
             type="checkbox"
             checked={riesgoAceptado}
             onChange={(e) => onToggleRiesgo(e.target.checked)}
-            disabled={readOnly}
+            disabled={readOnly || saving}
             className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00] disabled:opacity-60"
           />
           <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>

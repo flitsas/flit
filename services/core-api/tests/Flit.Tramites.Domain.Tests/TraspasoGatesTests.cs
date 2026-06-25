@@ -105,6 +105,43 @@ public sealed class TraspasoGatesTests
     }
 
     [Fact]
+    public void Paso2_RiesgoPreflightAceptado_BypassPreflightRed()
+    {
+        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso 2.
+        var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), RiesgoPreflightAceptado = true };
+        TraspasoGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
+    {
+        // El riesgo NO afloja el gating de documentos: sigue exigiendo obligatorios.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false),
+            RiesgoPreflightAceptado = true,
+            DocumentosObligatoriosCompletos = false,
+        };
+        var r = TraspasoGates.PasoCompleto(2, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("documentos_incompletos");
+    }
+
+    [Fact]
+    public void Paso4_RiesgoPreflightAceptado_NoBypassSimit()
+    {
+        // A diferencia de ForzarContinuar, el riesgo NO omite la validación SIMIT del comprador.
+        var ctx = BaseCtx() with
+        {
+            RiesgoPreflightAceptado = true,
+            SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 2),
+        };
+        var r = TraspasoGates.PasoCompleto(4, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("simit_multas");
+    }
+
+    [Fact]
     public void Paso1_ImpuestoUnknownSinPazSalvo_Bloquea()
     {
         // El gate de impuesto se movió al paso 1 (se confirma junto a la consulta/preflight).
