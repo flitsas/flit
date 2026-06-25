@@ -52,8 +52,11 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
                 Id = t.Id,
                 Nit = t.TaxId,
                 RazonSocial = t.LegalName,
+                Code = t.Code,
+                TenantType = t.TenantType,
                 EstadoActivo = t.IsActive,
                 FechaCreacion = t.CreatedAt,
+                RowVersion = t.RowVersion,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

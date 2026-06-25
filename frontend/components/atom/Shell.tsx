@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { decodeJwtPayload, isAdminCompany, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
@@ -44,6 +45,16 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "usuarios", label: "Usuarios y Permisos", icon: Users },
   { id: "ayuda", label: "Ayuda", icon: HelpCircle },
 ];
+
+// Entrada normalizada del dock: módulos de la SPA y accesos admin/empresa comparten
+// la misma forma para poder repartirse balanceadamente alrededor del FAB.
+type DockEntry = {
+  key: string;
+  label: string;
+  icon: typeof LayoutGrid;
+  active: boolean;
+  onClick: () => void;
+};
 
 function useTheme() {
   const [dark, setDark] = useState<boolean>(() => {
@@ -125,14 +136,79 @@ export function Shell({
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Dock balanceado alrededor del FAB: 4 a la izquierda y resto a la derecha.
-  // Filtra según permisos RBAC del JWT cuando visibleModuleCodes está disponible.
+  // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
+  // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
+  // por lo que se muestra siempre, en todas las pantallas del dock.
   const visibleDock = visibleModuleCodes
-    ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
+    ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
     : DOCK;
-  const midpoint = Math.min(4, Math.ceil(visibleDock.length / 2));
-  const left = visibleDock.slice(0, midpoint);
-  const right = visibleDock.slice(midpoint);
+
+  // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
+  // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
+  // de forma balanceada a izquierda/derecha; si se agregan más, se redistribuyen solas.
+  const pathname = usePathname() ?? "";
+  const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
+
+  const entries: DockEntry[] = visibleDock.map((it) => ({
+    key: it.id,
+    label: it.label,
+    icon: it.icon,
+    active: !onAdminRoute && active === it.id,
+    onClick: () => onNav(it.id),
+  }));
+
+  if (currentUser?.isSuperAdmin) {
+    entries.push(
+      {
+        key: "admin-companies",
+        label: "Compañías",
+        icon: Building2,
+        active: pathname.startsWith("/admin/companies"),
+        onClick: () => window.location.assign("/admin/companies"),
+      },
+      {
+        key: "admin-transit",
+        label: "Tránsito",
+        icon: Landmark,
+        active: pathname.startsWith("/admin/transit-offices"),
+        onClick: () => window.location.assign("/admin/transit-offices"),
+      },
+      {
+        key: "admin-documents",
+        label: "Documental",
+        icon: FolderCog,
+        active: pathname.startsWith("/admin/documents"),
+        onClick: () => window.location.assign("/admin/documents"),
+      },
+      {
+        key: "rbac",
+        label: "RBAC Admin",
+        icon: Lock,
+        active: !onAdminRoute && active === "rbac",
+        onClick: () => onNav("rbac"),
+      },
+    );
+  }
+
+  if (currentUser?.isAdminCompany) {
+    entries.push({
+      key: "mi-empresa",
+      label: "Mi Empresa",
+      icon: Briefcase,
+      active: pathname.startsWith("/empresa"),
+      onClick: () => window.location.assign("/empresa/usuarios"),
+    });
+  }
+
+  // Reparto balanceado: mitad a cada lado del FAB (la izquierda toma el extra cuando
+  // el total es impar). Se rellena el lado más corto con un espaciador invisible para
+  // que el FAB quede perfectamente centrado sin importar cuántas entradas haya.
+  const half = Math.ceil(entries.length / 2);
+  const left = entries.slice(0, half);
+  const right = entries.slice(half);
+  const sideLen = Math.max(left.length, right.length);
+  const leftPad = sideLen - left.length;
+  const rightPad = sideLen - right.length;
 
   return (
     <div
@@ -246,10 +322,19 @@ export function Shell({
               border: `1px solid ${dark ? "#1A1F2B" : "#DFE5ED"}`,
             }}
           >
-            {left.map((it) => (
-              <DockBtn key={it.id} item={it} active={active === it.id} onClick={() => onNav(it.id)} dark={dark} />
+            {Array.from({ length: leftPad }).map((_, i) => (
+              <DockSpacer key={`lp-${i}`} />
             ))}
-            {/* FAB */}
+            {left.map((it) => (
+              <DockBtn
+                key={it.key}
+                item={{ label: it.label, icon: it.icon }}
+                active={it.active}
+                onClick={it.onClick}
+                dark={dark}
+              />
+            ))}
+            {/* FAB — siempre centrado en el dock */}
             <button
               onClick={() => onNav("dashboard")}
               className="mx-2 h-14 w-14 rounded-full grid place-items-center transition-transform hover:scale-105"
@@ -262,47 +347,17 @@ export function Shell({
               <img src={iso} alt="FLIT" className="h-7 w-7 brightness-0 invert" />
             </button>
             {right.map((it) => (
-              <DockBtn key={it.id} item={it} active={active === it.id} onClick={() => onNav(it.id)} dark={dark} />
-            ))}
-            {/* Botones admin: solo SuperAdmin */}
-            {currentUser?.isSuperAdmin && (
-              <>
-                <DockBtn
-                  item={{ label: "Compañías", icon: Building2 }}
-                  active={false}
-                  onClick={() => { window.location.href = "/admin/companies"; }}
-                  dark={dark}
-                />
-                <DockBtn
-                  item={{ label: "Tránsito", icon: Landmark }}
-                  active={false}
-                  onClick={() => { window.location.href = "/admin/transit-offices"; }}
-                  dark={dark}
-                />
-                <DockBtn
-                  item={{ label: "Documental", icon: FolderCog }}
-                  active={false}
-                  onClick={() => { window.location.href = "/admin/documents"; }}
-                  dark={dark}
-                />
-                <DockBtn
-                  item={{ label: "RBAC Admin", icon: Lock }}
-                  active={active === "rbac"}
-                  onClick={() => onNav("rbac")}
-                  dark={dark}
-                />
-              </>
-            )}
-
-            {/* Mi Empresa: solo AdminCompany */}
-            {currentUser?.isAdminCompany && (
               <DockBtn
-                item={{ label: "Mi Empresa", icon: Briefcase }}
-                active={false}
-                onClick={() => { window.location.href = "/empresa/usuarios"; }}
+                key={it.key}
+                item={{ label: it.label, icon: it.icon }}
+                active={it.active}
+                onClick={it.onClick}
                 dark={dark}
               />
-            )}
+            ))}
+            {Array.from({ length: rightPad }).map((_, i) => (
+              <DockSpacer key={`rp-${i}`} />
+            ))}
           </div>
         </div>
       </main>
@@ -342,6 +397,12 @@ function MenuItem({
       <span className="font-medium">{label}</span>
     </button>
   );
+}
+
+// Espaciador invisible del tamaño de un botón del dock. Rellena el lado más corto
+// cuando el total de entradas es impar, manteniendo el FAB perfectamente centrado.
+function DockSpacer() {
+  return <span aria-hidden="true" className="h-11 w-11 shrink-0" />;
 }
 
 function DockBtn({

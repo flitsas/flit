@@ -230,6 +230,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ValidationErrorResponse"
 
+  /api/v1/admin/companies/{tenantId}:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyUpdate
+      summary: Edita una compañía (#10118)
+      description: >
+        Actualiza razón social, NIT, tipo y estado de la compañía. El código es
+        inmutable (no se acepta en el payload). Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCompanyRequest"
+      responses:
+        "200":
+          description: Compañía actualizada; devuelve la compañía con sus datos nuevos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyListItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La compañía no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            Edición concurrente: el `rowVersion` enviado no coincide con el actual
+            (otra persona modificó la compañía). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Datos inválidos (campos requeridos, longitudes o tipo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
   /api/v1/admin/companies/{tenantId}/status:
     parameters:
       - name: tenantId
@@ -1645,9 +1703,22 @@ components:
         id: { type: string, format: uuid }
         nit: { type: string }
         razonSocial: { type: string }
+        code: { type: string, description: Código único del tenant (inmutable). }
+        tenantType:
+          type: string
+          description: >-
+            Tipo de compañía. Normalmente del catálogo B2B (RENTING, CONCESIONARIO,
+            FLIT), pero el listado también incluye tenants con tipos heredados fuera
+            del catálogo (p.ej. standard, transit_office), por lo que no es un enum cerrado.
         estadoActivo: { type: boolean }
         fechaCreacion: { type: string, format: date-time }
-      required: [id, nit, razonSocial, estadoActivo, fechaCreacion]
+        rowVersion:
+          type: integer
+          format: int64
+          description: >-
+            Token de concurrencia optimista (identity.tenants.row_version). Se reenvía en
+            UpdateCompanyRequest para detectar ediciones concurrentes (409).
+      required: [id, nit, razonSocial, code, tenantType, estadoActivo, fechaCreacion, rowVersion]
 
     CompanyPagedResult:
       type: object
@@ -1672,6 +1743,28 @@ components:
           enum: [RENTING, CONCESIONARIO, FLIT]
         estadoActivo: { type: boolean, default: true, description: Estado activo inicial. }
       required: [razonSocial, nit, code, tenantType]
+
+    UpdateCompanyRequest:
+      type: object
+      description: Edición de compañía. El código es inmutable, por lo que no se incluye.
+      properties:
+        razonSocial: { type: string, maxLength: 255, description: Razón social (legal_name). }
+        nit: { type: string, maxLength: 20, description: NIT (tax_id). }
+        tenantType:
+          type: string
+          description: >-
+            Tipo de compañía. Para cambiarlo debe ser del catálogo B2B (RENTING,
+            CONCESIONARIO, FLIT). Si coincide (ignorando mayúsculas) con el tipo actual
+            del tenant se preserva tal cual, lo que permite editar tenants con tipos
+            heredados (p.ej. standard, transit_office) sin alterar su tipo.
+        estadoActivo: { type: boolean, default: true, description: Estado activo. }
+        rowVersion:
+          type: integer
+          format: int64
+          description: >-
+            Versión de fila leída al abrir la edición. Opcional: si se envía y no coincide
+            con la actual del tenant, la edición se rechaza con 409 (lost update).
+      required: [razonSocial, nit, tenantType]
 
     SetCompanyStatusRequest:
       type: object

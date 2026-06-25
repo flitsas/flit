@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
+using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
@@ -53,6 +54,20 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // PUT /api/v1/admin/companies/{tenantId} — edición de datos de la compañía (#10118).
+        group.MapPut("/{tenantId:guid}", UpdateCompanyAsync)
+            .WithName("AdminCompanyUpdate")
+            .WithSummary("Edita una compañía")
+            .WithDescription("Actualiza razón social, NIT, tipo y estado de la compañía. El código es "
+                + "inmutable. 422 con detalle por campo si la validación falla; 404 si la compañía no "
+                + "existe; 409 si otra persona la editó (rowVersion desactualizado). Requiere SuperAdmin.")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // PUT /api/v1/admin/companies/{tenantId}/status — activa/desactiva la compañía (#10118).
@@ -198,6 +213,36 @@ public static class AdminCompaniesEndpoints
             : Results.Json(
                 new CompanyValidationErrorResponse(result.Errors),
                 statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> UpdateCompanyAsync(
+        Guid tenantId,
+        UpdateCompanyRequest request,
+        HttpContext httpContext,
+        [FromServices] UpdateCompanyHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateCompanyCommand
+        {
+            TenantId = tenantId,
+            Request = request,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            UpdateCompanyOutcome.Updated => Results.Ok(result.Company),
+            UpdateCompanyOutcome.NotFound => Results.NotFound(
+                new { error = $"No existe la compañía {tenantId}." }),
+            UpdateCompanyOutcome.Conflict => Results.Json(
+                new { error = "La compañía fue modificada por otra persona. Recarga e intenta de nuevo." },
+                statusCode: StatusCodes.Status409Conflict),
+            _ => Results.Json(
+                new CompanyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+        };
     }
 
     private static async Task<IResult> SetStatusAsync(

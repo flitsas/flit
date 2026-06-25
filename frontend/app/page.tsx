@@ -14,13 +14,7 @@ import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { getToken } from "@/lib/api/client";
 import { clearToken, getRememberedEmail } from "@/lib/auth/session";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
-
-const ALL_MODULE_IDS: ModuleId[] = ["dashboard", "tramites", "reportes", "validaciones", "usuarios", "ayuda", "rbac"];
-
-function parseModule(raw: string | null, valid: ModuleId[]): ModuleId {
-  const allowed = valid.length > 0 ? valid : ALL_MODULE_IDS;
-  return allowed.includes(raw as ModuleId) ? (raw as ModuleId) : "dashboard";
-}
+import { buildValidModules, parseModule } from "@/lib/nav/modules";
 
 function HomeContent() {
   const router = useRouter();
@@ -30,7 +24,9 @@ function HomeContent() {
   const { modules: accessibleModules } = useAccessibleModules(authed);
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
-  const validModules = accessibleCodes.length > 0 ? accessibleCodes : ALL_MODULE_IDS;
+  // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
+  // venga en los permisos. Así el dock lo muestra y abre en todas las pantallas.
+  const validModules = buildValidModules(accessibleCodes);
 
   const [module, setModule] = useState<ModuleId>(() => parseModule(params.get("m"), []));
 

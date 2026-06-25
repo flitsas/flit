@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
+using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
@@ -77,6 +78,9 @@ public static class DependencyInjection
 
         // Activar/desactivar compañía (toggle de estado en el listado, #10118).
         services.AddScoped<SetCompanyStatusHandler>();
+
+        // Editar compañía (botón "Editar" en el listado, #10118).
+        services.AddScoped<UpdateCompanyHandler>();
 
         // HU #10190 — configuración operativa + audit log.
         services.AddScoped<GetTenantSettingsHandler>();
