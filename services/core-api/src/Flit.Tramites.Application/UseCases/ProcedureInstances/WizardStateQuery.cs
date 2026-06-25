@@ -84,6 +84,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var preflight = PreflightOf(instance);
 
         var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var riesgoAceptado = RiesgoAceptado(instance);
 
         // Matrícula: la única parte (comprador) lleva la biométrica → Parte == "comprador".
         var identidadAprobada = BiometriaAprobada(instance, "comprador");
@@ -97,6 +98,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             IdentidadAprobada = identidadAprobada,
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
+            RiesgoPreflightAceptado = riesgoAceptado,
         };
 
         var maxAlcanzable = MatriculaGates.MaxPasoAlcanzable(ctx);
@@ -161,7 +163,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             steps.Add(new WizardStepDto(p, StepKey(false, p), StepLabel(pasos, p), status, reasons));
         }
 
-        var blockers = BlockersFrom(preflight, docsCompletos);
+        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado);
         // Identidad (paso 4) refleja el estado real de la biométrica (slice 6) en su status/reasons,
         // pero NO se cuenta como bloqueo duro del submit de este slice (paridad con Johan: la
         // biométrica se valida en el flujo FUR, no veta el radicado de datos). El FUR/firma (paso 5,
@@ -189,6 +191,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var preflight = PreflightOf(instance);
         var simitComprador = SimitOf(instance, comprador, preflight);
         var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var riesgoAceptado = RiesgoAceptado(instance);
 
         var ctx = new TraspasoGateContext
         {
@@ -211,6 +214,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
                 Comprador: BiometriaAprobada(instance, "comprador")),
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
+            RiesgoPreflightAceptado = riesgoAceptado,
         };
 
         var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
@@ -268,7 +272,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));
         }
 
-        var blockers = BlockersFrom(preflight, docsCompletos);
+        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
 
         return new WizardStateDto(
@@ -307,15 +311,19 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     }
 
     /// <summary>
-    /// Blockers globales que vetan el submit. Preflight red (subsanable) + gating ESTRICTO de
-    /// documentos obligatorios: faltan obligatorios → <c>documentos_incompletos</c> (sin override).
-    /// El blocker global es necesario porque en traspaso el paso 6 (docs) es diferido y quedaría
-    /// excluido del cómputo de pasos no-diferidos de <see cref="CanSubmit"/>.
+    /// Blockers globales que vetan el submit. Preflight red (subsanable: se levanta si el gestor
+    /// aceptó el riesgo) + gating ESTRICTO de documentos obligatorios: faltan obligatorios →
+    /// <c>documentos_incompletos</c> (sin override). El blocker global es necesario porque en
+    /// traspaso el paso 6 (docs) es diferido y quedaría excluido del cómputo de pasos no-diferidos
+    /// de <see cref="CanSubmit"/>.
     /// </summary>
-    private static List<string> BlockersFrom(PreflightSnapshot? preflight, bool documentosCompletos)
+    private static List<string> BlockersFrom(
+        PreflightSnapshot? preflight,
+        bool documentosCompletos,
+        bool riesgoAceptado)
     {
         var blockers = new List<string>(2);
-        if (preflight?.Overall == "red")
+        if (preflight?.Overall == "red" && !riesgoAceptado)
             blockers.Add("preflight_red");
         if (!documentosCompletos)
             blockers.Add("documentos_incompletos");
@@ -466,6 +474,17 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     {
         var fv = FieldValues(instance);
         var v = Get(fv, "paz_salvo_impuesto");
+        return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// El gestor aceptó el riesgo de rechazo en el OT ante un preflight rojo subsanable
+    /// (checkbox "Asumo el riesgo…"). Persistido en field_values como <c>riesgo_aceptado=true</c>.
+    /// </summary>
+    private static bool RiesgoAceptado(ProcedureInstance instance)
+    {
+        var fv = FieldValues(instance);
+        var v = Get(fv, "riesgo_aceptado");
         return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
     }
 

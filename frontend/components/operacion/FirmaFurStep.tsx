@@ -16,11 +16,6 @@ import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
-import {
-  filterOrganismos,
-  findOrganismoByName,
-  type OrganismoTransito,
-} from '@/lib/catalogs/organismos-transito';
 import type {
   Actor,
   BiometricValidation,
@@ -33,6 +28,7 @@ import type {
   Signature,
   SignatureParte,
   StatusHistory,
+  TransitOfficeOption,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -385,31 +381,59 @@ function OrganismoModal({
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // OTs habilitados para la empresa (catálogo real filtrado por grants). El operador
+  // solo puede elegir de esta lista; ya no es un catálogo estático del frontend.
+  const [offices, setOffices] = useState<TransitOfficeOption[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Sugerencia desde RUNT: si el nombre del organismo viaja en field_values y
-  // coincide con un organismo del catálogo, se ofrece como atajo de un click.
-  const runtSuggestion = useMemo<OrganismoTransito | null>(() => {
-    if (!suggestedName.trim()) return null;
-    return (
-      findOrganismoByName(suggestedName) ?? {
-        // Sin código en catálogo: igual se respeta el nombre del RUNT.
-        code: '',
-        name: suggestedName.trim(),
-        city: '',
-      }
-    );
-  }, [suggestedName]);
+  useEffect(() => {
+    let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    tramitesClient
+      .listTransitOffices()
+      .then((list) => {
+        if (active) setOffices(list);
+      })
+      .catch(() => {
+        if (active) setError('No se pudieron cargar los organismos habilitados.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const results = useMemo(() => filterOrganismos(query).slice(0, 40), [query]);
+  // Sugerencia desde RUNT: solo se ofrece si el organismo registrado en RUNT está
+  // entre los HABILITADOS de la empresa (no se puede radicar en uno no habilitado).
+  const runtSuggestion = useMemo<TransitOfficeOption | null>(() => {
+    const n = suggestedName.trim().toLowerCase();
+    if (!n) return null;
+    return offices.find((o) => o.name.toLowerCase() === n) ?? null;
+  }, [suggestedName, offices]);
 
-  const persist = async (org: OrganismoTransito) => {
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? offices.filter(
+          (o) =>
+            o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q),
+        )
+      : offices;
+    return list.slice(0, 40);
+  }, [query, offices]);
+
+  const persist = async (org: TransitOfficeOption) => {
     setSaving(true);
     setError(null);
     try {
       await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'transit_office_id', valueText: org.id },
         { formFieldId: null, fieldKey: 'transit_office_code', valueText: org.code },
         { formFieldId: null, fieldKey: 'transit_office_name', valueText: org.name },
-        { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.city },
+        { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.cityCode },
       ]);
       onConfirmed();
     } catch {
@@ -454,10 +478,8 @@ function OrganismoModal({
               Usar el organismo registrado en RUNT
             </p>
             <p className="text-xs font-semibold mt-0.5">{runtSuggestion.name}</p>
-            {(runtSuggestion.city || runtSuggestion.code) && (
-              <p className="text-[11px] opacity-70">
-                {[runtSuggestion.city, runtSuggestion.code].filter(Boolean).join(' · ')}
-              </p>
+            {runtSuggestion.code && (
+              <p className="text-[11px] opacity-70">{runtSuggestion.code}</p>
             )}
           </button>
         )}
@@ -468,7 +490,7 @@ function OrganismoModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por ciudad, nombre o código…"
+            placeholder="Buscar por nombre o código…"
             aria-label="Buscar organismo de tránsito"
             className={`${INPUT_BASE} pl-9`}
             style={{ borderColor: '#DFE5ED' }}
@@ -484,7 +506,7 @@ function OrganismoModal({
 
         <ul className="space-y-1.5 overflow-y-auto" aria-label="Catálogo de organismos">
           {results.map((o) => (
-            <li key={o.code}>
+            <li key={o.id}>
               <button
                 type="button"
                 onClick={() => void persist(o)}
@@ -493,11 +515,22 @@ function OrganismoModal({
                 style={{ borderColor: '#DFE5ED' }}
               >
                 <p className="text-xs font-semibold">{o.name}</p>
-                <p className="text-[11px] opacity-70">{o.city} · {o.code}</p>
+                <p className="text-[11px] opacity-70">{o.code}</p>
               </button>
             </li>
           ))}
-          {results.length === 0 && (
+          {loading && (
+            <li className="text-[11px] opacity-60 py-3 text-center">
+              Cargando organismos habilitados…
+            </li>
+          )}
+          {!loading && offices.length === 0 && (
+            <li className="text-[11px] py-3 text-center" style={{ color: '#F9AC00' }}>
+              Tu compañía no tiene organismos de tránsito habilitados. Contacta al
+              administrador para habilitarlos.
+            </li>
+          )}
+          {!loading && offices.length > 0 && results.length === 0 && (
             <li className="text-[11px] opacity-60 py-3 text-center">
               Sin resultados para «{query}».
             </li>

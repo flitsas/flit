@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Power, PowerOff, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Pencil, Power, PowerOff, Settings2 } from "lucide-react";
+import { isB2BTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
-// Estado, Fecha de creación + acciones "Activar/Desactivar" y "Configurar".
+// Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
 // Paginación server-side: la tabla solo emite el cambio de página vía onPageChange.
 export interface CompanyListTableProps {
   items: CompanyListItem[];
@@ -13,6 +14,8 @@ export interface CompanyListTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onConfigure: (tenantId: string) => void;
+  /** Solicita editar los datos de la compañía (el contenedor abre el modal de edición). */
+  onEdit: (company: CompanyListItem) => void;
   /** Solicita activar/desactivar la compañía (el contenedor muestra la confirmación). */
   onToggleStatus: (company: CompanyListItem) => void;
 }
@@ -24,6 +27,7 @@ export function CompanyListTable({
   pageSize,
   onPageChange,
   onConfigure,
+  onEdit,
   onToggleStatus,
 }: CompanyListTableProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -53,7 +57,11 @@ export function CompanyListTable({
           </tr>
         </thead>
         <tbody>
-          {items.map((c) => (
+          {items.map((c) => {
+            // Solo las compañías del catálogo B2B son editables; los tenants de tipo
+            // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
+            const editable = isB2BTenantType(c.tenantType);
+            return (
             <tr key={c.id} className="bg-white dark:bg-[#0B0F14]">
               <td className="border-y border-l px-4 py-3 font-mono rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
                 {c.nit}
@@ -74,6 +82,22 @@ export function CompanyListTable({
               </td>
               <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
                 <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => editable && onEdit(c)}
+                    disabled={!editable}
+                    aria-disabled={!editable}
+                    aria-label={`Editar ${c.razonSocial}`}
+                    title={
+                      editable
+                        ? undefined
+                        : "Compañía de tipo de sistema: no editable desde esta consola"
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                    style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                  >
+                    {editable ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />} Editar
+                  </button>
                   <button
                     type="button"
                     onClick={() => onToggleStatus(c)}
@@ -102,7 +126,8 @@ export function CompanyListTable({
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 

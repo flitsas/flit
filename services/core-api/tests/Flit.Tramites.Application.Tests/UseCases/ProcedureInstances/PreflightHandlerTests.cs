@@ -175,6 +175,48 @@ public sealed class PreflightHandlerTests
         result.Overall.Should().Be("green");
     }
 
+    // ── Estado del vehículo: REGISTRADO no bloquea matrícula inicial ───────────
+
+    private static ConsultationCheck EstadoVehiculoCheck(string status) =>
+        new("estado_vehiculo", "Estado del vehículo", status, "stub", "Estado: REGISTRADO");
+
+    [Fact]
+    public async Task Post_Matricula_EstadoVehiculoFail_DegradaAWarnNoRed()
+    {
+        // En matrícula inicial el estado RUNT "REGISTRADO" (fail) es el esperado para un 0 km:
+        // se degrada a warn (amarillo, informativo) y NO pinta el preflight en rojo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("red", EstadoVehiculoCheck("fail")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Overall.Should().Be("yellow");
+        result.Checks.Should().ContainSingle(c => c.Key == "estado_vehiculo" && c.Status == "warn");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_EstadoVehiculoFail_SiguePintandoRed()
+    {
+        // En traspaso se exige vehículo ACTIVO (en circulación): el fail se mantiene → rojo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("red", EstadoVehiculoCheck("fail")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Overall.Should().Be("red");
+        result.Checks.Should().ContainSingle(c => c.Key == "estado_vehiculo" && c.Status == "fail");
+    }
+
     [Fact]
     public async Task Post_Traspaso_RunsVehiculoSimitBothAndRnmc()
     {

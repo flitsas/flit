@@ -12,6 +12,7 @@ import type {
   TenantSettingsUpdate,
   TransitGrantsResponse,
   TransitOffice,
+  UpdateCompanyRequest,
   WhitelistAddResponse,
   WhitelistEntry,
 } from "./types";
@@ -29,6 +30,18 @@ export function fetchCompaniesIndex(
 /** POST /api/v1/admin/companies — alta de compañía. Lanza ApiValidationError en 422. */
 export function createCompany(body: CreateCompanyRequest): Promise<CompanyListItem> {
   return apiFetch<CompanyListItem>(base, { method: "POST", body });
+}
+
+/**
+ * PUT /{tenantId} — edición de compañía (#10118). Actualiza razón social, NIT, tipo y
+ * estado (el código es inmutable). Lanza ApiValidationError en 422 y ApiError 404 si el
+ * tenant no existe.
+ */
+export function updateCompany(
+  tenantId: string,
+  body: UpdateCompanyRequest,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${tenantId}`, { method: "PUT", body });
 }
 
 /**

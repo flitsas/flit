@@ -74,7 +74,12 @@ WHERE tenant_id = 'bbbbbbbb-0001-4000-8000-000000000001';
 INSERT INTO admin.tenant_transit_office_grants (id, tenant_id, transit_office_id, is_enabled, created_at)
 VALUES
     ('bbbbbbbb-0001-4000-8000-000000000001', '0ad1c0de-0000-4000-8000-000000000001', 'aaaaaaaa-0001-4000-8000-000000000001', true, now()),
-    ('bbbbbbbb-0001-4000-8000-000000000002', '0ad1c0de-0000-4000-8000-000000000002', 'aaaaaaaa-0001-4000-8000-000000000001', true, now())
+    ('bbbbbbbb-0001-4000-8000-000000000002', '0ad1c0de-0000-4000-8000-000000000002', 'aaaaaaaa-0001-4000-8000-000000000001', true, now()),
+    -- FLITDEV (tenant que usa el operador en dev): habilitado en 3 de 6 OTs para
+    -- demostrar el filtrado por empresa en el wizard (Bogotá, Medellín, Cali).
+    ('bbbbbbbb-0002-4000-8000-000000000001', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0001-4000-8000-000000000001', true, now()),
+    ('bbbbbbbb-0002-4000-8000-000000000002', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0001-4000-8000-000000000002', true, now()),
+    ('bbbbbbbb-0002-4000-8000-000000000003', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0001-4000-8000-000000000003', true, now())
 ON CONFLICT (tenant_id, transit_office_id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────

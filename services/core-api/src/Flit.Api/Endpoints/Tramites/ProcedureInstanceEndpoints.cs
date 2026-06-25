@@ -1,4 +1,8 @@
+using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
+using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,8 +19,25 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances", async (
             CreateProcedureInstanceRequest request,
             CreateProcedureInstanceHandler handler,
+            GetTenantSettingsHandler settingsHandler,
             CancellationToken ct) =>
         {
+            // #5 — La compañía puede deshabilitar la matrícula inicial vía el toggle
+            // "Permitir matrícula inicial" (admin/companies). Si está en off para el
+            // tenant, no se permite crear ese trámite. Sin fila de settings → permisivo
+            // (default de la columna allow_initial_registration = true), para no romper
+            // tenants aún no configurados.
+            if (EsMatriculaInicial(request.Modalidad))
+            {
+                var settings = await settingsHandler.HandleAsync(
+                    new GetTenantSettingsQuery { TenantId = request.TenantId }, ct);
+                if (settings is { SwitchesMatricula.AllowInitialRegistration: false })
+                    return Results.Problem(
+                        statusCode: 422,
+                        title: "Unprocessable Entity",
+                        detail: "La compañía no tiene habilitada la matrícula inicial.");
+            }
+
             var (result, error) = await handler.HandleAsync(request, ct);
             return error switch
             {
@@ -43,6 +64,31 @@ internal static class ProcedureInstanceEndpoints
             var items = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(new { items });
         }).WithName("ListProcedureInstances");
+
+        // GET /api/v1/tramites/transit-offices — Organismos de tránsito HABILITADOS para la
+        // empresa (tenant del header). #2: el operador solo puede elegir/enviar a los OT que la
+        // empresa tiene habilitados (admin.tenant_transit_office_grants), resueltos contra el
+        // catálogo. Lista vacía si la empresa no tiene ninguno habilitado.
+        group.MapGet("/transit-offices", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetTransitGrantsHandler grantsHandler,
+            ITransitOfficeCatalog catalog,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var grants = await grantsHandler.HandleAsync(
+                new GetTransitGrantsQuery { TenantId = tenantId.Value }, ct);
+
+            var items = grants.TransitOfficeIds
+                .Select(catalog.GetById)
+                .Where(o => o is not null)
+                .Select(o => new TransitOfficeOptionDto(o!.Id, o.Code, o.Name, o.CityCode))
+                .ToList();
+
+            return Results.Ok(new { items });
+        }).WithName("ListEnabledTransitOffices");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -98,6 +144,7 @@ internal static class ProcedureInstanceEndpoints
                 "identidad_requerida" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación de identidad del comprador no está aprobada."),
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de radicar."),
+                "organismo_no_habilitado" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito seleccionado no está habilitado para la compañía."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
                 _ => Results.Ok(result)
@@ -106,4 +153,17 @@ internal static class ProcedureInstanceEndpoints
 
         return app;
     }
+
+    /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
+    private static bool EsMatriculaInicial(string? modalidad) =>
+        string.Equals(
+            modalidad?.Trim(),
+            TramiteModalidadEntradaCodes.MatriculaInicial,
+            StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// Organismo de tránsito habilitado para una empresa (proyección catálogo + grant)
+/// que el operador puede elegir en el FUR.
+/// </summary>
+internal sealed record TransitOfficeOptionDto(Guid Id, string Code, string Name, string CityCode);

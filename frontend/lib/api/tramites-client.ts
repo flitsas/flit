@@ -18,6 +18,8 @@ import type {
   GenerarConsolidadoResult,
   InstanceSummary,
   InstancesResponse,
+  TransitOfficeOption,
+  TransitOfficesResponse,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
   InvitarParticipanteInput,
@@ -131,6 +133,25 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Mensaje de error legible a partir de una respuesta fallida. Si el cuerpo es un
+ * ProblemDetails (RFC 7807) con `detail`/`title`, usa ese texto para mostrarlo tal
+ * cual al usuario (p. ej. "La compañía no tiene habilitada la matrícula inicial.").
+ * Si no es JSON, cae al formato genérico `status statusText: body`.
+ */
+function problemMessage(res: Response, body: string): string {
+  if (body) {
+    try {
+      const problem = JSON.parse(body) as { detail?: string; title?: string };
+      const msg = problem.detail || problem.title;
+      if (msg) return msg;
+    } catch {
+      // body no es JSON → formato genérico abajo.
+    }
+  }
+  return `${res.status} ${res.statusText}${body ? ': ' + body : ''}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     ...init,
@@ -138,7 +159,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${res.statusText}${body ? ': ' + body : ''}`);
+    throw new Error(problemMessage(res, body));
   }
 
   if (res.status === 204) {
@@ -190,6 +211,18 @@ export const tramitesClient = {
   ): Promise<InstanceSummary[]> => {
     const res = await request<InstancesResponse>(
       '/api/v1/tramites/instances',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.items ?? [];
+  },
+
+  // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
+  // El operador solo puede elegir/enviar a estos en el FUR.
+  listTransitOffices: async (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<TransitOfficeOption[]> => {
+    const res = await request<TransitOfficesResponse>(
+      '/api/v1/tramites/transit-offices',
       { headers: tenantHeader(tenantId) },
     );
     return res?.items ?? [];

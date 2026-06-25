@@ -13,7 +13,8 @@ import {
 import { CompanyListTable } from "@/components/admin/companies/CompanyListTable";
 import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
-import { createCompany, fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { EditCompanyDialog } from "@/components/admin/companies/EditCompanyDialog";
+import { createCompany, fetchCompaniesIndex, updateCompany } from "@/lib/api/admin-companies";
 import type { CompanyListItem, CompanyPagedResult } from "@/lib/api/types";
 
 const PAGE_SIZE = 20;
@@ -36,6 +37,7 @@ function CompaniesList() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<CompanyPagedResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<CompanyListItem | null>(null);
   const [toggleTarget, setToggleTarget] = useState<CompanyListItem | null>(null);
 
   const load = useCallback(
@@ -97,8 +99,19 @@ function CompaniesList() {
     );
   };
 
+  // Reemplaza la fila editada con la compañía actualizada (update optimista local).
+  const handleEdited = (updated: CompanyListItem) => {
+    setResult((prev) =>
+      prev
+        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
+        : prev,
+    );
+    setEditTarget(null);
+    show(`Compañía «${updated.razonSocial}» actualizada.`, "success");
+  };
+
   return (
-    <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+    <div className="flex min-h-full flex-col gap-4 px-6 pt-6 pb-24">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -140,6 +153,7 @@ function CompaniesList() {
               pageSize={result.pageSize}
               onPageChange={setPage}
               onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
+              onEdit={setEditTarget}
               onToggleStatus={setToggleTarget}
             />
           )}
@@ -153,6 +167,16 @@ function CompaniesList() {
         onCreated={(company) => handleCreated(company.razonSocial)}
       />
 
+      {editTarget && (
+        <EditCompanyDialog
+          open
+          company={editTarget}
+          onClose={() => setEditTarget(null)}
+          onUpdate={updateCompany}
+          onUpdated={handleEdited}
+        />
+      )}
+
       {toggleTarget && (
         <CompanyStatusDialog
           company={toggleTarget}
@@ -160,6 +184,6 @@ function CompaniesList() {
           onConfirmed={handleStatusConfirmed}
         />
       )}
-    </main>
+    </div>
   );
 }

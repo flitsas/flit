@@ -67,6 +67,7 @@ export interface InstanceSummary {
   vehiculoLinea: string | null;
   compradorNombre: string | null;
   compradorDocumento: string | null;
+  organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
   createdAt: string;
@@ -75,6 +76,18 @@ export interface InstanceSummary {
 /** Respuesta de GET /instances. */
 export interface InstancesResponse {
   items: InstanceSummary[];
+}
+
+/** Organismo de tránsito habilitado para la empresa (catálogo + grant). */
+export interface TransitOfficeOption {
+  id: string;
+  code: string;
+  name: string;
+  cityCode: string;
+}
+
+export interface TransitOfficesResponse {
+  items: TransitOfficeOption[];
 }
 
 export interface FieldValue {
