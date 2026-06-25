@@ -93,6 +93,33 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(Guid tenantId, int limit, CancellationToken ct)
+    {
+        return await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .OrderByDescending(v => v.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(Guid tenantId, CancellationToken ct)
+    {
+        var rows = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .GroupBy(v => v.Estado)
+            .Select(g => new { Estado = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(x => x.Estado, x => x.Count);
+    }
+
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);

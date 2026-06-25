@@ -1516,6 +1516,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/biometric-validations:
+    get:
+      operationId: listTenantBiometricValidations
+      tags: [Tramites, Identidad]
+      summary: Listar las validaciones de identidad del tenant (HU #10234)
+      description: >
+        Vista transversal del submódulo "Validaciones de Identidad": lista TODAS las validaciones
+        biométricas/de identidad del tenant (a través de todas sus instancias no eliminadas), las más
+        recientes primero, junto con KPIs agregados por estado. No es por-instancia. La tabla se acota a
+        un máximo de filas (vista de monitoreo); los KPIs se calculan aparte y son exactos. El motivo de
+        rechazo viaja SANITIZADO (sin PII), igual que en la vista por-instancia.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Validaciones del tenant + KPIs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantBiometricValidationsResponse"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/biometric:
     post:
       operationId: iniciarProcedureInstanceBiometric
@@ -2345,6 +2377,70 @@ components:
           type: string
           nullable: true
           description: URL de captura de Kyverum. Solo presente con provider=kyverum y estado=en_proceso (AC9).
+        motivoRechazo:
+          type: string
+          nullable: true
+          description: >
+            Motivo de rechazo SANITIZADO (sin PII), solo presente con estado=rechazado (HU #10234 AC4).
+            Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
+    TenantBiometricValidationDto:
+      type: object
+      required: [id, instanceId, referenceNumber, modalidad, nombre, tipoDoc, documento, estado, provider, expired, createdAt]
+      description: Fila de la vista transversal del submódulo de Validaciones (HU #10234).
+      properties:
+        id: { type: string, format: uuid }
+        instanceId:
+          type: string
+          format: uuid
+          description: Instancia (trámite) a la que pertenece la validación (para navegar).
+        referenceNumber:
+          type: string
+          description: Referencia del trámite (p.ej. TRM-2026-000007).
+        modalidad:
+          type: string
+          description: Modalidad de entrada del trámite (matricula_inicial | traspaso).
+        parte: { type: string, nullable: true }
+        nombre: { type: string }
+        tipoDoc: { type: string }
+        documento:
+          type: string
+          description: Documento de la persona (la UI lo enmascara al pintarlo).
+        estado:
+          type: string
+          enum: [enviado, en_proceso, aprobado, rechazado, expirado]
+        score: { type: integer, nullable: true }
+        provider:
+          type: string
+          enum: [mock, kyverum]
+        expired: { type: boolean }
+        motivoRechazo:
+          type: string
+          nullable: true
+          description: Motivo de rechazo SANITIZADO (sin PII), solo con estado=rechazado.
+        createdAt: { type: string, format: date-time }
+        validadoAt: { type: string, format: date-time, nullable: true }
+    BiometricValidationStatsDto:
+      type: object
+      required: [total, aprobadas, enProceso, rechazadas, expiradas]
+      description: KPIs agregados del submódulo de Validaciones (exactos, sin el cap de filas).
+      properties:
+        total: { type: integer }
+        aprobadas: { type: integer }
+        enProceso:
+          type: integer
+          description: Validaciones en curso (enviado + en_proceso).
+        rechazadas: { type: integer }
+        expiradas: { type: integer }
+    TenantBiometricValidationsResponse:
+      type: object
+      required: [validations, stats]
+      properties:
+        validations:
+          type: array
+          items:
+            $ref: "#/components/schemas/TenantBiometricValidationDto"
+        stats:
+          $ref: "#/components/schemas/BiometricValidationStatsDto"
     IniciarKyverumVerifyResult:
       type: object
       required: [validation, captureUrl]

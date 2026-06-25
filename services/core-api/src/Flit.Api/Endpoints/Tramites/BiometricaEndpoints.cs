@@ -75,6 +75,20 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceBiometric");
 
+        // GET vista transversal del tenant: TODAS las validaciones de identidad + KPIs (HU #10234,
+        // submódulo "Validaciones de Identidad"). No es por-instancia: agrega todas las del tenant.
+        group.MapGet("/biometric-validations", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListTenantBiometricValidationsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleAsync(tenantId.Value, ct);
+            return Results.Ok(result);
+        }).WithName("ListTenantBiometricValidations");
+
         // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.
         group.MapPost("/instances/{id:guid}/biometric/simulate", async (
             Guid id,

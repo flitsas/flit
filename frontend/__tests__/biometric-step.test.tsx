@@ -59,6 +59,43 @@ const EN_PROCESO: BiometricValidation = {
   captureUrl: 'https://verify.kyverum.com/capture.html?t=abc',
 };
 
+const RECHAZADA: BiometricValidation = {
+  id: 'val-3',
+  parte: 'comprador',
+  nombre: 'Ana Comprador',
+  tipoDoc: 'CC',
+  documento: '123',
+  email: 'ana@example.com',
+  estado: 'rechazado',
+  intentos: 1,
+  maxIntentos: 5,
+  score: 30,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validadoAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: null,
+  motivoRechazo: 'Los datos personales no coinciden con el documento.',
+};
+
+const EXPIRADA: BiometricValidation = {
+  id: 'val-4',
+  parte: 'comprador',
+  nombre: 'Ana Comprador',
+  tipoDoc: 'CC',
+  documento: '123',
+  email: 'ana@example.com',
+  estado: 'expirado',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-20T15:30:00Z',
+  validadoAt: null,
+  expired: true,
+  provider: 'kyverum',
+  captureUrl: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
@@ -213,5 +250,72 @@ describe('BiometricStep — resultado verificado', () => {
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
     // 1 carga inicial + 1 al actualizar.
     expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('BiometricStep — AC2 (abrir captura Kyverum)', () => {
+  it('en proceso ofrece el CTA "Abrir captura Kyverum" con target=_blank y rel=noopener', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const cta = await screen.findByRole('link', { name: 'Abrir captura Kyverum' });
+    expect(cta).toHaveAttribute('href', EN_PROCESO.captureUrl);
+    expect(cta).toHaveAttribute('target', '_blank');
+    expect(cta).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+});
+
+describe('BiometricStep — AC4 (rechazo con motivo)', () => {
+  it('muestra el motivo sanitizado y ofrece "Reintentar validación"', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [RECHAZADA], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByText(/Los datos personales no coinciden con el documento\./),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Validación no aprobada \(30\/100\)/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reintentar validación' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('BiometricStep — AC5 (expiración)', () => {
+  it('muestra la fecha de expiración y ofrece "Reiniciar validación"', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [EXPIRADA], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByText('El enlace de validación expiró.'),
+    ).toBeInTheDocument();
+    // La fecha se muestra formateada (es-CO): basta verificar que aparece el aviso "Venció el …".
+    expect(screen.getByText(/Venció el /)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reiniciar validación' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('BiometricStep — AC8 (estado de carga)', () => {
+  it('muestra un placeholder accesible (role=status) hasta que llega la primera respuesta', async () => {
+    let resolveState: (v: { validations: BiometricValidation[]; provider: string }) => void = () => {};
+    mocks.getBiometricState.mockReturnValue(
+      new Promise((resolve) => {
+        resolveState = resolve;
+      }),
+    );
+
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    // Antes de resolver: estado de carga visible, sin tarjetas todavía.
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Biométrica Comprador' })).not.toBeInTheDocument();
+
+    // Al resolver: desaparece la carga y aparece la tarjeta de la parte.
+    await act(async () => {
+      resolveState({ validations: [], provider: 'mock' });
+    });
+    expect(await screen.findByRole('group', { name: 'Biométrica Comprador' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

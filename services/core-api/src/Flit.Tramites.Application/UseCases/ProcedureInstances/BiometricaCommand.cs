@@ -28,7 +28,9 @@ public sealed record BiometricValidationDto(
     bool Expired,
     // HU #10233 (AC9): proveedor de la validación y URL de captura (solo kyverum + en_proceso).
     string Provider = BiometricProviders.Mock,
-    string? CaptureUrl = null);
+    string? CaptureUrl = null,
+    // HU #10234 (AC4): motivo de rechazo SANITIZADO. Solo se expone en estado rechazado; null en otros.
+    string? MotivoRechazo = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -176,7 +178,64 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
                 && v.Estado == BiometricEstados.EnProceso
                     ? v.CaptureUrl
-                    : null);
+                    : null,
+            ExtractMotivoRechazo(v));
+
+    /// <summary>
+    /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
+    /// rechazado; en cualquier otro estado es null. NUNCA incluye PII cruda: los JSON de origen
+    /// (Detalle del scorer mock, ProviderPayload de Kyverum) ya están sanitizados. Para mock se toma
+    /// `motivo`; para Kyverum se deriva un texto amigable de las coincidencias reportadas.
+    /// </summary>
+    internal static string? ExtractMotivoRechazo(ProcedureInstanceBiometricValidation v)
+    {
+        if (v.Estado != BiometricEstados.Rechazado)
+            return null;
+
+        // Mock: Detalle = { score, aprobado, motivo, ... } — el scorer ya produce texto sin PII.
+        var motivo = TryReadString(v.Detalle, "motivo");
+        if (!string.IsNullOrWhiteSpace(motivo))
+            return motivo;
+
+        // Kyverum: deriva el motivo de las coincidencias sanitizadas del payload del proveedor.
+        if (TryParseJson(v.ProviderPayload, out var payload)
+            && payload.TryGetProperty("coincidencias", out var coincidencias)
+            && coincidencias.ValueKind == JsonValueKind.Object)
+        {
+            if (coincidencias.TryGetProperty("documento", out var doc) && doc.ValueKind == JsonValueKind.False)
+                return "La verificación del documento no fue exitosa.";
+            if (coincidencias.TryGetProperty("nombre", out var nombre) && nombre.ValueKind == JsonValueKind.False)
+                return "Los datos personales no coinciden con el documento.";
+        }
+
+        return "La validación de identidad no fue aprobada por el proveedor.";
+    }
+
+    private static string? TryReadString(string? json, string property)
+    {
+        if (!TryParseJson(json, out var root))
+            return null;
+        return root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    private static bool TryParseJson(string? json, out JsonElement root)
+    {
+        root = default;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            root = doc.RootElement.Clone();
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 }
 
 // ── Handler: listar (autenticado) ───────────────────────────────────────────

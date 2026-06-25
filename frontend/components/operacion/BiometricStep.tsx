@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { Check, Copy, ExternalLink, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -35,6 +35,14 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
 };
 
 const KYVERUM = 'kyverum';
+
+/** Formatea una fecha ISO a un texto legible (es-CO). Devuelve el ISO crudo si no parsea. */
+function formatFecha(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+}
 
 /**
  * Paso de validación de identidad. Es provider-aware (HU #10233): con `kyverum` el clic dispara la
@@ -99,6 +107,13 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
     onRefresh?.();
   };
 
+  // AC8 — 4 estados de la UI a partir de la carga del estado biométrico:
+  //  • Cargando: aún no llegó la primera respuesta (validations === null) y no hubo error.
+  //  • Error:    `error` con role="alert".
+  //  • Lleno/Vacío: ya cargó → se pintan las tarjetas por parte (cada una resuelve su sub-estado:
+  //    vacío = acción de iniciar; lleno = verificado/en proceso/rechazado).
+  const initialLoading = instanceId != null && validations === null && error === null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -115,11 +130,11 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
             type="button"
             onClick={() => void handleRefresh()}
             disabled={loading || !instanceId}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{ borderColor: '#557EFF', color: '#557EFF' }}
             aria-label="Actualizar estado biométrico"
           >
-            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
             Actualizar
           </button>
         )}
@@ -136,28 +151,55 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
         </div>
       )}
 
-      <div className="space-y-4">
-        {partes.map((parte) => {
-          // Más reciente para la parte (el backend ordena por created_at asc): refleja el estado actual
-          // tras posibles reintentos (rechazado → nueva validación).
-          const matches = (validations ?? []).filter((v) =>
-            modalidad === 'traspaso'
-              ? v.parte === parte
-              : v.parte === null || v.parte === 'comprador',
-          );
-          const validation = matches.length > 0 ? matches[matches.length - 1] : null;
-          return (
-            <ParteCard
-              key={parte}
-              parte={parte}
-              instanceId={instanceId}
-              provider={provider}
-              validation={validation}
-              onChanged={() => void handleRefresh()}
-            />
-          );
-        })}
-      </div>
+      {initialLoading ? (
+        <BiometricSkeleton partes={partes} />
+      ) : (
+        <div className="space-y-4">
+          {partes.map((parte) => {
+            // Más reciente para la parte (el backend ordena por created_at asc): refleja el estado actual
+            // tras posibles reintentos (rechazado → nueva validación).
+            const matches = (validations ?? []).filter((v) =>
+              modalidad === 'traspaso'
+                ? v.parte === parte
+                : v.parte === null || v.parte === 'comprador',
+            );
+            const validation = matches.length > 0 ? matches[matches.length - 1] : null;
+            return (
+              <ParteCard
+                key={parte}
+                parte={parte}
+                instanceId={instanceId}
+                provider={provider}
+                validation={validation}
+                onChanged={() => void handleRefresh()}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Estado de carga (AC8): placeholder accesible mientras llega la primera respuesta de
+ * `getBiometricState`. Anuncia la carga a lectores de pantalla (role="status" + aria-live).
+ */
+function BiometricSkeleton({ partes }: { partes: BiometricParte[] }) {
+  return (
+    <div className="space-y-4" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">Cargando validaciones de identidad…</span>
+      {partes.map((parte) => (
+        <div
+          key={parte}
+          className="rounded-xl border p-4"
+          style={{ borderColor: '#DFE5ED' }}
+          aria-hidden="true"
+        >
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -269,25 +311,40 @@ function KyverumPendingView({ validation: v }: { validation: BiometricValidation
           <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
+          {/* AC2: CTA explícito para abrir la captura en una pestaña nueva (target=_blank, rel=noopener). */}
           <a
             href={captureUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="block truncate text-[11px] underline"
+            className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ background: '#557EFF' }}
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden />
+            Abrir captura Kyverum
+          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copy()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+              aria-label="Copiar enlace de captura"
+            >
+              <Copy className="h-3 w-3" aria-hidden />
+              {copied ? 'Copiado' : 'Copiar enlace'}
+            </button>
+          </div>
+          {/* El enlace literal queda como referencia (también se envió al correo del cliente). */}
+          <a
+            href={captureUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block truncate text-[11px] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{ color: '#557EFF' }}
             title={captureUrl}
           >
             {captureUrl}
           </a>
-          <button
-            type="button"
-            onClick={() => void copy()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          >
-            <Copy className="h-3 w-3" />
-            {copied ? 'Copiado' : 'Copiar enlace'}
-          </button>
         </div>
       </div>
     </div>
@@ -312,22 +369,35 @@ function RejectedView({
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center gap-2 rounded-xl p-3"
+        className="flex items-start gap-2 rounded-xl p-3"
         style={{ background: 'rgba(255,78,0,0.06)', border: '1px solid rgba(255,78,0,0.3)' }}
+        role="alert"
+        aria-live="polite"
       >
-        <XCircle className="h-4 w-4 shrink-0" style={{ color: '#FF4E00' }} aria-hidden />
-        <p className="text-[11px] font-semibold" style={{ color: '#FF4E00' }}>
-          {expirado
-            ? 'El enlace de validación expiró.'
-            : `Validación no aprobada${v.score != null ? ` (${v.score}/100)` : ''}.`}
-        </p>
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#FF4E00' }} aria-hidden />
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold" style={{ color: '#FF4E00' }}>
+            {expirado
+              ? 'El enlace de validación expiró.'
+              : `Validación no aprobada${v.score != null ? ` (${v.score}/100)` : ''}.`}
+          </p>
+          {/* AC5 — expiración: muestra cuándo venció el enlace. */}
+          {expirado && v.expiresAt && (
+            <p className="text-[11px] opacity-80">Venció el {formatFecha(v.expiresAt)}.</p>
+          )}
+          {/* AC4 — rechazo con motivo: detalle sanitizado del proveedor (sin PII). */}
+          {!expirado && v.motivoRechazo && (
+            <p className="text-[11px] opacity-80">Motivo: {v.motivoRechazo}</p>
+          )}
+        </div>
       </div>
       <StartAction
         parte={parte}
         instanceId={instanceId}
         provider={provider}
         onStarted={onChanged}
-        label="Reenviar validación de identidad"
+        // AC4: rechazo → "Reintentar validación". AC5: expiración → "Reiniciar validación".
+        label={expirado ? 'Reiniciar validación' : 'Reintentar validación'}
       />
     </div>
   );
@@ -388,6 +458,12 @@ function StartAction({
 
   return (
     <div className="space-y-3">
+      {/* AC8 — estado vacío explícito: sin label (no es reintento) aún no hay validación para la parte. */}
+      {!label && (
+        <p className="text-[11px] font-medium opacity-70">
+          Aún no se ha iniciado la validación de identidad de esta parte.
+        </p>
+      )}
       <p className="text-[11px] opacity-60">
         {isKyverum
           ? 'Inicia la validación: el cliente recibirá el enlace de captura por correo y aquí podrás compartir el enlace/QR.'
@@ -404,13 +480,14 @@ function StartAction({
         type="button"
         onClick={() => void handleStart()}
         disabled={submitting || !instanceId}
-        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ background: '#557EFF' }}
+        aria-label={buttonLabel}
       >
         {submitting ? (
-          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
         ) : (
-          <ShieldCheck className="h-3.5 w-3.5" />
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
         )}
         {submitting ? 'Procesando…' : buttonLabel}
       </button>

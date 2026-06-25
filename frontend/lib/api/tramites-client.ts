@@ -39,6 +39,7 @@ import type {
   SignaturesResponse,
   SimularFirmaResult,
   SolicitarFirmaInput,
+  TenantBiometricValidationsResponse,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -530,6 +531,23 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.validations ?? [];
+  },
+
+  // HU #10234 — vista transversal del submódulo "Validaciones de Identidad": TODAS las validaciones
+  // del tenant + KPIs. No es por-instancia. Devuelve { validations, stats }; default seguro si vacío.
+  listTenantBiometricValidations: async (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<TenantBiometricValidationsResponse> => {
+    const res = await request<TenantBiometricValidationsResponse>(
+      '/api/v1/tramites/biometric-validations',
+      { headers: tenantHeader(tenantId) },
+    );
+    return (
+      res ?? {
+        validations: [],
+        stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+      }
+    );
   },
 
   // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
