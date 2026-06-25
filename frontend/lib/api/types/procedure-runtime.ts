@@ -372,6 +372,8 @@ export interface BiometricValidation {
   // HU #10233: proveedor de la validación y URL de captura (solo kyverum + en_proceso).
   provider: string;
   captureUrl: string | null;
+  // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
+  motivoRechazo?: string | null;
 }
 
 /**
@@ -403,6 +405,44 @@ export interface IniciarBiometriaResult {
 export interface BiometricValidationsResponse {
   validations: BiometricValidation[];
   provider: string;
+}
+
+/**
+ * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
+ * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
+ * captureUrl (vista de monitoreo, no de gestión de la captura).
+ */
+export interface TenantBiometricValidation {
+  id: string;
+  instanceId: string;
+  referenceNumber: string;
+  modalidad: string;
+  parte: BiometricParte | null;
+  nombre: string;
+  tipoDoc: string;
+  documento: string;
+  estado: BiometricEstado;
+  score: number | null;
+  provider: string;
+  expired: boolean;
+  motivoRechazo?: string | null;
+  createdAt: string;
+  validadoAt: string | null;
+}
+
+/** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
+export interface BiometricValidationStats {
+  total: number;
+  aprobadas: number;
+  enProceso: number;
+  rechazadas: number;
+  expiradas: number;
+}
+
+/** Respuesta de GET /tramites/biometric-validations: filas + KPIs. */
+export interface TenantBiometricValidationsResponse {
+  validations: TenantBiometricValidation[];
+  stats: BiometricValidationStats;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

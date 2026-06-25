@@ -49,6 +49,8 @@ public static class DependencyInjection
         services.AddSingleton<Biometrics.IBiometricScorer, Biometrics.MockBiometricScorer>();
         services.AddScoped<IniciarBiometriaHandler>();
         services.AddScoped<ListBiometriaHandler>();
+        // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
+        services.AddScoped<ListTenantBiometricValidationsHandler>();
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
