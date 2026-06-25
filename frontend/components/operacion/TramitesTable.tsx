@@ -105,6 +105,9 @@ function stepLabel(item: InstanceSummary): string {
 
 const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 0.9fr 1fr';
 
+/** Filas por página en el listado (paginación client-side sobre `filtered`). */
+const PAGE_SIZE = 10;
+
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
   refreshKey?: number;
@@ -120,6 +123,9 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
   const [search, setSearch] = useState('');
   const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
+
+  // Paginación client-side (1-based).
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +169,32 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     });
   }, [items, search, modalidad, estado]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Página segura: si los filtros/refetch reducen los resultados por debajo de
+  // la página actual, se clampa al último rango válido.
+  const safePage = Math.min(page, totalPages);
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
+  // Al cambiar cualquier filtro se vuelve a la primera página: la combinación
+  // de criterios redefine el conjunto, así que arrancar desde el inicio es lo
+  // esperado. Se hace en los handlers (no en un effect) para no reaccionar a
+  // cambios derivados.
+  const handleSearchChange = (v: string) => {
+    setSearch(v);
+    setPage(1);
+  };
+  const handleModalidadChange = (v: '' | WizardModalidad) => {
+    setModalidad(v);
+    setPage(1);
+  };
+  const handleEstadoChange = (v: '' | InstanceStatus) => {
+    setEstado(v);
+    setPage(1);
+  };
+
   const hasActiveFilters =
     search.trim() !== '' || modalidad !== '' || estado !== '';
 
@@ -170,6 +202,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     setSearch('');
     setModalidad('');
     setEstado('');
+    setPage(1);
   };
 
   const heading = (
@@ -191,11 +224,11 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
       <div className="flex flex-col gap-3">
         <TramitesListToolbar
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           modalidad={modalidad}
-          onModalidadChange={setModalidad}
+          onModalidadChange={handleModalidadChange}
           estado={estado}
-          onEstadoChange={setEstado}
+          onEstadoChange={handleEstadoChange}
           onRefresh={() => void load()}
           onClearFilters={clearFilters}
           loading={loading}
@@ -208,6 +241,10 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           error={error}
           items={items}
           filtered={filtered}
+          paginated={paginated}
+          page={safePage}
+          totalPages={totalPages}
+          onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
@@ -224,6 +261,10 @@ function TableBody({
   error,
   items,
   filtered,
+  paginated,
+  page,
+  totalPages,
+  onPageChange,
   hasActiveFilters,
   onRetry,
   onClearFilters,
@@ -233,6 +274,10 @@ function TableBody({
   error: string | null;
   items: InstanceSummary[];
   filtered: InstanceSummary[];
+  paginated: InstanceSummary[];
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
   onRetry: () => void;
   onClearFilters: () => void;
@@ -337,12 +382,80 @@ function TableBody({
 
         {/* Rows */}
         <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
-          {filtered.map((item) => (
+          {paginated.map((item) => (
             <TramiteRow key={item.id} item={item} onOpen={onOpen} />
           ))}
         </ul>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={filtered.length}
+          shown={paginated.length}
+          onPageChange={onPageChange}
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * Control de paginación client-side. Se oculta cuando todo cabe en una sola
+ * página (totalPages <= 1). Estilo FLIT: borde #DFE5ED, acento #557EFF.
+ */
+function Pagination({
+  page,
+  totalPages,
+  total,
+  shown,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  shown: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = from + shown - 1;
+
+  return (
+    <nav
+      className="mt-3 flex items-center justify-between gap-3 border-t pt-3"
+      style={{ borderColor: '#DFE5ED' }}
+      aria-label="Paginación de trámites"
+    >
+      <p className="text-[11px] opacity-60" role="status" aria-live="polite">
+        {from}–{to} de {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
+          style={{ borderColor: '#DFE5ED', color: '#162744' }}
+          aria-label="Página anterior"
+        >
+          Anterior
+        </button>
+        <span className="text-[11px] font-semibold tabular-nums opacity-70">
+          {page} / {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
+          style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          aria-label="Página siguiente"
+        >
+          Siguiente
+        </button>
+      </div>
+    </nav>
   );
 }
 
