@@ -117,4 +117,5 @@ context/
 
 # Instrucciones locales de Claude Code (no van al repo)
 CLAUDE.md
+.claude/
 
