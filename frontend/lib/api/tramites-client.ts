@@ -15,6 +15,7 @@ import type {
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
+  GenerarConsolidadoResult,
   InstanceSummary,
   InstancesResponse,
   IniciarBiometriaInput,
@@ -549,6 +550,17 @@ export const tramitesClient = {
   generarFur: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
     request<GenerarFurResult>(
       `/api/v1/tramites/instances/${instanceId}/fur`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
+  // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
+  generarConsolidado: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+    request<GenerarConsolidadoResult>(
+      `/api/v1/tramites/instances/${instanceId}/consolidado`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),

@@ -64,6 +64,7 @@ public static class InfrastructureExtensions
         // HU #10256 — generador PDF real del FUR. Reemplaza al MockFurDocumentGenerator que
         // producía texto plano. El mock se conserva en Application para los tests unitarios.
         services.AddSingleton<IFurDocumentGenerator, FurDocumentGenerator>();
+        services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);

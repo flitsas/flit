@@ -32,6 +32,19 @@ public sealed class GetOtProfileHandler
                 OtOperationModes.Dashboard,
                 quipuxReadOnly: false,
                 changedBy: null,
+                transitOfficeId: query.TransitOfficeId,
+                cancellationToken).ConfigureAwait(false);
+        }
+        else if (query.TransitOfficeId is Guid officeId
+                 && officeId != Guid.Empty
+                 && profile.TransitOfficeId != officeId)
+        {
+            profile = await _profileRepository.SaveAsync(
+                query.TenantId,
+                profile.OperationMode,
+                profile.QuipuxReadOnly,
+                changedBy: null,
+                transitOfficeId: officeId,
                 cancellationToken).ConfigureAwait(false);
         }
 

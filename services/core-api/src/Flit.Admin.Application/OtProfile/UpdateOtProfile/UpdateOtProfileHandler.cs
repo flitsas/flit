@@ -49,7 +49,7 @@ public sealed class UpdateOtProfileHandler
             operationMode,
             quipuxReadOnly,
             command.ChangedBy,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return UpdateOtProfileResult.Success(OtProfileMapper.ToResponse(saved));
     }

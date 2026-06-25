@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        services.AddScoped<GenerarConsolidadoHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los

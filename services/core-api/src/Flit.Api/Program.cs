@@ -192,6 +192,7 @@ app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();
 app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
+app.MapTramitesConsolidadoEndpoints();
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();

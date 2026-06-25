@@ -271,6 +271,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
       <ParticipantesSection instanceId={instanceId} />
       <FurSection
         instanceId={instanceId}
+        modalidad={modalidad}
         onRefresh={() => {
           onRefresh?.();
           // Tras generar el FUR, refresca adjuntos para que el resumen y el
@@ -1028,14 +1029,19 @@ const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad']);
 
 function FurSection({
   instanceId,
+  modalidad,
   onRefresh,
 }: {
   instanceId: string | null;
+  modalidad: WizardModalidad;
   onRefresh?: () => void;
 }) {
   const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
+  const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [generatingConsolidado, setGeneratingConsolidado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
   const readOnly = useWizardReadOnly();
 
@@ -1044,6 +1050,7 @@ function FurSection({
     try {
       const list = await tramitesClient.getAttachments(instanceId);
       setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
+      setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
     } catch {
       // El listado de adjuntos es secundario; el error de generar se muestra abajo.
     }
@@ -1080,7 +1087,32 @@ function FurSection({
     }
   };
 
+  const handleGenerateConsolidado = async () => {
+    if (!instanceId) return;
+    setGeneratingConsolidado(true);
+    setConsolidadoError(null);
+    try {
+      await tramitesClient.generarConsolidado(instanceId);
+      await load();
+      onRefresh?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      setConsolidadoError(
+        msg.includes('fur_requerido')
+          ? 'Genera el FUR antes de crear el consolidado.'
+          : msg.includes('documentos_incompletos')
+            ? 'Sube los documentos obligatorios antes de generar el consolidado.'
+            : msg.includes('modalidad_no_soportada')
+              ? 'El consolidado solo aplica a matrícula inicial.'
+              : 'No se pudo generar el consolidado.',
+      );
+    } finally {
+      setGeneratingConsolidado(false);
+    }
+  };
+
   const generated = (docs ?? []).length > 0 || (lastResult ?? []).length > 0;
+  const consolidadoGenerated = consolidado !== null;
 
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
@@ -1141,6 +1173,63 @@ function FurSection({
             </li>
           ))}
         </ul>
+      )}
+
+      {modalidad === 'matricula_inicial' && (
+        <div className="space-y-3 pt-2 border-t" style={{ borderColor: '#DFE5ED' }}>
+          <div>
+            <h5 className="text-xs font-bold">Expediente consolidado</h5>
+            <p className="text-[11px] opacity-70">
+              Un solo PDF con el FUR, el certificado de identidad y los documentos
+              cargados en el trámite, en orden de prelación.
+            </p>
+          </div>
+
+          {consolidadoError && (
+            <div
+              className="rounded-xl p-3 text-xs border"
+              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              role="alert"
+              aria-live="polite"
+            >
+              {consolidadoError}
+            </div>
+          )}
+
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => void handleGenerateConsolidado()}
+              disabled={generatingConsolidado || !instanceId}
+              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: '#162744' }}
+            >
+              {generatingConsolidado
+                ? 'Generando consolidado…'
+                : consolidadoGenerated
+                  ? 'Re-generar consolidado'
+                  : 'Generar consolidado'}
+            </button>
+          )}
+
+          {consolidadoGenerated && consolidado && (
+            <div
+              className="rounded-xl border p-3 flex items-center gap-3"
+              style={{ borderColor: '#557EFF' }}
+            >
+              <FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold">
+                  consolidado · {consolidado.filename}
+                </p>
+                <p className="text-[10px] opacity-60 truncate" title={consolidado.sha256}>
+                  SHA-256: {consolidado.sha256}
+                </p>
+              </div>
+              <DownloadButton instanceId={instanceId} attachment={consolidado} />
+            </div>
+          )}
+        </div>
       )}
     </section>
   );

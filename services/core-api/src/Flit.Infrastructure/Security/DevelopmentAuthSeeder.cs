@@ -17,6 +17,10 @@ public static class DevelopmentAuthSeeder
     public const string DemoPassword = "DemoPass1!";
     public const string OtAdminEmail = "otadmin@flit.local";
     public const string OtAdminPassword = "OtAdminPass1!";
+
+    /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
+    public const string DevOperacionEmail = "dev@flitsas.io";
+    public const string DevOperacionPassword = "DevPass1!";
     public const string DemoTenantCode = "DEMO";
 
     public const string DemoAdminCompanyEmail = "admin@empresa.local";
@@ -46,6 +50,7 @@ public static class DevelopmentAuthSeeder
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
+        await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedTenantModuleGrantsAsync(db, cancellationToken);
     }
@@ -178,6 +183,8 @@ public static class DevelopmentAuthSeeder
 
         if (existingUser is not null)
         {
+            await EnsureUserCredentialsAsync(
+                db, existingUser.Id, OtAdminPassword, passwordHasher, cancellationToken);
             await EnsureOtAdminAssignmentAsync(db, existingUser.Id, resolvedTenantId, cancellationToken);
             return;
         }
@@ -229,6 +236,50 @@ public static class DevelopmentAuthSeeder
             RowVersion = 0,
         });
 
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// El SQL seed HU #10200 inserta <see cref="DevOperacionEmail"/> sin fila en
+    /// user_credentials; sin esto el login local devuelve 401 aunque el usuario exista.
+    /// </summary>
+    private static async Task EnsureDevOperacionCredentialsAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == DevOperacionEmail, cancellationToken);
+        if (user is null)
+            return;
+
+        await EnsureUserCredentialsAsync(
+            db, user.Id, DevOperacionPassword, passwordHasher, cancellationToken);
+    }
+
+    private static async Task EnsureUserCredentialsAsync(
+        FlitDbContext db,
+        Guid userId,
+        string plainPassword,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var hasCredential = await db.UserCredentials
+            .AnyAsync(c => c.UserId == userId, cancellationToken);
+        if (hasCredential)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = userId,
+            PasswordHash = passwordHasher.Hash(plainPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
         await db.SaveChangesAsync(cancellationToken);
     }
 

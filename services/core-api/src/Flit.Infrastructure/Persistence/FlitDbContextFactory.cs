@@ -24,6 +24,8 @@ public sealed class FlitDbContextFactory : IDesignTimeDbContextFactory<FlitDbCon
         var opts = new DbContextOptionsBuilder<FlitDbContext>()
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention()
+            .ConfigureWarnings(w => w.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning))
             .Options;
 
         return new FlitDbContext(opts);
