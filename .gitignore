@@ -117,4 +117,8 @@ context/
 
 # Instrucciones locales de Claude Code (no van al repo)
 CLAUDE.md
+.claude/
+
+# Scripts de smoke/dev local (Postman, pruebas manuales — no van al repo)
+scripts/dev/
 
