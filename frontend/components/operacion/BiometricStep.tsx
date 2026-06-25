@@ -54,16 +54,18 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!instanceId) return;
+    if (!instanceId) return null;
     try {
       const state = await tramitesClient.getBiometricState(instanceId);
       setValidations(state.validations);
       setProvider(state.provider);
       setError(() => null);
+      return state;
     } catch (err) {
       setError(() =>
         err instanceof Error ? err.message : 'Error al cargar las validaciones.',
       );
+      return null;
     }
   }, [instanceId]);
 
@@ -72,14 +74,20 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
   }, [load]);
 
   // Kyverum es asíncrono: el resultado llega por webhook. Mientras haya una validación en proceso se
-  // refresca solo cada 5s para reflejar aprobado/rechazado sin que el gestor tenga que recargar.
+  // refresca solo cada 5s para reflejar aprobado/rechazado sin que el gestor tenga que recargar. Al
+  // resolverse (ya no queda ninguna en_proceso) se notifica al wizard (onRefresh) para que recomponga
+  // el gate server-driven y habilite "Continuar" sin requerir un clic manual en "Actualizar".
   useEffect(() => {
     if (provider !== KYVERUM) return;
     const pending = (validations ?? []).some((v) => v.estado === 'en_proceso');
     if (!pending) return;
-    const timer = setInterval(() => void load(), 5000);
+    const timer = setInterval(async () => {
+      const state = await load();
+      const stillPending = (state?.validations ?? []).some((v) => v.estado === 'en_proceso');
+      if (state && !stillPending) onRefresh?.();
+    }, 5000);
     return () => clearInterval(timer);
-  }, [provider, validations, load]);
+  }, [provider, validations, load, onRefresh]);
 
   const handleRefresh = async () => {
     setLoading(true);
