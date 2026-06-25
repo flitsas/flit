@@ -58,6 +58,24 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Signatures)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public async Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
+        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct)
+    {
+        return await db.ProcedureInstances
+            .Include(i => i.Actors)
+            .Where(i => i.TenantId == tenantId
+                && i.Status == Flit.Tramites.Domain.Enums.ProcedureInstanceStatus.Draft
+                && i.DraftFinalizedAt != null
+                && i.DeletedAt == null
+                && i.Actors.Any(a =>
+                    a.ActorType == parte
+                    && a.DocumentType == tipoDoc
+                    && a.DocumentNumber == documento))
+            .OrderBy(i => i.DraftFinalizedAt)
+            .ThenBy(i => i.ReferenceNumber)
+            .ToListAsync(ct);
+    }
+
     public Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.Commercial)

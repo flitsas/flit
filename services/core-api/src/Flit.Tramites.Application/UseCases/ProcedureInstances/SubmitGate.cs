@@ -76,7 +76,9 @@ public static class SubmitGate
         return lowRiskComplete ? [] : [];
     }
 
-    private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
+    // internal: reutilizado por FinalizeDraftGate (HU #10349) — misma fuente de verdad de completitud
+    // documental para finalizar borrador y para radicar.
+    internal static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
         // DEMO: ver DemoFlags.RelaxDocs — afloja el gating estricto de documentos.
         if (DemoFlags.RelaxDocs)
@@ -97,7 +99,8 @@ public static class SubmitGate
     private static bool FurGenerado(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
-    private static bool OrganismoSeleccionado(ProcedureInstance instance)
+    // internal: reutilizado por FinalizeDraftGate (HU #10349).
+    internal static bool OrganismoSeleccionado(ProcedureInstance instance)
     {
         var v = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase));

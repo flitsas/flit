@@ -1548,6 +1548,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/finalize-draft:
+    post:
+      operationId: finalizeDraftProcedureInstance
+      tags: [Tramites]
+      summary: Finalizar borrador del trámite (HU #10349)
+      description: >
+        Marca un borrador como "finalizado": valida que la captura de datos esté completa (actores de la
+        modalidad, documentos obligatorios y organismo de tránsito) PERO **no** exige validación de
+        identidad ni FUR. La instancia permanece en estado `draft` y se sella `draftFinalizedAt`, quedando
+        a la espera de la validación de identidad asíncrona del cliente (fase 2). Idempotente: si el
+        borrador ya estaba finalizado, devuelve el resumen actual sin re-sellar. La radicación real
+        (`submit`, Draft→Submitted) sigue exigiendo identidad + FUR + reglas OT.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador de la instancia (procedure_instance_id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Borrador finalizado; `draftFinalizedAt` sellado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureInstanceSummary"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La instancia no existe para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La instancia no está en `draft` (`not_draft`) o faltan datos para finalizar
+            (`actores_incompletos`, `documentos_incompletos`, `organismo_requerido`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/biometric:
     post:
       operationId: iniciarProcedureInstanceBiometric
@@ -2312,6 +2362,30 @@ components:
         snapshotAt: { type: string, format: date-time }
         documentCount: { type: integer, description: Documentos congelados en el snapshot. }
       required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    ProcedureInstanceSummary:
+      type: object
+      description: Resumen de una instancia de trámite (devuelto por finalize-draft y submit).
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string, example: draft }
+        procedureTypeId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
+        draftFinalizedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            HU #10349 — fecha en que el borrador se finalizó (datos completos a la espera de la
+            validación de identidad async). Null si el borrador no se ha finalizado.
+      required: [id, referenceNumber, status, procedureTypeId, tenantId, createdAt]
 
     ProcedureDocumentRequirementSnapshotRow:
       type: object

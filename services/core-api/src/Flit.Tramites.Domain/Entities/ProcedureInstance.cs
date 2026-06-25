@@ -14,6 +14,17 @@ public sealed class ProcedureInstance
     public string ChecklistEstado { get; set; } = "{}";
 
     public Guid? TransitOfficeId { get; set; }
+
+    /// <summary>
+    /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
+    /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
+    /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el
+    /// consumidor de outbox firma/encadena automáticamente los borradores finalizados del sujeto. Null
+    /// mientras el borrador no se ha finalizado. NO equivale a radicar (Draft→Submitted sigue exigiendo
+    /// identidad + FUR + gates en <see cref="UseCases.ProcedureInstances.SubmitGate"/>).
+    /// </summary>
+    public DateTimeOffset? DraftFinalizedAt { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

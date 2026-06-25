@@ -37,6 +37,15 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("checklist_estado")
             .HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
 
+        // HU #10349 — borrador finalizado (fase 2). Columna agregada por migración SQL cruda
+        // (la tabla está ExcludeFromMigrations); aquí solo se mapea para el modelo EF.
+        builder.Property(x => x.DraftFinalizedAt)
+            .HasColumnName("draft_finalized_at");
+
+        builder.HasIndex(x => new { x.TenantId, x.DraftFinalizedAt })
+            .HasDatabaseName("ix_procedure_instances_draft_finalized")
+            .HasFilter("status = 'draft' AND draft_finalized_at IS NOT NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");

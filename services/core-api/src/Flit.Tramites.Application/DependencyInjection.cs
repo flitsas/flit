@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
+        // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
+        services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         services.AddScoped<UploadAttachmentHandler>();
@@ -59,6 +61,10 @@ public static class DependencyInjection
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();
         services.AddScoped<KyverumWebhookHandler>();
+
+        // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
+        // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
+        services.AddScoped<Identity.IdentityValidationCompletedConsumer>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).

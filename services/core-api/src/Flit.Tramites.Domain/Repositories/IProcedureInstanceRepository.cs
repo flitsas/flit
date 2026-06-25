@@ -59,6 +59,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Lista los borradores FINALIZADOS del tenant (status=draft, <c>draft_finalized_at</c> NOT NULL, no
+    /// eliminados) donde el sujeto (<paramref name="tipoDoc"/> + <paramref name="documento"/>) es actor de
+    /// la <paramref name="parte"/> indicada. Orden determinista: <c>draft_finalized_at</c> ASC, luego
+    /// <c>reference_number</c> (HU #10349, AC5). Incluye los actores para resolver la parte; el resto del
+    /// grafo lo recargan los handlers de firma/FUR por id. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
+        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con TODO el grafo necesario para generar el FUR (Slice 7): actores,
     /// field values, adjuntos, comercial, biométricas y firmas.
     /// </summary>

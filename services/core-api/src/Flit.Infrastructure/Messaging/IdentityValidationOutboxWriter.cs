@@ -17,6 +17,13 @@ internal static class IdentityValidationOutboxWriter
     public static IdentityValidationOutbox Enqueue(FlitDbContext db, IdentityValidationEvent evt)
     {
         var now = DateTimeOffset.UtcNow;
+
+        // HU #10349 (fase 2): los eventos 'completed' se dejan PENDIENTES (published_at = null) para que
+        // el procesador de outbox encadene el auto-flujo (firma/FUR) de los borradores finalizados y luego
+        // selle published_at. Los 'requested' no tienen consumidor → se sellan al despachar (in-process).
+        var pending = string.Equals(
+            evt.EventType, IdentityValidationEventTypes.Completed, StringComparison.Ordinal);
+
         var outbox = new IdentityValidationOutbox
         {
             Id = Guid.NewGuid(),
@@ -25,8 +32,8 @@ internal static class IdentityValidationOutboxWriter
             EventType = evt.EventType,
             Payload = JsonSerializer.Serialize(evt, evt.GetType(), JsonOptions),
             OccurredAt = now,
-            PublishedAt = now,
-            Attempts = 1,
+            PublishedAt = pending ? null : now,
+            Attempts = pending ? 0 : 1,
             CreatedAt = now,
         };
 
