@@ -67,6 +67,7 @@ export interface InstanceSummary {
   vehiculoLinea: string | null;
   compradorNombre: string | null;
   compradorDocumento: string | null;
+  organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
   createdAt: string;

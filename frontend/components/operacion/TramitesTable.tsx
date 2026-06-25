@@ -103,7 +103,7 @@ function stepLabel(item: InstanceSummary): string {
   return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
 }
 
-const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 0.9fr 1fr';
+const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 1.3fr 0.9fr 1fr';
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -157,6 +157,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           item.vin,
           item.referenceNumber,
           item.compradorNombre,
+          item.organismoTransito,
         ]
           .filter(Boolean)
           .join(' ')
@@ -358,7 +359,7 @@ function TableBody({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[1040px]">
+      <div className="min-w-[1180px]">
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
@@ -376,6 +377,7 @@ function TableBody({
           <div>Modalidad</div>
           <div>Paso</div>
           <div>Estado</div>
+          <div>Organismo</div>
           <div>Creado</div>
           <div className="text-right">Acciones</div>
         </div>
@@ -535,6 +537,9 @@ function TramiteRow({
           >
             {chip.label}
           </span>
+        </span>
+        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
+          {item.organismoTransito ?? '—'}
         </span>
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}

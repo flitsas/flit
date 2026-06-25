@@ -38,6 +38,7 @@ function makeInstances(n: number): InstanceSummary[] {
       vehiculoLinea: 'Corolla',
       compradorNombre: `Comprador ${num}`,
       compradorDocumento: `100${num}`,
+      organismoTransito: null,
       pasoActual: 2,
       totalPasos: 6,
       createdAt: '2026-06-18T00:00:00Z',
@@ -116,5 +117,29 @@ describe('TramitesTable — paginación', () => {
     expect(within(nav).getByText('1 / 3')).toBeInTheDocument();
     expect(screen.getByText('P0001')).toBeInTheDocument();
     expect(screen.queryByText('P0011')).not.toBeInTheDocument();
+  });
+});
+
+describe('TramitesTable — organismo de tránsito', () => {
+  const [base] = makeInstances(1);
+
+  it('muestra el organismo en la fila y permite filtrar por él', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'a', placa: 'BOG001', organismoTransito: 'Secretaría de Movilidad Bogotá' },
+      { ...base, id: 'b', placa: 'CAL001', organismoTransito: 'Cali — STTMP' },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('BOG001');
+    expect(screen.getByText('Secretaría de Movilidad Bogotá')).toBeInTheDocument();
+    expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
+
+    // El buscador también filtra por organismo.
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Buscar trámites' }),
+      'Cali',
+    );
+    expect(screen.queryByText('BOG001')).not.toBeInTheDocument();
+    expect(screen.getByText('CAL001')).toBeInTheDocument();
   });
 });

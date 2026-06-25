@@ -102,7 +102,7 @@ export function TramitesListToolbar({
             type="search"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar por placa, VIN, referencia o comprador…"
+            placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
             aria-label="Buscar trámites"
             className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
             style={{ borderColor: '#DFE5ED' }}

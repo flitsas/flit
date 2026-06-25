@@ -21,6 +21,7 @@ public sealed record InstanceSummaryDto(
     string? VehiculoLinea,
     string? CompradorNombre,
     string? CompradorDocumento,
+    string? OrganismoTransito,   // nombre del OT elegido (field_value transit_office_name)
     int PasoActual,              // 1..TotalPasos
     int TotalPasos,              // 5 matrícula | 6 traspaso
     DateTimeOffset CreatedAt);
@@ -65,6 +66,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             Field(fv, "vehicle_line"),
             string.IsNullOrWhiteSpace(buyer?.FullName) ? null : buyer.FullName,
             string.IsNullOrWhiteSpace(buyer?.DocumentNumber) ? null : buyer.DocumentNumber,
+            Field(fv, "transit_office_name"),
             pasoActual,
             totalPasos,
             e.CreatedAt);
