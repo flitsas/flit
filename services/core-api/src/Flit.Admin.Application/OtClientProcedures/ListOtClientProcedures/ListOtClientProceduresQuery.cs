@@ -4,7 +4,7 @@ public sealed class ListOtClientProceduresQuery
 {
     public Guid OtTenantId { get; init; }
 
-  public Guid? TransitOfficeId { get; init; }
+    public Guid? TransitOfficeId { get; init; }
 
     public string? Status { get; init; }
 
