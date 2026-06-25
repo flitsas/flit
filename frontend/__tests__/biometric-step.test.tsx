@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
@@ -136,6 +136,49 @@ describe('BiometricStep — kyverum (validación real)', () => {
       screen.getByRole('link', { name: EN_PROCESO.captureUrl! }),
     ).toHaveAttribute('href', EN_PROCESO.captureUrl);
     expect(screen.getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
+  });
+
+  // Regresión (VERONICA): el resultado de Kyverum llega async por webhook. El polling debe avisar al
+  // wizard (onRefresh) al resolverse la validación para que el gate server-driven habilite "Continuar"
+  // SIN requerir un clic manual en "Actualizar". Antes solo se notificaba en el refresh manual.
+  it('polling: al resolverse en_proceso → aprobado dispara onRefresh sin clic manual', async () => {
+    vi.useFakeTimers();
+    try {
+      const onRefresh = vi.fn();
+      const APROBADA_KYVERUM: BiometricValidation = {
+        ...EN_PROCESO,
+        estado: 'aprobado',
+        score: 76,
+        validadoAt: '2026-06-25T00:00:00Z',
+      };
+      // 1ª consulta (carga inicial): en proceso → arranca el polling, sin notificar.
+      // 2ª consulta (tick de 5s): aprobado → debe notificar exactamente una vez.
+      mocks.getBiometricState
+        .mockResolvedValueOnce({ validations: [EN_PROCESO], provider: 'kyverum' })
+        .mockResolvedValue({ validations: [APROBADA_KYVERUM], provider: 'kyverum' });
+
+      render(
+        <BiometricStep
+          instanceId={INSTANCE}
+          modalidad="matricula_inicial"
+          onRefresh={onRefresh}
+        />,
+      );
+
+      // Drena la carga inicial (en_proceso) + montaje del polling: aún NO debe avisar al wizard.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(onRefresh).not.toHaveBeenCalled();
+
+      // Un ciclo de polling (5s): la validación resuelve a aprobado → notifica.
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+
+      // No re-notifica en ciclos posteriores: ya no queda nada en_proceso → el intervalo se desmonta.
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

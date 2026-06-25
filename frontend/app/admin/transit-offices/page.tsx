@@ -19,7 +19,7 @@ function AdminTransitOfficesPageInner() {
   const router = useRouter();
 
   return (
-    <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+    <div className="flex min-h-full flex-col gap-4 px-6 pt-6 pb-24">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -41,6 +41,6 @@ function AdminTransitOfficesPageInner() {
       >
         <TransitOfficesList />
       </div>
-    </main>
+    </div>
   );
 }

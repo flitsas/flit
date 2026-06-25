@@ -12,6 +12,14 @@ public interface ICompanyWriteRepository
     Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Devuelve la proyección de listado de la compañía, o <c>null</c> si no existe.
+    /// La usa el handler de edición para resolver/validar el <c>tenant_type</c> respecto
+    /// del valor actual: preserva tipos heredados fuera del catálogo B2B
+    /// (p.ej. <c>standard</c>/<c>transit_office</c>) cuando la edición no los cambia.
+    /// </summary>
+    Task<CompanyListItem?> GetByIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Inserta la compañía y devuelve su proyección de listado (incluye el id y la
     /// fecha de creación generados). El llamador (handler) ya validó los datos.
     /// </summary>
@@ -24,6 +32,21 @@ public interface ICompanyWriteRepository
     /// </summary>
     Task<CompanyListItem?> SetActiveAsync(
         Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Actualiza los datos editables de la compañía (razón social, NIT, tipo y estado)
+    /// sobre <c>identity.tenants</c> y devuelve su proyección de listado actualizada, o
+    /// <c>null</c> si el tenant no existe. El <c>code</c> es inmutable (no se toca).
+    /// Idempotente: solo persiste si hay cambios reales. El llamador (handler) ya validó.
+    /// </summary>
+    Task<CompanyListItem?> UpdateAsync(
+        Guid tenantId,
+        string legalName,
+        string taxId,
+        string tenantType,
         bool isActive,
         Guid? changedBy,
         CancellationToken cancellationToken = default);

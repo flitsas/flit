@@ -6,8 +6,20 @@ export interface CompanyListItem {
   id: string;
   nit: string;
   razonSocial: string;
+  /** Código único del tenant (inmutable; identificador de sistema). */
+  code: string;
+  /**
+   * Tipo de compañía. `string` (no el enum B2B) porque el listado incluye tenants con
+   * tipos heredados fuera del catálogo (p.ej. `standard`, `transit_office`).
+   */
+  tenantType: string;
   estadoActivo: boolean;
   fechaCreacion: string;
+  /**
+   * Token de concurrencia optimista (`identity.tenants.row_version`). Se reenvía al editar
+   * para que el backend detecte ediciones concurrentes (409 si otra persona la modificó).
+   */
+  rowVersion: number;
 }
 
 export interface CompanyPagedResult {
@@ -37,6 +49,18 @@ export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
   FLIT: "FLIT",
 };
 
+/** Catálogo B2B administrable desde la consola de compañías. */
+export const B2B_TENANT_TYPES: readonly TenantType[] = ["RENTING", "CONCESIONARIO", "FLIT"];
+
+/**
+ * `true` si el tipo pertenece al catálogo B2B editable. Los tenants con tipos heredados
+ * de sistema (`standard`, `transit_office`, …) aparecen en el listado pero NO se editan
+ * desde esta consola (decisión de producto): se muestran como solo-lectura.
+ */
+export function isB2BTenantType(value: string): value is TenantType {
+  return (B2B_TENANT_TYPES as readonly string[]).includes(value);
+}
+
 /** Payload del POST /api/v1/admin/companies (alta de compañía). */
 export interface CreateCompanyRequest {
   razonSocial: string;
@@ -44,6 +68,21 @@ export interface CreateCompanyRequest {
   code: string;
   tenantType: TenantType;
   estadoActivo: boolean;
+}
+
+/**
+ * Payload del PUT /api/v1/admin/companies/{tenantId} (edición de compañía). El
+ * código es inmutable, por lo que no se envía. `tenantType` es `string` (no el enum
+ * B2B) porque el listado incluye tenants con tipos heredados fuera del catálogo
+ * (p.ej. `standard`, `transit_office`); al editar se preserva su valor actual.
+ */
+export interface UpdateCompanyRequest {
+  razonSocial: string;
+  nit: string;
+  tenantType: string;
+  estadoActivo: boolean;
+  /** Versión leída al abrir la edición; el backend responde 409 si quedó desactualizada. */
+  rowVersion: number;
 }
 
 // ── Configuración del tenant (AC2) ──────────────────────────────────────────

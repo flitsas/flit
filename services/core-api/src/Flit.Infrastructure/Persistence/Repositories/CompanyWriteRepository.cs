@@ -114,6 +114,64 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             entity.UpdatedAt = DateTimeOffset.UtcNow;
             entity.UpdatedBy = changedBy;
             await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            // El trigger trg_row_version incrementa row_version en BD; recargar para que la
+            // proyección devuelva la versión nueva (concurrencia optimista de la edición).
+            await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Project(entity);
+    }
+
+    public async Task<CompanyListItem?> GetByIdAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.Tenants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : Project(entity);
+    }
+
+    public async Task<CompanyListItem?> UpdateAsync(
+        Guid tenantId,
+        string legalName,
+        string taxId,
+        string tenantType,
+        bool isActive,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.Tenants
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        // Idempotente: solo persiste si algún campo editable cambia (el code es inmutable).
+        var changed =
+            entity.LegalName != legalName
+            || entity.TaxId != taxId
+            || entity.TenantType != tenantType
+            || entity.IsActive != isActive;
+
+        if (changed)
+        {
+            entity.LegalName = legalName;
+            entity.TaxId = taxId;
+            entity.TenantType = tenantType;
+            entity.IsActive = isActive;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            entity.UpdatedBy = changedBy;
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            // El trigger trg_row_version incrementa row_version en BD; recargar para que la
+            // proyección devuelva la versión nueva (si no, una edición posterior del mismo
+            // cliente daría un 409 falso al reenviar la versión vieja).
+            await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return Project(entity);
@@ -124,7 +182,10 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         Id = entity.Id,
         Nit = entity.TaxId,
         RazonSocial = entity.LegalName,
+        Code = entity.Code,
+        TenantType = entity.TenantType,
         EstadoActivo = entity.IsActive,
         FechaCreacion = entity.CreatedAt,
+        RowVersion = entity.RowVersion,
     };
 }
