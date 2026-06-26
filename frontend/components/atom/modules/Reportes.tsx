@@ -20,6 +20,7 @@ import { CompanySelector } from "./_reportes/CompanySelector";
 import { CategoryDonut } from "./_reportes/CategoryDonut";
 import { ProductivityCards } from "./_reportes/ProductivityCards";
 import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
+import { ExportButtons } from "./_reportes/ExportButtons";
 import { CATEGORY_META, CATEGORY_ORDER } from "./_reportes/categories";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 
@@ -179,7 +180,7 @@ export function Reportes() {
         subtitle="Monitorea el desempeño operativo por categoría de trámite."
       />
 
-      {/* Filtros — rango de fechas (todos) + compañía (solo SuperAdmin) */}
+      {/* Filtros — rango de fechas (todos) + compañía (solo SuperAdmin) + exportaciones */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
         <DateRangeFilter value={range} onChange={setRange} disabled={status === "loading"} />
         {isSuper && (
@@ -190,6 +191,15 @@ export function Reportes() {
             disabled={status === "loading"}
           />
         )}
+        <div className="ml-auto">
+          <ExportButtons
+            range={range}
+            tenantId={tenantId || undefined}
+            category={segment?.category}
+            status={segment?.status}
+            disabled={status === "loading" || !isValidRange(range)}
+          />
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto pr-1">

@@ -251,6 +251,13 @@ export interface ProcedureDetailsParams {
   tenantId?: string;
 }
 
+/** Cuerpo del POST /api/v1/analytics/export/executive-pdf (HU #10246 / #10249). */
+export interface ExecutivePdfParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
 /** Error de validación tipado para flujos 422 (AC2/AC3). */
 export class ApiValidationError extends Error {
   constructor(
