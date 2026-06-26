@@ -1870,6 +1870,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/export/executive-pdf:
+    post:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsExecutivePdf
+      summary: Genera el PDF de Resumen Ejecutivo del periodo (RF10)
+      description: >
+        Genera un PDF con los totales por categoría y el Top 5 de radicadores del periodo.
+        El tenant se toma del claim `tenant_id` (AC2); un SuperAdmin puede indicar `tenantId`
+        en el cuerpo. Si falta `from` o `to`, responde 400 (AC3).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutivePdfRequest"
+      responses:
+        "200":
+          description: PDF del Resumen Ejecutivo.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Falta from/to, rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2790,3 +2830,11 @@ components:
         page: { type: integer, example: 1 }
         pageSize: { type: integer, example: 20 }
       required: [items, totalCount, page, pageSize]
+
+    ExecutivePdfRequest:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin." }
+      required: [from, to]

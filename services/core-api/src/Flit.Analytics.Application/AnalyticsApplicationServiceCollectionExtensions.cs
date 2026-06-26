@@ -11,6 +11,7 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetAnalyticsOverviewHandler>();
         services.AddScoped<GetTopProducersHandler>();
         services.AddScoped<GetProcedureDetailsHandler>();
+        services.AddScoped<ExportExecutivePdfHandler>();
         return services;
     }
 }

@@ -57,6 +57,14 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapPost("/export/executive-pdf", ExportExecutivePdfAsync)
+            .WithName("AnalyticsExecutivePdf")
+            .WithSummary("Genera el PDF de Resumen Ejecutivo del periodo")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 
@@ -97,6 +105,30 @@ public static class AnalyticsEndpoints
 
     private const string ExcelContentType =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    private static async Task<IResult> ExportExecutivePdfAsync(
+        HttpContext httpContext,
+        ExecutivePdfRequest request,
+        ExportExecutivePdfHandler handler,
+        CancellationToken ct)
+    {
+        // AC3: from (o to) ausente en el cuerpo → 400 antes de resolver tenant o consultar.
+        if (request?.From is null || request.To is null)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "El cuerpo debe incluir 'from' y 'to'.");
+
+        if (!TryResolveEffectiveTenant(httpContext.User, request.TenantId, out var tenant, out var error))
+            return error!;
+
+        var (pdf, err) = await handler.HandleAsync(
+            new ExportExecutivePdfQuery(tenant, request.From.Value, request.To.Value), ct);
+
+        if (err is "invalid_range")
+            return InvalidRange();
+
+        var fileName = $"resumen_ejecutivo_{request.From:yyyyMMdd}_{request.To:yyyyMMdd}.pdf";
+        return Results.File(pdf!, "application/pdf", fileName);
+    }
 
     private static IResult ExportExcel(
         HttpContext httpContext,
@@ -199,3 +231,9 @@ public static class AnalyticsEndpoints
         Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "El rango de fechas es inválido: 'from' no puede ser posterior a 'to'.");
 }
+
+/// <summary>
+/// Cuerpo del Resumen Ejecutivo (HU #10246). <c>From</c>/<c>To</c> son nullables para detectar
+/// su ausencia y responder 400 (AC3). <c>TenantId</c> opcional solo aplica para SuperAdmin (AC2).
+/// </summary>
+public sealed record ExecutivePdfRequest(DateOnly? From, DateOnly? To, Guid? TenantId);
