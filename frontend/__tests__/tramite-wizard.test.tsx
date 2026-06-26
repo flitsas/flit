@@ -738,6 +738,26 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     expect(mocks.simulateBiometric).not.toHaveBeenCalled();
     expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
   });
+
+  it('si el ensure de identidad falla → avisa al gestor (toast) en vez de fallar en silencio', async () => {
+    // Fix #2 (auditoría QA): el error de ensureIdentity ya NO se traga silenciosamente. Se avisa al
+    // gestor con un toast (y se deja traza en consola) para que no continúe creyendo que la identidad
+    // quedó encaminada. No bloquea el avance.
+    mocks.ensureIdentity.mockRejectedValue(new Error('network'));
+
+    await guardarVendedor();
+
+    await waitFor(() => expect(mocks.ensureIdentity).toHaveBeenCalledWith('inst-1', 'vendedor'));
+    await waitFor(() =>
+      expect(toastShow).toHaveBeenCalledWith(
+        expect.stringContaining('No se pudo iniciar automáticamente la validación de identidad'),
+        'error',
+      ),
+    );
+    // El fallo corta la orquestación (no se fuerza simular/iniciar tras el error) pero no rompe el flujo.
+    expect(mocks.simulateBiometric).not.toHaveBeenCalled();
+    expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
+  });
 });
 
 describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split)', () => {

@@ -104,8 +104,16 @@ public static class BiometricRules
     public const int VigenciaDias = 30;
 
     /// <summary>
-    /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ la fecha de
-    /// hoy es anterior a <c>ValidadoAt + VigenciaDias</c> (corte por DÍA calendario, no por hora exacta).
+    /// Huso horario de Colombia (UTC-5, sin horario de verano). La vigencia se cuenta por DÍA CALENDARIO
+    /// local de Colombia —el día que ve el gestor— y no por el día UTC: una aprobación cerca de medianoche
+    /// no debe contar un día de menos/más por la diferencia de 5 horas.
+    /// </summary>
+    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ el DÍA
+    /// calendario de hoy (en hora de Colombia) es anterior a <c>ValidadoAt + VigenciaDias</c>: el día de
+    /// aprobación es el día 1 y vence en el día 31. El corte es por DÍA, no por hora.
     /// Una aprobada sin <c>ValidadoAt</c> se trata como vigente: ese estado sólo ocurre en fixtures de
     /// prueba; en producción los tres caminos de aprobación (mock, simular, webhook Kyverum) siempre
     /// setean la fecha al aprobar.
@@ -117,6 +125,32 @@ public static class BiometricRules
             return false;
         if (validation.ValidadoAt is not { } validadoAt)
             return true;
-        return now.UtcDateTime.Date < validadoAt.UtcDateTime.Date.AddDays(VigenciaDias);
+        // Día calendario en hora de Colombia (no UTC) para que coincida con el día del gestor.
+        var hoy = now.ToOffset(ColombiaUtcOffset).Date;
+        var diaAprobacion = validadoAt.ToOffset(ColombiaUtcOffset).Date;
+        return hoy < diaAprobacion.AddDays(VigenciaDias);
+    }
+
+    /// <summary>
+    /// ¿La validación corresponde al documento (tipo + número) de la parte ACTUAL del trámite? Defensa
+    /// en profundidad del gate de identidad (HU #10350): aunque <c>EnsureIdentityHandler</c> expira las
+    /// validaciones de una persona anterior cuando el gestor cambia el documento, el gate NO debe contar
+    /// como aprobada una validación cuyo documento difiera del actor actual (p.ej. si esa invalidación no
+    /// llegó a correr, falló de red o se saltó). El gate deja de depender de un mejor-esfuerzo del frontend.
+    /// <para>Lenient: si la validación o el actor no tienen documento (fixtures/datos parciales), no se
+    /// descarta por documento — sólo se descarta cuando AMBOS números están presentes y difieren. El tipo
+    /// de documento sólo descarta cuando ambos están presentes y difieren.</para>
+    /// </summary>
+    public static bool DocumentoCoincide(
+        ProcedureInstanceBiometricValidation validation, string? tipoDoc, string? documento)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        if (string.IsNullOrWhiteSpace(documento) || string.IsNullOrWhiteSpace(validation.Documento))
+            return true;
+        if (!string.Equals(validation.Documento.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(validation.TipoDoc))
+            return true;
+        return string.Equals(validation.TipoDoc.Trim(), tipoDoc.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -376,11 +376,16 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     private static bool BiometriaAprobada(ProcedureInstance instance, string? parte)
     {
         // HU #10350 — la validación cuenta como aprobada sólo si además está VIGENTE (≤30 días desde la
-        // aprobación). Una aprobación vencida deja de satisfacer el gate → obliga a revalidar.
+        // aprobación) Y corresponde al DOCUMENTO del actor actual de la parte. El doc-match es defensa en
+        // profundidad: si el gestor cambió de persona y la invalidación de la validación previa no corrió
+        // (p.ej. el ensure del frontend falló), el gate NO la cuenta como identidad de la persona actual.
         var now = DateTimeOffset.UtcNow;
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         return instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now));
+            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }
 
     /// <summary>

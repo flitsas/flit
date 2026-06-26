@@ -52,6 +52,19 @@ public sealed class EnsureIdentityHandlerTests
     }
 
     [Fact]
+    public void EsAprobadaVigente_CuentaElDiaEnHoraDeColombia_NoEnUtc()
+    {
+        // El conteo es por DÍA calendario de Colombia (UTC-5), no por día UTC. Aprobada el 2026-06-24
+        // 02:00 UTC = 2026-06-23 21:00 en Colombia → el día 1 es el 23-jun (Colombia). El día 31 es el
+        // 23-jul. Hoy = 2026-07-23 17:00 UTC = 12:00 en Colombia (23-jul) → YA vencida.
+        // (Con conteo en día UTC el día 1 sería el 24-jun y daría vigente — eso es justo lo que se corrige.)
+        var validadoAt = new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero);
+        var now = new DateTimeOffset(2026, 7, 23, 17, 0, 0, TimeSpan.Zero);
+        var v = Validation(BiometricEstados.Aprobado, validadoAt: validadoAt);
+        BiometricRules.EsAprobadaVigente(v, now).Should().BeFalse();
+    }
+
+    [Fact]
     public void EsAprobadaVigente_NoAprobada_EsFalse()
     {
         var now = DateTimeOffset.UtcNow;

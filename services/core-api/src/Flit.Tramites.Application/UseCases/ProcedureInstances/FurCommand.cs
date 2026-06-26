@@ -125,11 +125,19 @@ public sealed class GenerarFurHandler(
     /// </summary>
     private static bool BiometriaGateOk(ProcedureInstance instance, bool esTraspaso)
     {
-        // HU #10350 — la biométrica debe estar aprobada Y vigente (≤30 días) para generar el FUR.
+        // HU #10350 — la biométrica debe estar aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor
+        // actual para generar el FUR (defensa en profundidad: no se cuenta la identidad de una persona
+        // anterior si el gestor cambió el documento y la invalidación previa no corrió).
         var now = DateTimeOffset.UtcNow;
-        bool Aprobada(string? parte) => instance.BiometricValidations.Any(v =>
-            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now));
+        bool Aprobada(string? parte)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+            return instance.BiometricValidations.Any(v =>
+                string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
+                && BiometricRules.EsAprobadaVigente(v, now)
+                && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
+        }
 
         return esTraspaso
             ? Aprobada("comprador") && Aprobada("vendedor")

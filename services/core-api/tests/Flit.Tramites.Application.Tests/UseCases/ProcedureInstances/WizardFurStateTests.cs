@@ -36,7 +36,9 @@ public sealed class WizardFurStateTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-    private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
+    // documento debe coincidir con el del actor de la parte (el gate exige doc-match, HU #10350);
+    // por defecto "777" = documento del Comprador() por defecto.
+    private static ProcedureInstanceBiometricValidation Bio(string? parte, string documento = "777") =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -44,7 +46,7 @@ public sealed class WizardFurStateTests
             Estado = BiometricEstados.Aprobado,
             Nombre = "X",
             TipoDoc = "CC",
-            Documento = "1",
+            Documento = documento,
             Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -179,8 +181,8 @@ public sealed class WizardFurStateTests
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
-        instance.BiometricValidations.Add(Bio("comprador"));
-        instance.BiometricValidations.Add(Bio("vendedor"));
+        instance.BiometricValidations.Add(Bio("comprador", documento: "666"));
+        instance.BiometricValidations.Add(Bio("vendedor", documento: "555"));
         // firma + fur faltan
         Setup(instance);
 
@@ -199,8 +201,8 @@ public sealed class WizardFurStateTests
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
-        instance.BiometricValidations.Add(Bio("comprador"));
-        instance.BiometricValidations.Add(Bio("vendedor"));
+        instance.BiometricValidations.Add(Bio("comprador", documento: "666"));
+        instance.BiometricValidations.Add(Bio("vendedor", documento: "555"));
         instance.Signatures.Add(Firma("comprador"));
         instance.Signatures.Add(Firma("vendedor"));
         CompletarDocsTraspaso(instance);

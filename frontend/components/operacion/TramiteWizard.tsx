@@ -409,8 +409,15 @@ export function TramiteWizard(props: Props) {
               await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
             }
           }
-        } catch {
-          // La identidad puede iniciarse manualmente en el paso de Identidad; no se bloquea el avance.
+        } catch (ensureErr) {
+          // No se traga en silencio (HU #10350): asegurar/iniciar la identidad falló. No bloquea el
+          // avance —el gestor puede iniciarla manualmente en el paso de Identidad— pero SÍ se avisa para
+          // que no continúe creyendo que la identidad quedó encaminada, y se deja traza para observabilidad.
+          console.warn('[tramite-wizard] ensureIdentity falló', { instanceId, parte: parteIdentidad, error: ensureErr });
+          show(
+            'No se pudo iniciar automáticamente la validación de identidad. Continúa y, si es necesario, iníciala en el paso de Identidad.',
+            'error',
+          );
         }
       }
 

@@ -38,7 +38,9 @@ public sealed class WizardBiometricaStateTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-    private static ProcedureInstanceBiometricValidation Biometria(string? parte, string estado) =>
+    // documento debe coincidir con el del actor de la parte (el gate exige doc-match, HU #10350);
+    // por defecto "777" = documento del Comprador() por defecto.
+    private static ProcedureInstanceBiometricValidation Biometria(string? parte, string estado, string documento = "777") =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -46,7 +48,7 @@ public sealed class WizardBiometricaStateTests
             Estado = estado,
             Nombre = "X",
             TipoDoc = "CC",
-            Documento = "1",
+            Documento = documento,
             Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -152,6 +154,26 @@ public sealed class WizardBiometricaStateTests
     }
 
     [Fact]
+    public async Task Matricula_BiometriaAprobadaDeOtroDocumento_NoCuentaComoIdentidad()
+    {
+        // Defensa en profundidad (HU #10350): si el gestor cambió de persona y quedó una validación
+        // aprobada+vigente de la persona ANTERIOR (documento distinto al del actor actual), el gate de
+        // identidad NO la cuenta como verificada — aunque la invalidación del ensure no haya corrido.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        CompletarHastaIdentidadMatricula(instance); // comprador doc "777"
+        instance.BiometricValidations.Add(
+            Biometria(parte: "comprador", estado: BiometricEstados.Aprobado, documento: "111-persona-anterior"));
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var s4 = result!.Steps.Single(s => s.Index == 4);
+        s4.Status.Should().Be("incomplete");
+        s4.Reasons.Should().Contain("identidad_pendiente");
+    }
+
+    [Fact]
     public async Task Matricula_BiometriaRechazada_IdentidadStillIncomplete()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -225,7 +247,7 @@ public sealed class WizardBiometricaStateTests
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
-        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
+        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado, documento: "666"));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
@@ -241,8 +263,8 @@ public sealed class WizardBiometricaStateTests
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
-        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado));
-        instance.BiometricValidations.Add(Biometria(parte: "vendedor", estado: BiometricEstados.Aprobado));
+        instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado, documento: "666"));
+        instance.BiometricValidations.Add(Biometria(parte: "vendedor", estado: BiometricEstados.Aprobado, documento: "555"));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);

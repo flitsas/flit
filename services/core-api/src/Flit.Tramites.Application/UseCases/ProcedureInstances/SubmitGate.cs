@@ -93,11 +93,16 @@ public static class SubmitGate
 
     private static bool BiometriaAprobada(ProcedureInstance instance, string parte)
     {
-        // HU #10350 — aprobada Y vigente (≤30 días desde la aprobación); una aprobación vencida no radica.
+        // HU #10350 — aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor actual; una aprobación
+        // vencida no radica, y una validación de una persona anterior (documento distinto) tampoco cuenta
+        // (defensa en profundidad: el gate no se fía de que el ensure del frontend haya invalidado la previa).
         var now = DateTimeOffset.UtcNow;
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         return instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now));
+            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }
 
     private static bool FurGenerado(ProcedureInstance instance) =>
