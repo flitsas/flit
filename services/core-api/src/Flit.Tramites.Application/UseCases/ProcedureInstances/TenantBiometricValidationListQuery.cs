@@ -20,8 +20,21 @@ public sealed record TenantBiometricValidationListQuery(
     int? ScoreMax = null,
     DateTimeOffset? CreatedFrom = null,
     DateTimeOffset? CreatedTo = null,
-    string? MotivoRechazo = null)
+    string? MotivoRechazo = null,
+    int Page = 1,
+    int PageSize = 20)
 {
+    /// <summary>Filas por página: el cliente elige de 10 en 10 hasta 50 (HU #10347 — paginación).</summary>
+    public const int MinPageSize = 10;
+    public const int MaxPageSize = 50;
+    public const int DefaultPageSize = 20;
+
+    /// <summary>Página normalizada (1-based, mínimo 1).</summary>
+    public int SafePage() => Page < 1 ? 1 : Page;
+
+    /// <summary>Tamaño de página acotado al rango permitido [10, 50].</summary>
+    public int SafePageSize() => Math.Clamp(PageSize, MinPageSize, MaxPageSize);
+
     private static readonly HashSet<string> ValidEstados = new(StringComparer.OrdinalIgnoreCase)
     {
         BiometricEstados.Enviado,
@@ -29,6 +42,8 @@ public sealed record TenantBiometricValidationListQuery(
         BiometricEstados.Aprobado,
         BiometricEstados.Rechazado,
         BiometricEstados.Expirado,
+        BiometricEstados.PendienteEnvio,
+        BiometricEstados.ErrorEnvio,
     };
 
     private static readonly HashSet<string> ValidPartes = new(StringComparer.OrdinalIgnoreCase)
@@ -52,7 +67,7 @@ public sealed record TenantBiometricValidationListQuery(
             return "scoreMin no puede ser mayor que scoreMax.";
 
         if (!string.IsNullOrWhiteSpace(Estado) && !ValidEstados.Contains(Estado.Trim()))
-            return "estado inválido; use enviado, en_proceso, aprobado, rechazado o expirado.";
+            return "estado inválido; use enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio o error_envio.";
 
         if (!string.IsNullOrWhiteSpace(Parte) && !ValidPartes.Contains(Parte.Trim()))
             return "parte inválida; use comprador o vendedor.";

@@ -36,22 +36,30 @@ public sealed record BiometricValidationStatsDto(
     int Rechazadas,
     int Expiradas);
 
-/// <summary>Respuesta del listado transversal: filas + KPIs agregados.</summary>
+/// <summary>
+/// Respuesta del listado transversal: filas de la PÁGINA pedida + KPIs agregados de TODO el conjunto
+/// filtrado + metadatos de paginación. <c>Total</c> es el total filtrado (para calcular el nº de páginas);
+/// los KPIs (<see cref="Stats"/>) siguen siendo del conjunto completo, no solo de la página.
+/// </summary>
 public sealed record TenantBiometricValidationsResponse(
     IReadOnlyList<TenantBiometricValidationDto> Validations,
-    BiometricValidationStatsDto Stats);
+    BiometricValidationStatsDto Stats,
+    int Page,
+    int PageSize,
+    int Total);
 
 /// <summary>
-/// Lista las validaciones biométricas del tenant (todas las instancias) para el submódulo de
-/// Validaciones de Identidad (HU #10234, filtros HU #10347). La tabla se acota a
-/// <see cref="MaxRows"/> filas; los KPIs se calculan con un conteo agrupado aparte para que sean
-/// exactos aunque la tabla esté acotada. Con filtros activos, filas y KPIs reflejan el mismo subconjunto.
+/// Lista PAGINADA de las validaciones biométricas del tenant (todas las instancias) para el submódulo de
+/// Validaciones de Identidad (HU #10234, filtros HU #10347, paginación). Devuelve solo la página pedida
+/// (server-side: <c>Skip/Take</c>), con los KPIs calculados con un conteo agrupado aparte para que sean
+/// exactos sobre TODO el conjunto filtrado (no solo la página) y el <c>Total</c> para el paginador.
 /// Reusa <see cref="IniciarBiometriaHandler.ExtractMotivoRechazo"/> para el motivo SANITIZADO (sin PII).
 /// </summary>
 public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepository repo)
 {
-    /// <summary>Cap de filas de la tabla (vista de monitoreo). Los KPIs no dependen de este cap.</summary>
-    public const int MaxRows = 500;
+    // Cap de escaneo en memoria SOLO para el filtro motivoRechazo (jsonb, no filtrable/paginable en SQL):
+    // se trae un lote acotado de rechazadas, se filtra y se pagina en memoria.
+    private const int MotivoScanCap = 2000;
 
     public async Task<(TenantBiometricValidationsResponse? Result, string? Error)> HandleAsync(
         Guid tenantId,
@@ -65,11 +73,40 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
 
         var filter = query.ToFilter();
         var activeFilter = filter.HasActiveFilters ? filter : null;
+        var page = query.SafePage();
+        var pageSize = query.SafePageSize();
         var now = DateTimeOffset.UtcNow;
 
-        var rows = await repo.ListBiometricValidationsByTenantAsync(tenantId, MaxRows, activeFilter, now, ct);
+        // Caso motivoRechazo: se resuelve EN MEMORIA (Detalle/ProviderPayload son jsonb y Postgres no soporta
+        // ILIKE sobre jsonb). La UI sólo muestra este filtro con estado=rechazado, así que el lote escaneado
+        // ya viene acotado a rechazadas; se filtra por el texto sanitizado y se pagina en memoria.
+        if (!string.IsNullOrWhiteSpace(filter.MotivoRechazo))
+        {
+            var scan = await repo.ListBiometricValidationsByTenantAsync(tenantId, 0, MotivoScanCap, activeFilter, now, ct);
+            var term = filter.MotivoRechazo;
+            var all = scan
+                .Select(v => ToDto(v, now))
+                .Where(d => d.MotivoRechazo is not null
+                    && d.MotivoRechazo.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-        var dtos = rows.Select(v => new TenantBiometricValidationDto(
+            var pageDtos = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var statsMotivo = BuildStatsFromRows(all);
+            return (new TenantBiometricValidationsResponse(pageDtos, statsMotivo, page, pageSize, all.Count), null);
+        }
+
+        // Caso general: KPIs + total exactos por conteo agrupado en BD; filas de la página por Skip/Take.
+        var stats = BuildStats(await repo.CountBiometricValidationsByEstadoAsync(tenantId, activeFilter, now, ct));
+        var rows = await repo.ListBiometricValidationsByTenantAsync(
+            tenantId, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
+        var dtos = rows.Select(v => ToDto(v, now)).ToList();
+
+        return (new TenantBiometricValidationsResponse(dtos, stats, page, pageSize, stats.Total), null);
+    }
+
+    /// <summary>Mapea una validación a su DTO de fila (incluye flag expirada + motivo sanitizado).</summary>
+    private static TenantBiometricValidationDto ToDto(ProcedureInstanceBiometricValidation v, DateTimeOffset now) =>
+        new(
             v.Id,
             v.ProcedureInstanceId,
             v.ProcedureInstance?.ReferenceNumber ?? string.Empty,
@@ -85,30 +122,7 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt,
             IniciarBiometriaHandler.ExtractMotivoRechazo(v),
             v.CreatedAt,
-            v.ValidadoAt)).ToList();
-
-        // motivoRechazo se filtra EN MEMORIA (no en SQL): Detalle/ProviderPayload son columnas jsonb y
-        // Postgres no soporta ILIKE sobre jsonb. Se compara contra el MISMO texto sanitizado que se muestra
-        // en la columna (ExtractMotivoRechazo, ya calculado en el DTO); así filtrar por lo que ve el gestor
-        // también funciona para Kyverum (motivo derivado, no literal del payload).
-        if (!string.IsNullOrWhiteSpace(filter.MotivoRechazo))
-        {
-            var term = filter.MotivoRechazo;
-            dtos = dtos
-                .Where(d => d.MotivoRechazo is not null
-                    && d.MotivoRechazo.Contains(term, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        // KPIs: sin filtro de motivo, conteo exacto agrupado en BD (independiente del cap de filas). Con
-        // filtro de motivo (sólo aplica a rechazadas y se resuelve en memoria), los KPIs se derivan del
-        // subconjunto efectivamente mostrado para que filas y KPIs sean coherentes.
-        var stats = string.IsNullOrWhiteSpace(filter.MotivoRechazo)
-            ? BuildStats(await repo.CountBiometricValidationsByEstadoAsync(tenantId, activeFilter, now, ct))
-            : BuildStatsFromRows(dtos);
-
-        return (new TenantBiometricValidationsResponse(dtos, stats), null);
-    }
+            v.ValidadoAt);
 
     /// <summary>
     /// KPIs derivados de las filas ya materializadas (usado cuando el filtro de motivo se resuelve en

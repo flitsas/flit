@@ -83,6 +83,16 @@ public static class BiometricEstados
     public const string Aprobado = "aprobado";
     public const string Rechazado = "rechazado";
     public const string Expirado = "expirado";
+
+    /// <summary>
+    /// El envío al proveedor externo falló de forma TRANSITORIA y quedó ENCOLADO para reintento por el
+    /// worker (cola de envío, provider-agnostic). El worker lo pasa a <see cref="EnProceso"/> al lograr el
+    /// envío, o a <see cref="ErrorEnvio"/> si agota los intentos.
+    /// </summary>
+    public const string PendienteEnvio = "pendiente_envio";
+
+    /// <summary>El envío al proveedor agotó los reintentos (o falló de forma definitiva) → requiere acción.</summary>
+    public const string ErrorEnvio = "error_envio";
 }
 
 /// <summary>Reglas de negocio de la biométrica (compartidas Application/Domain).</summary>

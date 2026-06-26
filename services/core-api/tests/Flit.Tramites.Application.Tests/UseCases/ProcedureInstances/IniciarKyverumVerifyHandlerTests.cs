@@ -88,8 +88,10 @@ public sealed class IniciarKyverumVerifyHandlerTests
     }
 
     [Fact]
-    public async Task Iniciar_ProviderTransientError_Returns503Code()
+    public async Task Iniciar_ProviderTransientError_EncolaParaReintento()
     {
+        // Fallo TRANSITORIO del proveedor → NO devuelve error: encola la validación en pendiente_envio
+        // para que el worker reintente el envío (cola de envío provider-agnostic).
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -99,9 +101,12 @@ public sealed class IniciarKyverumVerifyHandlerTests
 
         var (result, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
-        result.Should().BeNull();
-        error.Should().Be("proveedor_no_disponible");
-        await _repo.DidNotReceive().SaveChangesAsync(ct);
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Queued.Should().BeTrue();
+        result.CaptureUrl.Should().BeEmpty();
+        result.Validation.Estado.Should().Be(BiometricEstados.PendienteEnvio);
+        await _repo.Received(1).SaveChangesAsync(ct);
     }
 
     [Fact]

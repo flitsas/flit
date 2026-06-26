@@ -373,7 +373,10 @@ export type BiometricEstado =
   | 'en_proceso'
   | 'aprobado'
   | 'rechazado'
-  | 'expirado';
+  | 'expirado'
+  // Cola de envío (provider-agnostic): el envío al proveedor falló y se reintenta / agotó intentos.
+  | 'pendiente_envio'
+  | 'error_envio';
 
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
@@ -469,10 +472,16 @@ export interface BiometricValidationStats {
   expiradas: number;
 }
 
-/** Respuesta de GET /tramites/biometric-validations: filas + KPIs. */
+/** Respuesta de GET /tramites/biometric-validations: filas de la página + KPIs + metadatos de paginación. */
 export interface TenantBiometricValidationsResponse {
   validations: TenantBiometricValidation[];
   stats: BiometricValidationStats;
+  /** Página devuelta (1-based). */
+  page: number;
+  /** Filas por página efectivas (acotadas a [10, 50]). */
+  pageSize: number;
+  /** Total del conjunto filtrado completo (para calcular el nº de páginas). */
+  total: number;
 }
 
 /**
@@ -496,6 +505,42 @@ export interface TenantBiometricValidationFilters {
   createdFrom?: string;
   createdTo?: string;
   motivoRechazo?: string;
+  /** Página (1-based). */
+  page?: number;
+  /** Filas por página (10–50). */
+  pageSize?: number;
+}
+
+/** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó
+ * reintentos (estado error_envio); `encadenamiento` = el encadenamiento async firma/FUR agotó reintentos. */
+export type StuckIdentityValidationKind = 'envio' | 'encadenamiento';
+
+/**
+ * Validación de identidad ATASCADA (dead-letter): agotó los reintentos automáticos de su cola — el ENVÍO al
+ * proveedor (kind=envio) o el ENCADENAMIENTO async firma/FUR (kind=encadenamiento). Espejo de
+ * StuckIdentityValidationDto (HU #10349). Sin PII.
+ */
+export interface StuckIdentityValidation {
+  id: string;
+  validationId: string;
+  eventType: string;
+  attempts: number;
+  occurredAt: string;
+  createdAt: string;
+  // Persona validada (la UI muestra nombre + últimos 4 del documento). Null si la validación ya no existe.
+  nombre: string | null;
+  tipoDoc: string | null;
+  documento: string | null;
+  // Qué cola se atascó (para etiquetar la fila). Backend siempre lo envía; opcional por tolerancia a
+  // un backend en transición que aún no lo exponga (default 'encadenamiento' en la UI).
+  kind?: StuckIdentityValidationKind;
+}
+
+/** Respuesta de GET /identity-validation/stuck: eventos atascados + total + tope de reintentos. */
+export interface StuckIdentityValidationsResponse {
+  stuck: StuckIdentityValidation[];
+  total: number;
+  maxDeliveryAttempts: number;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

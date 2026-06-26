@@ -10,8 +10,13 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
-/// <summary>Resultado de iniciar una validación Kyverum: la validación + la URL de captura.</summary>
-public sealed record IniciarKyverumVerifyResult(BiometricValidationDto Validation, string CaptureUrl);
+/// <summary>
+/// Resultado de iniciar una validación Kyverum: la validación + la URL de captura. Si <see cref="Queued"/>
+/// es true, el envío falló de forma transitoria y quedó ENCOLADO para reintento (la validación está en
+/// <c>pendiente_envio</c> y aún no hay <c>CaptureUrl</c>).
+/// </summary>
+public sealed record IniciarKyverumVerifyResult(
+    BiometricValidationDto Validation, string CaptureUrl, bool Queued = false);
 
 /// <summary>
 /// Entrada del webhook de Kyverum: id de NUESTRA validación (de la URL del callback, ya que el cuerpo
@@ -57,7 +62,8 @@ public sealed class IniciarKyverumVerifyHandler(
 
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
+            && v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso
+                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
         if (existing is not null)
             return (null, "biometria_activa");
 
@@ -88,7 +94,38 @@ public sealed class IniciarKyverumVerifyHandler(
         }
         catch (KyverumVerifyException ex)
         {
-            return (null, ex.Transient ? "proveedor_no_disponible" : "proveedor_error");
+            // Fallo DEFINITIVO (datos/4xx): no se reintenta.
+            if (!ex.Transient)
+                return (null, "proveedor_error");
+
+            // Fallo TRANSITORIO (proveedor caído/timeout/5xx): se ENCOLA para reintento. Persiste la
+            // validación en pendiente_envio con los datos del sujeto; el worker (provider-agnostic)
+            // reintentará el envío sin intervención del gestor y la pasará a en_proceso al lograrlo.
+            var queuedAt = DateTimeOffset.UtcNow;
+            var queued = new ProcedureInstanceBiometricValidation
+            {
+                Id = validationId,
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Parte = parte,
+                Nombre = nombre,
+                TipoDoc = tipoDoc,
+                Documento = documento,
+                Email = email,
+                Estado = BiometricEstados.PendienteEnvio,
+                TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
+                ExpiresAt = queuedAt.AddHours(BiometricRules.TokenTtlHoras),
+                Intentos = 1, // el primer intento (síncrono) ya falló
+                MaxIntentos = BiometricRules.MaxIntentos,
+                CreatedAt = queuedAt,
+                Provider = BiometricProviders.Kyverum,
+            };
+            instance.BiometricValidations.Add(queued);
+            repo.Add(queued);
+            await repo.SaveChangesAsync(ct);
+
+            var queuedDto = IniciarBiometriaHandler.ToDto(queued, queuedAt);
+            return (new IniciarKyverumVerifyResult(queuedDto, string.Empty, Queued: true), null);
         }
 
         var now = DateTimeOffset.UtcNow;

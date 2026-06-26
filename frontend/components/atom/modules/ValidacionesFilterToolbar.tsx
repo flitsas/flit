@@ -111,6 +111,8 @@ const ESTADO_OPTIONS: { value: '' | BiometricEstado; label: string }[] = [
   { value: 'aprobado', label: 'Aprobado' },
   { value: 'rechazado', label: 'Rechazado' },
   { value: 'expirado', label: 'Expirado' },
+  { value: 'pendiente_envio', label: 'Pendiente de envío' },
+  { value: 'error_envio', label: 'Error de envío' },
 ];
 
 const PROVIDER_OPTIONS: { value: '' | BiometricProvider; label: string }[] = [

@@ -67,6 +67,10 @@ public static class DependencyInjection
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
         // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
         services.AddScoped<Identity.IdentityValidationCompletedConsumer>();
+        // HU #10349 (fase 2) — observabilidad: consulta + reencolar eventos de identidad ATASCADOS (dead-letter).
+        services.AddScoped<ListStuckIdentityValidationsHandler>();
+        services.AddScoped<RequeueStuckIdentityValidationHandler>();
+        services.AddScoped<RequeueAllStuckIdentityValidationsHandler>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).

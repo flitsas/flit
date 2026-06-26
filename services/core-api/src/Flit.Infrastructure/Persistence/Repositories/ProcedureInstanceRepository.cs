@@ -137,7 +137,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
         Guid tenantId,
-        int limit,
+        int skip,
+        int take,
         BiometricValidationListFilter? filter,
         DateTimeOffset now,
         CancellationToken ct)
@@ -147,7 +148,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         return await query
             .OrderByDescending(v => v.CreatedAt)
-            .Take(limit)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
     }
 

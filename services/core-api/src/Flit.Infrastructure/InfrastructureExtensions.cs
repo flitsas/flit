@@ -60,6 +60,7 @@ public static class InfrastructureExtensions
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
 
         AddAttachmentStorage(services, configuration);
@@ -301,6 +302,13 @@ public static class InfrastructureExtensions
         // encadena el auto-flujo (firma/FUR) de los borradores finalizados. Único para ambos modos:
         // in-process (default) y el stub RabbitMQ dejan el evento en la outbox; este servicio lo procesa.
         services.AddHostedService<IdentityValidationOutboxProcessor>();
+
+        // Cola de ENVÍO de validaciones de identidad (provider-agnostic): proveedores registrados +
+        // resolver por nombre + worker que reintenta el envío de las validaciones en 'pendiente_envio'.
+        // Añadir un proveedor = registrar su IIdentityValidationProvider aquí; el worker no cambia.
+        services.AddScoped<IIdentityValidationProvider, KyverumIdentityValidationProvider>();
+        services.AddScoped<IIdentityValidationProviderResolver, IdentityValidationProviderResolver>();
+        services.AddHostedService<IdentityValidationSendRetryProcessor>();
     }
 
     public static async Task InitializeInfrastructureAsync(

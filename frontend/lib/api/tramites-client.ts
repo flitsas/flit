@@ -43,6 +43,7 @@ import type {
   SolicitarFirmaInput,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
+  StuckIdentityValidationsResponse,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -604,6 +605,8 @@ export const tramitesClient = {
     add('createdFrom', filters.createdFrom);
     add('createdTo', filters.createdTo);
     add('motivoRechazo', filters.motivoRechazo);
+    add('page', filters.page);
+    add('pageSize', filters.pageSize);
 
     const query = params.toString();
     const res = await request<TenantBiometricValidationsResponse>(
@@ -614,9 +617,43 @@ export const tramitesClient = {
       res ?? {
         validations: [],
         stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+        page: 1,
+        pageSize: 20,
+        total: 0,
       }
     );
   },
+
+  // HU #10349 (fase 2) — eventos de validación de identidad ATASCADOS (dead-letter): el encadenamiento
+  // async (firma/FUR) agotó los reintentos del worker. Para observabilidad + reencolar desde la UI.
+  listStuckIdentityValidations: async (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<StuckIdentityValidationsResponse> => {
+    const res = await request<StuckIdentityValidationsResponse>(
+      '/api/v1/tramites/identity-validation/stuck',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res ?? { stuck: [], total: 0, maxDeliveryAttempts: 5 };
+  },
+
+  // POST reencolar ("desatascar") un evento atascado: reinicia sus intentos para que el worker lo retome.
+  requeueStuckIdentityValidation: (
+    id: string,
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<{ requeued: boolean }> =>
+    request<{ requeued: boolean }>(
+      `/api/v1/tramites/identity-validation/stuck/${id}/requeue`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
+  requeueAllStuckIdentityValidations: (
+    tenantId: string = DEV_TENANT_ID,
+  ): Promise<{ requeued: number }> =>
+    request<{ requeued: number }>(
+      '/api/v1/tramites/identity-validation/stuck/requeue-all',
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 
   // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
   // el botón "Validar identidad" sea provider-aware (kyverum → validación real; mock → simular).

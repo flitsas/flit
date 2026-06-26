@@ -43,6 +43,8 @@ internal static class BiometricaEndpoints
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
                     "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                    // Encolado (fallo transitorio del proveedor): 202 Accepted — el worker reintentará el envío.
+                    _ when kResult!.Queued => Results.Accepted($"/api/v1/tramites/instances/{id}/biometric/{kResult.Validation.Id}", kResult),
                     _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{kResult!.Validation.Id}", kResult),
                 };
             }
@@ -92,6 +94,8 @@ internal static class BiometricaEndpoints
             [FromQuery] DateTimeOffset? createdFrom,
             [FromQuery] DateTimeOffset? createdTo,
             [FromQuery] string? motivoRechazo,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
@@ -111,13 +115,59 @@ internal static class BiometricaEndpoints
                 scoreMax,
                 createdFrom,
                 createdTo,
-                motivoRechazo);
+                motivoRechazo,
+                page ?? 1,
+                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize);
 
             var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
         }).WithName("ListTenantBiometricValidations");
+
+        // GET eventos de validación de identidad ATASCADOS (dead-letter): pendientes que agotaron los
+        // reintentos del worker de outbox (fase 2). Observabilidad para reencolar manualmente.
+        group.MapGet("/identity-validation/stuck", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListStuckIdentityValidationsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleAsync(tenantId.Value, ct);
+            return Results.Ok(result);
+        }).WithName("ListStuckIdentityValidations");
+
+        // POST reencolar ("desatascar") un evento de identidad atascado: reinicia sus intentos para que el
+        // worker lo vuelva a procesar. 404 si no hay un evento atascado con ese id para el tenant.
+        group.MapPost("/identity-validation/stuck/{id:guid}/requeue", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RequeueStuckIdentityValidationHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var error = await handler.HandleAsync(tenantId.Value, id, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay un evento atascado con ese id.")
+                : Results.Ok(new { requeued = true });
+        }).WithName("RequeueStuckIdentityValidation");
+
+        // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
+        group.MapPost("/identity-validation/stuck/requeue-all", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RequeueAllStuckIdentityValidationsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var count = await handler.HandleAsync(tenantId.Value, ct);
+            return Results.Ok(new { requeued = count });
+        }).WithName("RequeueAllStuckIdentityValidations");
 
         // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.
         group.MapPost("/instances/{id:guid}/biometric/simulate", async (

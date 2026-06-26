@@ -42,7 +42,8 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
         Guid tenantId,
-        int limit,
+        int skip,
+        int take,
         BiometricValidationListFilter? filter,
         DateTimeOffset now,
         CancellationToken ct = default);
