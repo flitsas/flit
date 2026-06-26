@@ -40,6 +40,10 @@ public sealed class FurHandlerTests
             return new StoredFile(path, $"sha-{tipo}", ms.Length);
         }
 
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public void Delete(string storagePath) => Deleted.Add(storagePath);
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>

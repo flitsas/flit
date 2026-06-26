@@ -49,7 +49,42 @@ public static class AttachmentRules
     {
         "application/pdf", "image/jpeg", "image/png", "image/webp",
     };
+
+    /// <summary>
+    /// Valida tipo/mime/size de un adjunto. Devuelve el código de error (compartido con el contrato
+    /// del front) o <c>null</c> si es válido. Reutilizado por la subida multipart y el flujo presigned.
+    /// </summary>
+    public static string? Validate(string? tipo, string? mimetype, long sizeBytes)
+    {
+        if (sizeBytes <= 0)
+            return "missing_file";
+        if (string.IsNullOrWhiteSpace(tipo) || !ValidTipos.Contains(tipo))
+            return "invalid_tipo";
+        if (string.IsNullOrWhiteSpace(mimetype) || !ValidMimetypes.Contains(mimetype))
+            return "invalid_mime";
+        if (sizeBytes > MaxSizeBytes)
+            return "file_too_large";
+        return null;
+    }
 }
+
+/// <summary>Datos para abrir una subida directa a S3 (presigned): metadata sin binario.</summary>
+public sealed record PresignAttachmentInput(string Tipo, string Filename, string Mimetype, long SizeBytes);
+
+/// <summary>Presigned POST policy + id de almacenamiento que el cliente usa para subir a S3.</summary>
+public sealed record PresignAttachmentResponse(
+    string StoragePath,
+    string Url,
+    IReadOnlyDictionary<string, string> Fields);
+
+/// <summary>Metadata de un adjunto ya subido directo a S3 (flujo presigned), sin binario.</summary>
+public sealed record RegisterAttachmentInput(
+    string Tipo,
+    string Filename,
+    string Mimetype,
+    long SizeBytes,
+    string Sha256,
+    string StoragePath);
 
 /// <summary>
 /// Sube un adjunto: valida tipo/mime/size, persiste el binario vía <see cref="IAttachmentStorage"/>,
@@ -67,14 +102,11 @@ public sealed class UploadAttachmentHandler(
         Guid? uploadedBy = null,
         CancellationToken ct = default)
     {
-        if (input.Content is null || input.SizeBytes <= 0)
+        if (input.Content is null)
             return (null, "missing_file");
-        if (string.IsNullOrWhiteSpace(input.Tipo) || !AttachmentRules.ValidTipos.Contains(input.Tipo))
-            return (null, "invalid_tipo");
-        if (string.IsNullOrWhiteSpace(input.Mimetype) || !AttachmentRules.ValidMimetypes.Contains(input.Mimetype))
-            return (null, "invalid_mime");
-        if (input.SizeBytes > AttachmentRules.MaxSizeBytes)
-            return (null, "file_too_large");
+        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        if (validationError is not null)
+            return (null, validationError);
 
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
@@ -118,6 +150,96 @@ public sealed class UploadAttachmentHandler(
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
         new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt);
+}
+
+/// <summary>
+/// Abre una subida directa a S3: valida tipo/mime/size + estado draft y devuelve una presigned POST
+/// policy para que el cliente suba el binario SIN que pase por el request del API (PDFs grandes).
+/// No crea la fila del adjunto: eso ocurre al registrar la metadata (<see cref="RegisterAttachmentHandler"/>)
+/// una vez subido el binario.
+/// </summary>
+public sealed class PresignAttachmentHandler(
+    IProcedureInstanceRepository repo,
+    IAttachmentStorage storage)
+{
+    public async Task<(PresignAttachmentResponse? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        PresignAttachmentInput input,
+        CancellationToken ct = default)
+    {
+        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        if (validationError is not null)
+            return (null, validationError);
+
+        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (null, "not_found");
+        if (instance.Status != ProcedureInstanceStatus.Draft)
+            return (null, "not_draft");
+
+        var tipo = input.Tipo.Trim().ToLowerInvariant();
+        var filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim();
+        var presigned = await storage.CreatePresignedUploadAsync(id, tipo, filename, ct);
+
+        return (new PresignAttachmentResponse(presigned.StoragePath, presigned.Url, presigned.Fields), null);
+    }
+}
+
+/// <summary>
+/// Registra la metadata de un adjunto YA subido directo a S3 (flujo presigned). No recibe el binario:
+/// confía en el <c>StoragePath</c> (id del file-manager) y en el <c>Sha256</c>/<c>SizeBytes</c> que el
+/// cliente calculó. Aplica las mismas validaciones, estado draft y auto-marca de checklist que la
+/// subida multipart.
+/// </summary>
+public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
+{
+    public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        RegisterAttachmentInput input,
+        Guid? uploadedBy = null,
+        CancellationToken ct = default)
+    {
+        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        if (validationError is not null)
+            return (null, validationError);
+        if (string.IsNullOrWhiteSpace(input.StoragePath))
+            return (null, "missing_storage_path");
+        if (string.IsNullOrWhiteSpace(input.Sha256))
+            return (null, "missing_sha256");
+
+        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (null, "not_found");
+        if (instance.Status != ProcedureInstanceStatus.Draft)
+            return (null, "not_draft");
+
+        var tipo = input.Tipo.Trim().ToLowerInvariant();
+        var attachment = new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            Tipo = tipo,
+            Filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim(),
+            Mimetype = input.Mimetype.Trim().ToLowerInvariant(),
+            SizeBytes = input.SizeBytes,
+            Sha256 = input.Sha256.Trim().ToLowerInvariant(),
+            StoragePath = input.StoragePath.Trim(),
+            Source = "user",
+            UploadedAt = DateTimeOffset.UtcNow,
+            UploadedBy = uploadedBy,
+        };
+        instance.Attachments.Add(attachment);
+        // PK store-generated con Id ya seteado: Added explícito para forzar INSERT (igual que la subida).
+        repo.Add(attachment);
+
+        ChecklistEstadoJson.AutoMark(instance, tipo);
+        await repo.SaveChangesAsync(ct);
+
+        return (UploadAttachmentHandler.ToDto(attachment), null);
+    }
 }
 
 /// <summary>Lista los adjuntos de una instancia.</summary>
