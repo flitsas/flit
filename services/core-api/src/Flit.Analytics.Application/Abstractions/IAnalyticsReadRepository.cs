@@ -28,4 +28,13 @@ public interface IAnalyticsReadRepository
     Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate,
         string? category, string? status, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recorre en streaming el detalle de trámites filtrado (sin paginar), invocando
+    /// <paramref name="onRowAsync"/> por cada fila a medida que llega del lector. Memoria
+    /// acotada (no materializa el conjunto completo) para exports grandes (HU #10245).
+    /// </summary>
+    Task ExportProcedureDetailsAsync(
+        Guid tenantId, DateOnly fromDate, DateOnly toDate, string? category, string? status,
+        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default);
 }

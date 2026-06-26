@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Queries;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -48,6 +49,14 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapGet("/export/excel", ExportExcel)
+            .WithName("AnalyticsExportExcel")
+            .WithSummary("Exporta a Excel (.xlsx) el detalle de trámites filtrado, por streaming")
+            .Produces(StatusCodes.Status200OK, contentType: ExcelContentType)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 
@@ -84,6 +93,33 @@ public static class AnalyticsEndpoints
             new GetTopProducersQuery(tenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit), ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
+    }
+
+    private const string ExcelContentType =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    private static IResult ExportExcel(
+        HttpContext httpContext,
+        DateOnly from,
+        DateOnly to,
+        IProcedureExcelExporter exporter,
+        [FromQuery] string? category = null,
+        [FromQuery] string? status = null,
+        [FromQuery] Guid? tenantId = null)
+    {
+        if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
+            return error!;
+
+        var (filter, err) = ExportProceduresExcelHandler.Validate(
+            new ExportProceduresExcelQuery(tenant, from, to, category, status));
+        if (err is "invalid_range")
+            return InvalidRange();
+
+        var fileName = $"tramites_{from:yyyyMMdd}_{to:yyyyMMdd}.xlsx";
+        return Results.Stream(
+            stream => exporter.ExportAsync(stream, filter!, httpContext.RequestAborted),
+            contentType: ExcelContentType,
+            fileDownloadName: fileName);
     }
 
     private static async Task<IResult> GetProcedureDetailsAsync(

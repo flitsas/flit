@@ -47,6 +47,8 @@
     <!-- HU #10256 — generador PDF real del FUR (QuestPDF Community). Versión pineada en Directory.Packages.props. -->
     <PackageReference Include="QuestPDF" />
     <PackageReference Include="PdfSharpCore" />
+    <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="System.IO.Packaging" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />

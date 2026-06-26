@@ -184,6 +184,40 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             return new ProcedureDetailsPageDto(items, total, page, pageSize);
         }, ct);
 
+    public async Task ExportProcedureDetailsAsync(
+        Guid tenantId, DateOnly fromDate, DateOnly toDate, string? category, string? status,
+        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(onRowAsync);
+        await ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
+        {
+            await using var cmd = CreateCommand(conn, tx, DetailsBaseCte +
+                " SELECT id, reference_number, procedure_type_name, category, status," +
+                " created_by_display_name, submitted_at, completed_at" +
+                " FROM base" + DetailsFilter +
+                " ORDER BY created_at DESC, id DESC;");
+            AddParam(cmd, "tenant", tenantId);
+            AddParam(cmd, "from", fromDate);
+            AddParam(cmd, "to", toDate);
+            AddParam(cmd, "category", (object?)category ?? DBNull.Value);
+            AddParam(cmd, "status", (object?)status ?? DBNull.Value);
+
+            // CommandBehavior.SequentialAccess: el lector no bufferiza filas → memoria acotada.
+            await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var dto = new ProcedureDetailDto(
+                    reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                    reader.GetString(4), reader.GetString(5),
+                    await reader.IsDBNullAsync(6, ct).ConfigureAwait(false) ? null : reader.GetFieldValue<DateTimeOffset>(6),
+                    await reader.IsDBNullAsync(7, ct).ConfigureAwait(false) ? null : reader.GetFieldValue<DateTimeOffset>(7));
+                await onRowAsync(dto, ct).ConfigureAwait(false);
+            }
+
+            return true;
+        }, ct).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Abre una transacción reintentablemente, fija el GUC de tenant para RLS y ejecuta la consulta.
     /// El GUC es local a la transacción: se revierte al cerrar y no contamina la conexión del pool.
