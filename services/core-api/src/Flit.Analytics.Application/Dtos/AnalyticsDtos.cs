@@ -34,3 +34,27 @@ public sealed record TopProducerDto(
     int SubmittedCount,
     int ApprovedCount,
     int RejectedCount);
+
+/// <summary>
+/// Fila de la tabla lateral de detalle de trámites (HU #10244). Columnas obligatorias del RF05;
+/// los nombres son contrato con el frontend (#10248): NO renombrar sin coordinar.
+/// </summary>
+public sealed record ProcedureDetailDto(
+    Guid Id,
+    string ReferenceNumber,
+    string ProcedureTypeName,
+    string Category,
+    string Status,
+    string CreatedByDisplayName,
+    DateTimeOffset? SubmittedAt,
+    DateTimeOffset? CompletedAt);
+
+/// <summary>
+/// Página de detalle de trámites (HU #10244): <see cref="Items"/> de la página y
+/// <see cref="TotalCount"/> del universo filtrado (AC1/AC3).
+/// </summary>
+public sealed record ProcedureDetailsPageDto(
+    IReadOnlyList<ProcedureDetailDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);

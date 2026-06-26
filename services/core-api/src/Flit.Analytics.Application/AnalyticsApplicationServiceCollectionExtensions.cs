@@ -10,6 +10,7 @@ public static class AnalyticsApplicationServiceCollectionExtensions
     {
         services.AddScoped<GetAnalyticsOverviewHandler>();
         services.AddScoped<GetTopProducersHandler>();
+        services.AddScoped<GetProcedureDetailsHandler>();
         return services;
     }
 }

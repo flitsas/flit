@@ -19,4 +19,13 @@ public interface IAnalyticsReadRepository
     /// </summary>
     Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Detalle paginado de trámites del tenant en el rango, filtrable por categoría y estado.
+    /// <paramref name="category"/>/<paramref name="status"/> nulos o vacíos = sin filtro.
+    /// Devuelve la página solicitada y el total del universo filtrado (HU #10244).
+    /// </summary>
+    Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
+        Guid tenantId, DateOnly fromDate, DateOnly toDate,
+        string? category, string? status, int page, int pageSize, CancellationToken ct = default);
 }

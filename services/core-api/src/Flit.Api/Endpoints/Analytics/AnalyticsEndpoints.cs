@@ -40,6 +40,14 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapGet("/procedures", GetProcedureDetailsAsync)
+            .WithName("AnalyticsProcedureDetails")
+            .WithSummary("Detalle paginado de trámites filtrable por categoría y estado")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 
@@ -76,6 +84,30 @@ public static class AnalyticsEndpoints
             new GetTopProducersQuery(tenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit), ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> GetProcedureDetailsAsync(
+        HttpContext httpContext,
+        DateOnly from,
+        DateOnly to,
+        GetProcedureDetailsHandler handler,
+        CancellationToken ct,
+        [FromQuery] string? category = null,
+        [FromQuery] string? status = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null,
+        [FromQuery] Guid? tenantId = null)
+    {
+        if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
+            return error!;
+
+        var (result, err) = await handler.HandleAsync(
+            new GetProcedureDetailsQuery(
+                tenant, from, to, category, status,
+                page ?? 1, pageSize ?? GetProcedureDetailsHandler.DefaultPageSize),
+            ct);
+
+        return err is "invalid_range" ? InvalidRange() : Results.Ok(result);
     }
 
     /// <summary>

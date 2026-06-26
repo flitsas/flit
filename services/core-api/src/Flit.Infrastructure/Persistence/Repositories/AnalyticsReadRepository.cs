@@ -43,6 +43,33 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         LIMIT @limit;
         """;
 
+    // CTE compartida: proyecta el detalle de trámites con la categoría normalizada y aplica
+    // los filtros opcionales (category/status). Los cast ::text permiten parámetros NULL tipados.
+    private const string DetailsBaseCte = """
+        WITH base AS (
+            SELECT pi.id, pi.reference_number,
+                   pt.name AS procedure_type_name,
+                   CASE
+                       WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                       WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                       ELSE 'otros'
+                   END AS category,
+                   pi.status,
+                   u.display_name AS created_by_display_name,
+                   pi.submitted_at, pi.completed_at, pi.created_at
+            FROM tramites.procedure_instances pi
+            JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+            JOIN identity.users u ON u.id = pi.created_by_user_id
+            WHERE pi.tenant_id = @tenant
+              AND pi.deleted_at IS NULL
+              AND pi.created_at::date BETWEEN @from AND @to
+        )
+        """;
+
+    private const string DetailsFilter =
+        " WHERE (@category::text IS NULL OR category = @category::text)" +
+        "   AND (@status::text IS NULL OR status = @status::text)";
+
     private readonly FlitDbContext _context;
 
     public AnalyticsReadRepository(FlitDbContext context)
@@ -107,6 +134,54 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             }
 
             return (IReadOnlyList<TopProducerDto>)items;
+        }, ct);
+
+    public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
+        Guid tenantId, DateOnly fromDate, DateOnly toDate,
+        string? category, string? status, int page, int pageSize, CancellationToken ct = default) =>
+        ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
+        {
+            // 1) Total del universo filtrado.
+            await using var countCmd = CreateCommand(conn, tx, DetailsBaseCte + " SELECT count(*) FROM base" + DetailsFilter + ";");
+            AddParam(countCmd, "tenant", tenantId);
+            AddParam(countCmd, "from", fromDate);
+            AddParam(countCmd, "to", toDate);
+            AddParam(countCmd, "category", (object?)category ?? DBNull.Value);
+            AddParam(countCmd, "status", (object?)status ?? DBNull.Value);
+            var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
+
+            // 2) Página solicitada (más recientes primero).
+            await using var pageCmd = CreateCommand(conn, tx, DetailsBaseCte +
+                " SELECT id, reference_number, procedure_type_name, category, status," +
+                " created_by_display_name, submitted_at, completed_at" +
+                " FROM base" + DetailsFilter +
+                // Desempate por id (PK única): ORDER BY created_at solo no es determinista
+                // cuando hay timestamps repetidos → paginación estable sin filas duplicadas entre páginas.
+                " ORDER BY created_at DESC, id DESC LIMIT @pageSize OFFSET @offset;");
+            AddParam(pageCmd, "tenant", tenantId);
+            AddParam(pageCmd, "from", fromDate);
+            AddParam(pageCmd, "to", toDate);
+            AddParam(pageCmd, "category", (object?)category ?? DBNull.Value);
+            AddParam(pageCmd, "status", (object?)status ?? DBNull.Value);
+            AddParam(pageCmd, "pageSize", pageSize);
+            AddParam(pageCmd, "offset", (page - 1) * pageSize);
+
+            var items = new List<ProcedureDetailDto>();
+            await using var reader = await pageCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                items.Add(new ProcedureDetailDto(
+                    reader.GetGuid(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.GetString(5),
+                    await reader.IsDBNullAsync(6, ct).ConfigureAwait(false) ? null : reader.GetFieldValue<DateTimeOffset>(6),
+                    await reader.IsDBNullAsync(7, ct).ConfigureAwait(false) ? null : reader.GetFieldValue<DateTimeOffset>(7)));
+            }
+
+            return new ProcedureDetailsPageDto(items, total, page, pageSize);
         }, ct);
 
     /// <summary>
