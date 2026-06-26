@@ -63,9 +63,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Commercial)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
-    public async Task<IReadOnlyList<ProcedureInstance>> ListByTenantWithSummaryGraphAsync(Guid tenantId, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<ProcedureInstance>> ListWithSummaryGraphAsync(Guid? tenantId, int limit, CancellationToken ct)
     {
-        var rows = await db.ProcedureInstances
+        // tenantId null = TODOS los tenants (SuperAdmin ve todo, #1). El enforcement de pertenencia
+        // se hace antes (middleware): aquí null solo llega para un caller multi-tenant autorizado.
+        var query = db.ProcedureInstances
             .AsSplitQuery()
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
@@ -74,12 +76,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.PreflightSnapshots)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Signatures)
-            .Where(x => x.TenantId == tenantId && x.DeletedAt == null)
+            .Where(x => x.DeletedAt == null);
+
+        if (tenantId is { } tid)
+            query = query.Where(x => x.TenantId == tid);
+
+        return await query
             .OrderByDescending(x => x.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
+    }
 
-        return rows;
+    public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
+        IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
+    {
+        if (tenantIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = tenantIds.Distinct().ToList();
+        var rows = await db.Tenants
+            .Where(t => distinct.Contains(t.Id))
+            .Select(t => new { t.Id, t.LegalName })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Id, r => r.LegalName);
     }
 
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>

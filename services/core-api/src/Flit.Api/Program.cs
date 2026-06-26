@@ -158,6 +158,11 @@ app.UseCors(FrontendCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el
+// JWT (no del header del cliente) y deja superadmin con acceso multi-tenant. Va DESPUÉS de la auth
+// (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
+app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
+
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();

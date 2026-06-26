@@ -29,7 +29,15 @@ public interface IProcedureInstanceRepository
     /// biométricas y firmas — el mismo grafo que consume <c>GetWizardStateHandler.ComputeState</c> para
     /// derivar el paso actual. Limitado a <paramref name="limit"/> filas (cap razonable, p.ej. 200).
     /// </summary>
-    Task<IReadOnlyList<ProcedureInstance>> ListByTenantWithSummaryGraphAsync(Guid tenantId, int limit, CancellationToken ct = default);
+    /// <param name="tenantId">Tenant a listar; <c>null</c> = TODOS los tenants (solo SuperAdmin, #1).</param>
+    Task<IReadOnlyList<ProcedureInstance>> ListWithSummaryGraphAsync(Guid? tenantId, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
+    /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
+        IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);

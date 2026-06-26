@@ -77,6 +77,8 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
   };
 }
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
+import { getToken } from './client';
+import { decodeJwtPayload } from '@/lib/auth/jwt';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
@@ -155,9 +157,14 @@ function problemMessage(res: Response, body: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(apiUrl(path), {
     ...init,
-    headers: { ...JSON_HEADERS, ...init?.headers },
+    headers: {
+      ...JSON_HEADERS,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -181,9 +188,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-/** Header de tenant para runtime (NO X-Flit-SuperAdmin). */
-function tenantHeader(tenantId: string = DEV_TENANT_ID): HeadersInit {
-  return { 'X-Tenant-Id': tenantId };
+/**
+ * Tenant "activo" para llamadas per-instance (#1). El backend deriva el tenant del JWT para
+ * usuarios de compañía; un SuperAdmin que abre el trámite de OTRA compañía fija aquí el tenant de
+ * esa fila para que las llamadas per-instance lo lleven en X-Tenant-Id. Lo setea la página del
+ * wizard desde el query param `?t=` (ver app/tramites/[instanceId]).
+ */
+let activeTramitesTenant: string | undefined;
+
+/** Fija (o limpia) el tenant activo para las llamadas per-instance de trámites. */
+export function setActiveTramitesTenant(tenantId: string | undefined): void {
+  activeTramitesTenant = tenantId;
+}
+
+/** tenant_id del JWT en cookie (company-user). `undefined` si no hay token o claim. */
+function jwtTenantId(): string | undefined {
+  return decodeJwtPayload(getToken())?.tenant_id ?? undefined;
+}
+
+/**
+ * Headers de runtime: Bearer del JWT + X-Tenant-Id resuelto. La resolución del tenant es:
+ * explícito → tenant activo (superadmin abriendo otra compañía) → tenant del JWT (company-user).
+ * Para un company-user el backend igual lo sobrescribe desde el token (defensa); enviarlo solo
+ * mantiene la llamada coherente. NO es el header X-Flit-SuperAdmin de parametrización.
+ */
+function tenantHeader(tenantId?: string): HeadersInit {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const resolved = tenantId ?? activeTramitesTenant ?? jwtTenantId();
+  if (resolved) headers['X-Tenant-Id'] = resolved;
+  return headers;
 }
 
 /**
@@ -221,12 +256,16 @@ export const tramitesClient = {
 
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   // GET devuelve { items }; se desempaqueta al arreglo para el consumidor.
+  // #1 — El tenant lo deriva el backend del JWT: company-user ve solo su compañía. El SuperAdmin
+  // ve TODO; solo se manda X-Tenant-Id si elige una compañía (filterTenantId).
   listInstances: async (
-    tenantId: string = DEV_TENANT_ID,
+    filterTenantId?: string,
   ): Promise<InstanceSummary[]> => {
+    const headers: Record<string, string> = {};
+    if (filterTenantId) headers['X-Tenant-Id'] = filterTenantId;
     const res = await request<InstancesResponse>(
       '/api/v1/tramites/instances',
-      { headers: tenantHeader(tenantId) },
+      { headers },
     );
     return res?.items ?? [];
   },
@@ -234,7 +273,7 @@ export const tramitesClient = {
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
   listTransitOffices: async (
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<TransitOfficeOption[]> => {
     const res = await request<TransitOfficesResponse>(
       '/api/v1/tramites/transit-offices',
@@ -243,7 +282,7 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
-  getInstance: (id: string, tenantId: string = DEV_TENANT_ID) =>
+  getInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceDetail>(`/api/v1/tramites/instances/${id}`, {
       headers: tenantHeader(tenantId),
     }),
@@ -252,7 +291,7 @@ export const tramitesClient = {
   patchFieldValues: (
     id: string,
     items: FieldValueInput[],
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<ProcedureInstanceDetail>(
       `/api/v1/tramites/instances/${id}/field-values`,
@@ -263,7 +302,7 @@ export const tramitesClient = {
       },
     ),
 
-  submitInstance: (id: string, tenantId: string = DEV_TENANT_ID) =>
+  submitInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceSummary>(
       `/api/v1/tramites/instances/${id}/submit`,
       {
@@ -276,7 +315,7 @@ export const tramitesClient = {
   // para que los consumidores reciban directamente el arreglo.
   getActors: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<ProcedureActor[]> => {
     const res = await request<ActorsResponse>(
       `/api/v1/tramites/instances/${instanceId}/actors`,
@@ -291,7 +330,7 @@ export const tramitesClient = {
   saveActors: (
     instanceId: string,
     actors: ProcedureActor[],
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     withRetry(() =>
       request<void>(`/api/v1/tramites/instances/${instanceId}/actors`, {
@@ -306,7 +345,7 @@ export const tramitesClient = {
   runtPersonLookup: (
     instanceId: string,
     input: RuntPersonLookupInput,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<RuntPersonLookupResult>(
       `/api/v1/tramites/instances/${instanceId}/runt-person`,
@@ -322,7 +361,7 @@ export const tramitesClient = {
   runConsultation: async (
     instanceId: string,
     templateCode: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<PreflightSnapshot> => {
     const result = await request<ConsultationResult>(
       `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}`,
@@ -347,7 +386,7 @@ export const tramitesClient = {
   // ── Documentos / checklist (Slice 3) ────────────────────────────
   // Checklist guiado por la tipología: qué docTipos exige el trámite y
   // cuáles ya están satisfechos.
-  getChecklist: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+  getChecklist: (instanceId: string, tenantId?: string) =>
     request<ChecklistView>(
       `/api/v1/tramites/instances/${instanceId}/checklist`,
       { headers: tenantHeader(tenantId) },
@@ -356,7 +395,7 @@ export const tramitesClient = {
   // GET adjuntos. Devuelve { attachments }; se desempaqueta al arreglo.
   getAttachments: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<ProcedureAttachment[]> => {
     const res = await request<AttachmentsResponse>(
       `/api/v1/tramites/instances/${instanceId}/attachments`,
@@ -374,7 +413,7 @@ export const tramitesClient = {
     instanceId: string,
     tipo: string,
     file: File,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<ProcedureAttachment> => {
     const mimetype = file.type || 'application/octet-stream';
     const filename = file.name || 'file';
@@ -429,7 +468,7 @@ export const tramitesClient = {
   downloadAttachment: async (
     instanceId: string,
     attachmentId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
     const res = await fetch(
       apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
@@ -462,7 +501,7 @@ export const tramitesClient = {
   deleteAttachment: (
     instanceId: string,
     attachmentId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<void>(
       `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}`,
@@ -474,7 +513,7 @@ export const tramitesClient = {
 
   // ── Wizard server-driven (Slice 4b) ─────────────────────────────
   // El backend decide modalidad, pasos, status, razones y blockers.
-  getWizardState: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+  getWizardState: (instanceId: string, tenantId?: string) =>
     request<WizardState>(
       `/api/v1/tramites/instances/${instanceId}/wizard`,
       { headers: tenantHeader(tenantId) },
@@ -485,7 +524,7 @@ export const tramitesClient = {
   // al shape PreflightSnapshot que consume el PreflightPanel.
   runPreflight: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<PreflightSnapshot> => {
     const dto = await request<PreflightSnapshotDto>(
       `/api/v1/tramites/instances/${instanceId}/preflight`,
@@ -496,7 +535,7 @@ export const tramitesClient = {
 
   getPreflight: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<PreflightSnapshot | null> => {
     // DS-4B-3: el 404 significa "sin snapshot todavía" → null explícito.
     // Cualquier otro error (5xx, red) se propaga para no enmascarar fallos.
@@ -516,7 +555,7 @@ export const tramitesClient = {
   },
 
   // ── Datos comerciales (traspaso) — GET/PUT /commercial ──────────
-  getCommercial: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+  getCommercial: (instanceId: string, tenantId?: string) =>
     request<CommercialData>(
       `/api/v1/tramites/instances/${instanceId}/commercial`,
       { headers: tenantHeader(tenantId) },
@@ -525,7 +564,7 @@ export const tramitesClient = {
   putCommercial: (
     instanceId: string,
     data: CommercialData,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<CommercialData>(
       `/api/v1/tramites/instances/${instanceId}/commercial`,
@@ -542,7 +581,7 @@ export const tramitesClient = {
   iniciarBiometric: (
     instanceId: string,
     input: IniciarBiometriaInput,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<IniciarBiometriaResult>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
@@ -559,7 +598,7 @@ export const tramitesClient = {
   simulateBiometric: (
     instanceId: string,
     input: { parte: BiometricParte },
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<BiometricValidation>(
       `/api/v1/tramites/instances/${instanceId}/biometric/simulate`,
@@ -573,7 +612,7 @@ export const tramitesClient = {
   // GET lista/estado de las validaciones de la instancia. Desempaqueta a arreglo.
   listBiometric: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<BiometricValidation[]> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
@@ -585,7 +624,7 @@ export const tramitesClient = {
   // HU #10234 — vista transversal del submódulo "Validaciones de Identidad": TODAS las validaciones
   // del tenant + KPIs. No es por-instancia. Devuelve { validations, stats }; default seguro si vacío.
   listTenantBiometricValidations: async (
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<TenantBiometricValidationsResponse> => {
     const res = await request<TenantBiometricValidationsResponse>(
       '/api/v1/tramites/biometric-validations',
@@ -603,7 +642,7 @@ export const tramitesClient = {
   // el botón "Validar identidad" sea provider-aware (kyverum → validación real; mock → simular).
   getBiometricState: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<BiometricValidationsResponse> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
@@ -618,7 +657,7 @@ export const tramitesClient = {
   solicitarFirma: (
     instanceId: string,
     input: SolicitarFirmaInput,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<Signature>(
       `/api/v1/tramites/instances/${instanceId}/signatures`,
@@ -632,7 +671,7 @@ export const tramitesClient = {
   // GET lista/estado de firmas. Desempaqueta a arreglo.
   listFirmas: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<Signature[]> => {
     const res = await request<SignaturesResponse>(
       `/api/v1/tramites/instances/${instanceId}/signatures`,
@@ -645,7 +684,7 @@ export const tramitesClient = {
   simularFirma: (
     instanceId: string,
     signatureId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<SimularFirmaResult>(
       `/api/v1/tramites/instances/${instanceId}/signatures/${signatureId}/simulate`,
@@ -659,7 +698,7 @@ export const tramitesClient = {
   // POST generar FUR (+ compraventa en traspaso). Gated por biométrica:
   // 409 biometria_gate si la requerida no está aprobada. Los documentos
   // generados se listan vía getAttachments (tipos fur/compraventa).
-  generarFur: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+  generarFur: (instanceId: string, tenantId?: string) =>
     request<GenerarFurResult>(
       `/api/v1/tramites/instances/${instanceId}/fur`,
       {
@@ -670,7 +709,7 @@ export const tramitesClient = {
 
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
-  generarConsolidado: (instanceId: string, tenantId: string = DEV_TENANT_ID) =>
+  generarConsolidado: (instanceId: string, tenantId?: string) =>
     request<GenerarConsolidadoResult>(
       `/api/v1/tramites/instances/${instanceId}/consolidado`,
       {
@@ -685,7 +724,7 @@ export const tramitesClient = {
   invitarParticipante: (
     instanceId: string,
     input: InvitarParticipanteInput,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<InvitarParticipanteResult>(
       `/api/v1/tramites/instances/${instanceId}/participants`,
@@ -699,7 +738,7 @@ export const tramitesClient = {
   // GET lista de participantes. Desempaqueta a arreglo.
   listParticipantes: async (
     instanceId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<Participant[]> => {
     const res = await request<ParticipantsResponse>(
       `/api/v1/tramites/instances/${instanceId}/participants`,
@@ -712,7 +751,7 @@ export const tramitesClient = {
   reinvitarParticipante: (
     instanceId: string,
     participantId: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<InvitarParticipanteResult>(
       `/api/v1/tramites/instances/${instanceId}/participants/${participantId}/reinvite`,

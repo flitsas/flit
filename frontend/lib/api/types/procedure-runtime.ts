@@ -71,6 +71,10 @@ export interface InstanceSummary {
   pasoActual: number;
   totalPasos: number;
   createdAt: string;
+  /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
+  tenantId: string;
+  /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
+  companiaNombre: string | null;
 }
 
 /** Respuesta de GET /instances. */
