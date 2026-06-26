@@ -1,3 +1,4 @@
+using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
@@ -61,6 +62,11 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+
+        // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
+        services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
+        services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
 
         AddAttachmentStorage(services, configuration);
 

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Flit.Admin.Application;
+using Flit.Analytics.Application;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Analytics;
 using Flit.Api.Endpoints;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
@@ -31,6 +33,9 @@ builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, b
 
 // Runtime de trámites (rework #10128): casos de uso de instancias/wizard/consultas.
 builder.Services.AddTramitesApplication();
+
+// Dashboard analítico (Feature #10139, HU #10243): handlers de lectura de agregados.
+builder.Services.AddAnalyticsApplication();
 
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
@@ -197,6 +202,9 @@ app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
 app.MapTramitesWizardEndpoints();
+
+// ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
+app.MapAnalyticsEndpoints();
 
 app.Run();
 
