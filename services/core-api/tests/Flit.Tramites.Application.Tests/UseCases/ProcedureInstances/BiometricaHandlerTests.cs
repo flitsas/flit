@@ -4,8 +4,8 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
-using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -675,9 +675,11 @@ public sealed class BiometricaHandlerTests
             TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Kyverum,
                 providerPayload: """{"coincidencias":{"documento":false,"nombre":true}}"""),
         };
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), ct).Returns(rows);
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(rows);
         // KPIs exactos vienen del conteo agrupado, no de las filas (que están acotadas).
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, ct).Returns(new Dictionary<string, int>
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>
         {
             [BiometricEstados.Aprobado] = 3,
             [BiometricEstados.Enviado] = 1,
@@ -686,9 +688,10 @@ public sealed class BiometricaHandlerTests
             [BiometricEstados.Expirado] = 1,
         });
 
-        var result = await handler.HandleAsync(tenant, ct);
+        var (result, error) = await handler.HandleAsync(tenant, ct: ct);
 
-        result.Validations.Should().HaveCount(2);
+        error.Should().BeNull();
+        result!.Validations.Should().HaveCount(2);
         var aprobada = result.Validations[0];
         aprobada.ReferenceNumber.Should().Be("TRM-2026-000001");
         aprobada.Modalidad.Should().Be("traspaso");
@@ -716,13 +719,15 @@ public sealed class BiometricaHandlerTests
             TenantVal(tenant, BiometricEstados.Enviado, expiresAt: past),   // no aprobada + vencida → expired
             TenantVal(tenant, BiometricEstados.Aprobado, expiresAt: past),  // aprobada → nunca expired
         };
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), ct).Returns(rows);
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, ct)
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(rows);
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
-        var result = await handler.HandleAsync(tenant, ct);
+        var (result, error) = await handler.HandleAsync(tenant, ct: ct);
 
-        result.Validations[0].Expired.Should().BeTrue();
+        error.Should().BeNull();
+        result!.Validations[0].Expired.Should().BeTrue();
         result.Validations[1].Expired.Should().BeFalse();
     }
 
@@ -732,15 +737,206 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), ct)
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
-        _repo.CountBiometricValidationsByEstadoAsync(tenant, ct)
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>());
 
-        var result = await handler.HandleAsync(tenant, ct);
+        var (result, error) = await handler.HandleAsync(tenant, ct: ct);
 
-        result.Validations.Should().BeEmpty();
+        error.Should().BeNull();
+        result!.Validations.Should().BeEmpty();
         result.Stats.Total.Should().Be(0);
         result.Stats.Aprobadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ListTenant_NoFilters_PassesNullFilterToRepository()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        _repo.ListBiometricValidationsByTenantAsync(tenant, ListTenantBiometricValidationsHandler.MaxRows, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>());
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>());
+
+        var (result, error) = await handler.HandleAsync(tenant, new TenantBiometricValidationListQuery(), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _repo.Received(1).ListBiometricValidationsByTenantAsync(
+            tenant, ListTenantBiometricValidationsHandler.MaxRows, null, Arg.Any<DateTimeOffset>(), ct);
+        await _repo.Received(1).CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct);
+    }
+
+    [Fact]
+    public async Task ListTenant_FilterByEstado_PassesFilterToRepository()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(Estado: BiometricEstados.Aprobado);
+        var expectedFilter = query.ToFilter();
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>());
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 2 });
+
+        var (result, error) = await handler.HandleAsync(tenant, query, ct);
+
+        error.Should().BeNull();
+        result!.Stats.Aprobadas.Should().Be(2);
+        await _repo.Received(1).ListBiometricValidationsByTenantAsync(
+            tenant,
+            ListTenantBiometricValidationsHandler.MaxRows,
+            Arg.Is<BiometricValidationListFilter>(f => f.Estado == expectedFilter.Estado),
+            Arg.Any<DateTimeOffset>(),
+            ct);
+    }
+
+    [Fact]
+    public async Task ListTenant_CombinedReferenceAndNombre_PassesBothFilters()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(ReferenceNumber: "TRM-2026", Nombre: "Ana");
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>
+            {
+                TenantVal(tenant, BiometricEstados.Aprobado, reference: "TRM-2026-000001"),
+            });
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
+
+        var (result, error) = await handler.HandleAsync(tenant, query, ct);
+
+        error.Should().BeNull();
+        result!.Validations.Should().ContainSingle();
+        await _repo.Received(1).ListBiometricValidationsByTenantAsync(
+            tenant,
+            ListTenantBiometricValidationsHandler.MaxRows,
+            Arg.Is<BiometricValidationListFilter>(f =>
+                f.ReferenceNumber == "TRM-2026" && f.Nombre == "Ana"),
+            Arg.Any<DateTimeOffset>(),
+            ct);
+    }
+
+    [Fact]
+    public async Task ListTenant_FilteredStats_ReflectFilteredCounts()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(Modalidad: "traspaso");
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>());
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>
+            {
+                [BiometricEstados.Aprobado] = 2,
+                [BiometricEstados.Rechazado] = 1,
+            });
+
+        var (result, error) = await handler.HandleAsync(tenant, query, ct);
+
+        error.Should().BeNull();
+        result!.Stats.Total.Should().Be(3);
+        result.Stats.Aprobadas.Should().Be(2);
+        result.Stats.Rechazadas.Should().Be(1);
+        await _repo.Received(1).CountBiometricValidationsByEstadoAsync(
+            tenant,
+            Arg.Is<BiometricValidationListFilter>(f => f.Modalidad == "traspaso"),
+            Arg.Any<DateTimeOffset>(),
+            ct);
+    }
+
+    [Fact]
+    public async Task ListTenant_InvalidEstado_ReturnsValidationError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(Estado: "foo");
+
+        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), query, ct);
+
+        result.Should().BeNull();
+        error.Should().Contain("estado inválido");
+        await _repo.DidNotReceive().ListBiometricValidationsByTenantAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListTenant_ScoreMinGreaterThanMax_ReturnsValidationError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(ScoreMin: 90, ScoreMax: 10);
+
+        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), query, ct);
+
+        result.Should().BeNull();
+        error.Should().Contain("scoreMin");
+        await _repo.DidNotReceive().ListBiometricValidationsByTenantAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListTenant_FilterByMotivoRechazo_FiltersInMemoryAndDerivesStats()
+    {
+        // El filtro motivoRechazo se resuelve en memoria sobre el texto sanitizado (Detalle/ProviderPayload
+        // son jsonb y Postgres no permite ILIKE sobre jsonb). Solo deben quedar las rechazadas cuyo motivo
+        // mostrado contiene el término; los KPIs reflejan ese subconjunto y NO se consulta el conteo en BD.
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(MotivoRechazo: "ilegible");
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>
+            {
+                TenantVal(tenant, BiometricEstados.Rechazado, detalle: "{\"motivo\":\"Documento ilegible\"}"),
+                TenantVal(tenant, BiometricEstados.Rechazado, detalle: "{\"motivo\":\"Rostro no coincide\"}"),
+                TenantVal(tenant, BiometricEstados.Aprobado),
+            });
+
+        var (result, error) = await handler.HandleAsync(tenant, query, ct);
+
+        error.Should().BeNull();
+        result!.Validations.Should().ContainSingle();
+        result.Validations[0].MotivoRechazo.Should().Be("Documento ilegible");
+        result.Stats.Total.Should().Be(1);
+        result.Stats.Rechazadas.Should().Be(1);
+        result.Stats.Aprobadas.Should().Be(0);
+        await _repo.DidNotReceive().CountBiometricValidationsByEstadoAsync(
+            Arg.Any<Guid>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListTenant_FilterByMotivoRechazo_MatchesKyverumDerivedText()
+    {
+        // Kyverum: el motivo mostrado es DERIVADO (no está literal en el payload). El filtro debe coincidir
+        // sobre ese texto derivado (la versión anterior buscaba el JSON crudo y nunca coincidía).
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var query = new TenantBiometricValidationListQuery(MotivoRechazo: "documento no fue exitosa");
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation>
+            {
+                TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Kyverum,
+                    providerPayload: "{\"coincidencias\":{\"documento\":false}}"),
+            });
+
+        var (result, error) = await handler.HandleAsync(tenant, query, ct);
+
+        error.Should().BeNull();
+        result!.Validations.Should().ContainSingle();
+        result.Validations[0].MotivoRechazo.Should().Be("La verificación del documento no fue exitosa.");
     }
 }

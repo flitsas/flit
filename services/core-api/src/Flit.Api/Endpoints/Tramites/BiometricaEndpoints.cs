@@ -76,17 +76,47 @@ internal static class BiometricaEndpoints
         }).WithName("ListProcedureInstanceBiometric");
 
         // GET vista transversal del tenant: TODAS las validaciones de identidad + KPIs (HU #10234,
-        // submódulo "Validaciones de Identidad"). No es por-instancia: agrega todas las del tenant.
+        // submódulo "Validaciones de Identidad"). Filtros opcionales por columna (HU #10347).
         group.MapGet("/biometric-validations", async (
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromQuery] string? referenceNumber,
+            [FromQuery] string? modalidad,
+            [FromQuery] string? nombre,
+            [FromQuery] string? parte,
+            [FromQuery] string? tipoDoc,
+            [FromQuery] string? documento,
+            [FromQuery] string? estado,
+            [FromQuery] string? provider,
+            [FromQuery] int? scoreMin,
+            [FromQuery] int? scoreMax,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] string? motivoRechazo,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var result = await handler.HandleAsync(tenantId.Value, ct);
-            return Results.Ok(result);
+            var query = new TenantBiometricValidationListQuery(
+                referenceNumber,
+                modalidad,
+                nombre,
+                parte,
+                tipoDoc,
+                documento,
+                estado,
+                provider,
+                scoreMin,
+                scoreMax,
+                createdFrom,
+                createdTo,
+                motivoRechazo);
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            return error is not null
+                ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
+                : Results.Ok(result);
         }).WithName("ListTenantBiometricValidations");
 
         // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.

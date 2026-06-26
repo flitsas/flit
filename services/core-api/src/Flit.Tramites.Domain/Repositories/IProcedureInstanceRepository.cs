@@ -40,14 +40,24 @@ public interface IProcedureInstanceRepository
     /// transversal del submódulo "Validaciones de Identidad" (HU #10234). Solo lectura (AsNoTracking),
     /// acotada a <paramref name="limit"/> filas (cap de monitoreo, no exporta el histórico completo).
     /// </summary>
-    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(Guid tenantId, int limit, CancellationToken ct = default);
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+        Guid tenantId,
+        int limit,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Cuenta las validaciones biométricas del tenant agrupadas por estado (KPIs del submódulo de
     /// Validaciones). Independiente del cap de filas de <see cref="ListBiometricValidationsByTenantAsync"/>
-    /// para que los totales sean exactos.
+    /// para que los totales sean exactos. Si <paramref name="filter"/> tiene criterios activos, el conteo
+    /// se aplica sobre el mismo conjunto filtrado (HU #10347).
     /// </summary>
-    Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(Guid tenantId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+        Guid tenantId,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:

@@ -1520,13 +1520,16 @@ paths:
     get:
       operationId: listTenantBiometricValidations
       tags: [Tramites, Identidad]
-      summary: Listar las validaciones de identidad del tenant (HU #10234)
+      summary: Listar las validaciones de identidad del tenant (HU #10234, filtros HU #10347)
       description: >
         Vista transversal del submódulo "Validaciones de Identidad": lista TODAS las validaciones
         biométricas/de identidad del tenant (a través de todas sus instancias no eliminadas), las más
         recientes primero, junto con KPIs agregados por estado. No es por-instancia. La tabla se acota a
-        un máximo de filas (vista de monitoreo); los KPIs se calculan aparte y son exactos. El motivo de
-        rechazo viaja SANITIZADO (sin PII), igual que en la vista por-instancia.
+        un máximo de filas (vista de monitoreo); los KPIs se calculan aparte y son exactos. Con filtros
+        activos, filas y KPIs reflejan el mismo subconjunto filtrado (antes del cap de 500 filas). El
+        motivo de rechazo viaja SANITIZADO (sin PII), igual que en la vista por-instancia. Filtrar por
+        estado=expirado incluye validaciones con estado persistido expirado y las que tienen el flag
+        expired calculado (no aprobada y ExpiresAt &lt; now).
       security:
         - bearerAuth: []
       parameters:
@@ -1534,6 +1537,77 @@ paths:
           in: header
           required: true
           schema: { type: string, format: uuid }
+        - name: referenceNumber
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre el número de referencia del trámite.
+          schema: { type: string }
+        - name: modalidad
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre la modalidad del trámite.
+          schema: { type: string }
+        - name: nombre
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre el nombre de la persona validada.
+          schema: { type: string }
+        - name: parte
+          in: query
+          required: false
+          description: Filtro exacto por parte (comprador | vendedor).
+          schema: { type: string, enum: [comprador, vendedor] }
+        - name: tipoDoc
+          in: query
+          required: false
+          description: Filtro exacto por tipo de documento (p.ej. CC, CE).
+          schema: { type: string }
+        - name: documento
+          in: query
+          required: false
+          description: Coincidencia parcial por número de documento (sin exponer PII en errores).
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: >
+            Filtro por estado. Valores: enviado, en_proceso, aprobado, rechazado, expirado. El valor
+            expirado incluye estado persistido y validaciones vencidas no aprobadas (flag expired).
+          schema:
+            type: string
+            enum: [enviado, en_proceso, aprobado, rechazado, expirado]
+        - name: provider
+          in: query
+          required: false
+          description: Filtro exacto por proveedor (mock | kyverum).
+          schema: { type: string, enum: [mock, kyverum] }
+        - name: scoreMin
+          in: query
+          required: false
+          description: Score mínimo inclusive (solo filas con score informado).
+          schema: { type: integer, minimum: 0 }
+        - name: scoreMax
+          in: query
+          required: false
+          description: Score máximo inclusive (solo filas con score informado).
+          schema: { type: integer, minimum: 0 }
+        - name: createdFrom
+          in: query
+          required: false
+          description: Fecha/hora mínima inclusive de creación (ISO-8601).
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          required: false
+          description: Fecha/hora máxima inclusive de creación (ISO-8601).
+          schema: { type: string, format: date-time }
+        - name: motivoRechazo
+          in: query
+          required: false
+          description: >
+            Coincidencia parcial case-insensitive en el motivo de rechazo sanitizado (solo filas
+            rechazadas; busca en Detalle y ProviderPayload).
+          schema: { type: string }
       responses:
         "200":
           description: Validaciones del tenant + KPIs.
@@ -1542,7 +1616,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/TenantBiometricValidationsResponse"
         "400":
-          description: Falta el header X-Tenant-Id.
+          description: >
+            Falta el header X-Tenant-Id, parámetros de filtro inválidos (estado/provider/parte fuera de
+            catálogo, scoreMin &gt; scoreMax, createdFrom &gt; createdTo).
           content:
             application/json:
               schema:

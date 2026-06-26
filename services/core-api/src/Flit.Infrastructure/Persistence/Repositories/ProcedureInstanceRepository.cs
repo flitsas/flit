@@ -135,31 +135,131 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
     }
 
-    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(Guid tenantId, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+        Guid tenantId,
+        int limit,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct)
     {
-        return await db.ProcedureInstanceBiometricValidations
-            .AsNoTracking()
-            .Include(v => v.ProcedureInstance)
-            .Where(v => v.TenantId == tenantId
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+        var query = BaseTenantBiometricQuery(tenantId);
+        query = ApplyBiometricValidationFilters(query, filter, now);
+
+        return await query
             .OrderByDescending(v => v.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(Guid tenantId, CancellationToken ct)
+    public async Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+        Guid tenantId,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct)
     {
-        var rows = await db.ProcedureInstanceBiometricValidations
-            .AsNoTracking()
-            .Where(v => v.TenantId == tenantId
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+        var query = ApplyBiometricValidationFilters(BaseTenantBiometricQuery(tenantId), filter, now);
+
+        var rows = await query
             .GroupBy(v => v.Estado)
             .Select(g => new { Estado = g.Key, Count = g.Count() })
             .ToListAsync(ct);
 
         return rows.ToDictionary(x => x.Estado, x => x.Count);
+    }
+
+    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(Guid tenantId) =>
+        db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null);
+
+    private static IQueryable<ProcedureInstanceBiometricValidation> ApplyBiometricValidationFilters(
+        IQueryable<ProcedureInstanceBiometricValidation> query,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now)
+    {
+        if (filter is null || !filter.HasActiveFilters)
+            return query;
+
+        if (!string.IsNullOrWhiteSpace(filter.ReferenceNumber))
+        {
+            var term = filter.ReferenceNumber.Trim();
+            query = query.Where(v => v.ProcedureInstance != null
+                && EF.Functions.ILike(v.ProcedureInstance.ReferenceNumber, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Modalidad))
+        {
+            var term = filter.Modalidad.Trim();
+            query = query.Where(v => v.ProcedureInstance != null
+                && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Nombre))
+        {
+            var term = filter.Nombre.Trim().ToLower();
+            query = query.Where(v => EF.Functions.ILike(v.Nombre.ToLower(), $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Parte))
+        {
+            var parte = filter.Parte.Trim().ToLower();
+            query = query.Where(v => v.Parte != null && v.Parte.ToLower() == parte);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.TipoDoc))
+        {
+            var tipoDoc = filter.TipoDoc.Trim().ToLower();
+            query = query.Where(v => v.TipoDoc.ToLower() == tipoDoc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Documento))
+        {
+            var term = filter.Documento.Trim();
+            query = query.Where(v => EF.Functions.ILike(v.Documento, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Estado))
+        {
+            var estado = filter.Estado.Trim().ToLower();
+            if (estado == BiometricEstados.Expirado)
+            {
+                // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
+                query = query.Where(v =>
+                    v.Estado == BiometricEstados.Expirado
+                    || (v.Estado != BiometricEstados.Aprobado && v.ExpiresAt < now));
+            }
+            else
+            {
+                query = query.Where(v => v.Estado.ToLower() == estado);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Provider))
+        {
+            var provider = filter.Provider.Trim().ToLower();
+            query = query.Where(v => v.Provider.ToLower() == provider);
+        }
+
+        if (filter.ScoreMin is { } scoreMin)
+            query = query.Where(v => v.Score != null && v.Score >= scoreMin);
+
+        if (filter.ScoreMax is { } scoreMax)
+            query = query.Where(v => v.Score != null && v.Score <= scoreMax);
+
+        if (filter.CreatedFrom is { } createdFrom)
+            query = query.Where(v => v.CreatedAt >= createdFrom);
+
+        if (filter.CreatedTo is { } createdTo)
+            query = query.Where(v => v.CreatedAt <= createdTo);
+
+        // NOTA: el filtro `motivoRechazo` NO se aplica aquí. Detalle/ProviderPayload son columnas `jsonb`
+        // y PostgreSQL no soporta el operador ILIKE sobre jsonb (falla con 42883 like_escape(jsonb,...)).
+        // Se resuelve en memoria en el handler sobre el motivo SANITIZADO (ExtractMotivoRechazo), que además
+        // es el texto que ve el gestor (para Kyverum el motivo es derivado, no literal del payload).
+        return query;
     }
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
