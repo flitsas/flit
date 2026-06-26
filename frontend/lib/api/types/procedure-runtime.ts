@@ -378,6 +378,9 @@ export type BiometricEstado =
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
 
+/** Proveedor de validación de identidad (espejo de BiometricProviders). */
+export type BiometricProvider = 'mock' | 'kyverum';
+
 /** Tipos de documento admitidos por la captura biométrica. */
 export type BiometricTipoDoc = 'CC' | 'CE' | 'TI' | 'PPT' | 'PAS';
 
@@ -470,6 +473,29 @@ export interface BiometricValidationStats {
 export interface TenantBiometricValidationsResponse {
   validations: TenantBiometricValidation[];
   stats: BiometricValidationStats;
+}
+
+/**
+ * Filtros del listado transversal de validaciones (HU #10348 → query params del backend HU #10347).
+ * Todos opcionales; los vacíos/undefined no se envían como query param. El backend combina con AND y
+ * devuelve filas + KPIs del mismo subconjunto. `motivoRechazo` solo aplica a rechazadas (filtrado en
+ * memoria sobre el texto sanitizado). Fechas en ISO-8601. Puede responder 400 si `estado/provider/parte`
+ * está fuera de catálogo, `scoreMin > scoreMax` o `createdFrom > createdTo`.
+ */
+export interface TenantBiometricValidationFilters {
+  referenceNumber?: string;
+  modalidad?: WizardModalidad;
+  nombre?: string;
+  parte?: BiometricParte;
+  tipoDoc?: string;
+  documento?: string;
+  estado?: BiometricEstado;
+  provider?: BiometricProvider;
+  scoreMin?: number;
+  scoreMax?: number;
+  createdFrom?: string;
+  createdTo?: string;
+  motivoRechazo?: string;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

@@ -42,6 +42,7 @@ import type {
   SimularFirmaResult,
   SolicitarFirmaInput,
   TenantBiometricValidationsResponse,
+  TenantBiometricValidationFilters,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -578,11 +579,35 @@ export const tramitesClient = {
 
   // HU #10234 — vista transversal del submódulo "Validaciones de Identidad": TODAS las validaciones
   // del tenant + KPIs. No es por-instancia. Devuelve { validations, stats }; default seguro si vacío.
+  // HU #10348 — filtros opcionales: se serializan como query params; los vacíos/undefined no se envían
+  // (el backend HU #10347 combina con AND y devuelve filas + KPIs del subconjunto filtrado).
   listTenantBiometricValidations: async (
+    filters: TenantBiometricValidationFilters = {},
     tenantId: string = DEV_TENANT_ID,
   ): Promise<TenantBiometricValidationsResponse> => {
+    const params = new URLSearchParams();
+    const add = (key: string, value: string | number | undefined) => {
+      if (value === undefined) return;
+      const s = typeof value === 'number' ? String(value) : value.trim();
+      if (s !== '') params.set(key, s);
+    };
+    add('referenceNumber', filters.referenceNumber);
+    add('modalidad', filters.modalidad);
+    add('nombre', filters.nombre);
+    add('parte', filters.parte);
+    add('tipoDoc', filters.tipoDoc);
+    add('documento', filters.documento);
+    add('estado', filters.estado);
+    add('provider', filters.provider);
+    add('scoreMin', filters.scoreMin);
+    add('scoreMax', filters.scoreMax);
+    add('createdFrom', filters.createdFrom);
+    add('createdTo', filters.createdTo);
+    add('motivoRechazo', filters.motivoRechazo);
+
+    const query = params.toString();
     const res = await request<TenantBiometricValidationsResponse>(
-      '/api/v1/tramites/biometric-validations',
+      `/api/v1/tramites/biometric-validations${query ? `?${query}` : ''}`,
       { headers: tenantHeader(tenantId) },
     );
     return (

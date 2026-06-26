@@ -1,22 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
   ExternalLink,
-  RefreshCw,
   ScanFace,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
 import { ModuleTitle } from './ModuleTitle';
+import {
+  ValidacionesFilterToolbar,
+  EMPTY_VALIDACIONES_FILTERS,
+  hasActiveValidacionesFilters,
+  type ValidacionesUiFilters,
+} from './ValidacionesFilterToolbar';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   BiometricEstado,
   BiometricValidationStats,
   TenantBiometricValidation,
+  TenantBiometricValidationFilters,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -65,15 +71,55 @@ function maskDoc(tipoDoc: string, documento: string): string {
   return `${tipoDoc} ${masked}`.trim();
 }
 
+/**
+ * Convierte los filtros de la UI (strings controlados) a los query params del backend (HU #10347):
+ * vacíos → undefined (no se envían), score a número, fechas a ISO (createdTo a fin de día para que la
+ * fecha elegida quede incluida). motivoRechazo solo cuando se filtra por estado=rechazado.
+ */
+function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFilters {
+  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
+  const num = (s: string) => {
+    if (s.trim() === '') return undefined;
+    const n = Number(s);
+    return Number.isNaN(n) ? undefined : n;
+  };
+  return {
+    referenceNumber: text(f.referenceNumber),
+    modalidad: f.modalidad || undefined,
+    nombre: text(f.nombre),
+    parte: f.parte || undefined,
+    tipoDoc: text(f.tipoDoc),
+    documento: text(f.documento),
+    estado: f.estado || undefined,
+    provider: f.provider || undefined,
+    scoreMin: num(f.scoreMin),
+    scoreMax: num(f.scoreMax),
+    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
+    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
+    motivoRechazo: f.estado === 'rechazado' ? text(f.motivoRechazo) : undefined,
+  };
+}
+
 export function Validaciones() {
   const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  const load = useCallback(async () => {
+  // `filters` = controles de la UI (instantáneos); `applied` = lo que se consulta al backend. Los chips
+  // y fechas aplican de inmediato; los inputs de texto aplican tras un debounce (~300 ms). El filtrado
+  // se delega al backend (HU #10347) — NO se filtra client-side sobre el cap de 500 filas.
+  const [filters, setFilters] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
+  const [applied, setApplied] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback(async (uiFilters: ValidacionesUiFilters) => {
+    setFetching(true);
     try {
-      const res = await tramitesClient.listTenantBiometricValidations();
+      const res = await tramitesClient.listTenantBiometricValidations(buildApiFilters(uiFilters));
       setValidations(res.validations);
       setStats(res.stats);
       setError(() => null);
@@ -81,51 +127,74 @@ export function Validaciones() {
       setError(() =>
         err instanceof Error ? err.message : 'No se pudieron cargar las validaciones.',
       );
+    } finally {
+      setFetching(false);
+      setHasLoadedOnce(true);
     }
   }, []);
 
+  // Refetch cuando cambia el conjunto de filtros aplicados (incluye la carga inicial con `applied` vacío).
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(applied);
+  }, [applied, load]);
+
+  // Limpia el timer del debounce al desmontar.
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
+
+  const applyChange = useCallback((patch: Partial<ValidacionesUiFilters>, immediate?: boolean) => {
+    // Si el estado deja de ser 'rechazado', se oculta y limpia el filtro de motivo (AC1).
+    const normalized =
+      'estado' in patch && patch.estado !== 'rechazado'
+        ? { ...patch, motivoRechazo: '' }
+        : patch;
+    const next = { ...filtersRef.current, ...normalized };
+    setFilters(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (immediate) {
+      setApplied(next);
+    } else {
+      debounceRef.current = setTimeout(() => setApplied(next), 300);
+    }
+  }, []);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await load(filtersRef.current);
   };
 
-  // AC8 — los 4 estados se derivan de (validations, error):
-  //  • Cargando: aún no llegó la primera respuesta (validations === null) y sin error.
-  //  • Error:    `error` con role="alert".
-  //  • Vacío:    cargó pero no hay filas.
-  //  • Lleno:    cargó con filas → KPIs + tabla.
-  const initialLoading = validations === null && error === null;
+  const handleClearFilters = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setFilters(EMPTY_VALIDACIONES_FILTERS);
+    setApplied(EMPTY_VALIDACIONES_FILTERS);
+  }, []);
+
+  // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
+  const initialLoading = !hasLoadedOnce && validations === null && error === null;
   const isEmpty = validations !== null && validations.length === 0;
+  // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
+  const filtersActive = hasActiveValidacionesFilters(applied);
 
   return (
     <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
       <ModuleTitle
         title="Validaciones de Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
-        right={
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Actualizar validaciones de identidad"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-            Actualizar
-          </button>
-        }
       />
 
       <StatsCards stats={stats} loading={initialLoading} />
+
+      {hasLoadedOnce && (
+        <ValidacionesFilterToolbar
+          filters={filters}
+          onChange={applyChange}
+          onRefresh={() => void handleRefresh()}
+          onClearFilters={handleClearFilters}
+          loading={fetching}
+          resultCount={validations?.length ?? 0}
+        />
+      )}
 
       {error && (
         <div
@@ -159,11 +228,24 @@ export function Validaciones() {
         >
           <div className="text-center max-w-md px-6 py-10">
             <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
-            <p className="mt-3 text-sm font-semibold">Aún no hay validaciones de identidad.</p>
-            <p className="mt-1 text-xs opacity-70">
-              Las validaciones aparecen aquí cuando inicias la identidad de una parte desde el paso
-              de identidad de un trámite.
-            </p>
+            {filtersActive ? (
+              // AC2 — hubo respuesta vacía CON filtros activos: no es el estado inicial sin datos.
+              <>
+                <p className="mt-3 text-sm font-semibold">Sin resultados.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Ninguna validación coincide con los filtros aplicados. Ajusta o limpia los filtros
+                  para ver más resultados.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-sm font-semibold">Aún no hay validaciones de identidad.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Las validaciones aparecen aquí cuando inicias la identidad de una parte desde el paso
+                  de identidad de un trámite.
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -190,29 +272,29 @@ function StatsCards({
     { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#FF4E00' },
   ];
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
       {cards.map((k) => {
         const Icon = k.i;
         return (
           <div
             key={k.l}
-            className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
+            className="rounded-2xl px-4 py-2.5 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
             style={{ borderColor: '#DFE5ED' }}
           >
             <div>
               <p className="text-[11px] opacity-70 font-medium">{k.l}</p>
               {loading ? (
                 <div
-                  className="mt-2 h-7 w-12 animate-pulse rounded bg-black/10 dark:bg-white/10"
+                  className="mt-1 h-6 w-12 animate-pulse rounded bg-black/10 dark:bg-white/10"
                   aria-hidden="true"
                 />
               ) : (
-                <p className="text-2xl font-bold mt-1" style={{ color: k.c }}>
+                <p className="text-xl font-bold mt-0.5" style={{ color: k.c }}>
                   {k.v ?? 0}
                 </p>
               )}
             </div>
-            <Icon className="h-8 w-8 opacity-40" style={{ color: k.c }} aria-hidden="true" />
+            <Icon className="h-7 w-7 opacity-40" style={{ color: k.c }} aria-hidden="true" />
           </div>
         );
       })}
@@ -258,7 +340,7 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
         <div className="col-span-1">Score</div>
         <div className="col-span-2">Fecha</div>
       </div>
-      <ul className="flex-1 overflow-y-auto space-y-2 pt-2" aria-label="Validaciones de identidad">
+      <ul className="flex-1 min-h-[16rem] overflow-y-auto space-y-2 pt-2" aria-label="Validaciones de identidad">
         {rows.map((r) => (
           <ValidacionRow key={r.id} row={r} />
         ))}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import type {
   TenantBiometricValidation,
@@ -120,9 +121,10 @@ describe('Validaciones — AC8 estados de UI', () => {
     expect(screen.getByText('Total validaciones')).toBeInTheDocument();
     expect(screen.getByText('8')).toBeInTheDocument();
 
-    // Badges de estado.
-    expect(screen.getByText('Aprobado')).toBeInTheDocument();
-    expect(screen.getByText('Rechazado')).toBeInTheDocument();
+    // Badges de estado (dentro de la tabla; el toolbar también tiene chips con esos textos).
+    const list = screen.getByRole('list', { name: /validaciones de identidad/i });
+    expect(within(list).getByText('Aprobado')).toBeInTheDocument();
+    expect(within(list).getByText('Rechazado')).toBeInTheDocument();
   });
 });
 
@@ -162,5 +164,82 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(
       screen.getByRole('button', { name: /actualizar validaciones de identidad/i }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Validaciones — filtros (HU #10348)', () => {
+  it('filtra por estado: al elegir un valor re-consulta el backend con ese estado', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001'); // carga inicial
+
+    await user.selectOptions(screen.getByLabelText('Estado'), 'aprobado');
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: 'aprobado' }),
+      ),
+    );
+  });
+
+  it('combina filtros de texto (referencia + nombre) y los envía al backend', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByLabelText(/filtrar por número de trámite/i);
+
+    await user.type(screen.getByLabelText(/filtrar por número de trámite/i), 'TRM-2026');
+    await user.type(screen.getByLabelText('Persona'), 'Ana');
+
+    // Debounce ~300ms; la última consulta combina ambos filtros (AND en el backend).
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceNumber: 'TRM-2026', nombre: 'Ana' }),
+      ),
+    );
+  });
+
+  it('sin resultados: con filtros activos y respuesta vacía muestra "Sin resultados"', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations
+      .mockResolvedValueOnce(FULL) // carga inicial con datos
+      .mockResolvedValue(EMPTY); // tras filtrar, sin coincidencias
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    await user.selectOptions(screen.getByLabelText('Estado'), 'expirado');
+
+    expect(await screen.findByText(/sin resultados\./i)).toBeInTheDocument();
+    // NO debe mostrar el vacío inicial.
+    expect(
+      screen.queryByText(/aún no hay validaciones de identidad/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('limpiar filtros: restablece los controles y recarga sin query params', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    const estadoSelect = screen.getByLabelText('Estado');
+    await user.selectOptions(estadoSelect, 'aprobado');
+    await waitFor(() => expect(estadoSelect).toHaveValue('aprobado'));
+
+    mocks.listTenantBiometricValidations.mockClear();
+    await user.click(screen.getByRole('button', { name: /limpiar filtros/i }));
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalled();
+      const lastArg = mocks.listTenantBiometricValidations.mock.calls.at(-1)?.[0];
+      expect(lastArg?.estado).toBeUndefined();
+    });
+    // El control vuelve a "Todos" (valor vacío).
+    expect(screen.getByLabelText('Estado')).toHaveValue('');
   });
 });
