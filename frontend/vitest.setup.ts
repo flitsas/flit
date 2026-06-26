@@ -33,6 +33,17 @@ const localStorageStub = new MemoryStorage();
 Object.defineProperty(globalThis, "localStorage", { value: localStorageStub, configurable: true });
 Object.defineProperty(globalThis, "sessionStorage", { value: new MemoryStorage(), configurable: true });
 
+// jsdom no implementa ResizeObserver, que Recharts (ResponsiveContainer) usa para medir
+// el contenedor. Stub no-op para que los componentes con gráficos se monten en pruebas.
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
+}
+
 beforeEach(() => {
   localStorageStub.clear();
 });

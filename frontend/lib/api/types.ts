@@ -166,6 +166,38 @@ export interface AuditLogPageResponse {
   pageSize: number;
 }
 
+// ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
+/** Categoría de trámite normalizada por el backend (RF01). */
+export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
+
+/** Conteo de trámites en un estado concreto dentro de una categoría. */
+export interface StatusCount {
+  status: string;
+  count: number;
+}
+
+/** Métricas agregadas de una categoría en el periodo consultado. */
+export interface CategoryMetrics {
+  category: AnalyticsCategory;
+  total: number;
+  byStatus: StatusCount[];
+}
+
+/** Respuesta de GET /api/v1/analytics/overview (RF01, RF02). */
+export interface AnalyticsOverviewResponse {
+  tenantId: string;
+  from: string;
+  to: string;
+  categories: CategoryMetrics[];
+}
+
+/** Query params del overview. `tenantId` solo lo honra el backend para SuperAdmin (AC1). */
+export interface AnalyticsOverviewParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
 /** Error de validación tipado para flujos 422 (AC2/AC3). */
 export class ApiValidationError extends Error {
   constructor(
