@@ -1648,6 +1648,107 @@ paths:
         "404":
           description: Validación no encontrada.
 
+  /api/v1/analytics/overview:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsOverview
+      summary: Métricas por categoría/estado del tenant en un rango de fechas (RF01, RF02, RF07)
+      description: >
+        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado para
+        el rango [from, to]. El tenant se toma del claim JWT `tenant_id` (AC1); un SuperAdmin
+        puede indicar `tenantId` por query para consultar otra compañía (AC2). Requiere JWT con
+        rol de empresa o SuperAdmin (AdminCompany).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha inicial inclusiva (YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha final inclusiva (YYYY-MM-DD).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; selecciona la compañía a consultar (AC2).
+      responses:
+        "200":
+          description: Métricas agregadas del periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverviewResponse"
+        "400":
+          description: Rango inválido (`from` posterior a `to`) o falta tenant (AC4).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Tenant Admin solicitando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/productivity/top:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsTopProducers
+      summary: Top de radicadores por trámites enviados en un rango (RF07, AC3)
+      description: >
+        Devuelve hasta `limit` usuarios ordenados por `submittedCount` descendente. Mismo
+        modelo de tenant que el overview (claim `tenant_id`; SuperAdmin con `tenantId` opcional).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 50 }
+          description: Tamaño del ranking (por defecto 5).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin (AC2).
+      responses:
+        "200":
+          description: Ranking de productividad del periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopProducersResponse"
+        "400":
+          description: Rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2492,3 +2593,54 @@ components:
                     properties:
                       documento: { type: boolean }
                       nombre: { type: boolean }
+
+    StatusCount:
+      type: object
+      description: Conteo de trámites en un estado dentro de una categoría.
+      properties:
+        status: { type: string, example: submitted }
+        count: { type: integer, example: 40 }
+      required: [status, count]
+
+    CategoryMetrics:
+      type: object
+      description: Métricas de una categoría (matriculas/traspasos/otros).
+      properties:
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        total: { type: integer, example: 120 }
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+      required: [category, total, byStatus]
+
+    AnalyticsOverviewResponse:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryMetrics"
+      required: [tenantId, from, to, categories]
+
+    TopProducer:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, example: "Ana Pérez" }
+        submittedCount: { type: integer, example: 40 }
+        approvedCount: { type: integer, example: 12 }
+        rejectedCount: { type: integer, example: 3 }
+      required: [userId, displayName, submittedCount, approvedCount, rejectedCount]
+
+    TopProducersResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProducer"
+      required: [items]
