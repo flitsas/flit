@@ -16,6 +16,8 @@ public sealed class AttachmentsHandlerTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly FakeStorage _storage = new();
     private readonly UploadAttachmentHandler _upload;
+    private readonly PresignAttachmentHandler _presign;
+    private readonly RegisterAttachmentHandler _register;
     private readonly ListAttachmentsHandler _list;
     private readonly DeleteAttachmentHandler _delete;
     private readonly DownloadAttachmentHandler _download;
@@ -24,6 +26,8 @@ public sealed class AttachmentsHandlerTests
     public AttachmentsHandlerTests()
     {
         _upload = new UploadAttachmentHandler(_repo, _storage);
+        _presign = new PresignAttachmentHandler(_repo, _storage);
+        _register = new RegisterAttachmentHandler(_repo);
         _list = new ListAttachmentsHandler(_repo);
         _delete = new DeleteAttachmentHandler(_repo, _storage);
         _download = new DownloadAttachmentHandler(_repo, _storage);
@@ -34,6 +38,7 @@ public sealed class AttachmentsHandlerTests
     private sealed class FakeStorage : IAttachmentStorage
     {
         public List<string> Saved { get; } = [];
+        public List<string> Presigned { get; } = [];
         public List<string> Deleted { get; } = [];
         public Dictionary<string, byte[]> Contents { get; } = [];
 
@@ -46,6 +51,17 @@ public sealed class AttachmentsHandlerTests
             Saved.Add(path);
             Contents[path] = ms.ToArray();
             return new StoredFile(path, "deadbeef", ms.Length);
+        }
+
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default)
+        {
+            var path = $"{procedureInstanceId:D}/{tipo}_{originalFilename}";
+            Presigned.Add(path);
+            return Task.FromResult(new PresignedUpload(
+                path,
+                "https://s3.test/upload",
+                new Dictionary<string, string> { ["key"] = path, ["policy"] = "pol" }));
         }
 
         public void Delete(string storagePath) => Deleted.Add(storagePath);
@@ -225,6 +241,167 @@ public sealed class AttachmentsHandlerTests
 
         error.Should().BeNull();
         instance.ChecklistEstado.Should().Contain("\"soat\":true");
+    }
+
+    // ── Presign (subida directa a S3) ─────────────────────────────────────────
+
+    private static PresignAttachmentInput PresignInput(
+        string tipo = "factura", string mime = "application/pdf", long size = 1024, string name = "doc.pdf") =>
+        new(tipo, name, mime, size);
+
+    [Fact]
+    public async Task Presign_InvalidTipo_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (result, error) = await _presign.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), PresignInput(tipo: "no_existe"), ct);
+
+        error.Should().Be("invalid_tipo");
+        result.Should().BeNull();
+        _storage.Presigned.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Presign_TooLarge_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, error) = await _presign.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), PresignInput(size: AttachmentRules.MaxSizeBytes + 1), ct);
+
+        error.Should().Be("file_too_large");
+        _storage.Presigned.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Presign_InstanceNotFound_Returns404()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+
+        var (_, error) = await _presign.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), PresignInput(), ct);
+
+        error.Should().Be("not_found");
+        _storage.Presigned.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Presign_NotDraft_Returns409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: "submitted"));
+
+        var (_, error) = await _presign.HandleAsync(id, tenant, PresignInput(), ct);
+
+        error.Should().Be("not_draft");
+        _storage.Presigned.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Presign_HappyPath_DevuelveUrlYFields_SinCrearAdjunto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _presign.HandleAsync(id, tenant, PresignInput(tipo: "factura"), ct);
+
+        error.Should().BeNull();
+        result!.Url.Should().Be("https://s3.test/upload");
+        result.Fields.Should().ContainKey("policy");
+        _storage.Presigned.Should().ContainSingle();
+        // El presign NO crea la fila del adjunto ni persiste: eso ocurre en register.
+        instance.Attachments.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    // ── Register (metadata de adjunto ya subido a S3) ──────────────────────────
+
+    private static RegisterAttachmentInput RegisterInput(
+        string tipo = "factura", string mime = "application/pdf", long size = 1024,
+        string name = "doc.pdf", string sha = "abc123", string storagePath = "file_xyz") =>
+        new(tipo, name, mime, size, sha, storagePath);
+
+    [Fact]
+    public async Task Register_InvalidMime_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, error) = await _register.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), RegisterInput(mime: "text/plain"), null, ct);
+
+        error.Should().Be("invalid_mime");
+    }
+
+    [Fact]
+    public async Task Register_MissingStoragePath_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, error) = await _register.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), RegisterInput(storagePath: ""), null, ct);
+
+        error.Should().Be("missing_storage_path");
+    }
+
+    [Fact]
+    public async Task Register_MissingSha256_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, error) = await _register.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), RegisterInput(sha: ""), null, ct);
+
+        error.Should().Be("missing_sha256");
+    }
+
+    [Fact]
+    public async Task Register_NotDraft_Returns409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: "submitted"));
+
+        var (_, error) = await _register.HandleAsync(id, tenant, RegisterInput(), null, ct);
+
+        error.Should().Be("not_draft");
+    }
+
+    [Fact]
+    public async Task Register_HappyPath_PersisteMetadataConShaDelCliente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _register.HandleAsync(
+            id, tenant, RegisterInput(tipo: "factura", sha: "deadbeef", storagePath: "file_xyz"), null, ct);
+
+        error.Should().BeNull();
+        result!.Tipo.Should().Be("factura");
+        // El sha256 y el storagePath provienen del cliente (el binario no pasó por el API).
+        result.Sha256.Should().Be("deadbeef");
+        instance.Attachments.Should().ContainSingle(a => a.StoragePath == "file_xyz" && a.Sha256 == "deadbeef");
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceAttachment>(a => a.Tipo == "factura"));
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Register_FacturaInMatriculaInicial_AutoMarksChecklistItem()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _register.HandleAsync(id, tenant, RegisterInput(tipo: "factura"), null, ct);
+
+        error.Should().BeNull();
+        instance.ChecklistEstado.Should().Contain("\"factura\":true");
     }
 
     // ── List ──────────────────────────────────────────────────────────────────

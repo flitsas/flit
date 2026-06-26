@@ -45,6 +45,10 @@ public sealed class PortalHandlerTests
             return new StoredFile(path, "deadbeef", ms.Length);
         }
 
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public void Delete(string storagePath) { }
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>

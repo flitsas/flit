@@ -264,6 +264,17 @@ export interface AttachmentsResponse {
   attachments: ProcedureAttachment[];
 }
 
+/**
+ * Respuesta de POST /instances/{id}/attachments/presign: POST policy de S3 para subir el binario
+ * directo desde el navegador. `storagePath` (id del file-manager) se devuelve luego al registrar la
+ * metadata; `fields` son los campos firmados que van ANTES del 'file' en el multipart a S3.
+ */
+export interface PresignAttachmentResponse {
+  storagePath: string;
+  url: string;
+  fields: Record<string, string>;
+}
+
 /** Item del checklist guiado por la tipología del trámite. */
 export interface ChecklistItemView {
   key: string;

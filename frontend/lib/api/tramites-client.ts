@@ -29,6 +29,7 @@ import type {
   PortalFirmaUrl,
   PortalView,
   PreflightSnapshot,
+  PresignAttachmentResponse,
   ProcedureActor,
   ProcedureAttachment,
   ProcedureConfiguration,
@@ -183,6 +184,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 /** Header de tenant para runtime (NO X-Flit-SuperAdmin). */
 function tenantHeader(tenantId: string = DEV_TENANT_ID): HeadersInit {
   return { 'X-Tenant-Id': tenantId };
+}
+
+/**
+ * SHA-256 del archivo en hex minúsculas. En la subida directa a S3 el binario no pasa por el API,
+ * así que el hash de integridad lo calcula el navegador (Web Crypto, requiere contexto seguro:
+ * https o localhost) y se envía al registrar la metadata del adjunto.
+ */
+async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export const tramitesClient = {
@@ -351,32 +365,62 @@ export const tramitesClient = {
     return res?.attachments ?? [];
   },
 
-  // POST multipart. NO se fija Content-Type: el browser pone el boundary
-  // del multipart/form-data automáticamente al pasar un FormData.
+  // Subida directa navegador→S3 (presigned). El binario NO pasa por el request del
+  // API (resuelve PDFs grandes que fallaban en el límite del request/gateway):
+  //   1) presign  → el API registra el archivo en el file-manager y devuelve la POST policy de S3.
+  //   2) POST a S3 → el navegador sube el binario directo con los campos firmados + el archivo.
+  //   3) register → el API persiste la metadata del adjunto (incl. el sha256 que calcula el cliente).
   uploadAttachment: async (
     instanceId: string,
     tipo: string,
     file: File,
     tenantId: string = DEV_TENANT_ID,
   ): Promise<ProcedureAttachment> => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('tipo', tipo);
-    const res = await fetch(
-      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments`),
+    const mimetype = file.type || 'application/octet-stream';
+    const filename = file.name || 'file';
+    const sha256 = await sha256Hex(file);
+
+    // 1) presign
+    const presign = await request<PresignAttachmentResponse>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/presign`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
-        body: form,
+        body: JSON.stringify({ tipo, filename, mimetype, sizeBytes: file.size }),
       },
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
+
+    // 2) POST policy a S3: los campos firmados van ANTES del 'file'. NO se fija Content-Type ni
+    // headers de tenant: es S3, no el API; el navegador pone el boundary del multipart.
+    const form = new FormData();
+    for (const [key, value] of Object.entries(presign.fields)) {
+      form.append(key, value);
+    }
+    form.append('file', file);
+    const s3Res = await fetch(presign.url, { method: 'POST', body: form });
+    if (!s3Res.ok) {
+      const body = await s3Res.text().catch(() => '');
       throw new Error(
-        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+        `Error subiendo a almacenamiento (${s3Res.status})${body ? ': ' + body : ''}`,
       );
     }
-    return (await res.json()) as ProcedureAttachment;
+
+    // 3) register
+    return request<ProcedureAttachment>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/register`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({
+          tipo,
+          filename,
+          mimetype,
+          sizeBytes: file.size,
+          sha256,
+          storagePath: presign.storagePath,
+        }),
+      },
+    );
   },
 
   // GET descarga binaria de un adjunto. Devuelve el blob + filename/mimetype
