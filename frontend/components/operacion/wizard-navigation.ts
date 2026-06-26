@@ -18,13 +18,26 @@ export function frontierIndex(steps: WizardStep[]): number {
 }
 
 /**
- * ¿Se puede navegar al paso `index`? Solo si está completo o es exactamente la
- * frontera (el primer paso incompleto). Cualquier paso más allá de la frontera
- * queda fuera de alcance.
+ * Pasos DIFERIDOS (HU #10349/#10350): identidad y FUR quedan `incomplete` aun con los datos
+ * completos, porque dependen de la validación/firma async. A diferencia de un paso de datos
+ * incompleto, NO deben bloquear la navegación hacia adelante: el gestor recorre hasta el último paso
+ * (FUR) para finalizar el borrador o radicar. Por eso un diferido incompleto no es "frontera dura".
+ */
+const DEFERRED_STEP_KEYS = new Set(['identidad', 'fur']);
+
+/** Un paso incompleto que SÍ corta la cascada (un paso de datos sin terminar, no un diferido). */
+function isBlockingIncomplete(step: WizardStep): boolean {
+  return step.status === 'incomplete' && !DEFERRED_STEP_KEYS.has(step.key);
+}
+
+/**
+ * ¿Se puede navegar al paso `index`? El backend marca como `locked` lo no alcanzable; el frontend
+ * además exige que no haya un paso de DATOS incompleto por delante (cascada). Los pasos diferidos
+ * (identidad/FUR) incompletos NO cortan la cascada, así el gestor puede llegar al último paso a
+ * finalizar/radicar aunque la identidad siga pendiente.
  *
- * En modo solo lectura (`viewOnly`, Track C) no hay frontera que respetar: el
- * usuario solo recorre lo ya resuelto, así que únicamente son navegables los
- * pasos `complete` (en un trámite enviado, típicamente todos).
+ * En modo solo lectura (`viewOnly`, Track C) no hay cascada que respetar: el usuario solo recorre lo
+ * ya resuelto, así que únicamente son navegables los pasos `complete` (en un trámite enviado, todos).
  */
 export function canNavigateToStep(
   steps: WizardStep[],
@@ -33,6 +46,11 @@ export function canNavigateToStep(
 ): boolean {
   const step = steps[index];
   if (!step) return false;
+  if (step.status === 'locked') return false;
   if (viewOnly) return step.status === 'complete';
-  return step.status === 'complete' || index === frontierIndex(steps);
+  // Navegable si ningún paso de datos previo quedó incompleto (los diferidos no cuentan).
+  for (let i = 0; i < index; i++) {
+    if (steps[i].status === 'locked' || isBlockingIncomplete(steps[i])) return false;
+  }
+  return true;
 }

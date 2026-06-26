@@ -91,10 +91,14 @@ public static class SubmitGate
         return computed?.Completo ?? true;
     }
 
-    private static bool BiometriaAprobada(ProcedureInstance instance, string parte) =>
-        instance.BiometricValidations.Any(v =>
+    private static bool BiometriaAprobada(ProcedureInstance instance, string parte)
+    {
+        // HU #10350 — aprobada Y vigente (≤30 días desde la aprobación); una aprobación vencida no radica.
+        var now = DateTimeOffset.UtcNow;
+        return instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado == BiometricEstados.Aprobado);
+            && BiometricRules.EsAprobadaVigente(v, now));
+    }
 
     private static bool FurGenerado(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));

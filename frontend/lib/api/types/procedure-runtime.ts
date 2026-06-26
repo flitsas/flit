@@ -49,6 +49,8 @@ export interface ProcedureInstanceSummary {
   tenantId: string;
   createdAt: string;
   submittedAt?: string | null;
+  /** HU #10350 — sello de borrador finalizado (datos completos a la espera de identidad async). */
+  draftFinalizedAt?: string | null;
 }
 
 // ── Listado de instancias (Slice M6) ───────────────────────────────
@@ -71,6 +73,16 @@ export interface InstanceSummary {
   pasoActual: number;
   totalPasos: number;
   createdAt: string;
+  // HU #10350 — desacople de la validación de identidad async. Derivan los chips del listado
+  // ("Pendiente validación" / "Pendiente firma") y la acción de la fila ("Radicar"/"Continuar").
+  /** Sello de borrador finalizado; null si el borrador no se ha finalizado. */
+  draftFinalizedAt: string | null;
+  /** Estado agregado de identidad: 'aprobado' | 'en_proceso' | 'rechazado' | null (sin iniciar). */
+  identityValidationStatus: string | null;
+  /** Traspaso: firma de la compraventa de alguna parte aún pendiente. */
+  signaturePending: boolean;
+  /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
+  canSubmit: boolean;
 }
 
 /** Respuesta de GET /instances. */
@@ -121,6 +133,8 @@ export interface ProcedureInstanceDetail {
   createdAt: string;
   submittedAt: string | null;
   completedAt: string | null;
+  /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
+  draftFinalizedAt?: string | null;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -473,6 +487,22 @@ export interface CompletarBiometriaResult {
   estado: BiometricEstado;
   score: number;
   motivo: string;
+}
+
+/**
+ * HU #10350 — desenlace de "asegurar identidad" de una parte al guardarla (espejo de
+ * EnsureIdentityResult). El backend reutiliza una validación vigente o indica que se requiere validar.
+ */
+export type EnsureIdentityOutcome =
+  | 'ya_vigente'           // el trámite ya tiene una validación aprobada y vigente
+  | 'en_proceso'           // ya hay una validación en curso
+  | 'reusada'              // se clonó una validación vigente de la persona (identidad aprobada)
+  | 'requiere_validacion'  // no hay vigente → el front dispara la validación automáticamente
+  | 'sin_actor';           // la parte aún no tiene actor con documento
+
+export interface EnsureIdentityResult {
+  outcome: EnsureIdentityOutcome;
+  validationId?: string | null;
 }
 
 // ── Firma electrónica (Slice 7A) ────────────────────────────────────

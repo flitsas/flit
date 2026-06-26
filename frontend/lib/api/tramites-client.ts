@@ -12,6 +12,7 @@ import type {
   CompletarBiometriaResult,
   ConsultationResult,
   CreateInstanceRequest,
+  EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
@@ -214,7 +215,15 @@ export const tramitesClient = {
       '/api/v1/tramites/instances',
       { headers: tenantHeader(tenantId) },
     );
-    return res?.items ?? [];
+    // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
+    // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
+    return (res?.items ?? []).map((item) => ({
+      ...item,
+      draftFinalizedAt: item.draftFinalizedAt ?? null,
+      identityValidationStatus: item.identityValidationStatus ?? null,
+      signaturePending: item.signaturePending ?? false,
+      canSubmit: item.canSubmit ?? false,
+    }));
   },
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
@@ -252,6 +261,19 @@ export const tramitesClient = {
   submitInstance: (id: string, tenantId: string = DEV_TENANT_ID) =>
     request<ProcedureInstanceSummary>(
       `/api/v1/tramites/instances/${id}/submit`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // HU #10350 (AC1) — finalizar el borrador: sella draftFinalizedAt SIN exigir identidad/FUR. El
+  // trámite permanece en `draft`; la firma se dispara async cuando el cliente valida su identidad.
+  // Distinto de submit (que sí radica a tránsito y exige identidad + gates completos).
+  // 409 si la instancia no es draft o faltan datos (actores/documentos/organismo).
+  finalizeDraft: (id: string, tenantId: string = DEV_TENANT_ID) =>
+    request<ProcedureInstanceSummary>(
+      `/api/v1/tramites/instances/${id}/finalize-draft`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -523,6 +545,22 @@ export const tramitesClient = {
         method: 'POST',
         headers: tenantHeader(tenantId),
         body: JSON.stringify(input),
+      },
+    ),
+
+  // HU #10350 — asegura la identidad de una parte al guardarla: el backend reutiliza una validación
+  // vigente (≤30 días) de la persona o responde 'requiere_validacion' para que el front la dispare.
+  ensureIdentity: (
+    instanceId: string,
+    parte: BiometricParte,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<EnsureIdentityResult>(
+      `/api/v1/tramites/instances/${instanceId}/identity/ensure`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ parte }),
       },
     ),
 

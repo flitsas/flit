@@ -94,4 +94,29 @@ public static class BiometricRules
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
+
+    /// <summary>
+    /// Vigencia (días CALENDARIO) de una validación de identidad APROBADA, contada desde la fecha de
+    /// aprobación (<c>ValidadoAt</c>). El día de aprobación es el día 1; vence en el día 31, es decir,
+    /// el día <c>ValidadoAt + 30 días</c> ya NO es vigente. Pasada la vigencia hay que revalidar
+    /// (HU #10350 — reuso de identidad vigente).
+    /// </summary>
+    public const int VigenciaDias = 30;
+
+    /// <summary>
+    /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ la fecha de
+    /// hoy es anterior a <c>ValidadoAt + VigenciaDias</c> (corte por DÍA calendario, no por hora exacta).
+    /// Una aprobada sin <c>ValidadoAt</c> se trata como vigente: ese estado sólo ocurre en fixtures de
+    /// prueba; en producción los tres caminos de aprobación (mock, simular, webhook Kyverum) siempre
+    /// setean la fecha al aprobar.
+    /// </summary>
+    public static bool EsAprobadaVigente(ProcedureInstanceBiometricValidation validation, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        if (validation.Estado != BiometricEstados.Aprobado)
+            return false;
+        if (validation.ValidadoAt is not { } validadoAt)
+            return true;
+        return now.UtcDateTime.Date < validadoAt.UtcDateTime.Date.AddDays(VigenciaDias);
+    }
 }

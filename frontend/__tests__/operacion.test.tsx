@@ -107,6 +107,10 @@ const INSTANCE_DRAFT: InstanceSummary = {
   pasoActual: 2,
   totalPasos: 6,
   createdAt: '2026-06-18T00:00:00Z',
+  draftFinalizedAt: null,
+  identityValidationStatus: null,
+  signaturePending: false,
+  canSubmit: false,
 };
 
 const INSTANCE_SUBMITTED: InstanceSummary = {
@@ -124,6 +128,10 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
   pasoActual: 5,
   totalPasos: 5,
   createdAt: '2026-06-19T00:00:00Z',
+  draftFinalizedAt: null,
+  identityValidationStatus: null,
+  signaturePending: false,
+  canSubmit: false,
 };
 
 describe('M6 — tabla de trámites en curso', () => {

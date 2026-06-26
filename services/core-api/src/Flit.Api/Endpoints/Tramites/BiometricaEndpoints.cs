@@ -110,9 +110,33 @@ internal static class BiometricaEndpoints
             };
         }).WithName("SimularProcedureInstanceBiometric");
 
+        // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
+        // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.
+        group.MapPost("/instances/{id:guid}/identity/ensure", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] EnsureIdentityRequest? body,
+            EnsureIdentityHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, ct);
+            return error switch
+            {
+                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor)."),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("EnsureProcedureInstanceIdentity");
+
         return app;
     }
 }
 
 /// <summary>Cuerpo de la simulación de biométrica. <c>parte</c> opcional (vacío → comprador).</summary>
 internal sealed record SimularBiometriaRequest(string? Parte);
+
+/// <summary>Cuerpo de "asegurar identidad" (HU #10350). <c>parte</c> = comprador|vendedor.</summary>
+internal sealed record EnsureIdentityRequest(string? Parte);

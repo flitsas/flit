@@ -55,6 +55,52 @@ function titlecase(value: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+type Chip = { label: string; bg: string; color: string; border: string };
+
+/**
+ * HU #10350 (AC3) — chip de estado async para borradores FINALIZADOS (draft + draftFinalizedAt). El
+ * trámite cerró la captura y espera la validación de identidad del cliente; la firma se procesa sola
+ * al aprobarse. Precedencia: rechazo → aprobado (firma pendiente / listo para radicar) → pendiente de
+ * validación. Devuelve además `ready` cuando ya se puede radicar (identidad aprobada + gates), para que
+ * la acción de la fila pase de "Continuar" a "Radicar". Null si no es un borrador finalizado (chip base).
+ */
+function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | null {
+  if (item.estado !== 'draft' || !item.draftFinalizedAt) return null;
+  const idv = item.identityValidationStatus;
+
+  if (idv === 'rechazado') {
+    return {
+      chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+      ready: false,
+    };
+  }
+
+  if (idv === 'aprobado') {
+    if (item.signaturePending) {
+      return {
+        chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
+        ready: false,
+      };
+    }
+    if (item.canSubmit) {
+      return {
+        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+        ready: true,
+      };
+    }
+    return {
+      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: '#5B8A1F', border: 'rgba(140,198,63,0.35)' },
+      ready: false,
+    };
+  }
+
+  // en_proceso | enviado | null (sin iniciar) → esperando la validación del cliente.
+  return {
+    chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+    ready: false,
+  };
+}
+
 function shortDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
@@ -469,9 +515,13 @@ function TramiteRow({
   item: InstanceSummary;
   onOpen: (id: string) => void;
 }) {
-  const chip = estadoChip(item.estado);
+  // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
+  // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
+  // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
+  const async = asyncStatus(item);
+  const chip = async?.chip ?? estadoChip(item.estado);
   const isDraft = item.estado === 'draft';
-  const actionLabel = isDraft ? 'Continuar' : 'Ver';
+  const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
 
   return (
     <li>
@@ -534,6 +584,8 @@ function TramiteRow({
               color: chip.color,
               borderColor: chip.border,
             }}
+            role="status"
+            aria-label={`Estado: ${chip.label}`}
           >
             {chip.label}
           </span>

@@ -38,6 +38,7 @@ import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ActorDocumentType,
+  BiometricParte,
   FieldValue,
   FieldValueInput,
   InstanceStatus,
@@ -94,6 +95,22 @@ const STEP_SUBTITLE: Record<string, string> = {
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
 
+/**
+ * ¿La validación de identidad está aprobada? (HU #10350) Se deriva del estado server-driven de los
+ * pasos, sin recálculo en cliente: en matrícula el paso `identidad` queda `complete` cuando la
+ * biométrica del comprador está aprobada; en traspaso la biométrica vive dentro del paso `fur`, que
+ * lista `pendiente_biometria` mientras falte alguna parte. `locked` ⇒ aún no alcanzable ⇒ no aprobada.
+ */
+function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): boolean {
+  if (modalidad === 'traspaso') {
+    const fur = steps.find((s) => s.key === 'fur');
+    if (!fur || fur.status === 'locked') return false;
+    return !fur.reasons.includes('pendiente_biometria');
+  }
+  const identidad = steps.find((s) => s.key === 'identidad');
+  return identidad?.status === 'complete';
+}
+
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
 function StepMarker({ status, index }: { status: WizardStepStatus; index: number }) {
   const s = STATUS_BADGE[status];
@@ -128,26 +145,40 @@ export function TramiteWizard(props: Props) {
   // En las vías de auto-create el id lo produce `start()` → state.instanceId.
   const instanceId = existingInstanceId ?? state.instanceId;
 
-  // Modo solo lectura (Track C): un trámite que ya salió de `draft` (enviado a
-  // tránsito, en revisión, etc.) es solo visualización. Se deriva del estado de
-  // la instancia existente; los trámites nuevos siempre arrancan editables.
+  // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
+  // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
+  const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
   useEffect(() => {
     if (!existingInstanceId) return;
     let active = true;
     tramitesClient
       .getInstance(existingInstanceId)
       .then((d) => {
-        if (active) setInstanceStatus(d.status ?? null);
+        if (active) {
+          setInstanceStatus(d.status ?? null);
+          setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+        }
       })
       .catch(() => {});
     return () => {
       active = false;
     };
   }, [existingInstanceId]);
-  // Solo lectura cuando conocemos un estado y NO es draft. Si el estado aún no
-  // se resolvió (o el backend no lo devuelve), se asume editable.
-  const readOnly = !!instanceStatus && instanceStatus !== 'draft';
+
+  // Tres modos del wizard (HU #10350 — desacople de la validación de identidad async):
+  //  • Editable: borrador SIN finalizar (o trámite nuevo) → captura completa de datos.
+  //  • Borrador finalizado (`draft` + draftFinalizedAt): datos en solo lectura, pero el paso de
+  //    Identidad sigue operable (el cliente valida async). Banner informativo; Radicar solo cuando
+  //    el wizard reporte canSubmit + identidad aprobada.
+  //  • Solo visualización (Track C): el trámite ya salió de `draft` (enviado a tránsito, etc.).
+  const fullReadOnly = !!instanceStatus && instanceStatus !== 'draft';
+  const draftFinalized = instanceStatus === 'draft' && !!draftFinalizedAt;
+  // Captura de datos deshabilitada en ambos modos no-editables (provider de solo lectura).
+  const editLocked = fullReadOnly || draftFinalized;
+  // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
+  // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
+  const navViewOnly = fullReadOnly;
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
@@ -202,6 +233,13 @@ export function TramiteWizard(props: Props) {
   const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
+  // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
+  // canRadicar gobierna el botón "Radicar a tránsito": el submit de HU #10349 exige identidad, mientras
+  // que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit para radicar.
+  const identityApproved = isIdentityApproved(steps, modalidad);
+  const canRadicar = canSubmit && identityApproved;
+
   // Header: por modalidad usamos `title`; legacy usa configuration.name; con
   // instancia existente derivamos la etiqueta de la modalidad server-driven.
   const headerTitle =
@@ -212,7 +250,7 @@ export function TramiteWizard(props: Props) {
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
-    if (!canNavigateToStep(steps, index, readOnly)) return;
+    if (!canNavigateToStep(steps, index, navViewOnly)) return;
     setActiveIndex(index);
   };
 
@@ -235,13 +273,13 @@ export function TramiteWizard(props: Props) {
   // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
   // En solo lectura no hay edición que regrese gates, así que no reposiciona.
   useEffect(() => {
-    if (readOnly) return;
+    if (navViewOnly) return;
     if (steps.length === 0) return;
     if (!canNavigateToStep(steps, activeIndex)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveIndex(frontierIndex(steps));
     }
-  }, [steps, activeIndex, readOnly]);
+  }, [steps, activeIndex, navViewOnly]);
 
   const runPreflight = async () => {
     if (!instanceId) return;
@@ -267,8 +305,10 @@ export function TramiteWizard(props: Props) {
     }
   }, [instanceId, activeStep?.key]);
 
+  // Radicar a tránsito (AC4): submit estricto — exige identidad + FUR + gates (HU #10349). Solo se
+  // habilita cuando el wizard reporta canSubmit Y la identidad está aprobada (ver `canRadicar`).
   const handleFinish = async () => {
-    if (!instanceId || !canSubmit) return;
+    if (!instanceId || !canRadicar) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -290,7 +330,31 @@ export function TramiteWizard(props: Props) {
     }
   };
 
-  const isLast = steps.length > 0 && activeIndex === steps.length - 1;
+  // Finalizar borrador (AC1): datos completos pero identidad aún pendiente. Sella draftFinalizedAt
+  // SIN radicar; la firma se dispara async cuando el cliente valida su identidad. Distinto de submit.
+  const handleFinalizeDraft = async () => {
+    if (!instanceId || !canSubmit) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await tramitesClient.finalizeDraft(instanceId);
+      show(
+        'Trámite guardado en borrador — pendiente validación del cliente.',
+        'success',
+      );
+      onExit();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo finalizar el borrador.',
+      );
+      setSubmitting(false);
+    }
+  };
+
+  // Paso de decisión terminal (HU #10350): el ÚLTIMO paso del wizard ('fur' en ambas modalidades),
+  // donde el gestor finaliza el borrador o radica. El paso de Identidad ya NO es terminal: desde él se
+  // "Continúa" al paso FUR (el FUR es alcanzable aunque la identidad esté pendiente — backend #10350).
+  const isDecisionStep = activeStep?.key === 'fur';
   // Pasos con form embebido (actores y comercial): el footer "Continuar" guarda
   // y luego avanza, así que se habilita aunque el paso aún esté incomplete (el
   // save lo completa).
@@ -298,11 +362,14 @@ export function TramiteWizard(props: Props) {
     activeStep?.key === 'comprador' ||
     activeStep?.key === 'vendedor' ||
     activeStep?.key === 'comercial';
+  // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
+  // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
+  const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
   const continueDisabled =
     !activeStep ||
     activeIndex >= steps.length - 1 ||
     continuing ||
-    (!isSavableStep && activeStep.status !== 'complete');
+    (!isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
 
   // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
   // ref), refresca el wizard y avanza solo si el paso quedó complete. Otros
@@ -320,6 +387,33 @@ export function TramiteWizard(props: Props) {
         setSubmitError('No se pudo guardar. Por favor, reintenta.');
         return;
       }
+
+      // HU #10350 — al guardar la parte (comprador/vendedor), asegura su identidad sin esperar el clic
+      // en "Validar identidad": el backend reutiliza una validación VIGENTE (≤30 días) de la persona;
+      // si no hay vigente, se dispara la validación automáticamente (provider-aware: Kyverum envía el
+      // enlace de captura; en mock se simula). No bloquea el avance si algo falla.
+      const parteIdentidad: BiometricParte | null =
+        activeStep?.key === 'comprador'
+          ? 'comprador'
+          : activeStep?.key === 'vendedor'
+            ? 'vendedor'
+            : null;
+      if (parteIdentidad && instanceId) {
+        try {
+          const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
+          if (ensured.outcome === 'requiere_validacion') {
+            const { provider } = await tramitesClient.getBiometricState(instanceId);
+            if (provider === 'kyverum') {
+              await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
+            } else {
+              await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+            }
+          }
+        } catch {
+          // La identidad puede iniciarse manualmente en el paso de Identidad; no se bloquea el avance.
+        }
+      }
+
       const fresh = await refresh();
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
         setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
@@ -334,7 +428,7 @@ export function TramiteWizard(props: Props) {
   };
 
   return (
-   <WizardReadOnlyProvider readOnly={readOnly}>
+   <WizardReadOnlyProvider readOnly={editLocked}>
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -349,13 +443,13 @@ export function TramiteWizard(props: Props) {
         <button
           onClick={onExit}
           className="text-xs opacity-70 hover:opacity-100"
-          aria-label={readOnly ? 'Volver al listado' : 'Cancelar y volver al selector'}
+          aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >
-          {readOnly ? '← Volver al listado' : '← Cancelar'}
+          {editLocked ? '← Volver al listado' : '← Cancelar'}
         </button>
       </div>
 
-      {readOnly && (
+      {fullReadOnly && (
         <div
           className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
           style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
@@ -369,6 +463,24 @@ export function TramiteWizard(props: Props) {
             </span>{' '}
             Este trámite ya no puede editarse, pero aún puedes generar o
             descargar el FUR y el expediente consolidado.
+          </span>
+        </div>
+      )}
+
+      {draftFinalized && (
+        <div
+          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#162744' }}
+          role="status"
+          aria-live="polite"
+        >
+          <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#F9AC00' }} aria-hidden="true" />
+          <span>
+            <span className="font-semibold" style={{ color: '#B45309' }}>
+              Borrador finalizado — esperando validación del cliente.
+            </span>{' '}
+            Los datos quedaron en solo lectura. Puedes iniciar o compartir la validación de identidad;
+            la firma se procesará automáticamente al aprobarse, y luego podrás radicar a tránsito.
           </span>
         </div>
       )}
@@ -401,7 +513,7 @@ export function TramiteWizard(props: Props) {
             <ol className="space-y-3">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
-                const clickable = canNavigateToStep(steps, i, readOnly);
+                const clickable = canNavigateToStep(steps, i, navViewOnly);
                 return (
                   <li key={s.key} aria-current={isActive ? 'step' : undefined}>
                     <button
@@ -468,12 +580,14 @@ export function TramiteWizard(props: Props) {
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
+                identityOperable={draftFinalized}
+                identityApproved={identityApproved}
               />
             </div>
           )}
 
-          {/* Bloqueos de envío traducidos. */}
-          {isLast && blockers.length > 0 && (
+          {/* Bloqueos de envío traducidos (en el paso de decisión). */}
+          {isDecisionStep && blockers.length > 0 && (
             <div
               className="mt-6 rounded-xl p-3 border text-xs"
               style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
@@ -505,8 +619,54 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
-            {/* En solo lectura no hay Continuar/Guardar/Finalizar: solo se recorre. */}
-            {readOnly ? null : !isLast ? (
+            {/* Acción derecha del footer según el modo (HU #10350):
+                · Solo visualización (fullReadOnly): sin acciones, solo se recorre.
+                · Paso de decisión (identidad/FUR): "Radicar a tránsito" si la identidad ya está
+                  aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando los datos están
+                  completos. En borrador ya finalizado solo se ofrece "Radicar" (deshabilitado hasta
+                  que el cliente valide su identidad).
+                · Pasos de datos: en borrador finalizado solo se navega; editable usa Continuar/Guardar. */}
+            {fullReadOnly ? null : isDecisionStep ? (
+              canRadicar ? (
+                <button
+                  onClick={() => void handleFinish()}
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                >
+                  {submitting ? 'Radicando…' : 'Radicar a tránsito'}
+                </button>
+              ) : draftFinalized ? (
+                <button
+                  onClick={() => void handleFinish()}
+                  disabled
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Disponible cuando el cliente valide su identidad"
+                >
+                  Radicar a tránsito
+                </button>
+              ) : (
+                <button
+                  onClick={() => void handleFinalizeDraft()}
+                  disabled={!canSubmit || submitting}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                >
+                  {submitting ? 'Finalizando…' : 'Finalizar'}
+                </button>
+              )
+            ) : draftFinalized ? (
+              <button
+                onClick={() => goToStep(activeIndex + 1)}
+                disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
+                className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              >
+                Continuar
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            ) : (
               <button
                 onClick={() => void handleContinue()}
                 disabled={continueDisabled}
@@ -515,15 +675,6 @@ export function TramiteWizard(props: Props) {
               >
                 {continuing ? 'Guardando…' : isSavableStep ? 'Guardar y continuar' : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
-              </button>
-            ) : (
-              <button
-                onClick={() => void handleFinish()}
-                disabled={!canSubmit || submitting}
-                className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              >
-                {submitting ? 'Enviando…' : 'Finalizar'}
               </button>
             )}
           </div>
@@ -1069,6 +1220,8 @@ function StepBody({
   onRunPreflight,
   onRefresh,
   stepFormRef,
+  identityOperable = false,
+  identityApproved = false,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1078,6 +1231,15 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /**
+   * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
+   * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
+   * cliente es justamente lo que se está esperando. Reabre la captura SOLO para la biométrica.
+   */
+  identityOperable?: boolean;
+  /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
+   * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
+  identityApproved?: boolean;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -1156,8 +1318,8 @@ function StepBody({
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
     // hideIntro: el h2 + subtítulo ya describen el paso (en `fur` la intro se
     // conserva porque ahí la biométrica es una subsección, no el título).
-    case 'identidad':
-      return (
+    case 'identidad': {
+      const biometric = (
         <BiometricStep
           instanceId={instanceId}
           modalidad={modalidad}
@@ -1165,18 +1327,56 @@ function StepBody({
           hideIntro
         />
       );
+      // Borrador finalizado: reabre la captura SOLO para la biométrica (provider readOnly=false).
+      // En el resto de modos hereda el contexto externo (editable o solo lectura).
+      return identityOperable ? (
+        <WizardReadOnlyProvider readOnly={false}>{biometric}</WizardReadOnlyProvider>
+      ) : (
+        biometric
+      );
+    }
 
     // FUR (matrícula 5 / traspaso 6). Biométrica de las partes (Slice 6) +
     // firma electrónica, portal de participantes y generación del FUR (Slice 7).
     // En matrícula la biométrica es del comprador (parte única) y no hay firma.
-    case 'fur':
+    case 'fur': {
+      const biometric = (
+        <BiometricStep
+          instanceId={instanceId}
+          modalidad={modalidad}
+          onRefresh={onRefresh}
+        />
+      );
       return (
         <div className="space-y-6">
-          <BiometricStep
-            instanceId={instanceId}
-            modalidad={modalidad}
-            onRefresh={onRefresh}
-          />
+          {/* HU #10350 — con la identidad pendiente, el FUR/firma se generan AUTOMÁTICAMENTE al
+              aprobarse la validación del cliente (consumidor de outbox #10349). Se avisa aquí para que
+              el gestor no intente generarlos a mano y entienda que solo debe "Finalizar". */}
+          {!identityApproved && (
+            <div
+              className="rounded-xl p-3 text-xs border flex items-start gap-2"
+              style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+              role="status"
+              aria-live="polite"
+            >
+              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+              <span>
+                <span className="font-semibold" style={{ color: '#557EFF' }}>
+                  El FUR y la firma se generarán automáticamente
+                </span>{' '}
+                cuando el cliente valide su identidad. No necesitas generarlos a mano: completa los datos
+                y pulsa <span className="font-semibold">Finalizar</span> para dejar el trámite a la espera
+                de la validación.
+              </span>
+            </div>
+          )}
+          {/* Borrador finalizado (traspaso): la biométrica sigue operable; la firma/FUR no (es
+              automática al aprobarse la identidad), por eso hereda el contexto de solo lectura. */}
+          {identityOperable ? (
+            <WizardReadOnlyProvider readOnly={false}>{biometric}</WizardReadOnlyProvider>
+          ) : (
+            biometric
+          )}
           <FirmaFurStep
             instanceId={instanceId}
             modalidad={modalidad}
@@ -1184,6 +1384,7 @@ function StepBody({
           />
         </div>
       );
+    }
 
     default:
       return (

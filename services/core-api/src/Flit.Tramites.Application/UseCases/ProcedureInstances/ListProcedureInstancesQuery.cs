@@ -24,7 +24,14 @@ public sealed record InstanceSummaryDto(
     string? OrganismoTransito,   // nombre del OT elegido (field_value transit_office_name)
     int PasoActual,              // 1..TotalPasos
     int TotalPasos,              // 5 matrícula | 6 traspaso
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    // HU #10350 — desacople de la validación de identidad async. Estos campos alimentan los chips
+    // del listado ("Pendiente validación" / "Pendiente firma" / "Radicar") y la acción de la fila sin
+    // que el frontend recalcule gates. Opcionales (default) para compat con consumidores existentes.
+    DateTimeOffset? DraftFinalizedAt = null,
+    string? IdentityValidationStatus = null,  // aprobado | en_proceso | rechazado | null (sin iniciar)
+    bool SignaturePending = false,            // traspaso: compraventa de alguna parte sin firmar
+    bool CanSubmit = false);                  // gates de radicación satisfechos (mismo cómputo que el wizard)
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -53,7 +60,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                         ?? TramiteModalidadEntrada.MatriculaInicial;
         var modalidadCode = TramiteModalidadEntradaCodes.ToCode(modalidad);
 
-        var (pasoActual, totalPasos) = ComputeProgress(e);
+        // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
+        // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
+        var state = GetWizardStateHandler.ComputeState(e);
+        var (pasoActual, totalPasos) = ComputeProgress(state, e.Status);
 
         return new InstanceSummaryDto(
             e.Id,
@@ -69,7 +79,70 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             Field(fv, "transit_office_name"),
             pasoActual,
             totalPasos,
-            e.CreatedAt);
+            e.CreatedAt,
+            e.DraftFinalizedAt,
+            DeriveIdentityStatus(e, modalidad),
+            DeriveSignaturePending(e, modalidad),
+            state.CanSubmit);
+    }
+
+    /// <summary>Partes que llevan validación de identidad por modalidad (matrícula = solo comprador).</summary>
+    private static readonly string[] PartesTraspaso = ["comprador", "vendedor"];
+    private static readonly string[] PartesMatricula = ["comprador"];
+
+    /// <summary>
+    /// Estado agregado de la validación de identidad para los chips del listado (HU #10350): <c>aprobado</c>
+    /// si TODAS las partes requeridas tienen una validación aprobada; <c>en_proceso</c> si alguna relevante
+    /// está enviada/en proceso; <c>rechazado</c> si alguna relevante quedó rechazada/expirada; <c>null</c> si
+    /// no hay ninguna validación iniciada. En matrícula la única parte (comprador) puede venir con
+    /// <c>Parte</c> null o "comprador".
+    /// </summary>
+    private static string? DeriveIdentityStatus(ProcedureInstance e, TramiteModalidadEntrada modalidad)
+    {
+        var partes = modalidad == TramiteModalidadEntrada.Traspaso ? PartesTraspaso : PartesMatricula;
+        var esMatricula = modalidad != TramiteModalidadEntrada.Traspaso;
+
+        bool Relevant(ProcedureInstanceBiometricValidation v) =>
+            partes.Any(p => string.Equals(v.Parte, p, StringComparison.OrdinalIgnoreCase))
+            || (esMatricula && v.Parte is null);
+
+        var relevant = e.BiometricValidations.Where(Relevant).ToList();
+        if (relevant.Count == 0)
+            return null;
+
+        // Aprobado para el chip = aprobado Y VIGENTE (≤30 días): una aprobación vencida deja de contar.
+        var now = DateTimeOffset.UtcNow;
+        bool Aprobada(string parte) => e.BiometricValidations.Any(v =>
+            (string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase) || (esMatricula && v.Parte is null))
+            && BiometricRules.EsAprobadaVigente(v, now));
+
+        if (partes.All(Aprobada))
+            return BiometricEstados.Aprobado;
+
+        if (relevant.Any(v => v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso))
+            return BiometricEstados.EnProceso;
+
+        if (relevant.Any(v => v.Estado is BiometricEstados.Rechazado or BiometricEstados.Expirado))
+            return BiometricEstados.Rechazado;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Firma de la compraventa pendiente (solo traspaso): alguna de las dos partes aún no tiene su firma
+    /// <c>firmada</c>. En matrícula no aplica firma de compraventa → siempre false.
+    /// </summary>
+    private static bool DeriveSignaturePending(ProcedureInstance e, TramiteModalidadEntrada modalidad)
+    {
+        if (modalidad != TramiteModalidadEntrada.Traspaso)
+            return false;
+
+        bool Firmada(string parte) => e.Signatures.Any(s =>
+            string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase)
+            && s.Estado == SignatureEstados.Firmada);
+
+        return !(Firmada("comprador") && Firmada("vendedor"));
     }
 
     /// <summary>
@@ -81,12 +154,11 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// listado coincide con el paso en que se abre el trámite. Si todos los pasos están completos, o
     /// la instancia ya está radicada (Submitted o posterior), se reporta <c>PasoActual = TotalPasos</c>.</para>
     /// </summary>
-    private static (int PasoActual, int TotalPasos) ComputeProgress(ProcedureInstance e)
+    private static (int PasoActual, int TotalPasos) ComputeProgress(WizardStateDto state, string status)
     {
-        var state = GetWizardStateHandler.ComputeState(e);
         var total = state.TotalSteps;
 
-        if (!string.Equals(e.Status, ProcedureInstanceStatus.Draft, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(status, ProcedureInstanceStatus.Draft, StringComparison.OrdinalIgnoreCase))
             return (total, total);
 
         // Frontera = primer paso no completo (mismo criterio que frontierIndex del frontend).

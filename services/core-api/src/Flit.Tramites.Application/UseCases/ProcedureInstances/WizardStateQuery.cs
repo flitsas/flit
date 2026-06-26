@@ -102,29 +102,27 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         };
 
         var maxAlcanzable = MatriculaGates.MaxPasoAlcanzable(ctx);
+        // Datos (pasos 1-3) completos: maxAlcanzable >= 4 ⇒ Consulta+Documentos+Comprador OK. A partir
+        // de aquí los pasos diferidos (4 Identidad, 5 FUR) son ALCANZABLES aunque la identidad esté
+        // pendiente — desacople HU #10350: el gestor recorre hasta el último paso y finaliza el borrador.
+        var datosCompletos = maxAlcanzable >= 4;
         var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
                     ?? [];
 
         var steps = new List<WizardStepDto>(MatriculaGates.TotalPasos);
         for (var p = 1; p <= MatriculaGates.TotalPasos; p++)
         {
-            var gate = MatriculaGates.PasoCompleto(p, ctx);
             var reasons = new List<string>();
             string status;
 
-            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
-            // (locked, sin reasons), incluidos los diferidos (4 identidad, 5 FUR). Así el
-            // sidebar no deja saltar a Identidad sin haber completado Comprador. Solo cuando
-            // el paso es alcanzable se aplica su lógica específica.
-            if (p > maxAlcanzable)
-            {
-                status = "locked";
-            }
             // 4 = Identidad (biométrica, slice 6): refleja el estado real de la biométrica del comprador.
-            // 5 = Generar FUR (firma, slice 7): diferido → incomplete con reason, sin bloqueo.
-            else if (p == 4)
+            if (p == 4)
             {
-                if (identidadAprobada)
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else if (identidadAprobada)
                 {
                     status = "complete";
                 }
@@ -135,10 +133,16 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
                     reasons.Add(PendienteBiometria);
                 }
             }
+            // 5 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos AUNQUE
+            // la identidad siga pendiente (HU #10350), para que sea el ÚLTIMO paso del wizard donde el
+            // gestor finaliza/radica. El FUR se genera automáticamente al validar la identidad (#10349).
             else if (p == 5)
             {
-                // FUR (Slice 7): matrícula NO requiere firma; completa cuando el FUR está generado.
-                if (FurGenerado(instance))
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else if (FurGenerado(instance))
                 {
                     status = "complete";
                 }
@@ -148,16 +152,24 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
                     reasons.Add(FurPendiente);
                 }
             }
-            else if (gate.Ok)
-            {
-                status = "complete";
-            }
             else
             {
-                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
-                status = "incomplete";
-                if (gate.Code is not null)
-                    reasons.Add(gate.Code);
+                // Pasos de datos 1-3: cascada estándar por gate (no alcanzable ⇒ locked).
+                var gate = MatriculaGates.PasoCompleto(p, ctx);
+                if (p > maxAlcanzable)
+                {
+                    status = "locked";
+                }
+                else if (gate.Ok)
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    if (gate.Code is not null)
+                        reasons.Add(gate.Code);
+                }
             }
 
             steps.Add(new WizardStepDto(p, StepKey(false, p), StepLabel(pasos, p), status, reasons));
@@ -361,10 +373,15 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     /// parte); traspaso usa <c>"comprador"</c>/<c>"vendedor"</c>. Aprobada = existe una validación de
     /// esa parte en estado <c>aprobado</c>.
     /// </summary>
-    private static bool BiometriaAprobada(ProcedureInstance instance, string? parte) =>
-        instance.BiometricValidations.Any(v =>
+    private static bool BiometriaAprobada(ProcedureInstance instance, string? parte)
+    {
+        // HU #10350 — la validación cuenta como aprobada sólo si además está VIGENTE (≤30 días desde la
+        // aprobación). Una aprobación vencida deja de satisfacer el gate → obliga a revalidar.
+        var now = DateTimeOffset.UtcNow;
+        return instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado == BiometricEstados.Aprobado);
+            && BiometricRules.EsAprobadaVigente(v, now));
+    }
 
     /// <summary>
     /// Check preflight de la firma de la compraventa (paridad Johan <c>derivaFirmaCompraventaCheck</c>).

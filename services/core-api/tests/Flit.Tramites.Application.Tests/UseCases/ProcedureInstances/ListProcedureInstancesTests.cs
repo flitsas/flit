@@ -111,4 +111,106 @@ public sealed class ListProcedureInstancesTests
         t.TotalPasos.Should().Be(6);
         t.PasoActual.Should().Be(6); // submitted → todos los pasos resueltos
     }
+
+    // HU #10350 (AC3) — derivación de las pistas async que alimentan los chips del listado.
+
+    [Fact]
+    public async Task HandleAsync_DraftFinalizado_IdentidadEnProceso_MapeaPistasAsync()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var finalizadoAt = DateTimeOffset.UtcNow.AddHours(-1);
+
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ReferenceNumber = "TRM-2026-000010",
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
+            DraftFinalizedAt = finalizadoAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+            BiometricValidations =
+            {
+                new ProcedureInstanceBiometricValidation
+                {
+                    Id = Guid.NewGuid(),
+                    Parte = "comprador",
+                    Estado = BiometricEstados.EnProceso,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            },
+        };
+
+        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+            .Returns([instance]);
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        var m = result.Single();
+        m.DraftFinalizedAt.Should().Be(finalizadoAt);
+        m.IdentityValidationStatus.Should().Be(BiometricEstados.EnProceso);
+        m.SignaturePending.Should().BeFalse(); // matrícula no lleva firma de compraventa
+    }
+
+    [Fact]
+    public async Task HandleAsync_DraftFinalizado_IdentidadAprobada_MapeaAprobado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ReferenceNumber = "TRM-2026-000011",
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
+            DraftFinalizedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            CreatedAt = DateTimeOffset.UtcNow,
+            BiometricValidations =
+            {
+                new ProcedureInstanceBiometricValidation
+                {
+                    Id = Guid.NewGuid(),
+                    Parte = "comprador",
+                    Estado = BiometricEstados.Aprobado,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            },
+        };
+
+        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+            .Returns([instance]);
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        result.Single().IdentityValidationStatus.Should().Be(BiometricEstados.Aprobado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinBiometrica_IdentityStatusNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ReferenceNumber = "TRM-2026-000012",
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+            .Returns([instance]);
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        var m = result.Single();
+        m.DraftFinalizedAt.Should().BeNull();
+        m.IdentityValidationStatus.Should().BeNull();
+    }
 }

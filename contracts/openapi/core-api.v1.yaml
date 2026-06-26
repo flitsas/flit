@@ -1598,6 +1598,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/identity/ensure:
+    post:
+      operationId: ensureProcedureInstanceIdentity
+      tags: [Tramites, Identidad]
+      summary: Asegurar la identidad vigente de una parte (HU #10350)
+      description: >
+        Al guardar una parte (comprador/vendedor) el sistema asegura su validación de identidad sin
+        esperar un clic manual: si la persona (tipoDoc+documento) tiene una validación APROBADA y VIGENTE
+        (≤30 días calendario desde la aprobación; el día de aprobación es el día 1 y vence el día 31) en
+        cualquier trámite del tenant, la reutiliza clonándola a este trámite (hereda la fecha de
+        aprobación → conserva el mismo vencimiento). Si no hay vigente, responde `requiere_validacion`
+        para que el cliente sea enviado a validar automáticamente. Idempotente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parte]
+              properties:
+                parte:
+                  type: string
+                  enum: [comprador, vendedor]
+      responses:
+        "200":
+          description: Desenlace de la verificación de identidad de la parte.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnsureIdentityResult"
+        "400":
+          description: parte inválida o falta X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Instancia no encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/biometric:
     post:
       operationId: iniciarProcedureInstanceBiometric
@@ -2411,6 +2465,23 @@ components:
       required: [data]
 
     # ── Validación de identidad / Kyverum Verify (HU #10233) ──────────────────
+    EnsureIdentityResult:
+      type: object
+      description: Desenlace de asegurar la identidad vigente de una parte (HU #10350).
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [ya_vigente, en_proceso, reusada, requiere_validacion, sin_actor]
+          description: >
+            `ya_vigente`/`en_proceso`: el trámite ya tiene una validación utilizable. `reusada`: se clonó
+            una validación vigente de la persona. `requiere_validacion`: no hay vigente → enviar a validar.
+            `sin_actor`: la parte aún no tiene actor con documento.
+        validationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Id de la validación clonada cuando `outcome=reusada`.
     IniciarBiometriaInput:
       type: object
       required: [nombre, tipoDoc, documento, email]

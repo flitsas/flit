@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
+        // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
+        services.AddScoped<EnsureIdentityHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.

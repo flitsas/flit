@@ -111,6 +111,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public async Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct)
+    {
+        // Filtro grueso en SQL por timestamp (validado_at >= corte), con un día de margen para no
+        // descartar candidatos cerca del límite; el corte fino por DÍA calendario se aplica en memoria
+        // con BiometricRules.EsAprobadaVigente (semántica "día de aprobación = día 1; vence el día 31").
+        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.Estado == BiometricEstados.Aprobado
+                && v.ValidadoAt != null
+                && v.ValidadoAt >= cutoff
+                && v.TipoDoc == tipoDoc
+                && v.Documento == documento
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .OrderByDescending(v => v.ValidadoAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
+    }
+
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(Guid tenantId, int limit, CancellationToken ct)
     {
         return await db.ProcedureInstanceBiometricValidations

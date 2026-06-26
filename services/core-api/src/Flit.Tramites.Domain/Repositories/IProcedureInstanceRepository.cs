@@ -75,6 +75,17 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Busca la validación de identidad APROBADA y VIGENTE más reciente de una persona
+    /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) en CUALQUIER trámite no eliminado del
+    /// tenant, para reutilizarla (HU #10350 — reuso de identidad vigente). Vigente = aprobada con
+    /// <c>validado_at</c> dentro de los <see cref="Entities.BiometricRules.VigenciaDias"/> días (regla por
+    /// fecha de <see cref="Entities.BiometricRules.EsAprobadaVigente"/>, aplicada en memoria sobre los
+    /// candidatos). Devuelve null si la persona no tiene ninguna validación vigente. Solo lectura.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
     /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.
     /// </summary>
