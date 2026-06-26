@@ -25,6 +25,8 @@ public sealed record InstanceSummaryDto(
     int PasoActual,              // 1..TotalPasos
     int TotalPasos,              // 5 matrícula | 6 traspaso
     DateTimeOffset CreatedAt,
+    Guid TenantId,                            // compañía dueña (para el scoping/columna del superadmin, #1)
+    string? CompaniaNombre,                   // razón social; solo se resuelve en el listado multi-tenant (superadmin)
     // HU #10350 — desacople de la validación de identidad async. Estos campos alimentan los chips
     // del listado ("Pendiente validación" / "Pendiente firma" / "Radicar") y la acción de la fila sin
     // que el frontend recalcule gates. Opcionales (default) para compat con consumidores existentes.
@@ -44,13 +46,30 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
     private const string BuyerActorType = "comprador";
 
-    public async Task<IReadOnlyList<InstanceSummaryDto>> HandleAsync(Guid tenantId, CancellationToken ct = default)
+    /// <summary>
+    /// Lista las instancias visibles para el caller. <paramref name="tenantId"/> <c>null</c> +
+    /// <paramref name="isSuperAdmin"/> = TODAS las compañías (#1, el superadmin ve todo); en ese caso
+    /// se resuelve el nombre de compañía por fila. Un usuario de compañía siempre llega con su
+    /// <paramref name="tenantId"/> (resuelto del JWT por el middleware) y sin nombre de compañía.
+    /// </summary>
+    public async Task<IReadOnlyList<InstanceSummaryDto>> HandleAsync(
+        Guid? tenantId, bool isSuperAdmin, CancellationToken ct = default)
     {
-        var instances = await repo.ListByTenantWithSummaryGraphAsync(tenantId, MaxItems, ct);
-        return instances.Select(ToSummary).ToList();
+        var instances = await repo.ListWithSummaryGraphAsync(tenantId, MaxItems, ct);
+
+        // Solo el listado multi-tenant del superadmin necesita el nombre de compañía por fila.
+        IReadOnlyDictionary<Guid, string> nombres = isSuperAdmin
+            ? await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct)
+            : EmptyNames;
+
+        return instances
+            .Select(e => ToSummary(e, nombres.GetValueOrDefault(e.TenantId)))
+            .ToList();
     }
 
-    internal static InstanceSummaryDto ToSummary(ProcedureInstance e)
+    private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
+
+    internal static InstanceSummaryDto ToSummary(ProcedureInstance e, string? companiaNombre = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -80,6 +99,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             pasoActual,
             totalPasos,
             e.CreatedAt,
+            e.TenantId,
+            string.IsNullOrWhiteSpace(companiaNombre) ? null : companiaNombre,
             e.DraftFinalizedAt,
             DeriveIdentityStatus(e, modalidad),
             DeriveSignaturePending(e, modalidad),

@@ -63,6 +63,38 @@ public sealed class FileManagerAttachmentStorageTests
     }
 
     [Fact]
+    public async Task CreatePresignedUploadAsync_CreaRegistroYDevuelvePresigned_SinSubirAS3()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) =>
+        {
+            if (req.Method == HttpMethod.Post && req.RequestUri!.AbsolutePath == "/pdn/api/v1/files")
+                return Json(HttpStatusCode.Created,
+                    """{"id":"file_xyz","presignedUrl":{"url":"https://s3.test/upload","fields":{"key":"tramites/k/obj","policy":"pol"}}}""");
+            // Cualquier llamada a S3 sería un error: el presign NO sube el binario.
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        var result = await Storage(handler).CreatePresignedUploadAsync(
+            Guid.Parse("22222222-2222-2222-2222-222222222222"), "factura", "f.pdf", ct);
+
+        // StoragePath = id del file-manager; url + fields = POST policy para el cliente.
+        result.StoragePath.Should().Be("file_xyz");
+        result.Url.Should().Be("https://s3.test/upload");
+        result.Fields.Should().Contain("key", "tramites/k/obj").And.Contain("policy", "pol");
+
+        // Solo se llamó al file-manager (create); NUNCA a S3 (el binario lo sube el navegador).
+        handler.Requests.Should().ContainSingle();
+        var createBody = handler.Requests.Single().Body;
+        createBody.Should().Contain("\"category\":\"tramites\"")
+            .And.Contain("\"filename\":\"f.pdf\"")
+            .And.Contain("factura")
+            .And.Contain("22222222-2222-2222-2222-222222222222");
+        // El sha256 NO va en metadata: lo calcula el cliente al registrar.
+        createBody.Should().NotContain("sha256");
+    }
+
+    [Fact]
     public async Task OpenReadAsync_ResuelvePresignedYDescargaBytes()
     {
         var ct = TestContext.Current.CancellationToken;

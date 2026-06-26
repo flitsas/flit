@@ -166,6 +166,98 @@ export interface AuditLogPageResponse {
   pageSize: number;
 }
 
+// ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
+/** Categoría de trámite normalizada por el backend (RF01). */
+export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
+
+/** Conteo de trámites en un estado concreto dentro de una categoría. */
+export interface StatusCount {
+  status: string;
+  count: number;
+}
+
+/** Métricas agregadas de una categoría en el periodo consultado. */
+export interface CategoryMetrics {
+  category: AnalyticsCategory;
+  total: number;
+  byStatus: StatusCount[];
+}
+
+/** Respuesta de GET /api/v1/analytics/overview (RF01, RF02). */
+export interface AnalyticsOverviewResponse {
+  tenantId: string;
+  from: string;
+  to: string;
+  categories: CategoryMetrics[];
+}
+
+/** Query params del overview. `tenantId` solo lo honra el backend para SuperAdmin (AC1). */
+export interface AnalyticsOverviewParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
+/** Productividad de un radicador en el periodo (RF07). */
+export interface TopProducer {
+  userId: string;
+  displayName: string;
+  submittedCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+}
+
+/** Respuesta de GET /api/v1/analytics/productivity/top (HU #10243). */
+export interface TopProducersResponse {
+  items: TopProducer[];
+}
+
+/** Query params del Top de productividad. */
+export interface TopProducersParams {
+  from: string;
+  to: string;
+  limit?: number;
+  tenantId?: string;
+}
+
+/** Fila del detalle de trámites (RF04, RF05). */
+export interface ProcedureDetail {
+  id: string;
+  referenceNumber: string;
+  procedureTypeName: string;
+  category: AnalyticsCategory;
+  status: string;
+  createdByDisplayName: string;
+  submittedAt?: string | null;
+  completedAt?: string | null;
+}
+
+/** Página de detalle de trámites de GET /api/v1/analytics/procedures (HU #10244). */
+export interface ProcedureDetailsPage {
+  items: ProcedureDetail[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Query params del detalle paginado. */
+export interface ProcedureDetailsParams {
+  from: string;
+  to: string;
+  category?: AnalyticsCategory;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+  tenantId?: string;
+}
+
+/** Cuerpo del POST /api/v1/analytics/export/executive-pdf (HU #10246 / #10249). */
+export interface ExecutivePdfParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
 /** Error de validación tipado para flujos 422 (AC2/AC3). */
 export class ApiValidationError extends Error {
   constructor(

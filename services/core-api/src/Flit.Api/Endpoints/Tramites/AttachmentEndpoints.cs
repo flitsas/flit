@@ -49,6 +49,75 @@ internal static class AttachmentEndpoints
         .WithName("UploadProcedureInstanceAttachment")
         .DisableAntiforgery();
 
+        // POST presign: crea una presigned POST policy para subir el binario DIRECTO a S3 desde el
+        // navegador (sin pasar por el request del API; resuelve PDFs grandes). -> 200 { storagePath, url, fields }
+        group.MapPost("/instances/{id:guid}/attachments/presign", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] PresignAttachmentRequest? body,
+            PresignAttachmentHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var input = new PresignAttachmentInput(
+                body.Tipo ?? string.Empty,
+                body.Filename ?? string.Empty,
+                body.Mimetype ?? string.Empty,
+                body.SizeBytes);
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, ct);
+            return error switch
+            {
+                "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tamaño del archivo debe ser mayor a 0."),
+                "invalid_tipo" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo inválido."),
+                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
+                "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el máximo de 20 MB."),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en estado draft."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("PresignProcedureInstanceAttachment");
+
+        // POST register: registra la metadata de un adjunto YA subido a S3 vía presign. -> 201 AttachmentDto
+        group.MapPost("/instances/{id:guid}/attachments/register", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] RegisterAttachmentRequest? body,
+            RegisterAttachmentHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var input = new RegisterAttachmentInput(
+                body.Tipo ?? string.Empty,
+                body.Filename ?? string.Empty,
+                body.Mimetype ?? string.Empty,
+                body.SizeBytes,
+                body.Sha256 ?? string.Empty,
+                body.StoragePath ?? string.Empty);
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, null, ct);
+            return error switch
+            {
+                "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tamaño del archivo debe ser mayor a 0."),
+                "invalid_tipo" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo inválido."),
+                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
+                "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el máximo de 20 MB."),
+                "missing_storage_path" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta storagePath (id de almacenamiento)."),
+                "missing_sha256" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta sha256."),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en estado draft."),
+                _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
+            };
+        }).WithName("RegisterProcedureInstanceAttachment");
+
         // GET lista de adjuntos -> { attachments: [...] }
         group.MapGet("/instances/{id:guid}/attachments", async (
             Guid id,
@@ -128,3 +197,19 @@ internal static class AttachmentEndpoints
         return app;
     }
 }
+
+/// <summary>Cuerpo del POST /attachments/presign (JSON): metadata del archivo, sin binario.</summary>
+internal sealed record PresignAttachmentRequest(
+    string? Tipo,
+    string? Filename,
+    string? Mimetype,
+    long SizeBytes);
+
+/// <summary>Cuerpo del POST /attachments/register (JSON): metadata del adjunto ya subido a S3.</summary>
+internal sealed record RegisterAttachmentRequest(
+    string? Tipo,
+    string? Filename,
+    string? Mimetype,
+    long SizeBytes,
+    string? Sha256,
+    string? StoragePath);

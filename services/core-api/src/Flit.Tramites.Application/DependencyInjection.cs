@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         services.AddScoped<UploadAttachmentHandler>();
+        services.AddScoped<PresignAttachmentHandler>();
+        services.AddScoped<RegisterAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();

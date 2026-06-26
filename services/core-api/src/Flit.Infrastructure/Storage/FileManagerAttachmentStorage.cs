@@ -63,6 +63,36 @@ internal sealed class FileManagerAttachmentStorage(
         return new StoredFile(created.Id, sha256, bytes.LongLength);
     }
 
+    public async Task<PresignedUpload> CreatePresignedUploadAsync(
+        Guid procedureInstanceId,
+        string tipo,
+        string originalFilename,
+        CancellationToken ct = default)
+    {
+        // Crea el registro en el file-manager (igual que SaveAsync) pero NO sube los bytes: devuelve
+        // la presigned POST policy para que el cliente suba directo a S3. El SHA-256 lo calcula el
+        // cliente y se persiste al registrar la metadata, por eso aquí no va en metadata.
+        var filename = string.IsNullOrWhiteSpace(originalFilename) ? "file" : originalFilename;
+        var createReq = new CreateFileRequest(
+            _options.Category,
+            filename,
+            [tipo],
+            new Dictionary<string, string>
+            {
+                ["procedureInstanceId"] = procedureInstanceId.ToString("D"),
+                ["tipo"] = tipo,
+            });
+
+        var created = await PostCreateAsync(createReq, ct);
+        if (string.IsNullOrWhiteSpace(created?.Id) || string.IsNullOrWhiteSpace(created.PresignedUrl?.Url))
+            throw new InvalidOperationException("file-manager: respuesta de creación inválida (sin id/presignedUrl).");
+
+        return new PresignedUpload(
+            created.Id,
+            created.PresignedUrl.Url,
+            created.PresignedUrl.Fields ?? new Dictionary<string, string>());
+    }
+
     public async Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(storagePath))

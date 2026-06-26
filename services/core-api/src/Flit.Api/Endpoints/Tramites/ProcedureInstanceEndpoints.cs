@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Api.Middleware;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Microsoft.AspNetCore.Builder;
@@ -18,19 +20,48 @@ internal static class ProcedureInstanceEndpoints
 
         group.MapPost("/instances", async (
             CreateProcedureInstanceRequest request,
+            HttpContext http,
             CreateProcedureInstanceHandler handler,
             GetTenantSettingsHandler settingsHandler,
             CancellationToken ct) =>
         {
+            // #1 — El tenant y el usuario creador SALEN del JWT, no del body (no se confía en el
+            // cliente). Un usuario de compañía siempre crea en SU compañía; el superadmin debe
+            // indicar la compañía destino (header X-Tenant-Id o body).
+            var (resolvedTenant, isSuperAdmin) = ResolveTenantContext(http);
+            Guid effectiveTenant;
+            if (isSuperAdmin)
+            {
+                effectiveTenant = resolvedTenant ?? request.TenantId;
+                if (effectiveTenant == Guid.Empty)
+                    return Results.Problem(statusCode: 400, title: "Bad Request",
+                        detail: "Indique la compañía destino (X-Tenant-Id) para crear el trámite.");
+            }
+            else if (resolvedTenant is { } companyTenant)
+            {
+                effectiveTenant = companyTenant;
+            }
+            else
+            {
+                return Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "El usuario autenticado no tiene una compañía asignada.");
+            }
+
+            var effectiveRequest = request with
+            {
+                TenantId = effectiveTenant,
+                CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
+            };
+
             // #5 — La compañía puede deshabilitar la matrícula inicial vía el toggle
             // "Permitir matrícula inicial" (admin/companies). Si está en off para el
             // tenant, no se permite crear ese trámite. Sin fila de settings → permisivo
             // (default de la columna allow_initial_registration = true), para no romper
             // tenants aún no configurados.
-            if (EsMatriculaInicial(request.Modalidad))
+            if (EsMatriculaInicial(effectiveRequest.Modalidad))
             {
                 var settings = await settingsHandler.HandleAsync(
-                    new GetTenantSettingsQuery { TenantId = request.TenantId }, ct);
+                    new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
                 if (settings is { SwitchesMatricula.AllowInitialRegistration: false })
                     return Results.Problem(
                         statusCode: 422,
@@ -38,7 +69,7 @@ internal static class ProcedureInstanceEndpoints
                         detail: "La compañía no tiene habilitada la matrícula inicial.");
             }
 
-            var (result, error) = await handler.HandleAsync(request, ct);
+            var (result, error) = await handler.HandleAsync(effectiveRequest, ct);
             return error switch
             {
                 "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Debe indicar exactamente uno de procedureTypeId o modalidad."),
@@ -53,15 +84,15 @@ internal static class ProcedureInstanceEndpoints
 
         // Listado para la tabla de operación (Slice M6). Ruta literal /instances → NO colisiona con
         // /instances/{id:guid} (la constraint :guid solo casa GUIDs; el listado no lleva segmento).
+        // #1 — El tenant lo resuelve el middleware desde el JWT: company-user ve solo su compañía;
+        // superadmin ve TODO (tenant null) o acota a una empresa (X-Tenant-Id).
         group.MapGet("/instances", async (
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             ListProcedureInstancesHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
-
-            var items = await handler.HandleAsync(tenantId.Value, ct);
+            var (tenantId, isSuperAdmin) = ResolveTenantContext(http);
+            var items = await handler.HandleAsync(tenantId, isSuperAdmin, ct);
             return Results.Ok(new { items });
         }).WithName("ListProcedureInstances");
 
@@ -175,6 +206,27 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         return app;
+    }
+
+    /// <summary>
+    /// Tenant + rol resueltos por <see cref="TenantEnforcementMiddleware"/> desde el JWT.
+    /// <c>TenantId == null</c> solo ocurre para un SuperAdmin sin acotar (ver todo).
+    /// </summary>
+    private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http)
+    {
+        var isSuperAdmin = http.Items.TryGetValue(TenantEnforcementMiddleware.SuperAdminItemKey, out var sa)
+            && sa is true;
+        Guid? tenantId = http.Items.TryGetValue(TenantEnforcementMiddleware.TenantItemKey, out var t) && t is Guid g
+            ? g
+            : null;
+        return (tenantId, isSuperAdmin);
+    }
+
+    /// <summary>Id del usuario autenticado (claim <c>sub</c>/NameIdentifier), o null si no resuelve.</summary>
+    private static Guid? ResolveUserId(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(raw, out var id) ? id : null;
     }
 
     /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>

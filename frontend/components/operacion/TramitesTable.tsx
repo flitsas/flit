@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import type {
   InstanceStatus,
@@ -150,6 +152,8 @@ function stepLabel(item: InstanceSummary): string {
 }
 
 const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 1.3fr 0.9fr 1fr';
+// #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
+const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -169,6 +173,17 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
   const [search, setSearch] = useState('');
   const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
+  // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
+  const [compania, setCompania] = useState('');
+
+  // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
+  // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
+  // JWT en cliente tras montar (getToken lee la cookie), por eso vive en estado, no en el render SSR.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -193,7 +208,14 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     void load();
   }, [load, refreshKey]);
 
-  // Filtrado en cadena: búsqueda → modalidad → estado.
+  // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
+  const companias = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) if (it.companiaNombre) set.add(it.companiaNombre);
+    return [...set].sort((a, b) => a.localeCompare(b, 'es'));
+  }, [items]);
+
+  // Filtrado en cadena: búsqueda → modalidad → estado → compañía.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -204,6 +226,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           item.referenceNumber,
           item.compradorNombre,
           item.organismoTransito,
+          item.companiaNombre,
         ]
           .filter(Boolean)
           .join(' ')
@@ -212,9 +235,10 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
       }
       if (modalidad && item.modalidad !== modalidad) return false;
       if (estado && item.estado !== estado) return false;
+      if (compania && item.companiaNombre !== compania) return false;
       return true;
     });
-  }, [items, search, modalidad, estado]);
+  }, [items, search, modalidad, estado, compania]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Página segura: si los filtros/refetch reducen los resultados por debajo de
@@ -241,14 +265,19 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     setEstado(v);
     setPage(1);
   };
+  const handleCompaniaChange = (v: string) => {
+    setCompania(v);
+    setPage(1);
+  };
 
   const hasActiveFilters =
-    search.trim() !== '' || modalidad !== '' || estado !== '';
+    search.trim() !== '' || modalidad !== '' || estado !== '' || compania !== '';
 
   const clearFilters = () => {
     setSearch('');
     setModalidad('');
     setEstado('');
+    setCompania('');
     setPage(1);
   };
 
@@ -283,6 +312,29 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           filteredCount={filtered.length}
         />
 
+        {/* #1 — Filtro por compañía (solo SuperAdmin, que ve trámites de todas las empresas). */}
+        {isAdmin && companias.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label htmlFor="filtro-compania" className="text-[11px] font-semibold opacity-60">
+              Compañía
+            </label>
+            <select
+              id="filtro-compania"
+              value={compania}
+              onChange={(e) => handleCompaniaChange(e.target.value)}
+              className="rounded-xl border px-3 py-1.5 text-xs"
+              style={{ borderColor: '#DFE5ED', color: '#162744' }}
+            >
+              <option value="">Todas</option>
+              {companias.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <TableBody
           loading={loading}
           error={error}
@@ -293,9 +345,16 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
+          showCompania={isAdmin}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
-          onOpen={(id) => router.push(`/tramites/${id}`)}
+          onOpen={(id, tenantId) =>
+            router.push(
+              isAdmin && tenantId
+                ? `/tramites/${id}?t=${encodeURIComponent(tenantId)}`
+                : `/tramites/${id}`,
+            )
+          }
         />
       </div>
     </section>
@@ -313,6 +372,7 @@ function TableBody({
   totalPages,
   onPageChange,
   hasActiveFilters,
+  showCompania,
   onRetry,
   onClearFilters,
   onOpen,
@@ -326,10 +386,12 @@ function TableBody({
   totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
+  showCompania: boolean;
   onRetry: () => void;
   onClearFilters: () => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, tenantId: string) => void;
 }) {
+  const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
   if (loading) {
     return (
       <div
@@ -405,17 +467,18 @@ function TableBody({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[1180px]">
+      <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
           style={{
             background: '#dfe5ed',
             color: '#162744',
-            gridTemplateColumns: GRID_COLS,
+            gridTemplateColumns: gridCols,
           }}
           role="row"
         >
+          {showCompania && <div>Compañía</div>}
           <div>Placa</div>
           <div>Comprador</div>
           <div>VIN</div>
@@ -431,7 +494,13 @@ function TableBody({
         {/* Rows */}
         <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
           {paginated.map((item) => (
-            <TramiteRow key={item.id} item={item} onOpen={onOpen} />
+            <TramiteRow
+              key={item.id}
+              item={item}
+              showCompania={showCompania}
+              gridCols={gridCols}
+              onOpen={onOpen}
+            />
           ))}
         </ul>
 
@@ -510,10 +579,14 @@ function Pagination({
 /** Fila de trámite: clickable (abre el wizard) + acción explícita Continuar/Ver. */
 function TramiteRow({
   item,
+  showCompania,
+  gridCols,
   onOpen,
 }: {
   item: InstanceSummary;
-  onOpen: (id: string) => void;
+  showCompania: boolean;
+  gridCols: string;
+  onOpen: (id: string, tenantId: string) => void;
 }) {
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
@@ -528,17 +601,22 @@ function TramiteRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onOpen(item.id)}
+        onClick={() => onOpen(item.id, item.tenantId)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onOpen(item.id);
+            onOpen(item.id, item.tenantId);
           }
         }}
         className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: GRID_COLS }}
+        style={{ gridTemplateColumns: gridCols }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
+        {showCompania && (
+          <span className="block text-xs font-semibold text-[#162744]/90 dark:text-white/80 truncate">
+            {item.companiaNombre ?? '—'}
+          </span>
+        )}
         <span className="min-w-0">
           <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
             {item.placa ?? '—'}
@@ -601,7 +679,7 @@ function TramiteRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onOpen(item.id);
+              onOpen(item.id, item.tenantId);
             }}
             className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
             style={

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -47,6 +47,8 @@ function makeInstances(n: number): InstanceSummary[] {
       identityValidationStatus: null,
       signaturePending: false,
       canSubmit: false,
+      tenantId: '11111111-1111-1111-1111-111111111111',
+      companiaNombre: null,
     } satisfies InstanceSummary;
   });
 }
@@ -209,5 +211,54 @@ describe('TramitesTable — organismo de tránsito', () => {
     );
     expect(screen.queryByText('BOG001')).not.toBeInTheDocument();
     expect(screen.getByText('CAL001')).toBeInTheDocument();
+  });
+});
+
+// ── #1 — SuperAdmin: columna + filtro Compañía + abrir con ?t= ──────────────
+function superAdminToken(): string {
+  const b64 = (o: unknown) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${b64({ alg: 'none' })}.${b64({ sub: 'admin', role: 'SuperAdmin' })}.`;
+}
+
+function instance(over: Partial<InstanceSummary>): InstanceSummary {
+  return {
+    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'draft',
+    placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
+    compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
+    pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
+    draftFinalizedAt: null, identityValidationStatus: null,
+    signaturePending: false, canSubmit: false,
+    tenantId: 't', companiaNombre: null, ...over,
+  };
+}
+
+describe('TramitesTable — SuperAdmin multi-tenant', () => {
+  beforeEach(() => {
+    document.cookie = `flit_token=${superAdminToken()}; path=/`;
+  });
+  afterEach(() => {
+    document.cookie = 'flit_token=; path=/; Max-Age=0';
+  });
+
+  it('muestra la columna Compañía, el filtro y abre con el tenant de la fila (?t=)', async () => {
+    mocks.listInstances.mockResolvedValue([
+      instance({ id: 'a', placa: 'AAA111', tenantId: 'ten-a', companiaNombre: 'Empresa A' }),
+      instance({ id: 'b', placa: 'BBB222', tenantId: 'ten-b', companiaNombre: 'Empresa B' }),
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    // Columna Compañía (header de la grilla, role="row") + nombre por fila (dentro de la lista).
+    expect(within(screen.getByRole('row')).getByText('Compañía')).toBeInTheDocument();
+    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    expect(within(rows).getByText('Empresa A')).toBeInTheDocument();
+    // Filtro Compañía presente (select con label) con la opción de la empresa.
+    expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
+
+    // Abrir una fila navega con ?t=<tenant de la fila>.
+    await userEvent.click(screen.getByText('AAA111'));
+    expect(routerPush).toHaveBeenCalledWith('/tramites/a?t=ten-a');
   });
 });

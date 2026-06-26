@@ -83,6 +83,10 @@ export interface InstanceSummary {
   signaturePending: boolean;
   /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
   canSubmit: boolean;
+  /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
+  tenantId: string;
+  /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
+  companiaNombre: string | null;
 }
 
 /** Respuesta de GET /instances. */
@@ -276,6 +280,17 @@ export interface ProcedureAttachment {
 /** Respuesta de GET /instances/{id}/attachments. */
 export interface AttachmentsResponse {
   attachments: ProcedureAttachment[];
+}
+
+/**
+ * Respuesta de POST /instances/{id}/attachments/presign: POST policy de S3 para subir el binario
+ * directo desde el navegador. `storagePath` (id del file-manager) se devuelve luego al registrar la
+ * metadata; `fields` son los campos firmados que van ANTES del 'file' en el multipart a S3.
+ */
+export interface PresignAttachmentResponse {
+  storagePath: string;
+  url: string;
+  fields: Record<string, string>;
 }
 
 /** Item del checklist guiado por la tipología del trámite. */

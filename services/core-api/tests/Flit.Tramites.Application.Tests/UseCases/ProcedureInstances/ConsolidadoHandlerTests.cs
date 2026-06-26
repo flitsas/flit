@@ -48,6 +48,10 @@ public sealed class ConsolidadoHandlerTests
             return new StoredFile(path, $"sha-{tipo}", bytes.Length);
         }
 
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public void Delete(string storagePath) => Files.Remove(storagePath);
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)

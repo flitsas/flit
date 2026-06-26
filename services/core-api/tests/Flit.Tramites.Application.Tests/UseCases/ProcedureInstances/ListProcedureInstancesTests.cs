@@ -23,10 +23,10 @@ public sealed class ListProcedureInstancesTests
     public async Task HandleAsync_Empty_ReturnsEmptyList()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.ListByTenantWithSummaryGraphAsync(Arg.Any<Guid>(), Arg.Any<int>(), ct)
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct)
             .Returns([]);
 
-        var result = await _sut.HandleAsync(Guid.NewGuid(), ct);
+        var result = await _sut.HandleAsync(Guid.NewGuid(), isSuperAdmin: false, ct);
 
         result.Should().BeEmpty();
     }
@@ -83,12 +83,15 @@ public sealed class ListProcedureInstancesTests
             },
         };
 
-        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+        _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([matriculaParcial, traspasoSubmitted]);
 
-        var result = await _sut.HandleAsync(tenantId, ct);
+        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
 
         result.Should().HaveCount(2);
+        // Usuario de compañía: no se resuelve el nombre de compañía (columna oculta en el front).
+        result.Should().OnlyContain(x => x.CompaniaNombre == null);
+        await _repo.DidNotReceive().GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
 
         var m = result.Single(x => x.ReferenceNumber == "TRM-2026-000001");
         m.Modalidad.Should().Be("matricula_inicial");
@@ -142,10 +145,10 @@ public sealed class ListProcedureInstancesTests
             },
         };
 
-        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+        _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, ct);
+        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
 
         var m = result.Single();
         m.DraftFinalizedAt.Should().Be(finalizadoAt);
@@ -180,10 +183,10 @@ public sealed class ListProcedureInstancesTests
             },
         };
 
-        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+        _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, ct);
+        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
 
         result.Single().IdentityValidationStatus.Should().Be(BiometricEstados.Aprobado);
     }
@@ -204,13 +207,43 @@ public sealed class ListProcedureInstancesTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        _repo.ListByTenantWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+        _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, ct);
+        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
 
         var m = result.Single();
         m.DraftFinalizedAt.Should().BeNull();
         m.IdentityValidationStatus.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_SuperAdmin_ListaTodoYResuelveCompania()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        ProcedureInstance Inst(Guid tenant, string reference) => new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ReferenceNumber = reference,
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        // tenant null = TODOS (el superadmin ve todo).
+        _repo.ListWithSummaryGraphAsync(null, ListProcedureInstancesHandler.MaxItems, ct)
+            .Returns([Inst(tenantA, "TRM-2026-000010"), Inst(tenantB, "TRM-2026-000011")]);
+        _repo.GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [tenantA] = "Empresa A", [tenantB] = "Empresa B" });
+
+        var result = await _sut.HandleAsync(tenantId: null, isSuperAdmin: true, ct);
+
+        result.Should().HaveCount(2);
+        result.Single(x => x.TenantId == tenantA).CompaniaNombre.Should().Be("Empresa A");
+        result.Single(x => x.TenantId == tenantB).CompaniaNombre.Should().Be("Empresa B");
     }
 }

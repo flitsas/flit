@@ -1954,6 +1954,268 @@ paths:
         "404":
           description: Validación no encontrada.
 
+  /api/v1/analytics/overview:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsOverview
+      summary: Métricas por categoría/estado del tenant en un rango de fechas (RF01, RF02, RF07)
+      description: >
+        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado para
+        el rango [from, to]. El tenant se toma del claim JWT `tenant_id` (AC1); un SuperAdmin
+        puede indicar `tenantId` por query para consultar otra compañía (AC2). Requiere JWT con
+        rol de empresa o SuperAdmin (AdminCompany).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha inicial inclusiva (YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha final inclusiva (YYYY-MM-DD).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; selecciona la compañía a consultar (AC2).
+      responses:
+        "200":
+          description: Métricas agregadas del periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverviewResponse"
+        "400":
+          description: Rango inválido (`from` posterior a `to`) o falta tenant (AC4).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Tenant Admin solicitando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/productivity/top:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsTopProducers
+      summary: Top de radicadores por trámites enviados en un rango (RF07, AC3)
+      description: >
+        Devuelve hasta `limit` usuarios ordenados por `submittedCount` descendente. Mismo
+        modelo de tenant que el overview (claim `tenant_id`; SuperAdmin con `tenantId` opcional).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 50 }
+          description: Tamaño del ranking (por defecto 5).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin (AC2).
+      responses:
+        "200":
+          description: Ranking de productividad del periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopProducersResponse"
+        "400":
+          description: Rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/procedures:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsProcedureDetails
+      summary: Detalle paginado de trámites filtrable por categoría y estado (RF04, RF05)
+      description: >
+        Lista el detalle de trámites del tenant en el rango [from, to], filtrable por
+        `category` (matriculas/traspasos/otros) y `status`, con paginación. `totalCount`
+        refleja el universo filtrado. Mismo modelo de tenant que el overview (claim
+        `tenant_id`; SuperAdmin con `tenantId` opcional). Aislamiento multi-tenant por RLS.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string, enum: [matriculas, traspasos, otros] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, example: submitted }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin.
+      responses:
+        "200":
+          description: Página de detalle (vacía con totalCount=0 si no hay trámites).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureDetailsPage"
+        "400":
+          description: Rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/export/excel:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsExportExcel
+      summary: Exporta a Excel (.xlsx) el detalle de trámites filtrado (RF06)
+      description: >
+        Descarga un .xlsx con el detalle de trámites del rango, con los mismos filtros que
+        `/analytics/procedures`. El archivo se genera por streaming (OpenXmlWriter), procesando
+        las filas por chunks sin materializar el conjunto completo en memoria (AC2). Sin datos,
+        el archivo contiene solo la fila de encabezados (AC3).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string, enum: [matriculas, traspasos, otros] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin.
+      responses:
+        "200":
+          description: Archivo Excel con el detalle filtrado.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/export/executive-pdf:
+    post:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsExecutivePdf
+      summary: Genera el PDF de Resumen Ejecutivo del periodo (RF10)
+      description: >
+        Genera un PDF con los totales por categoría y el Top 5 de radicadores del periodo.
+        El tenant se toma del claim `tenant_id` (AC2); un SuperAdmin puede indicar `tenantId`
+        en el cuerpo. Si falta `from` o `to`, responde 400 (AC3).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutivePdfRequest"
+      responses:
+        "200":
+          description: PDF del Resumen Ejecutivo.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Falta from/to, rango inválido o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2907,3 +3169,87 @@ components:
                     properties:
                       documento: { type: boolean }
                       nombre: { type: boolean }
+
+    StatusCount:
+      type: object
+      description: Conteo de trámites en un estado dentro de una categoría.
+      properties:
+        status: { type: string, example: submitted }
+        count: { type: integer, example: 40 }
+      required: [status, count]
+
+    CategoryMetrics:
+      type: object
+      description: Métricas de una categoría (matriculas/traspasos/otros).
+      properties:
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        total: { type: integer, example: 120 }
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+      required: [category, total, byStatus]
+
+    AnalyticsOverviewResponse:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryMetrics"
+      required: [tenantId, from, to, categories]
+
+    TopProducer:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, example: "Ana Pérez" }
+        submittedCount: { type: integer, example: 40 }
+        approvedCount: { type: integer, example: 12 }
+        rejectedCount: { type: integer, example: 3 }
+      required: [userId, displayName, submittedCount, approvedCount, rejectedCount]
+
+    TopProducersResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProducer"
+      required: [items]
+
+    ProcedureDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string, example: "TRM-2026-000008" }
+        procedureTypeName: { type: string, example: "Matrícula nueva de vehículo" }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string, example: submitted }
+        createdByDisplayName: { type: string, example: "Ana Pérez" }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+      required: [id, referenceNumber, procedureTypeName, category, status, createdByDisplayName]
+
+    ProcedureDetailsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProcedureDetail"
+        totalCount: { type: integer, example: 1268 }
+        page: { type: integer, example: 1 }
+        pageSize: { type: integer, example: 20 }
+      required: [items, totalCount, page, pageSize]
+
+    ExecutivePdfRequest:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin." }
+      required: [from, to]

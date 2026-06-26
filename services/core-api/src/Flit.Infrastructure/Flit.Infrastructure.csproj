@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
+    <ProjectReference Include="..\Flit.Analytics.Application\Flit.Analytics.Application.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
@@ -46,6 +47,8 @@
     <!-- HU #10256 — generador PDF real del FUR (QuestPDF Community). Versión pineada en Directory.Packages.props. -->
     <PackageReference Include="QuestPDF" />
     <PackageReference Include="PdfSharpCore" />
+    <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="System.IO.Packaging" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />

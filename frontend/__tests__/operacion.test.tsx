@@ -111,6 +111,8 @@ const INSTANCE_DRAFT: InstanceSummary = {
   identityValidationStatus: null,
   signaturePending: false,
   canSubmit: false,
+  tenantId: '11111111-1111-1111-1111-111111111111',
+  companiaNombre: null,
 };
 
 const INSTANCE_SUBMITTED: InstanceSummary = {
@@ -132,6 +134,8 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
   identityValidationStatus: null,
   signaturePending: false,
   canSubmit: false,
+  tenantId: '11111111-1111-1111-1111-111111111111',
+  companiaNombre: null,
 };
 
 describe('M6 — tabla de trámites en curso', () => {

@@ -43,6 +43,9 @@ public sealed class IdentityValidationCompletedConsumerTests
         }
 
         public void Delete(string storagePath) { }
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
     }

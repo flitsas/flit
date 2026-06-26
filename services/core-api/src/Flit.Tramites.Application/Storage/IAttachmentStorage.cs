@@ -7,6 +7,17 @@ namespace Flit.Tramites.Application.Storage;
 public sealed record StoredFile(string StoragePath, string Sha256, long SizeBytes);
 
 /// <summary>
+/// Presigned POST policy para subir un binario DIRECTO a S3 desde el cliente (sin pasar por el
+/// request del API). <c>StoragePath</c> es el id opaco del backend de almacenamiento (lo que flit
+/// guarda en <c>procedure_instance_attachments</c>); <c>Url</c> + <c>Fields</c> son la URL de S3 y
+/// los campos firmados del POST policy (van ANTES del 'file' en el multipart).
+/// </summary>
+public sealed record PresignedUpload(
+    string StoragePath,
+    string Url,
+    IReadOnlyDictionary<string, string> Fields);
+
+/// <summary>
 /// Abstracción de almacenamiento de adjuntos (storage-agnóstica para testear sin tocar red).
 /// La implementación concreta vive en Infrastructure (<c>FileManagerAttachmentStorage</c>, sobre
 /// el file-manager de la empresa / S3 vía presigned URLs).
@@ -23,6 +34,18 @@ public interface IAttachmentStorage
         string tipo,
         string originalFilename,
         Stream content,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Registra el archivo en el backend de almacenamiento y devuelve una presigned POST policy para
+    /// que el cliente suba el binario DIRECTO a S3 (no pasa por el request del API; resuelve PDFs
+    /// grandes). El binario aún no existe: el caller sube con la policy y luego registra la metadata
+    /// del adjunto (incl. el SHA-256, que en este flujo lo calcula el cliente).
+    /// </summary>
+    Task<PresignedUpload> CreatePresignedUploadAsync(
+        Guid procedureInstanceId,
+        string tipo,
+        string originalFilename,
         CancellationToken ct = default);
 
     /// <summary>
