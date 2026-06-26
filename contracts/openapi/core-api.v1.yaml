@@ -1753,6 +1753,8 @@ paths:
         a la espera de la validación de identidad asíncrona del cliente (fase 2). Idempotente: si el
         borrador ya estaba finalizado, devuelve el resumen actual sin re-sellar. La radicación real
         (`submit`, Draft→Submitted) sigue exigiendo identidad + FUR + reglas OT.
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
