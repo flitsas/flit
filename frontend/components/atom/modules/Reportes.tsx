@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ModuleTitle } from "./ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { fetchAnalyticsOverview } from "@/lib/api/analytics";
+import { fetchAnalyticsOverview, fetchTopProducers } from "@/lib/api/analytics";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
@@ -13,12 +13,21 @@ import type {
   AnalyticsOverviewResponse,
   CategoryMetrics,
   CompanyListItem,
+  TopProducer,
 } from "@/lib/api/types";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { CategoryDonut } from "./_reportes/CategoryDonut";
+import { ProductivityCards } from "./_reportes/ProductivityCards";
+import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
 import { CATEGORY_META, CATEGORY_ORDER } from "./_reportes/categories";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
+
+/** Segmento seleccionado en un donut → abre el detalle lateral (HU #10248, AC1). */
+interface SelectedSegment {
+  category: AnalyticsCategory;
+  status?: string;
+}
 
 /** Traduce un fallo de la API a un mensaje accionable para el usuario (AC3). */
 function describeError(error: unknown): string {
@@ -58,6 +67,15 @@ export function Reportes() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Top 5 productividad (HU #10248, AC2) — carga independiente del overview.
+  const [producers, setProducers] = useState<TopProducer[]>([]);
+  const [producersStatus, setProducersStatus] = useState<UiStatus>("loading");
+  const [producersError, setProducersError] = useState<string>();
+  const [producersReloadKey, setProducersReloadKey] = useState(0);
+
+  // Segmento seleccionado → panel lateral del detalle (HU #10248, AC1).
+  const [segment, setSegment] = useState<SelectedSegment | null>(null);
 
   // Rol del usuario en cliente (el token solo existe tras el montaje).
   useEffect(() => {
@@ -111,6 +129,35 @@ export function Reportes() {
     return () => controller.abort();
   }, [range, tenantId, reloadKey]);
 
+  // Carga del Top 5 productividad. Se redispara igual que el overview.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      if (!isValidRange(range)) {
+        setProducersStatus("empty");
+        return;
+      }
+      setProducersStatus("loading");
+      try {
+        const res = await fetchTopProducers(
+          { from: range.from, to: range.to, limit: 5, tenantId: tenantId || undefined },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setProducers(res.items);
+        setProducersStatus(res.items.length === 0 ? "empty" : "ready");
+      } catch (error) {
+        if (controller.signal.aborted || (error as Error).name === "AbortError") return;
+        setProducersError(describeError(error));
+        setProducersStatus("error");
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [range, tenantId, producersReloadKey]);
+
   const byCategory = useMemo(() => normalizeCategories(data), [data]);
   const totalTramites = useMemo(
     () => CATEGORY_ORDER.reduce((acc, c) => acc + byCategory[c].total, 0),
@@ -118,6 +165,12 @@ export function Reportes() {
   );
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+  const retryProducers = useCallback(() => setProducersReloadKey((k) => k + 1), []);
+  const selectSegment = useCallback(
+    (category: AnalyticsCategory, segmentStatus?: string) => setSegment({ category, status: segmentStatus }),
+    [],
+  );
+  const activeKey = segment ? `${segment.category}:${segment.status ?? ""}` : undefined;
 
   return (
     <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
@@ -161,15 +214,39 @@ export function Reportes() {
               ))}
             </div>
 
-            {/* Gráficos circulares por categoría */}
+            {/* Gráficos circulares por categoría (segmentos clicables → detalle lateral) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {CATEGORY_ORDER.map((cat) => (
-                <CategoryDonut key={cat} metrics={byCategory[cat]} />
+                <CategoryDonut
+                  key={cat}
+                  metrics={byCategory[cat]}
+                  onSelect={selectSegment}
+                  activeKey={activeKey}
+                />
               ))}
             </div>
+
+            {/* Top 5 productividad con multiselect */}
+            <ProductivityCards
+              producers={producers}
+              status={producersStatus}
+              errorMessage={producersError}
+              onRetry={retryProducers}
+            />
           </div>
         </UiStateBoundary>
       </div>
+
+      {segment && (
+        <ProcedureDetailPanel
+          key={activeKey}
+          category={segment.category}
+          status={segment.status}
+          range={range}
+          tenantId={tenantId || undefined}
+          onClose={() => setSegment(null)}
+        />
+      )}
     </div>
   );
 }

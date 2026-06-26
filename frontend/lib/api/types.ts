@@ -198,6 +198,59 @@ export interface AnalyticsOverviewParams {
   tenantId?: string;
 }
 
+/** Productividad de un radicador en el periodo (RF07). */
+export interface TopProducer {
+  userId: string;
+  displayName: string;
+  submittedCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+}
+
+/** Respuesta de GET /api/v1/analytics/productivity/top (HU #10243). */
+export interface TopProducersResponse {
+  items: TopProducer[];
+}
+
+/** Query params del Top de productividad. */
+export interface TopProducersParams {
+  from: string;
+  to: string;
+  limit?: number;
+  tenantId?: string;
+}
+
+/** Fila del detalle de trámites (RF04, RF05). */
+export interface ProcedureDetail {
+  id: string;
+  referenceNumber: string;
+  procedureTypeName: string;
+  category: AnalyticsCategory;
+  status: string;
+  createdByDisplayName: string;
+  submittedAt?: string | null;
+  completedAt?: string | null;
+}
+
+/** Página de detalle de trámites de GET /api/v1/analytics/procedures (HU #10244). */
+export interface ProcedureDetailsPage {
+  items: ProcedureDetail[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Query params del detalle paginado. */
+export interface ProcedureDetailsParams {
+  from: string;
+  to: string;
+  category?: AnalyticsCategory;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+  tenantId?: string;
+}
+
 /** Error de validación tipado para flujos 422 (AC2/AC3). */
 export class ApiValidationError extends Error {
   constructor(
