@@ -42,7 +42,7 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
 
   const handleNav = (m: ModuleId) => {
     if (m === 'tramites') router.push('/tramites');
-    else router.push('/');
+    else router.push(`/?m=${m}`);
   };
 
   const handleLogout = () => {
