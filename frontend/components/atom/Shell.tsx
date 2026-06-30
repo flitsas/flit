@@ -69,20 +69,11 @@ function useTheme() {
 }
 
 function useCurrentUser() {
-  const [user, setUser] = useState<{
-    displayName: string;
-    email: string;
-    roleLabel: string;
-    isSuperAdmin: boolean;
-    isAdminCompany: boolean;
-  } | null>(null);
-
-  useEffect(() => {
-    const token =
-      typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
+  const [user] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
     const payload = decodeJwtPayload(token);
-    if (!payload) return;
-
+    if (!payload) return null;
     const roleCode =
       (payload.role_code as string | undefined) ?? (payload.role as string | undefined) ?? "";
     const roleLabel =
@@ -91,9 +82,7 @@ function useCurrentUser() {
         : roleCode === "AdminCompany"
           ? "Admin de Compañía"
           : roleCode || "Usuario";
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUser({
+    return {
       displayName:
         (payload.display_name as string | undefined) ??
         (payload.email as string | undefined) ??
@@ -102,9 +91,8 @@ function useCurrentUser() {
       roleLabel,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
-    });
-  }, []);
-
+    };
+  });
   return user;
 }
 

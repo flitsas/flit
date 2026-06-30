@@ -65,6 +65,14 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapGet("/monthly-trend", GetMonthlyTrendAsync)
+            .WithName("AnalyticsMonthlyTrend")
+            .WithSummary("Tendencia mensual de trámites por categoría (últimos N meses)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 
@@ -79,8 +87,10 @@ public static class AnalyticsEndpoints
         if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
+        // Guid.Empty es el centinela de "vista global" (SuperAdmin sin tenant) → null para el handler.
+        Guid? effectiveTenant = (tenant == Guid.Empty) ? null : tenant;
         var (result, err) = await handler.HandleAsync(
-            new GetAnalyticsOverviewQuery(tenant, from, to), ct);
+            new GetAnalyticsOverviewQuery(effectiveTenant, from, to), ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(result);
     }
@@ -97,8 +107,10 @@ public static class AnalyticsEndpoints
         if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
+        // Guid.Empty es el centinela de "vista global" (SuperAdmin sin tenant) → null para el handler.
+        Guid? effectiveTenant = (tenant == Guid.Empty) ? null : tenant;
         var (items, err) = await handler.HandleAsync(
-            new GetTopProducersQuery(tenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit), ct);
+            new GetTopProducersQuery(effectiveTenant, from, to, limit ?? GetTopProducersHandler.DefaultLimit), ct);
 
         return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
     }
@@ -119,6 +131,10 @@ public static class AnalyticsEndpoints
 
         if (!TryResolveEffectiveTenant(httpContext.User, request.TenantId, out var tenant, out var error))
             return error!;
+
+        if (tenant == Guid.Empty)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "Este endpoint requiere especificar un tenantId: el SuperAdmin debe indicar la compañía.");
 
         var (pdf, err) = await handler.HandleAsync(
             new ExportExecutivePdfQuery(tenant, request.From.Value, request.To.Value), ct);
@@ -141,6 +157,10 @@ public static class AnalyticsEndpoints
     {
         if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
+
+        if (tenant == Guid.Empty)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "Este endpoint requiere especificar un tenantId: el SuperAdmin debe indicar la compañía.");
 
         var (filter, err) = ExportProceduresExcelHandler.Validate(
             new ExportProceduresExcelQuery(tenant, from, to, category, status));
@@ -169,6 +189,10 @@ public static class AnalyticsEndpoints
         if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
+        if (tenant == Guid.Empty)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "Este endpoint requiere especificar un tenantId: el SuperAdmin debe indicar la compañía.");
+
         var (result, err) = await handler.HandleAsync(
             new GetProcedureDetailsQuery(
                 tenant, from, to, category, status,
@@ -178,9 +202,52 @@ public static class AnalyticsEndpoints
         return err is "invalid_range" ? InvalidRange() : Results.Ok(result);
     }
 
+    private static async Task<IResult> GetMonthlyTrendAsync(
+        HttpContext httpContext,
+        DateOnly from,
+        DateOnly to,
+        GetMonthlyTrendHandler handler,
+        CancellationToken ct,
+        [FromQuery] Guid? tenantId = null)
+    {
+        var isSuperAdmin = httpContext.User.IsInRole(AdminAuthorization.SuperAdminRole);
+
+        Guid? effectiveTenant;
+        if (tenantId is { } requested && requested != Guid.Empty)
+        {
+            // tenantId explícito: validar acceso.
+            if (!isSuperAdmin)
+            {
+                if (!TryResolveTenantId(httpContext.User, out var claimTenant) || requested != claimTenant)
+                    return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
+                        detail: "No está autorizado para consultar métricas de otro tenant.");
+            }
+            effectiveTenant = requested;
+        }
+        else if (isSuperAdmin)
+        {
+            // SuperAdmin sin tenantId → vista global de todas las compañías.
+            effectiveTenant = null;
+        }
+        else
+        {
+            // Usuario normal: usa tenant del token.
+            if (!TryResolveTenantId(httpContext.User, out var claimTenant))
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                    detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
+            effectiveTenant = claimTenant;
+        }
+
+        var (items, err) = await handler.HandleAsync(new GetMonthlyTrendQuery(effectiveTenant, from, to), ct);
+        return err is "invalid_range" ? InvalidRange() : Results.Ok(new { items });
+    }
+
     /// <summary>
     /// AC1: usa el tenant del token. AC2: el SuperAdmin puede fijar otro tenant por query.
-    /// Tenant Admin que pida un tenant ajeno → 403; ausencia total de tenant → 400.
+    /// Tenant Admin que pida un tenant ajeno → 403; ausencia total de tenant en usuario no-SuperAdmin → 400.
+    /// SuperAdmin sin tenant en query ni en token → devuelve <see cref="Guid.Empty"/> como centinela de
+    /// vista global ("todas las compañías"); los callers que no soporten vista global deben agregar
+    /// un guard explícito (→ 400 descriptivo) antes de pasar al handler.
     /// </summary>
     private static bool TryResolveEffectiveTenant(
         ClaimsPrincipal user, Guid? tenantIdQuery, out Guid tenant, out IResult? error)
@@ -215,6 +282,9 @@ public static class AnalyticsEndpoints
             tenant = claimTenant;
             return true;
         }
+
+        // SuperAdmin sin tenant en query ni en token → vista global (Guid.Empty = todas las compañías).
+        if (isSuperAdmin) { tenant = Guid.Empty; return true; }
 
         error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
