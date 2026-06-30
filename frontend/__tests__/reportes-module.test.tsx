@@ -117,6 +117,27 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
     // Categoría sin datos muestra su nota vacía.
     expect(screen.getByTestId("donut-empty-otros")).toBeInTheDocument();
   });
+
+  it("Vehicular: pinta la categoría como donut de primer nivel (HU #10433)", async () => {
+    const withVehicular: AnalyticsOverviewResponse = {
+      ...FULL,
+      categories: [
+        { category: "matriculas", total: 10, byStatus: [{ status: "submitted", count: 10 }] },
+        { category: "traspasos", total: 0, byStatus: [] },
+        { category: "vehicular", total: 45, byStatus: [{ status: "submitted", count: 45 }] },
+        { category: "otros", total: 0, byStatus: [] },
+      ],
+    };
+    mocks.fetchAnalyticsOverview.mockResolvedValue(withVehicular);
+
+    render(<Reportes />);
+
+    await screen.findByText("Total trámites");
+    // total = 10 + 0 + 45 + 0 (vehicular ya NO se pierde en "otros")
+    expect(screen.getByText("55")).toBeInTheDocument();
+    // La categoría Vehicular aparece como tarjeta/donut con su etiqueta de marca.
+    expect(screen.getAllByText("Vehicular").length).toBeGreaterThan(0);
+  });
 });
 
 describe("Reportes — AC1 acceso por rol", () => {

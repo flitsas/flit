@@ -45,6 +45,7 @@ function normalizeCategories(data: AnalyticsOverviewResponse | null): Record<Ana
   const base: Record<AnalyticsCategory, CategoryMetrics> = {
     matriculas: { category: "matriculas", total: 0, byStatus: [] },
     traspasos: { category: "traspasos", total: 0, byStatus: [] },
+    vehicular: { category: "vehicular", total: 0, byStatus: [] },
     otros: { category: "otros", total: 0, byStatus: [] },
   };
   for (const cat of data?.categories ?? []) {

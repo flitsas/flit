@@ -105,6 +105,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid otTenantId,
         Guid procedureInstanceId,
         Guid? approvedBy,
+        string source,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -113,6 +114,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             ProcedureInstanceStatus.ApprovedOt,
             approvedBy,
             reason: null,
+            source,
             cancellationToken);
 
     public Task<OtClientProcedure?> RejectAsync(
@@ -120,6 +122,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid procedureInstanceId,
         string reason,
         Guid? rejectedBy,
+        string source,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -128,6 +131,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             ProcedureInstanceStatus.RejectedOt,
             rejectedBy,
             reason,
+            source,
             cancellationToken);
 
     private async Task<OtClientProcedure?> TransitionAsync(
@@ -137,6 +141,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string targetStatus,
         Guid? changedBy,
         string? reason,
+        string source,
         CancellationToken cancellationToken)
     {
         var accessible = await ExecuteOtScopedAsync(
@@ -190,6 +195,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     {
                         ot_tenant_id = otTenantId,
                         approver_tenant_id = otTenantId,
+                        source,
                     }),
                 });
 

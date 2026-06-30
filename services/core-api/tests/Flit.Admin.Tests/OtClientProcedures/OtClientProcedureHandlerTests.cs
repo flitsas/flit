@@ -3,6 +3,7 @@ using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -206,6 +207,87 @@ public sealed class OtClientProcedureHandlerTests
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery { OtTenantId = OtTenant }, TestContext.Current.CancellationToken);
 
         result.Data.Should().BeEmpty();
+    }
+
+    [Fact] // HU #10432 AC1 — transición manual: source=ot_admin + changed_by sellado
+    public async Task Approve_ManualSource_RecordsOtAdminAndChangedBy()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx);
+        var updated = await repo.ApproveAsync(
+            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        updated.Should().NotBeNull();
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        history.ToStatus.Should().Be(ProcedureInstanceStatus.ApprovedOt);
+        history.ChangedBy.Should().Be(Approver);
+        history.Metadata.Should().Contain("source").And.Contain(OtTransitionSource.OtAdmin);
+    }
+
+    [Fact] // HU #10432 AC1 — transición por webhook: source=quipux_webhook, changed_by null (sistema)
+    public async Task Reject_WebhookSource_RecordsQuipuxWebhookAndNullChangedBy()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx);
+        var updated = await repo.RejectAsync(
+            OtTenant, procedureId, "Rechazado vía integración Quipux", rejectedBy: null,
+            OtTransitionSource.QuipuxWebhook, TestContext.Current.CancellationToken);
+
+        updated.Should().NotBeNull();
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        history.ToStatus.Should().Be(ProcedureInstanceStatus.RejectedOt);
+        history.ChangedBy.Should().BeNull();
+        history.Metadata.Should().Contain("source").And.Contain(OtTransitionSource.QuipuxWebhook);
+    }
+
+    [Fact] // HU #10432 AC2 (negativo) — transición inválida (origen != pending_ot) no inserta fila
+    public async Task Approve_WhenNotPendingOt_ReturnsNullAndNoHistory()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.Submitted);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx);
+        var updated = await repo.ApproveAsync(
+            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        updated.Should().BeNull();
+        await using var verify = NewContext(db);
+        var hasHistory = await verify.ProcedureInstanceStatusHistories
+            .AnyAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        hasHistory.Should().BeFalse();
     }
 
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)

@@ -208,15 +208,23 @@ public sealed class FinalizeDraftProcedureInstanceTests
         instance.DraftFinalizedAt = DateTimeOffset.UtcNow;
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Tipo = "fur",
-            StoragePath = "p/fur", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "fur",
+            StoragePath = "p/fur",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
 
         var typeRepo = Substitute.For<IProcedureTypeRepository>();
         typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(new ProcedureType
         {
-            Id = instance.ProcedureTypeId, Code = "X", Name = "X", Family = "matriculas",
-            PublicationStatus = PublicationStatus.Published, CreatedAt = DateTimeOffset.UtcNow,
+            Id = instance.ProcedureTypeId,
+            Code = "X",
+            Name = "X",
+            Family = "matriculas",
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
 
@@ -224,7 +232,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
             NullTransitOfficeGrantGate.Instance);
 
-        var (_, error) = await submit.HandleAsync(id, tenant, ct);
+        var (_, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().Be("identidad_requerida");
         instance.Status.Should().Be(ProcedureInstanceStatus.Draft);
@@ -240,22 +248,38 @@ public sealed class FinalizeDraftProcedureInstanceTests
         instance.DraftFinalizedAt = DateTimeOffset.UtcNow;
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Tipo = "fur",
-            StoragePath = "p/fur", UploadedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "fur",
+            StoragePath = "p/fur",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Parte = "comprador",
-            Estado = BiometricEstados.Aprobado, Nombre = "Ana", TipoDoc = "CC", Documento = "1020304050",
-            Email = "ana@x.com", TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Parte = "comprador",
+            Estado = BiometricEstados.Aprobado,
+            Nombre = "Ana",
+            TipoDoc = "CC",
+            Documento = "1020304050",
+            Email = "ana@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
 
         var typeRepo = Substitute.For<IProcedureTypeRepository>();
         typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(new ProcedureType
         {
-            Id = instance.ProcedureTypeId, Code = "X", Name = "X", Family = "matriculas",
-            PublicationStatus = PublicationStatus.Published, CreatedAt = DateTimeOffset.UtcNow,
+            Id = instance.ProcedureTypeId,
+            Code = "X",
+            Name = "X",
+            Family = "matriculas",
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
 
@@ -263,7 +287,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
             NullTransitOfficeGrantGate.Instance);
 
-        var (result, error) = await submit.HandleAsync(id, tenant, ct);
+        var (result, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);

@@ -7,105 +7,132 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Lectura de los agregados analíticos (schema <c>analytics</c>, HU #10153/#10240) para el dashboard
-/// (HU #10243). Cada consulta fija <c>app.current_tenant_id</c> con <c>set_config(..., is_local := true)</c>
-/// (parametrizado, sin concatenar SQL) dentro de una transacción para respetar RLS — incluido el caso
-/// SuperAdmin consultando otro tenant. La normalización de categoría (family → matriculas/traspasos/otros)
-/// se hace en SQL para que el GROUP BY sea consistente con el contrato del frontend.
-/// Para vista global (SuperAdmin, tenantId = null): la conexión se abre directamente sin GUC; el owner
-/// bypasea RLS porque la tabla NO tiene FORCE ROW LEVEL SECURITY.
+/// Lectura analítica EN VIVO desde las tablas operacionales del módulo de trámites (schema
+/// <c>tramites</c>) e <c>identity</c> — HU #10430 / ADR-0021 (Opción C: una sola fuente de verdad; se
+/// eliminaron los agregados <c>analytics.*</c>). Por tenant: se fija <c>app.current_tenant_id</c> con
+/// <c>set_config(..., is_local := true)</c> (parametrizado, sin concatenar SQL) dentro de una transacción
+/// y la consulta filtra explícitamente por <c>tenant_id</c>. Vista global (SuperAdmin, tenantId = null):
+/// se omite el filtro de tenant y se ejecuta sin GUC; el rol de conexión no está sujeto a RLS (las tablas
+/// <c>tramites.*</c> no tienen FORCE ROW LEVEL SECURITY), por lo que agrega todas las compañías. La
+/// normalización de categoría (family → matriculas/traspasos/vehicular/otros) se hace en SQL para que el
+/// GROUP BY sea consistente con el contrato del frontend.
 /// </summary>
 internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 {
     // ── Overview ────────────────────────────────────────────────────────────────────────────────────
 
+    // En vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango de creación.
+    // La versión global omite el filtro de tenant (SuperAdmin: todas las compañías).
     private const string OverviewSql = """
         SELECT
             CASE
-                WHEN upper(procedure_category) = 'MATRICULAS' THEN 'matriculas'
-                WHEN upper(procedure_category) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                 ELSE 'otros'
             END AS category,
-            status,
-            SUM(count)::int AS total
-        FROM analytics.procedure_metrics_daily
-        WHERE tenant_id = @tenant AND metric_date BETWEEN @from AND @to
-        GROUP BY 1, status
-        ORDER BY 1, status;
+            pi.status,
+            count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.tenant_id = @tenant
+          AND pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, pi.status
+        ORDER BY 1, pi.status;
         """;
 
     private const string OverviewGlobalSql = """
         SELECT
             CASE
-                WHEN upper(procedure_category) = 'MATRICULAS' THEN 'matriculas'
-                WHEN upper(procedure_category) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                 ELSE 'otros'
             END AS category,
-            status,
-            SUM(count)::int AS total
-        FROM analytics.procedure_metrics_daily
-        WHERE metric_date BETWEEN @from AND @to
-        GROUP BY 1, status
-        ORDER BY 1, status;
+            pi.status,
+            count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, pi.status
+        ORDER BY 1, pi.status;
         """;
 
     // ── Top Producers ────────────────────────────────────────────────────────────────────────────────
 
+    // En vivo desde status_history (misma semántica que el extinto refresh: submitted; approved =
+    // approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING preserva el contrato previo
+    // (solo usuarios con al menos una radicación en el rango). Requiere changed_by poblado (HU #10431).
     private const string TopProducersSql = """
-        SELECT up.user_id, u.display_name,
-               SUM(up.submitted_count)::int AS submitted,
-               SUM(up.approved_count)::int  AS approved,
-               SUM(up.rejected_count)::int  AS rejected
-        FROM analytics.user_productivity_daily up
-        JOIN identity.users u ON u.id = up.user_id
-        WHERE up.tenant_id = @tenant AND up.metric_date BETWEEN @from AND @to
-        GROUP BY up.user_id, u.display_name
-        ORDER BY SUM(up.submitted_count) DESC, u.display_name ASC
+        SELECT h.changed_by AS user_id, u.display_name,
+               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+        FROM tramites.procedure_instance_status_history h
+        JOIN identity.users u ON u.id = h.changed_by
+        WHERE h.tenant_id = @tenant
+          AND h.changed_by IS NOT NULL
+          AND h.changed_at::date BETWEEN @from AND @to
+        GROUP BY h.changed_by, u.display_name
+        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 
     private const string TopProducersGlobalSql = """
-        SELECT up.user_id, u.display_name,
-               SUM(up.submitted_count)::int AS submitted,
-               SUM(up.approved_count)::int  AS approved,
-               SUM(up.rejected_count)::int  AS rejected
-        FROM analytics.user_productivity_daily up
-        JOIN identity.users u ON u.id = up.user_id
-        WHERE up.metric_date BETWEEN @from AND @to
-        GROUP BY up.user_id, u.display_name
-        ORDER BY SUM(up.submitted_count) DESC, u.display_name ASC
+        SELECT h.changed_by AS user_id, u.display_name,
+               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+        FROM tramites.procedure_instance_status_history h
+        JOIN identity.users u ON u.id = h.changed_by
+        WHERE h.changed_by IS NOT NULL
+          AND h.changed_at::date BETWEEN @from AND @to
+        GROUP BY h.changed_by, u.display_name
+        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 
     // ── Monthly Trend ─────────────────────────────────────────────────────────────────────────────────
 
+    // En vivo: trámites por año/mes/categoría a partir de la fecha de creación. La versión global omite
+    // el filtro de tenant (SuperAdmin).
     private const string MonthlyTrendWithTenantSql = """
-        SELECT EXTRACT(YEAR FROM metric_date)::int  AS year,
-               EXTRACT(MONTH FROM metric_date)::int AS month,
+        SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
+               EXTRACT(MONTH FROM pi.created_at)::int AS month,
                CASE
-                   WHEN upper(procedure_category) = 'MATRICULAS' THEN 'matriculas'
-                   WHEN upper(procedure_category) = 'TRASPASO'   THEN 'traspasos'
+                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                    ELSE 'otros'
                END AS category,
-               SUM(count)::int AS total
-        FROM analytics.procedure_metrics_daily
-        WHERE tenant_id = @tenant
-          AND metric_date BETWEEN @from AND @to
+               count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.tenant_id = @tenant
+          AND pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
         GROUP BY 1, 2, 3
         ORDER BY 1, 2, 3;
         """;
 
     private const string MonthlyTrendGlobalSql = """
-        SELECT EXTRACT(YEAR FROM metric_date)::int  AS year,
-               EXTRACT(MONTH FROM metric_date)::int AS month,
+        SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
+               EXTRACT(MONTH FROM pi.created_at)::int AS month,
                CASE
-                   WHEN upper(procedure_category) = 'MATRICULAS' THEN 'matriculas'
-                   WHEN upper(procedure_category) = 'TRASPASO'   THEN 'traspasos'
+                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                    ELSE 'otros'
                END AS category,
-               SUM(count)::int AS total
-        FROM analytics.procedure_metrics_daily
-        WHERE metric_date BETWEEN @from AND @to
+               count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
         GROUP BY 1, 2, 3
         ORDER BY 1, 2, 3;
         """;
@@ -121,6 +148,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                    CASE
                        WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
                        WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                       WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                        ELSE 'otros'
                    END AS category,
                    pi.status,
@@ -165,11 +193,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             }, ct).ConfigureAwait(false);
         }
 
-        // SuperAdmin global: consulta sin GUC → owner bypasea RLS (no hay FORCE ROW LEVEL SECURITY).
-        var conn = _context.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(ct).ConfigureAwait(false);
-
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
         await using var globalCmd = CreateCommand(conn, null!, OverviewGlobalSql);
         AddParam(globalCmd, "from", fromDate);
         AddParam(globalCmd, "to", toDate);
@@ -192,11 +217,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             }, ct).ConfigureAwait(false);
         }
 
-        // SuperAdmin global: consulta sin GUC → owner bypasea RLS (no hay FORCE ROW LEVEL SECURITY).
-        var conn = _context.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(ct).ConfigureAwait(false);
-
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
         await using var globalCmd = CreateCommand(conn, null!, TopProducersGlobalSql);
         AddParam(globalCmd, "from", fromDate);
         AddParam(globalCmd, "to", toDate);
@@ -218,13 +240,13 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(countCmd, "status", (object?)status ?? DBNull.Value);
             var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
-            // 2) Página solicitada (más recientes primero).
+            // 2) Página solicitada (más recientes primero). Desempate por id (PK única): ORDER BY
+            // created_at solo no es determinista con timestamps repetidos → paginación estable, sin
+            // filas duplicadas entre páginas.
             await using var pageCmd = CreateCommand(conn, tx, DetailsBaseCte +
                 " SELECT id, reference_number, procedure_type_name, category, status," +
                 " created_by_display_name, submitted_at, completed_at" +
                 " FROM base" + DetailsFilter +
-                // Desempate por id (PK única): ORDER BY created_at solo no es determinista
-                // cuando hay timestamps repetidos → paginación estable sin filas duplicadas entre páginas.
                 " ORDER BY created_at DESC, id DESC LIMIT @pageSize OFFSET @offset;");
             AddParam(pageCmd, "tenant", tenantId);
             AddParam(pageCmd, "from", fromDate);
@@ -270,7 +292,6 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(cmd, "category", (object?)category ?? DBNull.Value);
             AddParam(cmd, "status", (object?)status ?? DBNull.Value);
 
-            // CommandBehavior.SequentialAccess: el lector no bufferiza filas → memoria acotada.
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
@@ -291,7 +312,6 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     {
         if (tenantId.HasValue)
         {
-            // Consulta con RLS (tenant específico).
             return await ExecuteWithTenantAsync(tenantId.Value, async (conn, tx) =>
             {
                 await using var cmd = CreateCommand(conn, tx, MonthlyTrendWithTenantSql);
@@ -302,11 +322,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             }, ct).ConfigureAwait(false);
         }
 
-        // SuperAdmin global: consulta sin GUC → owner bypasea RLS (no hay FORCE ROW LEVEL SECURITY).
-        var conn = _context.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(ct).ConfigureAwait(false);
-
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
         await using var globalCmd = CreateCommand(conn, null!, MonthlyTrendGlobalSql);
         AddParam(globalCmd, "from", fromDate);
         AddParam(globalCmd, "to", toDate);
@@ -408,6 +425,15 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                 return result;
             }
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>Conexión abierta (sin transacción ni GUC) para las consultas globales del SuperAdmin.</summary>
+    private async Task<DbConnection> OpenGlobalConnectionAsync(CancellationToken ct)
+    {
+        var conn = _context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+        return conn;
     }
 
     private static DbCommand CreateCommand(DbConnection conn, DbTransaction tx, string sql)

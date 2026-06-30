@@ -170,5 +170,13 @@ public interface IProcedureInstanceRepository
 
     Task UpdateAsync(ProcedureInstance instance, CancellationToken ct = default);
     void RemoveAttachment(ProcedureInstanceAttachment attachment);
+
+    /// <summary>
+    /// <c>true</c> si existe un usuario con ese id en <c>identity.users</c>. Usado como guarda FK
+    /// antes de sellar <c>changed_by</c> en <c>status_history</c> (HU #10431): si el sujeto no existe
+    /// (proceso automático o <c>sub</c> inválido), el llamador resuelve <c>changed_by</c> a null.
+    /// </summary>
+    Task<bool> UserExistsAsync(Guid userId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }
