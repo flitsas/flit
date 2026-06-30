@@ -16,7 +16,7 @@ public sealed class BiometricRulesVigenciaTests
     private static readonly DateTimeOffset Aprobacion = new(2026, 6, 20, 10, 0, 0, TimeSpan.FromHours(-5));
 
     private static ProcedureInstanceBiometricValidation Aprobada(DateTimeOffset? validadoAt) =>
-        new() { Estado = BiometricEstados.Aprobado, ValidadoAt = validadoAt };
+        new() { Status = BiometricEstados.Aprobado, ValidatedAt = validadoAt };
 
     [Fact]
     public void FechaFinVigencia_EsElDiaDeAprobacionMas30()
@@ -32,6 +32,21 @@ public sealed class BiometricRulesVigenciaTests
     public void FechaFinVigencia_SinAprobacion_EsNull()
     {
         BiometricRules.FechaFinVigencia(Aprobada(validadoAt: null)).Should().BeNull();
+    }
+
+    [Fact]
+    public void Aprobar_SeteaEstadoFechaYEstampaVigencia()
+    {
+        var v = new ProcedureInstanceBiometricValidation();
+
+        v.Approve(Aprobacion);
+
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.ValidatedAt.Should().Be(Aprobacion);
+        v.UpdatedAt.Should().Be(Aprobacion);
+        // Estampa el fin de vigencia = día de aprobación + 30 (medianoche Colombia).
+        v.ValidUntil.Should().NotBeNull();
+        v.ValidUntil!.Value.ToOffset(TimeSpan.FromHours(-5)).Date.Should().Be(new DateTime(2026, 7, 20));
     }
 
     [Fact]

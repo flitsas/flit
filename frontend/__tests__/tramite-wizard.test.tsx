@@ -147,8 +147,8 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
-  mocks.simulateBiometric.mockResolvedValue({ id: 'bio-1', estado: 'aprobado' });
-  mocks.iniciarBiometric.mockResolvedValue({ validation: { id: 'bio-1', estado: 'en_proceso' } });
+  mocks.simulateBiometric.mockResolvedValue({ id: 'bio-1', status: 'aprobado' });
+  mocks.iniciarBiometric.mockResolvedValue({ validation: { id: 'bio-1', status: 'en_proceso' } });
   mocks.listBiometric.mockResolvedValue([]);
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);

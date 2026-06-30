@@ -12,15 +12,15 @@ public sealed class ProcedureInstanceBiometricValidation
     public Guid ProcedureInstanceId { get; set; }
 
     /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial (única parte = comprador).</summary>
-    public string? Parte { get; set; }
+    public string? PartyRole { get; set; }
 
-    public string Nombre { get; set; } = string.Empty;
-    public string TipoDoc { get; set; } = string.Empty;
-    public string Documento { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string DocumentType { get; set; } = string.Empty;
+    public string DocumentNumber { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
 
     /// <summary>enviado | en_proceso | aprobado | rechazado | expirado.</summary>
-    public string Estado { get; set; } = BiometricEstados.Enviado;
+    public string Status { get; set; } = BiometricEstados.Enviado;
 
     /// <summary>SHA-256 (hex) del token enviado por magic-link. El token crudo nunca se persiste.</summary>
     public string TokenHash { get; set; } = string.Empty;
@@ -48,21 +48,46 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>Payload del proveedor SANITIZADO (sin PII cruda ni secretos), en jsonb. Trazabilidad.</summary>
     public string? ProviderPayload { get; set; }
 
-    public int Intentos { get; set; }
-    public int MaxIntentos { get; set; } = BiometricRules.MaxIntentos;
+    public int Attempts { get; set; }
+    public int MaxAttempts { get; set; } = BiometricRules.MaxIntentos;
 
     public int? Score { get; set; }
-    public string? Detalle { get; set; }
+    public string? Detail { get; set; }
 
-    public string? FotoRostroPath { get; set; }
-    public string? FotoCedulaFrontalPath { get; set; }
-    public string? FotoCedulaReversoPath { get; set; }
+    public string? FacePhotoPath { get; set; }
+    public string? IdFrontPhotoPath { get; set; }
+    public string? IdBackPhotoPath { get; set; }
 
-    public DateTimeOffset? ValidadoAt { get; set; }
+    public DateTimeOffset? ValidatedAt { get; set; }
+
+    /// <summary>
+    /// Fecha de fin de vigencia de la identidad APROBADA: medianoche (hora Colombia, UTC-5) del día
+    /// <c>ValidatedAt + VigenciaDias</c>. La ESTAMPA el código al aprobar (ver <see cref="Approve"/>), NO la
+    /// BD — es un valor absoluto que solo depende de <c>ValidatedAt</c>. NULL mientras no haya aprobación.
+    /// Los "días restantes" NO se persisten: se calculan al leer con
+    /// <see cref="BiometricRules.DiasRestantesVigencia"/> (siempre frescos, sin job).
+    /// </summary>
+    public DateTimeOffset? ValidUntil { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public ProcedureInstance? ProcedureInstance { get; set; }
+
+    /// <summary>
+    /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
+    /// ESTAMPA la fecha de fin de vigencia (<c>now + VigenciaDias</c>, medianoche Colombia). Punto ÚNICO de
+    /// aprobación: garantiza que <see cref="ValidUntil"/> quede siempre en sync con <see cref="ValidatedAt"/>
+    /// sin depender de la BD. El reuso de identidad NO usa este método: HEREDA <c>ValidatedAt</c> +
+    /// <c>ValidUntil</c> de la validación fuente (conserva el vencimiento original, no reinicia el reloj).
+    /// </summary>
+    public void Approve(DateTimeOffset now)
+    {
+        Status = BiometricEstados.Aprobado;
+        ValidatedAt = now;
+        ValidUntil = BiometricRules.FechaFinVigencia(now);
+        UpdatedAt = now;
+    }
 }
 
 /// <summary>Proveedores de validación de identidad (HU #10233).</summary>
@@ -154,9 +179,9 @@ public static class BiometricRules
     public static bool EsAprobadaVigente(ProcedureInstanceBiometricValidation validation, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(validation);
-        if (validation.Estado != BiometricEstados.Aprobado)
+        if (validation.Status != BiometricEstados.Aprobado)
             return false;
-        if (validation.ValidadoAt is not { } validadoAt)
+        if (validation.ValidatedAt is not { } validadoAt)
             return true;
         // Día calendario en hora de Colombia (no UTC) para que coincida con el día del gestor.
         var hoy = now.ToOffset(ColombiaUtcOffset).Date;
@@ -172,8 +197,16 @@ public static class BiometricRules
     public static DateTimeOffset? FechaFinVigencia(ProcedureInstanceBiometricValidation validation)
     {
         ArgumentNullException.ThrowIfNull(validation);
-        if (validation.ValidadoAt is not { } validadoAt)
-            return null;
+        return validation.ValidatedAt is { } validadoAt ? FechaFinVigencia(validadoAt) : null;
+    }
+
+    /// <summary>
+    /// Fecha de fin de vigencia para una aprobación en <paramref name="validadoAt"/>: medianoche (hora
+    /// Colombia) del día <c>validadoAt + VigenciaDias</c>. Es el valor que se ESTAMPA en <c>vigencia_hasta</c>
+    /// al aprobar (<see cref="ProcedureInstanceBiometricValidation.Aprobar"/>).
+    /// </summary>
+    public static DateTimeOffset FechaFinVigencia(DateTimeOffset validadoAt)
+    {
         var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
         return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset);
     }
@@ -187,7 +220,7 @@ public static class BiometricRules
     public static int? DiasRestantesVigencia(ProcedureInstanceBiometricValidation validation, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(validation);
-        if (validation.ValidadoAt is not { } validadoAt)
+        if (validation.ValidatedAt is not { } validadoAt)
             return null;
         var hoy = now.ToOffset(ColombiaUtcOffset).Date;
         var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
@@ -209,12 +242,12 @@ public static class BiometricRules
         ProcedureInstanceBiometricValidation validation, string? tipoDoc, string? documento)
     {
         ArgumentNullException.ThrowIfNull(validation);
-        if (string.IsNullOrWhiteSpace(documento) || string.IsNullOrWhiteSpace(validation.Documento))
+        if (string.IsNullOrWhiteSpace(documento) || string.IsNullOrWhiteSpace(validation.DocumentNumber))
             return true;
-        if (!string.Equals(validation.Documento.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(validation.DocumentNumber.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase))
             return false;
-        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(validation.TipoDoc))
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(validation.DocumentType))
             return true;
-        return string.Equals(validation.TipoDoc.Trim(), tipoDoc.Trim(), StringComparison.OrdinalIgnoreCase);
+        return string.Equals(validation.DocumentType.Trim(), tipoDoc.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }

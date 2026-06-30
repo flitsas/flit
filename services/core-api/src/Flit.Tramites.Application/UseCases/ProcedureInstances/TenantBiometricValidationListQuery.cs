@@ -10,11 +10,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed record TenantBiometricValidationListQuery(
     string? ReferenceNumber = null,
     string? Modalidad = null,
-    string? Nombre = null,
-    string? Parte = null,
-    string? TipoDoc = null,
-    string? Documento = null,
-    string? Estado = null,
+    string? Name = null,
+    string? PartyRole = null,
+    string? DocumentType = null,
+    string? DocumentNumber = null,
+    string? Status = null,
     string? Provider = null,
     int? ScoreMin = null,
     int? ScoreMax = null,
@@ -77,10 +77,10 @@ public sealed record TenantBiometricValidationListQuery(
         if (ScoreMin is { } min && ScoreMax is { } max && min > max)
             return "scoreMin no puede ser mayor que scoreMax.";
 
-        if (!string.IsNullOrWhiteSpace(Estado) && !ValidEstados.Contains(Estado.Trim()))
+        if (!string.IsNullOrWhiteSpace(Status) && !ValidEstados.Contains(Status.Trim()))
             return "estado inválido; use enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio o error_envio.";
 
-        if (!string.IsNullOrWhiteSpace(Parte) && !ValidPartes.Contains(Parte.Trim()))
+        if (!string.IsNullOrWhiteSpace(PartyRole) && !ValidPartes.Contains(PartyRole.Trim()))
             return "parte inválida; use comprador o vendedor.";
 
         if (!string.IsNullOrWhiteSpace(Provider) && !ValidProviders.Contains(Provider.Trim()))
@@ -106,11 +106,11 @@ public sealed record TenantBiometricValidationListQuery(
     {
         ReferenceNumber = Trim(ReferenceNumber),
         Modalidad = Trim(Modalidad),
-        Nombre = Trim(Nombre),
-        Parte = Trim(Parte),
-        TipoDoc = Trim(TipoDoc),
-        Documento = Trim(Documento),
-        Estado = Trim(Estado),
+        Name = Trim(Name),
+        PartyRole = Trim(PartyRole),
+        DocumentType = Trim(DocumentType),
+        DocumentNumber = Trim(DocumentNumber),
+        Status = Trim(Status),
         Provider = Trim(Provider),
         ScoreMin = ScoreMin,
         ScoreMax = ScoreMax,

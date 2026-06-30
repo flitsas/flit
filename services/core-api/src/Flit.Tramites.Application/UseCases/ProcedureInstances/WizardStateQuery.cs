@@ -383,7 +383,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         return instance.BiometricValidations.Any(v =>
-            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && BiometricRules.EsAprobadaVigente(v, now)
             && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }

@@ -37,26 +37,26 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
                 o.Attempts,
                 o.OccurredAt,
                 o.CreatedAt,
-                v != null ? v.Nombre : null,
-                v != null ? v.TipoDoc : null,
-                v != null ? v.Documento : null,
+                v != null ? v.Name : null,
+                v != null ? v.DocumentType : null,
+                v != null ? v.DocumentNumber : null,
                 StuckIdentityValidationKinds.Encadenamiento);
 
         // (2) Cola de ENVÍO al proveedor atascada (validaciones en error_envio). La persona sale directa de
         // la propia validación. El "id" de la fila es el de la validación (lo usa el requeue por id).
         var envioQuery =
             from v in db.ProcedureInstanceBiometricValidations.AsNoTracking()
-            where v.TenantId == tenantId && v.Estado == BiometricEstados.ErrorEnvio
+            where v.TenantId == tenantId && v.Status == BiometricEstados.ErrorEnvio
             select new StuckIdentityValidationRow(
                 v.Id,
                 v.Id,
                 EnvioEventType,
-                v.Intentos,
+                v.Attempts,
                 v.UpdatedAt ?? v.CreatedAt,
                 v.CreatedAt,
-                v.Nombre,
-                v.TipoDoc,
-                v.Documento,
+                v.Name,
+                v.DocumentType,
+                v.DocumentNumber,
                 StuckIdentityValidationKinds.Envio);
 
         // Dos consultas (no hay UNION tipado limpio con el LEFT JOIN); se materializan acotadas y se mezclan
@@ -92,13 +92,13 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
         var validation = await db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(v => v.Id == id
                 && v.TenantId == tenantId
-                && v.Estado == BiometricEstados.ErrorEnvio, ct);
+                && v.Status == BiometricEstados.ErrorEnvio, ct);
 
         if (validation is null)
             return false;
 
-        validation.Estado = BiometricEstados.PendienteEnvio;
-        validation.Intentos = 0;
+        validation.Status = BiometricEstados.PendienteEnvio;
+        validation.Attempts = 0;
         validation.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return true;
@@ -115,10 +115,10 @@ internal sealed class IdentityValidationOutboxRepository(FlitDbContext db) : IId
             .ExecuteUpdateAsync(s => s.SetProperty(o => o.Attempts, 0), ct);
 
         var envioRequeued = await db.ProcedureInstanceBiometricValidations
-            .Where(v => v.TenantId == tenantId && v.Estado == BiometricEstados.ErrorEnvio)
+            .Where(v => v.TenantId == tenantId && v.Status == BiometricEstados.ErrorEnvio)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(v => v.Estado, BiometricEstados.PendienteEnvio)
-                .SetProperty(v => v.Intentos, 0)
+                .SetProperty(v => v.Status, BiometricEstados.PendienteEnvio)
+                .SetProperty(v => v.Attempts, 0)
                 .SetProperty(v => v.UpdatedAt, DateTimeOffset.UtcNow), ct);
 
         return outboxRequeued + envioRequeued;

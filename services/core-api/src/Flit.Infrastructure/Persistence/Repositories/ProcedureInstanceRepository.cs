@@ -141,14 +141,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
-                && v.Estado == BiometricEstados.Aprobado
-                && v.ValidadoAt != null
-                && v.ValidadoAt >= cutoff
-                && v.TipoDoc == tipoDoc
-                && v.Documento == documento
+                && v.Status == BiometricEstados.Aprobado
+                && v.ValidatedAt != null
+                && v.ValidatedAt >= cutoff
+                && v.DocumentType == tipoDoc
+                && v.DocumentNumber == documento
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null)
-            .OrderByDescending(v => v.ValidadoAt)
+            .OrderByDescending(v => v.ValidatedAt)
             .Take(10)
             .ToListAsync(ct);
 
@@ -182,7 +182,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         var query = ApplyBiometricValidationFilters(BaseTenantBiometricQuery(tenantId), filter, now);
 
         var rows = await query
-            .GroupBy(v => v.Estado)
+            .GroupBy(v => v.Status)
             .Select(g => new { Estado = g.Key, Count = g.Count() })
             .ToListAsync(ct);
 
@@ -219,43 +219,43 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Nombre))
+        if (!string.IsNullOrWhiteSpace(filter.Name))
         {
-            var term = filter.Nombre.Trim().ToLower();
-            query = query.Where(v => EF.Functions.ILike(v.Nombre.ToLower(), $"%{term}%"));
+            var term = filter.Name.Trim().ToLower();
+            query = query.Where(v => EF.Functions.ILike(v.Name.ToLower(), $"%{term}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Parte))
+        if (!string.IsNullOrWhiteSpace(filter.PartyRole))
         {
-            var parte = filter.Parte.Trim().ToLower();
-            query = query.Where(v => v.Parte != null && v.Parte.ToLower() == parte);
+            var parte = filter.PartyRole.Trim().ToLower();
+            query = query.Where(v => v.PartyRole != null && v.PartyRole.ToLower() == parte);
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.TipoDoc))
+        if (!string.IsNullOrWhiteSpace(filter.DocumentType))
         {
-            var tipoDoc = filter.TipoDoc.Trim().ToLower();
-            query = query.Where(v => v.TipoDoc.ToLower() == tipoDoc);
+            var tipoDoc = filter.DocumentType.Trim().ToLower();
+            query = query.Where(v => v.DocumentType.ToLower() == tipoDoc);
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Documento))
+        if (!string.IsNullOrWhiteSpace(filter.DocumentNumber))
         {
-            var term = filter.Documento.Trim();
-            query = query.Where(v => EF.Functions.ILike(v.Documento, $"%{term}%"));
+            var term = filter.DocumentNumber.Trim();
+            query = query.Where(v => EF.Functions.ILike(v.DocumentNumber, $"%{term}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Estado))
+        if (!string.IsNullOrWhiteSpace(filter.Status))
         {
-            var estado = filter.Estado.Trim().ToLower();
+            var estado = filter.Status.Trim().ToLower();
             if (estado == BiometricEstados.Expirado)
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
                 query = query.Where(v =>
-                    v.Estado == BiometricEstados.Expirado
-                    || (v.Estado != BiometricEstados.Aprobado && v.ExpiresAt < now));
+                    v.Status == BiometricEstados.Expirado
+                    || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
             }
             else
             {
-                query = query.Where(v => v.Estado.ToLower() == estado);
+                query = query.Where(v => v.Status.ToLower() == estado);
             }
         }
 
@@ -289,24 +289,24 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = filter.VigenciaEstado.Trim().ToLowerInvariant() switch
             {
                 BiometricVigenciaEstados.Vigente => query.Where(v =>
-                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null && v.ValidadoAt > corteVigente),
+                    v.Status == BiometricEstados.Aprobado && v.ValidatedAt != null && v.ValidatedAt > corteVigente),
                 BiometricVigenciaEstados.PorVencer => query.Where(v =>
-                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null
-                    && v.ValidadoAt > corteVigente && v.ValidadoAt <= cortePorVencer),
+                    v.Status == BiometricEstados.Aprobado && v.ValidatedAt != null
+                    && v.ValidatedAt > corteVigente && v.ValidatedAt <= cortePorVencer),
                 BiometricVigenciaEstados.Vencida => query.Where(v =>
-                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null && v.ValidadoAt <= corteVigente),
+                    v.Status == BiometricEstados.Aprobado && v.ValidatedAt != null && v.ValidatedAt <= corteVigente),
                 _ => query,
             };
         }
 
         // Rango por fecha de fin de vigencia (validado_at + VigenciaDias) → se desplaza el límite a validado_at.
         if (filter.ExpiraDesde is { } expiraDesde)
-            query = query.Where(v => v.ValidadoAt != null
-                && v.ValidadoAt >= expiraDesde.AddDays(-BiometricRules.VigenciaDias));
+            query = query.Where(v => v.ValidatedAt != null
+                && v.ValidatedAt >= expiraDesde.AddDays(-BiometricRules.VigenciaDias));
 
         if (filter.ExpiraHasta is { } expiraHasta)
-            query = query.Where(v => v.ValidadoAt != null
-                && v.ValidadoAt <= expiraHasta.AddDays(-BiometricRules.VigenciaDias));
+            query = query.Where(v => v.ValidatedAt != null
+                && v.ValidatedAt <= expiraHasta.AddDays(-BiometricRules.VigenciaDias));
 
         // "Vence en ≤ N días": aprobadas AÚN VIGENTES (validado_at > now - VigenciaDias) cuya expiración
         // (validado_at + VigenciaDias) cae dentro de N días ⟺ validado_at <= now + N - VigenciaDias.
@@ -315,8 +315,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
             var corteVenceEn = now.AddDays(venceEnDias - BiometricRules.VigenciaDias);
             query = query.Where(v =>
-                v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null
-                && v.ValidadoAt > corteVigente && v.ValidadoAt <= corteVenceEn);
+                v.Status == BiometricEstados.Aprobado && v.ValidatedAt != null
+                && v.ValidatedAt > corteVigente && v.ValidatedAt <= corteVenceEn);
         }
 
         // NOTA: el filtro `motivoRechazo` NO se aplica aquí. Detalle/ProviderPayload son columnas `jsonb`

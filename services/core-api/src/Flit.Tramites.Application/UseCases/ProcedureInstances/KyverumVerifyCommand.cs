@@ -61,8 +61,8 @@ public sealed class IniciarKyverumVerifyHandler(
             return (null, "not_draft");
 
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
                 or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
         if (existing is not null)
             return (null, "biometria_activa");
@@ -107,16 +107,16 @@ public sealed class IniciarKyverumVerifyHandler(
                 Id = validationId,
                 TenantId = tenantId,
                 ProcedureInstanceId = id,
-                Parte = parte,
-                Nombre = nombre,
-                TipoDoc = tipoDoc,
-                Documento = documento,
+                PartyRole = parte,
+                Name = nombre,
+                DocumentType = tipoDoc,
+                DocumentNumber = documento,
                 Email = email,
-                Estado = BiometricEstados.PendienteEnvio,
+                Status = BiometricEstados.PendienteEnvio,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = queuedAt.AddHours(BiometricRules.TokenTtlHoras),
-                Intentos = 1, // el primer intento (síncrono) ya falló
-                MaxIntentos = BiometricRules.MaxIntentos,
+                Attempts = 1, // el primer intento (síncrono) ya falló
+                MaxAttempts = BiometricRules.MaxIntentos,
                 CreatedAt = queuedAt,
                 Provider = BiometricProviders.Kyverum,
             };
@@ -134,17 +134,17 @@ public sealed class IniciarKyverumVerifyHandler(
             Id = validationId,
             TenantId = tenantId,
             ProcedureInstanceId = id,
-            Parte = parte,
-            Nombre = nombre,
-            TipoDoc = tipoDoc,
-            Documento = documento,
+            PartyRole = parte,
+            Name = nombre,
+            DocumentType = tipoDoc,
+            DocumentNumber = documento,
             Email = email,
-            Estado = BiometricEstados.EnProceso,
+            Status = BiometricEstados.EnProceso,
             // Sin magic-link en Kyverum: token_hash aleatorio para cumplir NOT NULL/único.
             TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
             ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
-            Intentos = 0,
-            MaxIntentos = BiometricRules.MaxIntentos,
+            Attempts = 0,
+            MaxAttempts = BiometricRules.MaxIntentos,
             CreatedAt = now,
             Provider = BiometricProviders.Kyverum,
             KyverumVerificationId = provider.VerificationId,
@@ -245,21 +245,24 @@ public sealed class KyverumWebhookHandler(
             return (null, "cuerpo_invalido");
 
         // Idempotencia: estados terminales no se re-procesan (AC2).
-        if (v.Estado is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
             return ("ok", null);
 
         // El sujeto que corresponde a la parte de esta validación (o el primero).
-        var subject = SelectSubject(payload.Data.Subjects, v.Parte);
+        var subject = SelectSubject(payload.Data.Subjects, v.PartyRole);
         var estado = payload.Data.Aprobado ? BiometricEstados.Aprobado : BiometricEstados.Rechazado;
 
         var now = DateTimeOffset.UtcNow;
-        v.Estado = estado;
+        if (estado == BiometricEstados.Aprobado)
+            v.Approve(now); // estado + validated_at + estampa valid_until + updated_at
+        else
+        {
+            v.Status = estado;
+            v.UpdatedAt = now;
+        }
         v.ProviderStatus = payload.Evento;
         v.ProviderPayload = Sanitize(payload, subject);
         v.Score = subject?.Score;
-        v.UpdatedAt = now;
-        if (estado == BiometricEstados.Aprobado)
-            v.ValidadoAt = now;
 
         await events.PublishAsync(new IdentityValidationCompleted
         {
@@ -267,7 +270,7 @@ public sealed class KyverumWebhookHandler(
             ProcedureInstanceId = v.ProcedureInstanceId,
             ValidationId = v.Id,
             Provider = BiometricProviders.Kyverum,
-            Parte = v.Parte,
+            Parte = v.PartyRole,
             Estado = estado,
             ProviderStatus = payload.Evento,
             Score = subject?.Score,

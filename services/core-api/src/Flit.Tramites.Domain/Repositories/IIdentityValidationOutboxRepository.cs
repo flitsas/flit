@@ -31,9 +31,9 @@ public sealed record StuckIdentityValidationRow(
     int Attempts,
     DateTimeOffset OccurredAt,
     DateTimeOffset CreatedAt,
-    string? Nombre,
-    string? TipoDoc,
-    string? Documento,
+    string? Name,
+    string? DocumentType,
+    string? DocumentNumber,
     string Kind);
 
 /// <summary>

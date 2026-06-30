@@ -106,7 +106,7 @@ public sealed class BiometricaHandlerTests
         error.Should().BeNull();
         result!.Token.Should().NotBeNullOrWhiteSpace();
         result.MagicLinkPath.Should().Be($"/biometric/{result.Token}");
-        result.Validation.Estado.Should().Be(BiometricEstados.Enviado);
+        result.Validation.Status.Should().Be(BiometricEstados.Enviado);
         instance.BiometricValidations.Should().ContainSingle();
         // El hash persistido NO es el token crudo.
         instance.BiometricValidations.Single().TokenHash.Should().NotBe(result.Token);
@@ -168,8 +168,8 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = null,
-            Estado = BiometricEstados.Enviado,
+            PartyRole = null,
+            Status = BiometricEstados.Enviado,
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -195,16 +195,16 @@ public sealed class BiometricaHandlerTests
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureInstanceId = Guid.NewGuid(),
-            Parte = null,
-            Nombre = "Juan",
-            TipoDoc = "CC",
-            Documento = "123",
+            PartyRole = null,
+            Name = "Juan",
+            DocumentType = "CC",
+            DocumentNumber = "123",
             Email = "j@x.com",
-            Estado = estado,
+            Status = estado,
             TokenHash = BiometricToken.Hash(token),
             ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddHours(1),
-            Intentos = intentos,
-            MaxIntentos = maxIntentos,
+            Attempts = intentos,
+            MaxAttempts = maxIntentos,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetBiometricByTokenHashAsync(BiometricToken.Hash(token), Arg.Any<CancellationToken>()).Returns(v);
@@ -223,13 +223,13 @@ public sealed class BiometricaHandlerTests
         error.Should().BeNull();
         result!.Estado.Should().Be(BiometricEstados.Aprobado);
         result.Score.Should().BeGreaterThanOrEqualTo(BiometricRules.ThresholdAprobacion);
-        v.Estado.Should().Be(BiometricEstados.Aprobado);
-        v.ValidadoAt.Should().NotBeNull();
-        v.Intentos.Should().Be(1);
-        v.FotoRostroPath.Should().NotBeNull();
-        v.FotoCedulaFrontalPath.Should().NotBeNull();
-        v.FotoCedulaReversoPath.Should().NotBeNull();
-        v.Detalle.Should().Contain("mock");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.ValidatedAt.Should().NotBeNull();
+        v.Attempts.Should().Be(1);
+        v.FacePhotoPath.Should().NotBeNull();
+        v.IdFrontPhotoPath.Should().NotBeNull();
+        v.IdBackPhotoPath.Should().NotBeNull();
+        v.Detail.Should().Contain("mock");
         _storage.Saved.Should().HaveCount(3);
         await _repo.Received().SaveChangesAsync(ct);
     }
@@ -245,9 +245,9 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Estado.Should().Be(BiometricEstados.Rechazado);
-        v.Estado.Should().Be(BiometricEstados.Rechazado);
-        v.ValidadoAt.Should().BeNull();
-        v.Intentos.Should().Be(1);
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        v.ValidatedAt.Should().BeNull();
+        v.Attempts.Should().Be(1);
         result.Motivo.Should().Contain("cedula_frontal");
     }
 
@@ -262,7 +262,7 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Estado.Should().Be(BiometricEstados.Aprobado);
-        v.Intentos.Should().Be(2);
+        v.Attempts.Should().Be(2);
     }
 
     [Fact]
@@ -288,7 +288,7 @@ public sealed class BiometricaHandlerTests
             token, new CompletarBiometriaInput(Photo(), Photo(), Photo()), ct);
 
         error.Should().Be("expirada");
-        v.Estado.Should().Be(BiometricEstados.Expirado);
+        v.Status.Should().Be(BiometricEstados.Expirado);
     }
 
     [Fact]
@@ -340,7 +340,7 @@ public sealed class BiometricaHandlerTests
         error.Should().BeNull();
         result!.Expired.Should().BeTrue();
         result.Estado.Should().Be(BiometricEstados.Expirado);
-        v.Estado.Should().Be(BiometricEstados.Expirado);
+        v.Status.Should().Be(BiometricEstados.Expirado);
     }
 
     [Fact]
@@ -380,12 +380,12 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "A",
-            TipoDoc = "CC",
-            Documento = "1",
+            PartyRole = "comprador",
+            Name = "A",
+            DocumentType = "CC",
+            DocumentNumber = "1",
             Email = "a@x.com",
-            Estado = BiometricEstados.Aprobado,
+            Status = BiometricEstados.Aprobado,
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -395,7 +395,7 @@ public sealed class BiometricaHandlerTests
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Validations.Should().ContainSingle().Which.Estado.Should().Be(BiometricEstados.Aprobado);
+        result!.Validations.Should().ContainSingle().Which.Status.Should().Be(BiometricEstados.Aprobado);
     }
 
     // ── AC4 (#10234): motivo de rechazo sanitizado en el DTO ─────────────────────
@@ -410,14 +410,14 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "A",
-            TipoDoc = "CC",
-            Documento = "1",
+            PartyRole = "comprador",
+            Name = "A",
+            DocumentType = "CC",
+            DocumentNumber = "1",
             Email = "a@x.com",
-            Estado = BiometricEstados.Rechazado,
-            // Detalle del scorer mock (ya sanitizado, sin PII).
-            Detalle = """{"score":30,"aprobado":false,"motivo":"Faltan fotos: rostro","scorer":"mock"}""",
+            Status = BiometricEstados.Rechazado,
+            // Detail del scorer mock (ya sanitizado, sin PII).
+            Detail = """{"score":30,"aprobado":false,"motivo":"Faltan fotos: rostro","scorer":"mock"}""",
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -428,7 +428,7 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle()
-            .Which.MotivoRechazo.Should().Be("Faltan fotos: rostro");
+            .Which.RejectionReason.Should().Be("Faltan fotos: rostro");
     }
 
     [Fact]
@@ -441,12 +441,12 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "A",
-            TipoDoc = "CC",
-            Documento = "1",
+            PartyRole = "comprador",
+            Name = "A",
+            DocumentType = "CC",
+            DocumentNumber = "1",
             Email = "a@x.com",
-            Estado = BiometricEstados.Rechazado,
+            Status = BiometricEstados.Rechazado,
             Provider = BiometricProviders.Kyverum,
             // Payload sanitizado de Kyverum: el documento no coincide.
             ProviderPayload = """{"status":"rejected","score":20,"coincidencias":{"documento":false,"nombre":true}}""",
@@ -460,7 +460,7 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle()
-            .Which.MotivoRechazo.Should().Be("La verificación del documento no fue exitosa.");
+            .Which.RejectionReason.Should().Be("La verificación del documento no fue exitosa.");
     }
 
     [Fact]
@@ -473,13 +473,13 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "A",
-            TipoDoc = "CC",
-            Documento = "1",
+            PartyRole = "comprador",
+            Name = "A",
+            DocumentType = "CC",
+            DocumentNumber = "1",
             Email = "a@x.com",
-            Estado = BiometricEstados.Aprobado,
-            Detalle = """{"motivo":"no debe filtrarse"}""",
+            Status = BiometricEstados.Aprobado,
+            Detail = """{"motivo":"no debe filtrarse"}""",
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -489,7 +489,7 @@ public sealed class BiometricaHandlerTests
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Validations.Should().ContainSingle().Which.MotivoRechazo.Should().BeNull();
+        result!.Validations.Should().ContainSingle().Which.RejectionReason.Should().BeNull();
     }
 
     // ── Simular (mock, sin fotos) ────────────────────────────────────────────────
@@ -508,13 +508,13 @@ public sealed class BiometricaHandlerTests
         var (result, error) = await _simular.HandleAsync(id, tenant, parte: null, ct);
 
         error.Should().BeNull();
-        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        result!.Status.Should().Be(BiometricEstados.Aprobado);
         result.Score.Should().Be(95);
-        result.Parte.Should().Be("comprador");
-        result.Nombre.Should().Be("Maria Compradora");
-        result.Documento.Should().Be("999");
+        result.PartyRole.Should().Be("comprador");
+        result.Name.Should().Be("Maria Compradora");
+        result.DocumentNumber.Should().Be("999");
         instance.BiometricValidations.Should().ContainSingle()
-            .Which.Detalle.Should().Contain("mock");
+            .Which.Detail.Should().Contain("mock");
         _repo.Received(1).Add(Arg.Any<ProcedureInstanceBiometricValidation>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }
@@ -530,12 +530,12 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Estado = BiometricEstados.Aprobado,
+            PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado,
             Score = 95,
-            Nombre = "Maria Compradora",
-            TipoDoc = "CC",
-            Documento = "999",
+            Name = "Maria Compradora",
+            DocumentType = "CC",
+            DocumentNumber = "999",
             Email = "maria@x.com",
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -546,7 +546,7 @@ public sealed class BiometricaHandlerTests
         var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
 
         error.Should().BeNull();
-        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        result!.Status.Should().Be(BiometricEstados.Aprobado);
         instance.BiometricValidations.Should().ContainSingle(); // no duplica
         _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
         await _repo.DidNotReceive().SaveChangesAsync(ct);
@@ -601,11 +601,11 @@ public sealed class BiometricaHandlerTests
         var rejected = new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Estado = BiometricEstados.Rechazado,
-            Nombre = "Old",
-            TipoDoc = "CC",
-            Documento = "1",
+            PartyRole = "comprador",
+            Status = BiometricEstados.Rechazado,
+            Name = "Old",
+            DocumentType = "CC",
+            DocumentNumber = "1",
             Email = "old@x.com",
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -617,11 +617,11 @@ public sealed class BiometricaHandlerTests
         var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
 
         error.Should().BeNull();
-        result!.Estado.Should().Be(BiometricEstados.Aprobado);
+        result!.Status.Should().Be(BiometricEstados.Aprobado);
         result.Score.Should().Be(95);
         instance.BiometricValidations.Should().ContainSingle(); // reusa, no crea
-        rejected.Estado.Should().Be(BiometricEstados.Aprobado);
-        rejected.Nombre.Should().Be("Maria Compradora"); // datos refrescados del actor
+        rejected.Status.Should().Be(BiometricEstados.Aprobado);
+        rejected.Name.Should().Be("Maria Compradora"); // datos refrescados del actor
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
@@ -643,15 +643,15 @@ public sealed class BiometricaHandlerTests
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureInstanceId = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "Ana",
-            TipoDoc = "CC",
-            Documento = "123456",
+            PartyRole = "comprador",
+            Name = "Ana",
+            DocumentType = "CC",
+            DocumentNumber = "123456",
             Email = "ana@x.com",
-            Estado = estado,
+            Status = estado,
             Provider = provider,
             Score = score,
-            Detalle = detalle,
+            Detail = detalle,
             ProviderPayload = providerPayload,
             TokenHash = "h",
             ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddHours(1),
@@ -699,9 +699,9 @@ public sealed class BiometricaHandlerTests
         var aprobada = result.Validations[0];
         aprobada.ReferenceNumber.Should().Be("TRM-2026-000001");
         aprobada.Modalidad.Should().Be("traspaso");
-        aprobada.Estado.Should().Be(BiometricEstados.Aprobado);
-        aprobada.MotivoRechazo.Should().BeNull();
-        result.Validations[1].MotivoRechazo.Should().Be("La verificación del documento no fue exitosa.");
+        aprobada.Status.Should().Be(BiometricEstados.Aprobado);
+        aprobada.RejectionReason.Should().BeNull();
+        result.Validations[1].RejectionReason.Should().Be("La verificación del documento no fue exitosa.");
 
         result.Stats.Total.Should().Be(8);
         result.Stats.Aprobadas.Should().Be(3);
@@ -781,7 +781,7 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        var query = new TenantBiometricValidationListQuery(Estado: BiometricEstados.Aprobado);
+        var query = new TenantBiometricValidationListQuery(Status: BiometricEstados.Aprobado);
         var expectedFilter = query.ToFilter();
 
         _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
@@ -797,7 +797,7 @@ public sealed class BiometricaHandlerTests
             tenant,
             Arg.Any<int>(),
             Arg.Any<int>(),
-            Arg.Is<BiometricValidationListFilter>(f => f.Estado == expectedFilter.Estado),
+            Arg.Is<BiometricValidationListFilter>(f => f.Status == expectedFilter.Status),
             Arg.Any<DateTimeOffset>(),
             ct);
     }
@@ -808,7 +808,7 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        var query = new TenantBiometricValidationListQuery(ReferenceNumber: "TRM-2026", Nombre: "Ana");
+        var query = new TenantBiometricValidationListQuery(ReferenceNumber: "TRM-2026", Name: "Ana");
 
         _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>
@@ -827,7 +827,7 @@ public sealed class BiometricaHandlerTests
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Is<BiometricValidationListFilter>(f =>
-                f.ReferenceNumber == "TRM-2026" && f.Nombre == "Ana"),
+                f.ReferenceNumber == "TRM-2026" && f.Name == "Ana"),
             Arg.Any<DateTimeOffset>(),
             ct);
     }
@@ -867,7 +867,7 @@ public sealed class BiometricaHandlerTests
     {
         var ct = TestContext.Current.CancellationToken;
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        var query = new TenantBiometricValidationListQuery(Estado: "foo");
+        var query = new TenantBiometricValidationListQuery(Status: "foo");
 
         var (result, error) = await handler.HandleAsync(Guid.NewGuid(), query, ct);
 
@@ -940,7 +940,7 @@ public sealed class BiometricaHandlerTests
     [Fact]
     public async Task ListTenant_FilterByMotivoRechazo_FiltersInMemoryAndDerivesStats()
     {
-        // El filtro motivoRechazo se resuelve en memoria sobre el texto sanitizado (Detalle/ProviderPayload
+        // El filtro motivoRechazo se resuelve en memoria sobre el texto sanitizado (Detail/ProviderPayload
         // son jsonb y Postgres no permite ILIKE sobre jsonb). Solo deben quedar las rechazadas cuyo motivo
         // mostrado contiene el término; los KPIs reflejan ese subconjunto y NO se consulta el conteo en BD.
         var ct = TestContext.Current.CancellationToken;
@@ -960,7 +960,7 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle();
-        result.Validations[0].MotivoRechazo.Should().Be("Documento ilegible");
+        result.Validations[0].RejectionReason.Should().Be("Documento ilegible");
         result.Stats.Total.Should().Be(1);
         result.Stats.Rechazadas.Should().Be(1);
         result.Stats.Aprobadas.Should().Be(0);
@@ -989,6 +989,6 @@ public sealed class BiometricaHandlerTests
 
         error.Should().BeNull();
         result!.Validations.Should().ContainSingle();
-        result.Validations[0].MotivoRechazo.Should().Be("La verificación del documento no fue exitosa.");
+        result.Validations[0].RejectionReason.Should().Be("La verificación del documento no fue exitosa.");
     }
 }

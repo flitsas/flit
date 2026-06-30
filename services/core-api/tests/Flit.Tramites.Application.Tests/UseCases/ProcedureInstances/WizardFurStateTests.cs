@@ -42,11 +42,11 @@ public sealed class WizardFurStateTests
         new()
         {
             Id = Guid.NewGuid(),
-            Parte = parte,
-            Estado = BiometricEstados.Aprobado,
-            Nombre = "X",
-            TipoDoc = "CC",
-            Documento = documento,
+            PartyRole = parte,
+            Status = BiometricEstados.Aprobado,
+            Name = "X",
+            DocumentType = "CC",
+            DocumentNumber = documento,
             Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
