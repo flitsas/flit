@@ -456,32 +456,50 @@ ej. `VerifikVehicleMode`, `VerifikConductorMode`, `VerifikSimitMode`, `VerifikRn
 
 ## 9. Flujo de negocio de inicio a fin
 
-Recorrido cronológico completo, con el endpoint/handler de cada paso.
+Recorrido cronológico completo, con el endpoint/handler de cada paso. En cada paso se indica
+**🔎 Persistencia a revisar**: la(s) tabla(s) donde debería verse el efecto del paso, para ir
+validando la data contra la BD (todos los nombres son físicos: `schema.tabla`).
 
 ### Fase A — Onboarding (SuperAdmin)
 
 1. **SuperAdmin loguea** → `POST /auth/login` → JWT con `role=SuperAdmin`.
+   - 🔎 **Persistencia a revisar**: paso de **lectura** (no crea filas). Se consultan
+     `identity.users`, `security.user_credentials`, `security.user_role_assignments`,
+     `security.roles`, `security.role_permissions`, `security.permissions` y
+     `security.user_temp_suspensions` (para verificar que no haya suspensión vigente).
 
 2. **Crea la compañía** → `POST /admin/companies` (`CreateCompanyHandler`).
    Valida razón social / NIT / code / `tenant_type` (RENTING | CONCESIONARIO | FLIT).
    **Efecto clave** (`CompanyWriteRepository`): además del `Tenant`, **siembra automáticamente
    el rol de sistema `AdminCompany`** y le asigna **todos** los permisos activos excepto
    `rbac.manage`. Esto es lo que permite invitar luego al admin de esa empresa.
+   - 🔎 **Persistencia a revisar**: `identity.tenants` (nueva fila), `security.roles` (rol
+     `AdminCompany` con `is_system=true` para ese `tenant_id`), `security.role_permissions`
+     (un grant por cada permiso asignado al rol sembrado).
 
 3. **Configura el tenant** (grupo `/admin/companies/{tenantId}`):
    - **Políticas operativas** → `PUT /settings` (`UpdateTenantSettingsHandler`). Aquí vive
      **`allow_initial_registration`** (¿permite matrícula inicial?), métodos de pago,
      estrategia de proveedor RUNT, etc. → tabla `admin.tenant_operational_policies`.
+     - 🔎 **Persistencia a revisar**: `admin.tenant_operational_policies` (fila del tenant) +
+       `admin.tenant_config_audit_logs` (registro del cambio).
    - **OTs disponibles** → `POST /transit-grants` (`AddTransitGrantHandler`) →
      `admin.tenant_transit_office_grants`.
+     - 🔎 **Persistencia a revisar**: `admin.tenant_transit_office_grants` (fila por OT
+       habilitada, `transit_office_id` → `catalogs.transit_offices`).
    - **Módulos habilitados** → `POST /superadmin/modules/{id}/grants/{tenantId}` →
      `security.tenant_module_grants`.
+     - 🔎 **Persistencia a revisar**: `security.tenant_module_grants` (fila por módulo
+       concedido al tenant).
    - **Whitelist** → `POST /whitelist`.
+     - 🔎 **Persistencia a revisar**: `admin.tenant_whitelist_users` (una fila por email).
 
 4. **Invita al AdminCompany** → `POST /security/invitations` (`CreateInvitationHandler`).
    Si el caller es SuperAdmin, **debe** pasar `TargetTenantId` y el rol se **fuerza a
    `AdminCompany`** del tenant destino (el sembrado en el paso 2). Se genera token y se envía
    email con el link de activación.
+   - 🔎 **Persistencia a revisar**: `security.user_invitations` (nueva fila con `status=pending`,
+     `tenant_id`, `role_id` y el hash del token).
 
 ### Fase B — Activación y administración del tenant (AdminCompany)
 
@@ -489,11 +507,17 @@ Recorrido cronológico completo, con el endpoint/handler de cada paso.
    En un solo `SaveChanges` (`UserActivationRepository`) crea: `User` (active, home tenant) +
    `UserCredential` (hash) + `UserRoleAssignment` (tenant + rol de la invitación), y marca la
    `UserInvitation` como `accepted`. Luego loguea y obtiene JWT con su `tenant_id` y permisos.
+   - 🔎 **Persistencia a revisar**: `identity.users` (nueva fila `status=active`),
+     `security.user_credentials` (hash Argon2), `security.user_role_assignments` (usuario↔rol↔tenant)
+     y `security.user_invitations` (la fila pasa a `status=accepted`).
 
 6. **AdminCompany administra su empresa**: invita operadores (`/security/invitations` a su
    propio tenant con el `role_id` que elija), crea roles y define permisos
    (`/security/roles`, `/security/roles/{id}/permissions` — solo puede delegar permisos que él
    mismo posee).
+   - 🔎 **Persistencia a revisar**: `security.user_invitations` (invitaciones de operadores),
+     `security.roles` (roles custom del tenant), `security.role_permissions` (permisos del rol),
+     y al asignar rol a un usuario `security.user_role_assignments`.
 
 ### Fase C — Ejecución de un trámite (Operador) — ej. **Matrícula inicial**
 
@@ -503,42 +527,66 @@ Recorrido cronológico completo, con el endpoint/handler de cada paso.
    compañía no tiene habilitada la matrícula inicial". Crea la instancia en estado **Draft**
    con `reference_number` único y la primera fila de `procedure_instance_status_history`
    (null → Draft).
+   - 🔎 **Persistencia a revisar**: `tramites.procedure_instances` (nueva fila `status=Draft`,
+     `tenant_id`, `procedure_type_id`, `reference_number`, `created_by_user_id`) y
+     `tramites.procedure_instance_status_history` (fila inicial null→Draft). La validación de
+     política **lee** `admin.tenant_operational_policies`.
 
 8. **Llena el wizard (Draft)** — server-driven:
    - `GET /instances/{id}/wizard` devuelve los pasos, `canSubmit` y `blockers`. El front nunca
      recalcula gates.
    - **Actores** (comprador/vendedor) → `PUT /instances/{id}/actors`.
    - **Field values** → `PATCH /instances/{id}/field-values` (solo en draft).
+   - 🔎 **Persistencia a revisar**: `GET /wizard` es solo lectura. Actores →
+     `tramites.procedure_instance_actors` (una fila por actor, datos snapshot). Field values →
+     `tramites.procedure_instance_field_values` (una fila por campo, con `source`).
 
 9. **Consultas externas (RUNT/Verifik)**:
    - `POST /instances/{id}/consultations/{templateCode}` (`RunConsultationHandler`): resuelve
      el provider desde el template y persiste los `hydratedFields` como `field_values` con
      `source="consultation"`.
    - `POST /instances/{id}/runt-person`: autopobla datos de persona (no persiste).
+   - 🔎 **Persistencia a revisar**: `tramites.procedure_instance_field_values` (filas con
+     `source="consultation"` — así distingues lo hidratado por consulta de lo capturado a mano).
+     `runt-person` **no persiste**. (Si el tenant tiene logging de OT activo, las llamadas se
+     registran en `admin.ot_api_call_logs`.)
 
 10. **Preflight (semáforo)** → `POST /instances/{id}/preflight` (`RunPreflightHandler`).
     Fan-out por modalidad: matrícula → vehículo por VIN; traspaso → vehículo por placa + SIMIT
     comprador/vendedor + RNMC. Compone `overall` green/yellow/red y persiste
     `procedure_instance_preflight_snapshots`. En matrícula, `estado_vehiculo=REGISTRADO` se
     degrada de fail → warn.
+    - 🔎 **Persistencia a revisar**: `tramites.procedure_instance_preflight_snapshots` (snapshot
+      con `overall` y el detalle de `checks`).
 
 11. **Adjuntos a S3**:
     - Directo (multipart, ≤20MB): `POST /instances/{id}/attachments`.
     - Presigned (PDFs grandes): `POST /attachments/presign` → el navegador sube directo a S3 →
       `POST /attachments/register` registra la metadata.
     - Checklist documental: `GET /instances/{id}/checklist`.
+    - 🔎 **Persistencia a revisar**: `tramites.procedure_instance_attachments` (metadata + key de
+      S3; el binario vive en S3, no en BD). `GET /checklist` es lectura computada. `presign` solo
+      no crea fila — la fila aparece tras `register`.
 
 12. **Biométrica / validación de identidad** → `POST /instances/{id}/biometric`.
     Según `Biometrics:Provider`: **mock** (magic-link 3 fotos) o **Kyverum** (captura remota +
     webhook; 202 si encolado). El resultado llega por el webhook público
     `POST /webhooks/kyverum-verify/{validationId}` (verificado por HMAC). `identity/ensure`
     reutiliza una validación vigente (≤30 días).
+    - 🔎 **Persistencia a revisar**: `tramites.procedure_instance_biometric_validations` (fila por
+      validación con su estado/score); con Kyverum, `tramites.identity_validation_outbox` (evento
+      encolado, patrón outbox) — el webhook actualiza el estado de la validación. Si la captura es
+      remota por participante, ver también `tramites.procedure_instance_participants`.
 
 13. **FUR y firma**:
     - `POST /instances/{id}/fur` (`GenerarFurHandler`): gated por biométrica aprobada +
       organismo seleccionado; persiste el FUR como adjunto tipo `fur`.
     - Firma electrónica (sobre todo en traspaso): `POST /instances/{id}/signatures` +
       `/simulate`.
+    - 🔎 **Persistencia a revisar**: FUR → `tramites.procedure_instance_attachments` (fila con
+      `document_type='fur'`). Firma → `tramites.procedure_instance_signatures` (fila por firmante);
+      participantes de firma remota en `tramites.procedure_instance_participants`. El consolidado
+      de expediente también queda como adjunto.
 
 14. **Radicar (Submit)** → `POST /instances/{id}/submit` (`SubmitProcedureInstanceCommand`).
     Aplica `SubmitGate`:
@@ -551,6 +599,11 @@ Recorrido cronológico completo, con el endpoint/handler de cada paso.
     - Si pasa: transición **Draft → Submitted**, sella `submitted_at`, escribe
       `procedure_instance_status_history`, y notifica vía `IProcedureStateChangeNotifier`
       (que puede disparar webhooks salientes a la OT).
+    - 🔎 **Persistencia a revisar**: `tramites.procedure_instances` (`status=Submitted`,
+      `submitted_at` sellado, `transit_office_id` promovido a columna),
+      `tramites.procedure_instance_status_history` (transición Draft→Submitted), y
+      `tramites.procedure_instance_events` (evento de timeline). El gate **lee**
+      `tramites.procedure_instance_field_values`, `..._attachments` y `..._biometric_validations`.
 
 > **Estados**: cada transición escribe en `procedure_instance_status_history`. El enum
 > `ProcedureInstanceStatus` arranca en Draft → Submitted; estados posteriores se gestionan en
