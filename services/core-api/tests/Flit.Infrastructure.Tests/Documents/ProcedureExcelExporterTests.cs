@@ -23,9 +23,11 @@ public sealed class ProcedureExcelExporterTests
     /// <summary>Repo en memoria: empuja las filas dadas al callback de streaming del exporter.</summary>
     private sealed class FakeRepo(IReadOnlyList<ProcedureDetailDto> rows) : IAnalyticsReadRepository
     {
-        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid? t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
