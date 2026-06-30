@@ -245,9 +245,11 @@ public static class AnalyticsEndpoints
     /// <summary>
     /// AC1: usa el tenant del token. AC2: el SuperAdmin puede fijar otro tenant por query.
     /// Tenant Admin que pida un tenant ajeno → 403; ausencia total de tenant en usuario no-SuperAdmin → 400.
-    /// SuperAdmin sin tenant en query ni en token → devuelve <see cref="Guid.Empty"/> como centinela de
+    /// SuperAdmin sin tenantId explícito → devuelve <see cref="Guid.Empty"/> como centinela de
     /// vista global ("todas las compañías"); los callers que no soporten vista global deben agregar
     /// un guard explícito (→ 400 descriptivo) antes de pasar al handler.
+    /// Nota: el JWT del SuperAdmin siempre incluye un tenant_id (el tenant DEMO del seeder); por eso
+    /// se evalúa isSuperAdmin ANTES que hasClaim para que el path sin tenantId sea siempre global.
     /// </summary>
     private static bool TryResolveEffectiveTenant(
         ClaimsPrincipal user, Guid? tenantIdQuery, out Guid tenant, out IResult? error)
@@ -256,35 +258,25 @@ public static class AnalyticsEndpoints
         error = null;
 
         var isSuperAdmin = user.IsInRole(AdminAuthorization.SuperAdminRole);
-        var hasClaim = TryResolveTenantId(user, out var claimTenant);
 
         if (tenantIdQuery is { } requested && requested != Guid.Empty)
         {
-            if (isSuperAdmin)
-            {
-                tenant = requested;
-                return true;
-            }
+            // Tenant explícito: SuperAdmin puede acceder a cualquiera; otros solo al propio.
+            if (isSuperAdmin) { tenant = requested; return true; }
 
-            if (hasClaim && requested == claimTenant)
-            {
-                tenant = claimTenant;
-                return true;
-            }
+            var hasClaim = TryResolveTenantId(user, out var claimTenant);
+            if (hasClaim && requested == claimTenant) { tenant = claimTenant; return true; }
 
             error = Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
                 detail: "No está autorizado para consultar métricas de otro tenant.");
             return false;
         }
 
-        if (hasClaim)
-        {
-            tenant = claimTenant;
-            return true;
-        }
-
-        // SuperAdmin sin tenant en query ni en token → vista global (Guid.Empty = todas las compañías).
+        // Sin tenant explícito: SuperAdmin → vista global (centinela Guid.Empty).
         if (isSuperAdmin) { tenant = Guid.Empty; return true; }
+
+        // Usuario normal → usa el tenant del JWT.
+        if (TryResolveTenantId(user, out var userTenant)) { tenant = userTenant; return true; }
 
         error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
