@@ -39,6 +39,6 @@ public sealed class LoginHandlerSuspensionTests
             .Should().ThrowAsync<AccountSuspendedException>();
 
         _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default, default!, default!);
+            default, default!, default, default!, default, default!, default!);
     }
 }
