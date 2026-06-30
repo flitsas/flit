@@ -20,6 +20,22 @@ public sealed class BiometricValidationListFilter
     public DateTimeOffset? CreatedTo { get; init; }
     public string? MotivoRechazo { get; init; }
 
+    // ── Vigencia de la identidad aprobada (HU #10350) ────────────────────────────
+    /// <summary>Estado de vigencia derivado: vigente | por_vencer | vencida (<see cref="Entities.BiometricVigenciaEstados"/>).</summary>
+    public string? VigenciaEstado { get; init; }
+
+    /// <summary>Filtra por fecha de fin de vigencia (validado_at + 30 días): límite inferior inclusivo.</summary>
+    public DateTimeOffset? ExpiraDesde { get; init; }
+
+    /// <summary>Filtra por fecha de fin de vigencia (validado_at + 30 días): límite superior inclusivo.</summary>
+    public DateTimeOffset? ExpiraHasta { get; init; }
+
+    /// <summary>
+    /// "Vence en ≤ N días": deja solo identidades aprobadas AÚN VIGENTES cuya vigencia se agota en N días
+    /// calendario o menos (excluye las ya vencidas). Generaliza el atajo "por_vencer" a un umbral libre.
+    /// </summary>
+    public int? VenceEnDias { get; init; }
+
     /// <summary>True si al menos un criterio de filtrado está informado.</summary>
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(ReferenceNumber)
@@ -34,5 +50,9 @@ public sealed class BiometricValidationListFilter
         || ScoreMax is not null
         || CreatedFrom is not null
         || CreatedTo is not null
-        || !string.IsNullOrWhiteSpace(MotivoRechazo);
+        || !string.IsNullOrWhiteSpace(MotivoRechazo)
+        || !string.IsNullOrWhiteSpace(VigenciaEstado)
+        || ExpiraDesde is not null
+        || ExpiraHasta is not null
+        || VenceEnDias is not null;
 }

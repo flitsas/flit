@@ -688,6 +688,10 @@ export const tramitesClient = {
     add('createdFrom', filters.createdFrom);
     add('createdTo', filters.createdTo);
     add('motivoRechazo', filters.motivoRechazo);
+    add('vigenciaEstado', filters.vigenciaEstado);
+    add('expiraDesde', filters.expiraDesde);
+    add('expiraHasta', filters.expiraHasta);
+    add('venceEnDias', filters.venceEnDias);
     add('page', filters.page);
     add('pageSize', filters.pageSize);
 

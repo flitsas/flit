@@ -277,6 +277,48 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (filter.CreatedTo is { } createdTo)
             query = query.Where(v => v.CreatedAt <= createdTo);
 
+        // Vigencia (HU #10350): la identidad APROBADA vence a los VigenciaDias días de validado_at. Para
+        // que el filtro sea traducible a SQL se DESPLAZA la constante en vez de sumar a la columna:
+        //   expira = validado_at + VigenciaDias  ⇒  (expira ⋈ x)  ⟺  (validado_at ⋈ x - VigenciaDias).
+        if (!string.IsNullOrWhiteSpace(filter.VigenciaEstado))
+        {
+            // validado_at > corteVigente  ⇒ aún vigente; <= ⇒ ya vencida.
+            var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+            // validado_at <= cortePorVencer ⇒ le quedan ≤ VigenciaPorVencerDias días de vigencia.
+            var cortePorVencer = now.AddDays(BiometricRules.VigenciaPorVencerDias - BiometricRules.VigenciaDias);
+            query = filter.VigenciaEstado.Trim().ToLowerInvariant() switch
+            {
+                BiometricVigenciaEstados.Vigente => query.Where(v =>
+                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null && v.ValidadoAt > corteVigente),
+                BiometricVigenciaEstados.PorVencer => query.Where(v =>
+                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null
+                    && v.ValidadoAt > corteVigente && v.ValidadoAt <= cortePorVencer),
+                BiometricVigenciaEstados.Vencida => query.Where(v =>
+                    v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null && v.ValidadoAt <= corteVigente),
+                _ => query,
+            };
+        }
+
+        // Rango por fecha de fin de vigencia (validado_at + VigenciaDias) → se desplaza el límite a validado_at.
+        if (filter.ExpiraDesde is { } expiraDesde)
+            query = query.Where(v => v.ValidadoAt != null
+                && v.ValidadoAt >= expiraDesde.AddDays(-BiometricRules.VigenciaDias));
+
+        if (filter.ExpiraHasta is { } expiraHasta)
+            query = query.Where(v => v.ValidadoAt != null
+                && v.ValidadoAt <= expiraHasta.AddDays(-BiometricRules.VigenciaDias));
+
+        // "Vence en ≤ N días": aprobadas AÚN VIGENTES (validado_at > now - VigenciaDias) cuya expiración
+        // (validado_at + VigenciaDias) cae dentro de N días ⟺ validado_at <= now + N - VigenciaDias.
+        if (filter.VenceEnDias is { } venceEnDias)
+        {
+            var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+            var corteVenceEn = now.AddDays(venceEnDias - BiometricRules.VigenciaDias);
+            query = query.Where(v =>
+                v.Estado == BiometricEstados.Aprobado && v.ValidadoAt != null
+                && v.ValidadoAt > corteVigente && v.ValidadoAt <= corteVenceEn);
+        }
+
         // NOTA: el filtro `motivoRechazo` NO se aplica aquí. Detalle/ProviderPayload son columnas `jsonb`
         // y PostgreSQL no soporta el operador ILIKE sobre jsonb (falla con 42883 like_escape(jsonb,...)).
         // Se resuelve en memoria en el handler sobre el motivo SANITIZADO (ExtractMotivoRechazo), que además

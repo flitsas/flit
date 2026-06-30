@@ -42,6 +42,8 @@ const ROW_APROBADA: TenantBiometricValidation = {
   motivoRechazo: null,
   createdAt: '2026-06-20T15:30:00Z',
   validadoAt: '2026-06-20T15:40:00Z',
+  vigenciaHasta: '2026-07-20T00:00:00-05:00',
+  diasRestantes: 20,
 };
 
 const ROW_RECHAZADA: TenantBiometricValidation = {
@@ -60,6 +62,8 @@ const ROW_RECHAZADA: TenantBiometricValidation = {
   motivoRechazo: 'La verificación del documento no fue exitosa.',
   createdAt: '2026-06-21T10:00:00Z',
   validadoAt: null,
+  vigenciaHasta: null,
+  diasRestantes: null,
 };
 
 const FULL: TenantBiometricValidationsResponse = {
@@ -175,6 +179,30 @@ describe('Validaciones — datos y accesibilidad', () => {
     ).toBeInTheDocument();
   });
 
+  it('muestra aprobación, expiración y días restantes de vigencia en la fila aprobada', async () => {
+    render(<Validaciones />);
+
+    // La fila aprobada expone la fecha de fin de vigencia y los días restantes (badge "20 días").
+    const link = await screen.findByRole('link', { name: /validación de ana compradora/i });
+    // Columnas desacopladas: la grilla expone cabeceras separadas Registro / Aprobación / Vigencia.
+    expect(screen.getByText('Aprobación')).toBeInTheDocument();
+    // "Vigencia" aparece como cabecera de columna Y como label del filtro → debe haber ≥1.
+    expect(screen.getAllByText('Vigencia').length).toBeGreaterThan(0);
+    // La fila aprobada muestra el badge de días restantes (en la columna Vigencia).
+    expect(within(link).getByText('20 días')).toBeInTheDocument();
+    // El aria-label resume la vigencia para lectores de pantalla.
+    expect(link.getAttribute('aria-label')).toMatch(/vigente hasta/i);
+    expect(link.getAttribute('aria-label')).toMatch(/vigencia: 20 días restantes/i);
+  });
+
+  it('la fila sin aprobación no muestra días de vigencia (—)', async () => {
+    render(<Validaciones />);
+
+    const link = await screen.findByRole('link', { name: /validación de luis vendedor/i });
+    expect(within(link).queryByText(/día/)).not.toBeInTheDocument();
+    expect(link.getAttribute('aria-label')).not.toMatch(/vigente hasta/i);
+  });
+
   it('el botón Actualizar tiene nombre accesible', async () => {
     render(<Validaciones />);
 
@@ -198,6 +226,61 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await waitFor(() =>
       expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
         expect.objectContaining({ estado: 'aprobado' }),
+      ),
+    );
+  });
+
+  it('filtra por vigencia: al elegir "Por vencer" re-consulta con vigenciaEstado', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    await user.selectOptions(screen.getByLabelText('Vigencia'), 'por_vencer');
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ vigenciaEstado: 'por_vencer' }),
+      ),
+    );
+  });
+
+  it('filtra por rango de expiración: "Vence desde/hasta" viajan como expiraDesde/expiraHasta', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    // Los date-pickers de vencimiento viven en el panel avanzado.
+    await user.click(screen.getByRole('button', { name: /más filtros/i }));
+    await user.type(screen.getByLabelText('Vence desde'), '2026-07-01');
+    await user.type(screen.getByLabelText('Vence hasta'), '2026-07-31');
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expiraDesde: '2026-07-01T00:00:00',
+          expiraHasta: '2026-07-31T23:59:59',
+        }),
+      ),
+    );
+  });
+
+  it('filtra por "Vence en ≤ N días": el número viaja como venceEnDias', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    await user.click(screen.getByRole('button', { name: /más filtros/i }));
+    await user.type(screen.getByLabelText('Vence en ≤ N días'), '3');
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ venceEnDias: 3 }),
       ),
     );
   });

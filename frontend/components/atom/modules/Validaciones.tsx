@@ -74,6 +74,27 @@ function formatFecha(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
+/** Formatea una fecha ISO solo a día (es-CO), sin hora. Para aprobación/expiración de la vigencia. */
+function formatFechaCorta(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(d);
+}
+
+/**
+ * Presentación de los días de vigencia restantes de una validación aprobada: color de urgencia
+ * (verde holgado, ámbar por vencer, rojo vencida) + etiqueta. La vigencia es de 30 días desde la
+ * aprobación; el backend ya calcula los días (0 = vencida). Null cuando la validación no está aprobada.
+ */
+function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
+  if (dias == null) return null;
+  if (dias <= 0) return { label: 'Vencida', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' };
+  const label = `${dias} día${dias === 1 ? '' : 's'}`;
+  if (dias <= 7) return { label, color: '#B26A00', bg: 'rgba(249,172,0,0.16)' };
+  return { label, color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' };
+}
+
 /** Enmascara el documento dejando visibles solo los últimos 4 (no se muestra el número completo). */
 function maskDoc(tipoDoc: string, documento: string): string {
   const tail = documento.length > 4 ? documento.slice(-4) : documento;
@@ -107,6 +128,11 @@ function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFil
     createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
     createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
     motivoRechazo: f.estado === 'rechazado' ? text(f.motivoRechazo) : undefined,
+    vigenciaEstado: f.vigenciaEstado || undefined,
+    // Rango por fecha de fin de vigencia (expiraHasta a fin de día, igual que createdTo).
+    expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
+    expiraHasta: f.expiraHasta ? `${f.expiraHasta}T23:59:59` : undefined,
+    venceEnDias: num(f.venceEnDias),
   };
 }
 
@@ -696,29 +722,44 @@ function ValidacionesSkeleton() {
   );
 }
 
+/**
+ * Plantilla de columnas compartida por cabecera y filas. Columnas DESACOPLADas: Registro, Aprobación y
+ * Vigencia van por separado (cada dato en su propia columna y filtrable desde el toolbar). minmax(0,..)
+ * permite truncar el contenido dentro de cada celda del grid.
+ */
+const GRID_COLS =
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr)';
+
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
   return (
-    <div className="flex flex-col">
-      {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila.
-          sticky → permanece visible al hacer scroll del módulo. */}
-      <div
-        className="sticky top-0 z-10 grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-        style={{ background: '#DFE5ED', color: '#162744' }}
-        aria-hidden="true"
-      >
-        <div className="col-span-2">Trámite</div>
-        <div className="col-span-3">Persona</div>
-        <div className="col-span-2">Documento</div>
-        <div className="col-span-2">Estado</div>
-        <div className="col-span-1">Score</div>
-        <div className="col-span-2">Fecha</div>
+    // Scroll horizontal en pantallas angostas. `shrink-0` es CLAVE: al ser overflow-x-auto este div es
+    // un contenedor de scroll y, como ítem flex, su min-height pasa a 0 → sin shrink-0 el flex del módulo
+    // lo colapsaría a casi nada (solo se vería la paginación).
+    <div className="overflow-x-auto shrink-0">
+      <div className="min-w-[880px]">
+        {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila.
+            sticky → permanece visible al hacer scroll del módulo. */}
+        <div
+          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
+          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
+          aria-hidden="true"
+        >
+          <div>Trámite</div>
+          <div>Persona</div>
+          <div>Documento</div>
+          <div>Estado</div>
+          <div>Score</div>
+          <div>Registro</div>
+          <div>Aprobación</div>
+          <div>Vigencia</div>
+        </div>
+        <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
+          {rows.map((r) => (
+            <ValidacionRow key={r.id} row={r} />
+          ))}
+        </ul>
       </div>
-      <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
-        {rows.map((r) => (
-          <ValidacionRow key={r.id} row={r} />
-        ))}
-      </ul>
     </div>
   );
 }
@@ -728,39 +769,44 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
   const modalidad = MODALIDAD_LABEL[r.modalidad] ?? r.modalidad;
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.parte ? ` (${r.parte})` : '';
+  const vigencia = vigenciaBadge(r.diasRestantes);
   const ariaLabel =
     `Validación de ${r.nombre}${parte}, trámite ${r.referenceNumber} (${modalidad}), ` +
     `proveedor ${provider}, estado ${meta.label}` +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.estado === 'rechazado' && r.motivoRechazo ? `, motivo: ${r.motivoRechazo}` : '') +
-    `, ${formatFecha(r.createdAt)}. Abrir trámite.`;
+    `, registrada ${formatFecha(r.createdAt)}` +
+    (r.validadoAt ? `, aprobada ${formatFechaCorta(r.validadoAt)}` : '') +
+    (r.vigenciaHasta ? `, vigente hasta ${formatFechaCorta(r.vigenciaHasta)}` : '') +
+    (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
+    `. Abrir trámite.`;
 
   return (
     <li>
       <a
         href={`/tramites/${r.instanceId}`}
         aria-label={ariaLabel}
-        className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#DFE5ED' }}
+        className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: '#DFE5ED', gridTemplateColumns: GRID_COLS }}
       >
-        <div className="col-span-2 min-w-0">
+        <div className="min-w-0">
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
             <span className="truncate">{r.referenceNumber || '—'}</span>
             <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
           </span>
           <span className="block text-[10px] opacity-60">{modalidad}</span>
         </div>
-        <div className="col-span-3 min-w-0">
+        <div className="min-w-0">
           <span className="block font-medium truncate">{r.nombre}</span>
-          <span className="block text-[10px] opacity-60">
+          <span className="block text-[10px] opacity-60 truncate">
             {provider}
             {r.parte ? ` · ${r.parte}` : ''}
           </span>
         </div>
-        <div className="col-span-2 font-mono text-[11px] opacity-80">
+        <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
           {maskDoc(r.tipoDoc, r.documento)}
         </div>
-        <div className="col-span-2">
+        <div className="min-w-0">
           <span
             className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold"
             style={{ background: meta.bg, color: meta.color }}
@@ -773,8 +819,31 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
             </span>
           )}
         </div>
-        <div className="col-span-1 font-semibold">{r.score ?? '—'}</div>
-        <div className="col-span-2 text-[11px] opacity-70">{formatFecha(r.createdAt)}</div>
+        <div className="font-semibold">{r.score ?? '—'}</div>
+        {/* Registro: fecha + hora del registro de la validación. */}
+        <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
+        {/* Aprobación: solo la fecha (o — si aún no se aprobó). */}
+        <div className="min-w-0 text-[10px] leading-tight opacity-80">
+          {r.validadoAt ? formatFechaCorta(r.validadoAt) : '—'}
+        </div>
+        {/* Vigencia: fin de vigencia + badge de días restantes (verde/ámbar/rojo). */}
+        <div className="min-w-0 text-[10px] leading-tight">
+          {r.vigenciaHasta ? (
+            <>
+              <span className="block opacity-80">{formatFechaCorta(r.vigenciaHasta)}</span>
+              {vigencia && (
+                <span
+                  className="mt-0.5 inline-block rounded-full px-1.5 py-px font-semibold"
+                  style={{ background: vigencia.bg, color: vigencia.color }}
+                >
+                  {vigencia.label}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="opacity-80">—</span>
+          )}
+        </div>
       </a>
     </li>
   );

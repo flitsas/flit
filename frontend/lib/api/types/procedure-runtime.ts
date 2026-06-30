@@ -399,6 +399,9 @@ export type BiometricParte = 'comprador' | 'vendedor';
 /** Proveedor de validación de identidad (espejo de BiometricProviders). */
 export type BiometricProvider = 'mock' | 'kyverum';
 
+/** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
+export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
+
 /** Tipos de documento admitidos por la captura biométrica. */
 export type BiometricTipoDoc = 'CC' | 'CE' | 'TI' | 'PPT' | 'PAS';
 
@@ -474,8 +477,14 @@ export interface TenantBiometricValidation {
   provider: string;
   expired: boolean;
   motivoRechazo?: string | null;
+  /** Fecha de registro (creación) de la validación. */
   createdAt: string;
+  /** Fecha de aprobación (null si aún no se aprobó). */
   validadoAt: string | null;
+  /** Fecha de fin de vigencia (aprobación + 30 días). Null si no hay aprobación. */
+  vigenciaHasta: string | null;
+  /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
+  diasRestantes: number | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -520,6 +529,13 @@ export interface TenantBiometricValidationFilters {
   createdFrom?: string;
   createdTo?: string;
   motivoRechazo?: string;
+  /** Estado de vigencia de la identidad aprobada: vigente | por_vencer | vencida. */
+  vigenciaEstado?: BiometricVigenciaEstado;
+  /** Fin de vigencia (aprobación + 30 días) desde / hasta, en ISO-8601. */
+  expiraDesde?: string;
+  expiraHasta?: string;
+  /** "Vence en ≤ N días": identidades vigentes que vencen en N días calendario o menos. */
+  venceEnDias?: number;
   /** Página (1-based). */
   page?: number;
   /** Filas por página (10–50). */
