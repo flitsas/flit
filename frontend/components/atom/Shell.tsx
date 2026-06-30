@@ -89,6 +89,7 @@ function useCurrentUser() {
         "Usuario",
       email: (payload.email as string | undefined) ?? "",
       roleLabel,
+      tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
     };
@@ -238,6 +239,11 @@ export function Shell({
             <span className="text-[10px] font-medium" style={{ color: "#557EFF" }}>
               {currentUser?.roleLabel ?? "—"}
             </span>
+            {currentUser?.tenantName && (
+              <span className="text-[10px] opacity-55">
+                {currentUser.tenantName}
+              </span>
+            )}
             <span className="text-xs font-semibold">
               {currentUser?.displayName ?? currentUser?.email ?? "—"}
             </span>
