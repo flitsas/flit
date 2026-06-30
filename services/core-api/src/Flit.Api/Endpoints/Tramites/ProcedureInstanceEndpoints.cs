@@ -182,13 +182,16 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances/{id:guid}/submit", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             SubmitProcedureInstanceHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            // HU #10431 — la radicación se atribuye al usuario autenticado (claim sub) para alimentar
+            // la productividad de la analítica; el handler aplica la guarda FK contra identity.users.
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

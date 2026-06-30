@@ -224,7 +224,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
             NullTransitOfficeGrantGate.Instance);
 
-        var (_, error) = await submit.HandleAsync(id, tenant, ct);
+        var (_, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().Be("identidad_requerida");
         instance.Status.Should().Be(ProcedureInstanceStatus.Draft);
@@ -263,7 +263,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
             NullTransitOfficeGrantGate.Instance);
 
-        var (result, error) = await submit.HandleAsync(id, tenant, ct);
+        var (result, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);

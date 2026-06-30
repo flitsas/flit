@@ -15,6 +15,7 @@ public sealed class SubmitProcedureInstanceHandler(
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
+        Guid? changedBy,
         CancellationToken ct = default)
     {
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
@@ -64,6 +65,15 @@ public sealed class SubmitProcedureInstanceHandler(
         instance.SubmittedAt = now;
         instance.UpdatedAt = now;
 
+        // HU #10431 — la radicación queda atribuida al gestor autenticado en status_history para
+        // alimentar la productividad de la analítica. Guarda FK: si el sujeto no existe en
+        // identity.users (proceso automático o sub inválido), changed_by se resuelve a null sin
+        // romper la inserción ni generar productividad espuria.
+        var resolvedChangedBy = changedBy is { } cb && cb != Guid.Empty
+            && await repo.UserExistsAsync(cb, ct).ConfigureAwait(false)
+            ? changedBy
+            : null;
+
         var statusHistory = new ProcedureInstanceStatusHistory
         {
             Id = Guid.NewGuid(),
@@ -71,7 +81,8 @@ public sealed class SubmitProcedureInstanceHandler(
             ProcedureInstanceId = id,
             FromStatus = ProcedureInstanceStatus.Draft,
             ToStatus = ProcedureInstanceStatus.Submitted,
-            ChangedAt = now
+            ChangedAt = now,
+            ChangedBy = resolvedChangedBy
         };
         instance.StatusHistory.Add(statusHistory);
         repo.Add(statusHistory);

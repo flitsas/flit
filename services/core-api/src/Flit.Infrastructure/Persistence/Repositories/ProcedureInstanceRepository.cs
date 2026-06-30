@@ -407,6 +407,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public void RemoveAttachment(ProcedureInstanceAttachment attachment) =>
         db.Set<ProcedureInstanceAttachment>().Remove(attachment);
 
+    // HU #10431 — guarda FK para changed_by en status_history: evita violar la FK a identity.users
+    // cuando el sujeto de la radicación no existe (proceso automático o claim sub inválido).
+    public Task<bool> UserExistsAsync(Guid userId, CancellationToken ct) =>
+        db.Users.AsNoTracking().AnyAsync(u => u.Id == userId, ct);
+
     public Task SaveChangesAsync(CancellationToken ct) =>
         db.SaveChangesAsync(ct);
 }
