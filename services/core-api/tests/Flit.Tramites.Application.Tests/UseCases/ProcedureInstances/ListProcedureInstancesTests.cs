@@ -138,8 +138,8 @@ public sealed class ListProcedureInstancesTests
                 new ProcedureInstanceBiometricValidation
                 {
                     Id = Guid.NewGuid(),
-                    Parte = "comprador",
-                    Estado = BiometricEstados.EnProceso,
+                    PartyRole = "comprador",
+                    Status = BiometricEstados.EnProceso,
                     CreatedAt = DateTimeOffset.UtcNow,
                 },
             },
@@ -176,8 +176,8 @@ public sealed class ListProcedureInstancesTests
                 new ProcedureInstanceBiometricValidation
                 {
                     Id = Guid.NewGuid(),
-                    Parte = "comprador",
-                    Estado = BiometricEstados.Aprobado,
+                    PartyRole = "comprador",
+                    Status = BiometricEstados.Aprobado,
                     CreatedAt = DateTimeOffset.UtcNow,
                 },
             },

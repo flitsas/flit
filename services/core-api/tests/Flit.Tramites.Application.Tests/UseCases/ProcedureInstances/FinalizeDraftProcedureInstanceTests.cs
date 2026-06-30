@@ -245,8 +245,8 @@ public sealed class FinalizeDraftProcedureInstanceTests
         });
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Parte = "comprador",
-            Estado = BiometricEstados.Aprobado, Nombre = "Ana", TipoDoc = "CC", Documento = "1020304050",
+            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado, Name = "Ana", DocumentType = "CC", DocumentNumber = "1020304050",
             Email = "ana@x.com", TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -287,6 +287,6 @@ public sealed class FinalizeDraftProcedureInstanceTests
         error.Should().BeNull();
         result.Should().NotBeNull();
         instance.BiometricValidations.Should().Contain(v =>
-            v.Parte == "comprador" && v.Estado == BiometricEstados.Aprobado);
+            v.PartyRole == "comprador" && v.Status == BiometricEstados.Aprobado);
     }
 }

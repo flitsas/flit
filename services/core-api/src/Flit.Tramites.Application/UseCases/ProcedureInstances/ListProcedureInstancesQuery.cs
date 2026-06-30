@@ -124,8 +124,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var esMatricula = modalidad != TramiteModalidadEntrada.Traspaso;
 
         bool Relevant(ProcedureInstanceBiometricValidation v) =>
-            partes.Any(p => string.Equals(v.Parte, p, StringComparison.OrdinalIgnoreCase))
-            || (esMatricula && v.Parte is null);
+            partes.Any(p => string.Equals(v.PartyRole, p, StringComparison.OrdinalIgnoreCase))
+            || (esMatricula && v.PartyRole is null);
 
         var relevant = e.BiometricValidations.Where(Relevant).ToList();
         if (relevant.Count == 0)
@@ -134,16 +134,16 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         // Aprobado para el chip = aprobado Y VIGENTE (≤30 días): una aprobación vencida deja de contar.
         var now = DateTimeOffset.UtcNow;
         bool Aprobada(string parte) => e.BiometricValidations.Any(v =>
-            (string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase) || (esMatricula && v.Parte is null))
+            (string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase) || (esMatricula && v.PartyRole is null))
             && BiometricRules.EsAprobadaVigente(v, now));
 
         if (partes.All(Aprobada))
             return BiometricEstados.Aprobado;
 
-        if (relevant.Any(v => v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso))
+        if (relevant.Any(v => v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso))
             return BiometricEstados.EnProceso;
 
-        if (relevant.Any(v => v.Estado is BiometricEstados.Rechazado or BiometricEstados.Expirado))
+        if (relevant.Any(v => v.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado))
             return BiometricEstados.Rechazado;
 
         return null;

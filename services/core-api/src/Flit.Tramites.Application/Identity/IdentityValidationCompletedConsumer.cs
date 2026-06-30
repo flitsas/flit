@@ -50,9 +50,9 @@ public sealed class IdentityValidationCompletedConsumer(
         if (validation is null)
             return new IdentityValidationConsumeResult(evt.ValidationId, evt.Estado, 0, 0, []);
 
-        var parte = validation.Parte ?? BiometricRules.ParteComprador;
+        var parte = validation.PartyRole ?? BiometricRules.ParteComprador;
         var instances = await repo.ListDraftFinalizedByActorAsync(
-            validation.TenantId, parte, validation.TipoDoc, validation.Documento, ct);
+            validation.TenantId, parte, validation.DocumentType, validation.DocumentNumber, ct);
 
         var processed = 0;
         var skipped = new List<string>();

@@ -22,12 +22,12 @@ import type {
 /** Filtros de la UI (controlados). Los numéricos/fechas se guardan como string para el input. */
 export interface ValidacionesUiFilters {
   referenceNumber: string;
-  nombre: string;
-  tipoDoc: string;
-  documento: string;
+  name: string;
+  documentType: string;
+  documentNumber: string;
   modalidad: '' | WizardModalidad;
-  parte: '' | BiometricParte;
-  estado: '' | BiometricEstado;
+  partyRole: '' | BiometricParte;
+  status: '' | BiometricEstado;
   provider: '' | BiometricProvider;
   vigenciaEstado: '' | BiometricVigenciaEstado;
   scoreMin: string;
@@ -38,17 +38,17 @@ export interface ValidacionesUiFilters {
   expiraHasta: string;
   /** "Vence en ≤ N días" (string para el input numérico; vacío = sin filtro). */
   venceEnDias: string;
-  motivoRechazo: string;
+  rejectionReason: string;
 }
 
 export const EMPTY_VALIDACIONES_FILTERS: ValidacionesUiFilters = {
   referenceNumber: '',
-  nombre: '',
-  tipoDoc: '',
-  documento: '',
+  name: '',
+  documentType: '',
+  documentNumber: '',
   modalidad: '',
-  parte: '',
-  estado: '',
+  partyRole: '',
+  status: '',
   provider: '',
   vigenciaEstado: '',
   scoreMin: '',
@@ -58,19 +58,19 @@ export const EMPTY_VALIDACIONES_FILTERS: ValidacionesUiFilters = {
   expiraDesde: '',
   expiraHasta: '',
   venceEnDias: '',
-  motivoRechazo: '',
+  rejectionReason: '',
 };
 
 /** True si hay al menos un criterio de filtrado informado. */
 export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean {
   return (
     f.referenceNumber.trim() !== '' ||
-    f.nombre.trim() !== '' ||
-    f.tipoDoc.trim() !== '' ||
-    f.documento.trim() !== '' ||
+    f.name.trim() !== '' ||
+    f.documentType.trim() !== '' ||
+    f.documentNumber.trim() !== '' ||
     f.modalidad !== '' ||
-    f.parte !== '' ||
-    f.estado !== '' ||
+    f.partyRole !== '' ||
+    f.status !== '' ||
     f.provider !== '' ||
     f.vigenciaEstado !== '' ||
     f.scoreMin.trim() !== '' ||
@@ -80,15 +80,15 @@ export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean 
     f.expiraDesde !== '' ||
     f.expiraHasta !== '' ||
     f.venceEnDias.trim() !== '' ||
-    f.motivoRechazo.trim() !== ''
+    f.rejectionReason.trim() !== ''
   );
 }
 
 /** True si hay algún filtro AVANZADO informado (para abrir el panel automáticamente). */
 function hasActiveAdvanced(f: ValidacionesUiFilters): boolean {
   return (
-    f.tipoDoc.trim() !== '' ||
-    f.documento.trim() !== '' ||
+    f.documentType.trim() !== '' ||
+    f.documentNumber.trim() !== '' ||
     f.scoreMin.trim() !== '' ||
     f.scoreMax.trim() !== '' ||
     f.createdFrom !== '' ||
@@ -247,15 +247,15 @@ export function ValidacionesFilterToolbar({
         />
         <FilterSelect
           label="Parte"
-          value={filters.parte}
+          value={filters.partyRole}
           options={PARTE_OPTIONS}
-          onSelect={(v) => onChange({ parte: v }, true)}
+          onSelect={(v) => onChange({ partyRole: v }, true)}
         />
         <FilterSelect
           label="Estado"
-          value={filters.estado}
+          value={filters.status}
           options={ESTADO_OPTIONS}
-          onSelect={(v) => onChange({ estado: v }, true)}
+          onSelect={(v) => onChange({ status: v }, true)}
         />
         <FilterSelect
           label="Vigencia"
@@ -272,8 +272,8 @@ export function ValidacionesFilterToolbar({
         <Field label="Persona">
           <input
             type="text"
-            value={filters.nombre}
-            onChange={(e) => onChange({ nombre: e.target.value })}
+            value={filters.name}
+            onChange={(e) => onChange({ name: e.target.value })}
             placeholder="Nombre…"
             className={CONTROL_CLASS}
             style={{ borderColor: '#DFE5ED' }}
@@ -282,13 +282,13 @@ export function ValidacionesFilterToolbar({
       </div>
 
       {/* Motivo de rechazo: contextual (visible solo cuando se filtra por estado=rechazado) */}
-      {filters.estado === 'rechazado' && (
+      {filters.status === 'rechazado' && (
         <div className="mt-2">
           <Field label="Motivo de rechazo">
             <input
               type="text"
-              value={filters.motivoRechazo}
-              onChange={(e) => onChange({ motivoRechazo: e.target.value })}
+              value={filters.rejectionReason}
+              onChange={(e) => onChange({ rejectionReason: e.target.value })}
               placeholder="Texto del motivo…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}
@@ -303,8 +303,8 @@ export function ValidacionesFilterToolbar({
           <Field label="Tipo doc.">
             <input
               type="text"
-              value={filters.tipoDoc}
-              onChange={(e) => onChange({ tipoDoc: e.target.value })}
+              value={filters.documentType}
+              onChange={(e) => onChange({ documentType: e.target.value })}
               placeholder="CC, CE…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}
@@ -313,8 +313,8 @@ export function ValidacionesFilterToolbar({
           <Field label="Documento">
             <input
               type="text"
-              value={filters.documento}
-              onChange={(e) => onChange({ documento: e.target.value })}
+              value={filters.documentNumber}
+              onChange={(e) => onChange({ documentNumber: e.target.value })}
               placeholder="Número…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}

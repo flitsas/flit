@@ -134,7 +134,7 @@ public sealed class GenerarFurHandler(
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
             return instance.BiometricValidations.Any(v =>
-                string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
+                string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
                 && BiometricRules.EsAprobadaVigente(v, now)
                 && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
         }
@@ -207,11 +207,11 @@ public sealed class GenerarFurHandler(
             string.Equals(x.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
 
         var bio = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.Parte, "comprador", StringComparison.OrdinalIgnoreCase)
-            && v.Estado == BiometricEstados.Aprobado);
+            string.Equals(v.PartyRole, "comprador", StringComparison.OrdinalIgnoreCase)
+            && v.Status == BiometricEstados.Aprobado);
 
-        var nombre = comprador?.FullName ?? bio?.Nombre ?? "-";
-        var documento = comprador?.DocumentNumber ?? bio?.Documento ?? "-";
+        var nombre = comprador?.FullName ?? bio?.Name ?? "-";
+        var documento = comprador?.DocumentNumber ?? bio?.DocumentNumber ?? "-";
         // La biométrica del comprador ya está aprobada (gate previo) → score real o 95 por defecto.
         var score = bio?.Score ?? 95;
 

@@ -23,9 +23,9 @@ public sealed class ListStuckIdentityValidationsTests
         Attempts: IdentityValidationOutbox.MaxDeliveryAttempts,
         OccurredAt: DateTimeOffset.UtcNow.AddMinutes(-30),
         CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-30),
-        Nombre: "ABRAHAM ENRIQUE CAÑON",
-        TipoDoc: "CC",
-        Documento: "1020304050",
+        Name: "ABRAHAM ENRIQUE CAÑON",
+        DocumentType: "CC",
+        DocumentNumber: "1020304050",
         Kind: StuckIdentityValidationKinds.Encadenamiento);
 
     [Fact]
@@ -50,9 +50,9 @@ public sealed class ListStuckIdentityValidationsTests
         dto.Attempts.Should().Be(IdentityValidationOutbox.MaxDeliveryAttempts);
         dto.OccurredAt.Should().Be(row.OccurredAt);
         // El DTO trae la persona (la UI muestra nombre + últimos 4 del documento).
-        dto.Nombre.Should().Be("ABRAHAM ENRIQUE CAÑON");
-        dto.TipoDoc.Should().Be("CC");
-        dto.Documento.Should().Be("1020304050");
+        dto.Name.Should().Be("ABRAHAM ENRIQUE CAÑON");
+        dto.DocumentType.Should().Be("CC");
+        dto.DocumentNumber.Should().Be("1020304050");
         dto.Kind.Should().Be(StuckIdentityValidationKinds.Encadenamiento);
     }
 

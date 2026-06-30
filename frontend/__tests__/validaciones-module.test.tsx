@@ -31,19 +31,19 @@ const ROW_APROBADA: TenantBiometricValidation = {
   instanceId: 'inst-1',
   referenceNumber: 'TRM-2026-000001',
   modalidad: 'traspaso',
-  parte: 'comprador',
-  nombre: 'Ana Compradora',
-  tipoDoc: 'CC',
-  documento: '1020304050',
-  estado: 'aprobado',
+  partyRole: 'comprador',
+  name: 'Ana Compradora',
+  documentType: 'CC',
+  documentNumber: '1020304050',
+  status: 'aprobado',
   score: 95,
   provider: 'kyverum',
   expired: false,
-  motivoRechazo: null,
+  rejectionReason: null,
   createdAt: '2026-06-20T15:30:00Z',
-  validadoAt: '2026-06-20T15:40:00Z',
-  vigenciaHasta: '2026-07-20T00:00:00-05:00',
-  diasRestantes: 20,
+  validatedAt: '2026-06-20T15:40:00Z',
+  validUntil: '2026-07-20T00:00:00-05:00',
+  daysRemaining: 20,
 };
 
 const ROW_RECHAZADA: TenantBiometricValidation = {
@@ -51,19 +51,19 @@ const ROW_RECHAZADA: TenantBiometricValidation = {
   instanceId: 'inst-2',
   referenceNumber: 'TRM-2026-000002',
   modalidad: 'matricula_inicial',
-  parte: null,
-  nombre: 'Luis Vendedor',
-  tipoDoc: 'CC',
-  documento: '7788',
-  estado: 'rechazado',
+  partyRole: null,
+  name: 'Luis Vendedor',
+  documentType: 'CC',
+  documentNumber: '7788',
+  status: 'rechazado',
   score: 30,
   provider: 'kyverum',
   expired: false,
-  motivoRechazo: 'La verificación del documento no fue exitosa.',
+  rejectionReason: 'La verificación del documento no fue exitosa.',
   createdAt: '2026-06-21T10:00:00Z',
-  validadoAt: null,
-  vigenciaHasta: null,
-  diasRestantes: null,
+  validatedAt: null,
+  validUntil: null,
+  daysRemaining: null,
 };
 
 const FULL: TenantBiometricValidationsResponse = {
@@ -225,7 +225,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     await waitFor(() =>
       expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: 'aprobado' }),
+        expect.objectContaining({ status: 'aprobado' }),
       ),
     );
   });
@@ -298,7 +298,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
     // Debounce ~300ms; la última consulta combina ambos filtros (AND en el backend).
     await waitFor(() =>
       expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
-        expect.objectContaining({ referenceNumber: 'TRM-2026', nombre: 'Ana' }),
+        expect.objectContaining({ referenceNumber: 'TRM-2026', name: 'Ana' }),
       ),
     );
   });
@@ -338,7 +338,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await waitFor(() => {
       expect(mocks.listTenantBiometricValidations).toHaveBeenCalled();
       const lastArg = mocks.listTenantBiometricValidations.mock.calls.at(-1)?.[0];
-      expect(lastArg?.estado).toBeUndefined();
+      expect(lastArg?.status).toBeUndefined();
     });
     // El control vuelve a "Todos" (valor vacío).
     expect(screen.getByLabelText('Estado')).toHaveValue('');
@@ -364,7 +364,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
       // La consulta automática se hace en segundo plano (último parámetro de filtros, sin query).
       const lastArg = mocks.listTenantBiometricValidations.mock.calls.at(-1)?.[0];
-      expect(lastArg?.estado).toBeUndefined();
+      expect(lastArg?.status).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }
@@ -381,9 +381,9 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
         attempts: 5,
         occurredAt: '2026-06-20T10:00:00Z',
         createdAt: '2026-06-20T10:00:00Z',
-        nombre: 'Maria Compradora',
-        tipoDoc: 'CC',
-        documento: '1020304050',
+        name: 'Maria Compradora',
+        documentType: 'CC',
+        documentNumber: '1020304050',
       },
     ],
     total: 1,
@@ -411,13 +411,13 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
     mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
     mocks.listStuckIdentityValidations.mockResolvedValue({
       stuck: [
-        { ...STUCK.stuck[0], id: 'evt-envio', kind: 'envio', nombre: 'Pedro Envio' },
+        { ...STUCK.stuck[0], id: 'evt-envio', kind: 'envio', name: 'Pedro Envio' },
         {
           ...STUCK.stuck[0],
           id: 'evt-cad',
           validationId: 'val-bbbbbbbb',
           kind: 'encadenamiento',
-          nombre: 'Ana Cadena',
+          name: 'Ana Cadena',
         },
       ],
       total: 2,
@@ -477,9 +477,9 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
           attempts: 5,
           occurredAt: '2026-06-20T11:00:00Z',
           createdAt: '2026-06-20T11:00:00Z',
-          nombre: 'Luis Vendedor',
-          tipoDoc: 'CC',
-          documento: '7788',
+          name: 'Luis Vendedor',
+          documentType: 'CC',
+          documentNumber: '7788',
         },
       ],
       total: 2,

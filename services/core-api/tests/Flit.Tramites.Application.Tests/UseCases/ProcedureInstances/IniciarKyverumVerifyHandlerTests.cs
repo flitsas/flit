@@ -72,7 +72,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         error.Should().BeNull();
         result!.CaptureUrl.Should().Be("https://capture/kyv_123");
         result.Validation.Provider.Should().Be(BiometricProviders.Kyverum);
-        result.Validation.Estado.Should().Be(BiometricEstados.EnProceso);
+        result.Validation.Status.Should().Be(BiometricEstados.EnProceso);
         // AC9: captureUrl expuesta en kyverum + en_proceso.
         result.Validation.CaptureUrl.Should().Be("https://capture/kyv_123");
 
@@ -105,7 +105,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         result.Should().NotBeNull();
         result!.Queued.Should().BeTrue();
         result.CaptureUrl.Should().BeEmpty();
-        result.Validation.Estado.Should().Be(BiometricEstados.PendienteEnvio);
+        result.Validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
@@ -148,8 +148,8 @@ public sealed class IniciarKyverumVerifyHandlerTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Estado = BiometricEstados.Aprobado,
+            PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado,
             TokenHash = "h",
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -191,7 +191,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
             ct);
         var v = instance.BiometricValidations.Should().ContainSingle().Subject;
         v.Email.Should().Be("actor@x.com");
-        v.Documento.Should().Be("99887766");
+        v.DocumentNumber.Should().Be("99887766");
     }
 
     [Fact]
