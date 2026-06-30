@@ -41,7 +41,7 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
   const immersive =
     segments.length === 2 && segments[0] === 'tramites' && segments[1] !== 'nuevo';
 
-  const { modules: accessibleModules } = useAccessibleModules(authed);
+  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
   const accessibleCodes = accessibleModules.map((m) => m.code);
 
   const handleNav = (m: ModuleId) => {
@@ -67,7 +67,7 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     // desmonta al ir de /tramites/[id] → /tramites, así el toast de "enviado a
     // tránsito" sigue visible tras la redirección que dispara Finalizar.
     <ToastProvider>
-    <Shell active="tramites" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}>
+    <Shell active="tramites" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
       <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
         {!immersive && (
           <>
