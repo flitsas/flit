@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getCommercial: vi.fn(),
   putCommercial: vi.fn(),
   submitInstance: vi.fn(),
+  finalizeDraft: vi.fn(),
   // dependencias de los componentes embebidos
   getActors: vi.fn(),
   saveActors: vi.fn(),
@@ -29,6 +30,14 @@ const mocks = vi.hoisted(() => ({
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
   listTransitOffices: vi.fn(),
+  getBiometricState: vi.fn(),
+  iniciarBiometric: vi.fn(),
+  simulateBiometric: vi.fn(),
+  ensureIdentity: vi.fn(),
+  // dependencias del paso FUR (FirmaFurStep)
+  listBiometric: vi.fn(),
+  listFirmas: vi.fn(),
+  listParticipantes: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -131,11 +140,20 @@ beforeEach(() => {
   mocks.getCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.putCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1' });
+  mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: '2026-06-24T12:00:00Z' });
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);
+  mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
+  mocks.simulateBiometric.mockResolvedValue({ id: 'bio-1', estado: 'aprobado' });
+  mocks.iniciarBiometric.mockResolvedValue({ validation: { id: 'bio-1', estado: 'en_proceso' } });
+  mocks.listBiometric.mockResolvedValue([]);
+  mocks.listFirmas.mockResolvedValue([]);
+  mocks.listParticipantes.mockResolvedValue([]);
+  // Por defecto la identidad ya está vigente (no dispara nueva validación al guardar la parte).
+  mocks.ensureIdentity.mockResolvedValue({ outcome: 'ya_vigente' });
 });
 
 function renderWizard() {
@@ -335,7 +353,9 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
   });
 
-  it('Finalizar envía, dispara toast de éxito y vuelve al listado (sin pantalla intermedia)', async () => {
+  it('con identidad aprobada el último paso radica (submit), dispara toast y vuelve al listado', async () => {
+    // Todos los pasos completos (incl. la biométrica → sin pendiente_biometria) ⇒ identidad
+    // aprobada ⇒ el botón terminal es "Radicar a tránsito" (no "Finalizar"), y dispara submit.
     mocks.getWizardState.mockResolvedValue({
       ...TRASPASO_WIZARD,
       canSubmit: true,
@@ -349,16 +369,107 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     );
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
-    const finish = screen.getByRole('button', { name: /Finalizar/ });
-    expect(finish).toBeEnabled();
-    await user.click(finish);
+    const radicar = screen.getByRole('button', { name: /Radicar a tránsito/ });
+    expect(radicar).toBeEnabled();
+    // No se ofrece "Finalizar" cuando ya se puede radicar.
+    expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
+    await user.click(radicar);
 
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.finalizeDraft).not.toHaveBeenCalled();
     // Toast de éxito + redirección inmediata (onExit), sin pantalla intermedia.
     expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/enviado a tránsito/i), 'success');
     expect(onExit).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('¡Trámite enviado!')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Volver a Operación' })).not.toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — desacople validación identidad async (HU #10350)', () => {
+  // Matrícula con datos completos pero identidad pendiente: el FUR (5) ahora es ALCANZABLE (incomplete,
+  // no locked), así que es el paso de decisión donde se finaliza/radica. Identidad (4) → "Continuar".
+  // canSubmit=true (datos listos; identidad diferida).
+  const MATRICULA_DATA_DONE_IDENTITY_PENDING: WizardState = {
+    modalidad: 'matricula_inicial',
+    tipologiaCodigo: 'matricula_inicial',
+    totalSteps: 5,
+    canSubmit: true,
+    blockers: [],
+    steps: [
+      { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+      { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+      { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
+      { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente', 'pendiente_biometria'] },
+      { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
+    ],
+  };
+
+  it('AC1 — el paso de decisión es FUR (5); Identidad ofrece "Continuar", no "Finalizar"', async () => {
+    mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+    // Reanuda en Identidad (frontera). Ya NO es paso terminal → "Continuar" (no "Finalizar").
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' });
+    expect(screen.getByRole('button', { name: /^Continuar$/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
+    // El paso 5 (FUR) es navegable aunque la identidad esté pendiente.
+    expect(screen.getByRole('button', { name: /^Paso 5: FUR/ })).toBeEnabled();
+  });
+
+  it('AC1 — "Finalizar" en el paso FUR llama finalize-draft (no submit), avisa y vuelve al listado', async () => {
+    mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    const onExit = vi.fn();
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
+
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' });
+    // Navega al paso 5 (FUR), el paso de decisión.
+    await user.click(screen.getByRole('button', { name: /^Paso 5: FUR/ }));
+
+    // Aviso de que el FUR/firma se generan automáticamente.
+    expect(await screen.findByText(/se generarán automáticamente/i)).toBeInTheDocument();
+    const finalizar = await screen.findByRole('button', { name: /^Finalizar$/ });
+    expect(finalizar).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Radicar a tránsito/ })).not.toBeInTheDocument();
+
+    await user.click(finalizar);
+
+    await waitFor(() => expect(mocks.finalizeDraft).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/pendiente validación del cliente/i), 'success');
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC2 — borrador finalizado: datos en solo lectura, Identidad operable, Radicar deshabilitado', async () => {
+    mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
+    // draftFinalizedAt presente ⇒ modo borrador finalizado (readOnly parcial).
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'draft',
+      draftFinalizedAt: '2026-06-20T10:00:00Z',
+      fieldValues: [],
+      actors: [],
+    });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+    // Banner informativo de espera de validación (accesible: role=status).
+    expect(await screen.findByText(/esperando validación del cliente/i)).toBeInTheDocument();
+
+    // Identidad (frontera) sigue operable pese al readOnly parcial.
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' });
+    expect(
+      await screen.findByRole('button', { name: /Simular validación de identidad/ }),
+    ).toBeEnabled();
+
+    // Los datos quedan en solo lectura: el input del paso de consulta está deshabilitado.
+    await user.click(screen.getByRole('button', { name: /^Paso 1: Consulta VIN/ }));
+    expect(await screen.findByLabelText('Número VIN')).toBeDisabled();
+
+    // En el paso FUR (decisión), Radicar deshabilitado hasta validar; sin "Finalizar" (ya finalizado).
+    await user.click(screen.getByRole('button', { name: /^Paso 5: FUR/ }));
+    expect(await screen.findByRole('button', { name: /Radicar a tránsito/ })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
   });
 });
 
@@ -581,6 +692,71 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
 
     // 3) Con el vendedor ya complete, el wizard avanza al paso Comprador.
     expect(await screen.findByText(/Identificación · Comprador/)).toBeInTheDocument();
+  });
+
+  // HU #10350 — al guardar la parte, el wizard asegura su identidad (reuso vigente o auto-validación).
+  async function guardarVendedor() {
+    const user = userEvent.setup();
+    mocks.getWizardState.mockResolvedValue(VENDEDOR_FRONTIER);
+    mocks.getActors.mockResolvedValue([
+      { rol: 'vendedor', tipoDocumento: 'CC', numeroDocumento: '999', nombreCompleto: 'Pedro Vendedor', email: 'pedro@x.com' },
+    ]);
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
+    await screen.findByDisplayValue('Pedro Vendedor');
+    await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
+  }
+
+  it('sin identidad vigente + provider mock → simula la validación automáticamente (sin clic)', async () => {
+    mocks.ensureIdentity.mockResolvedValue({ outcome: 'requiere_validacion' });
+    mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
+
+    await guardarVendedor();
+
+    await waitFor(() => expect(mocks.ensureIdentity).toHaveBeenCalledWith('inst-1', 'vendedor'));
+    await waitFor(() => expect(mocks.simulateBiometric).toHaveBeenCalledWith('inst-1', { parte: 'vendedor' }));
+    expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
+  });
+
+  it('sin identidad vigente + provider kyverum → inicia la validación (envía enlace) automáticamente', async () => {
+    mocks.ensureIdentity.mockResolvedValue({ outcome: 'requiere_validacion' });
+    mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'kyverum' });
+
+    await guardarVendedor();
+
+    await waitFor(() => expect(mocks.iniciarBiometric).toHaveBeenCalledWith('inst-1', { parte: 'vendedor' }));
+    expect(mocks.simulateBiometric).not.toHaveBeenCalled();
+  });
+
+  it('identidad vigente reutilizada → NO dispara una nueva validación', async () => {
+    mocks.ensureIdentity.mockResolvedValue({ outcome: 'reusada' });
+
+    await guardarVendedor();
+
+    await waitFor(() => expect(mocks.ensureIdentity).toHaveBeenCalledWith('inst-1', 'vendedor'));
+    expect(mocks.simulateBiometric).not.toHaveBeenCalled();
+    expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
+  });
+
+  it('si el ensure de identidad falla → avisa al gestor (toast) en vez de fallar en silencio', async () => {
+    // Fix #2 (auditoría QA): el error de ensureIdentity ya NO se traga silenciosamente. Se avisa al
+    // gestor con un toast (y se deja traza en consola) para que no continúe creyendo que la identidad
+    // quedó encaminada. No bloquea el avance.
+    mocks.ensureIdentity.mockRejectedValue(new Error('network'));
+
+    await guardarVendedor();
+
+    await waitFor(() => expect(mocks.ensureIdentity).toHaveBeenCalledWith('inst-1', 'vendedor'));
+    await waitFor(() =>
+      expect(toastShow).toHaveBeenCalledWith(
+        expect.stringContaining('No se pudo iniciar automáticamente la validación de identidad'),
+        'error',
+      ),
+    );
+    // El fallo corta la orquestación (no se fuerza simular/iniciar tras el error) pero no rompe el flujo.
+    expect(mocks.simulateBiometric).not.toHaveBeenCalled();
+    expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
   });
 });
 

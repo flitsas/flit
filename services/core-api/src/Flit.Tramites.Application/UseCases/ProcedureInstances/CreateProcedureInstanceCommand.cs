@@ -19,7 +19,8 @@ public sealed record ProcedureInstanceSummary(
     Guid ProcedureTypeId,
     Guid TenantId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? SubmittedAt);
+    DateTimeOffset? SubmittedAt,
+    DateTimeOffset? DraftFinalizedAt = null);
 
 public sealed class CreateProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -111,5 +112,5 @@ public sealed class CreateProcedureInstanceHandler(
     }
 
     internal static ProcedureInstanceSummary ToSummary(ProcedureInstance e) =>
-        new(e.Id, e.ReferenceNumber, e.Status, e.ProcedureTypeId, e.TenantId, e.CreatedAt, e.SubmittedAt);
+        new(e.Id, e.ReferenceNumber, e.Status, e.ProcedureTypeId, e.TenantId, e.CreatedAt, e.SubmittedAt, e.DraftFinalizedAt);
 }

@@ -48,14 +48,25 @@ public interface IProcedureInstanceRepository
     /// transversal del submódulo "Validaciones de Identidad" (HU #10234). Solo lectura (AsNoTracking),
     /// acotada a <paramref name="limit"/> filas (cap de monitoreo, no exporta el histórico completo).
     /// </summary>
-    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(Guid tenantId, int limit, CancellationToken ct = default);
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+        Guid tenantId,
+        int skip,
+        int take,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Cuenta las validaciones biométricas del tenant agrupadas por estado (KPIs del submódulo de
     /// Validaciones). Independiente del cap de filas de <see cref="ListBiometricValidationsByTenantAsync"/>
-    /// para que los totales sean exactos.
+    /// para que los totales sean exactos. Si <paramref name="filter"/> tiene criterios activos, el conteo
+    /// se aplica sobre el mismo conjunto filtrado (HU #10347).
     /// </summary>
-    Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(Guid tenantId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+        Guid tenantId,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
@@ -67,10 +78,31 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Lista los borradores FINALIZADOS del tenant (status=draft, <c>draft_finalized_at</c> NOT NULL, no
+    /// eliminados) donde el sujeto (<paramref name="tipoDoc"/> + <paramref name="documento"/>) es actor de
+    /// la <paramref name="parte"/> indicada. Orden determinista: <c>draft_finalized_at</c> ASC, luego
+    /// <c>reference_number</c> (HU #10349, AC5). Incluye los actores para resolver la parte; el resto del
+    /// grafo lo recargan los handlers de firma/FUR por id. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
+        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con TODO el grafo necesario para generar el FUR (Slice 7): actores,
     /// field values, adjuntos, comercial, biométricas y firmas.
     /// </summary>
     Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Busca la validación de identidad APROBADA y VIGENTE más reciente de una persona
+    /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) en CUALQUIER trámite no eliminado del
+    /// tenant, para reutilizarla (HU #10350 — reuso de identidad vigente). Vigente = aprobada con
+    /// <c>validado_at</c> dentro de los <see cref="Entities.BiometricRules.VigenciaDias"/> días (regla por
+    /// fecha de <see cref="Entities.BiometricRules.EsAprobadaVigente"/>, aplicada en memoria sobre los
+    /// candidatos). Devuelve null si la persona no tiene ninguna validación vigente. Solo lectura.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía

@@ -1520,13 +1520,131 @@ paths:
     get:
       operationId: listTenantBiometricValidations
       tags: [Tramites, Identidad]
-      summary: Listar las validaciones de identidad del tenant (HU #10234)
+      summary: Listar las validaciones de identidad del tenant (HU #10234, filtros HU #10347)
       description: >
         Vista transversal del submódulo "Validaciones de Identidad": lista TODAS las validaciones
         biométricas/de identidad del tenant (a través de todas sus instancias no eliminadas), las más
         recientes primero, junto con KPIs agregados por estado. No es por-instancia. La tabla se acota a
-        un máximo de filas (vista de monitoreo); los KPIs se calculan aparte y son exactos. El motivo de
-        rechazo viaja SANITIZADO (sin PII), igual que en la vista por-instancia.
+        un máximo de filas (vista de monitoreo); los KPIs se calculan aparte y son exactos. Con filtros
+        activos, filas y KPIs reflejan el mismo subconjunto filtrado (antes del cap de 500 filas). El
+        motivo de rechazo viaja SANITIZADO (sin PII), igual que en la vista por-instancia. Filtrar por
+        estado=expirado incluye validaciones con estado persistido expirado y las que tienen el flag
+        expired calculado (no aprobada y ExpiresAt &lt; now).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: referenceNumber
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre el número de referencia del trámite.
+          schema: { type: string }
+        - name: modalidad
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre la modalidad del trámite.
+          schema: { type: string }
+        - name: nombre
+          in: query
+          required: false
+          description: Coincidencia parcial (case-insensitive) sobre el nombre de la persona validada.
+          schema: { type: string }
+        - name: parte
+          in: query
+          required: false
+          description: Filtro exacto por parte (comprador | vendedor).
+          schema: { type: string, enum: [comprador, vendedor] }
+        - name: tipoDoc
+          in: query
+          required: false
+          description: Filtro exacto por tipo de documento (p.ej. CC, CE).
+          schema: { type: string }
+        - name: documento
+          in: query
+          required: false
+          description: Coincidencia parcial por número de documento (sin exponer PII en errores).
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: >
+            Filtro por estado. Valores: enviado, en_proceso, aprobado, rechazado, expirado. El valor
+            expirado incluye estado persistido y validaciones vencidas no aprobadas (flag expired).
+          schema:
+            type: string
+            enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
+        - name: provider
+          in: query
+          required: false
+          description: Filtro exacto por proveedor (mock | kyverum).
+          schema: { type: string, enum: [mock, kyverum] }
+        - name: scoreMin
+          in: query
+          required: false
+          description: Score mínimo inclusive (solo filas con score informado).
+          schema: { type: integer, minimum: 0 }
+        - name: scoreMax
+          in: query
+          required: false
+          description: Score máximo inclusive (solo filas con score informado).
+          schema: { type: integer, minimum: 0 }
+        - name: createdFrom
+          in: query
+          required: false
+          description: Fecha/hora mínima inclusive de creación (ISO-8601).
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          required: false
+          description: Fecha/hora máxima inclusive de creación (ISO-8601).
+          schema: { type: string, format: date-time }
+        - name: motivoRechazo
+          in: query
+          required: false
+          description: >
+            Coincidencia parcial case-insensitive en el motivo de rechazo sanitizado (solo filas
+            rechazadas; busca en Detalle y ProviderPayload).
+          schema: { type: string }
+        - name: page
+          in: query
+          required: false
+          description: Página (1-based). Por defecto 1; valores < 1 se normalizan a 1.
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          description: Filas por página. El cliente elige de 10 en 10 hasta 50; fuera de rango se acota.
+          schema: { type: integer, minimum: 10, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Validaciones del tenant + KPIs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantBiometricValidationsResponse"
+        "400":
+          description: >
+            Falta el header X-Tenant-Id, parámetros de filtro inválidos (estado/provider/parte fuera de
+            catálogo, scoreMin &gt; scoreMax, createdFrom &gt; createdTo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/identity-validation/stuck:
+    get:
+      operationId: listStuckIdentityValidations
+      tags: [Tramites, Identidad]
+      summary: Eventos de validación de identidad atascados (dead-letter) (HU #10349 fase 2)
+      description: >
+        Observabilidad operativa del encadenamiento async de identidad (patrón outbox). Lista los eventos
+        `completed` del tenant que quedaron ATASCADOS: pendientes (no despachados) que agotaron los
+        reintentos del worker (`attempts >= maxDeliveryAttempts`) y, por lo tanto, NO se reintentan más.
+        Útil para detectar trámites cuyo auto-flujo (firma/FUR) quedó trabado. Recuperación operativa:
+        reencolar poniendo `attempts = 0` en la fila (el worker la retomará). Sin PII (no expone el payload).
       security:
         - bearerAuth: []
       parameters:
@@ -1536,13 +1654,194 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: Validaciones del tenant + KPIs.
+          description: Eventos atascados + total.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TenantBiometricValidationsResponse"
+                $ref: "#/components/schemas/StuckIdentityValidationsResponse"
         "400":
           description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/identity-validation/stuck/{id}/requeue:
+    post:
+      operationId: requeueStuckIdentityValidation
+      tags: [Tramites, Identidad]
+      summary: Reencolar ("desatascar") un evento de identidad atascado (HU #10349 fase 2)
+      description: >
+        Reinicia los intentos de un evento ATASCADO (dead-letter) para que el worker lo vuelva a procesar
+        en el próximo ciclo. Idempotente. 404 si no hay un evento atascado con ese id para el tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id del evento en la outbox (identity_validation_outbox.id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Evento reencolado; el worker lo retomará en el próximo ciclo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requeued]
+                properties:
+                  requeued: { type: boolean, example: true }
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No hay un evento atascado con ese id para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/identity-validation/stuck/requeue-all:
+    post:
+      operationId: requeueAllStuckIdentityValidations
+      tags: [Tramites, Identidad]
+      summary: Reencolar TODOS los eventos de identidad atascados del tenant (HU #10349 fase 2)
+      description: >
+        Reinicia los intentos de todos los eventos ATASCADOS (dead-letter) del tenant de una vez para que
+        el worker los vuelva a procesar. Idempotente. Devuelve cuántos se reencolaron.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cantidad de eventos reencolados.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requeued]
+                properties:
+                  requeued: { type: integer, example: 3 }
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/finalize-draft:
+    post:
+      operationId: finalizeDraftProcedureInstance
+      tags: [Tramites]
+      summary: Finalizar borrador del trámite (HU #10349)
+      description: >
+        Marca un borrador como "finalizado": valida que la captura de datos esté completa (actores de la
+        modalidad, documentos obligatorios y organismo de tránsito) PERO **no** exige validación de
+        identidad ni FUR. La instancia permanece en estado `draft` y se sella `draftFinalizedAt`, quedando
+        a la espera de la validación de identidad asíncrona del cliente (fase 2). Idempotente: si el
+        borrador ya estaba finalizado, devuelve el resumen actual sin re-sellar. La radicación real
+        (`submit`, Draft→Submitted) sigue exigiendo identidad + FUR + reglas OT.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador de la instancia (procedure_instance_id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Borrador finalizado; `draftFinalizedAt` sellado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureInstanceSummary"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La instancia no existe para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La instancia no está en `draft` (`not_draft`) o faltan datos para finalizar
+            (`actores_incompletos`, `documentos_incompletos`, `organismo_requerido`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/identity/ensure:
+    post:
+      operationId: ensureProcedureInstanceIdentity
+      tags: [Tramites, Identidad]
+      summary: Asegurar la identidad vigente de una parte (HU #10350)
+      description: >
+        Al guardar una parte (comprador/vendedor) el sistema asegura su validación de identidad sin
+        esperar un clic manual: si la persona (tipoDoc+documento) tiene una validación APROBADA y VIGENTE
+        (≤30 días calendario desde la aprobación; el día de aprobación es el día 1 y vence el día 31) en
+        cualquier trámite del tenant, la reutiliza clonándola a este trámite (hereda la fecha de
+        aprobación → conserva el mismo vencimiento). Si no hay vigente, responde `requiere_validacion`
+        para que el cliente sea enviado a validar automáticamente. Idempotente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parte]
+              properties:
+                parte:
+                  type: string
+                  enum: [comprador, vendedor]
+      responses:
+        "200":
+          description: Desenlace de la verificación de identidad de la parte.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnsureIdentityResult"
+        "400":
+          description: parte inválida o falta X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Instancia no encontrada.
           content:
             application/json:
               schema:
@@ -1580,6 +1879,15 @@ paths:
           description: >
             Validación creada. El cuerpo varía según el proveedor: `IniciarKyverumVerifyResult`
             (kyverum) o el resultado del magic-link (mock).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarKyverumVerifyResult"
+        "202":
+          description: >
+            El envío al proveedor falló de forma transitoria y quedó ENCOLADO para reintento automático
+            (la validación está en `pendiente_envio`, `queued=true`, aún sin `captureUrl`). Un worker
+            provider-agnostic reintenta el envío y la pasa a `en_proceso`, o a `error_envio` si agota intentos.
           content:
             application/json:
               schema:
@@ -2575,6 +2883,30 @@ components:
         documentCount: { type: integer, description: Documentos congelados en el snapshot. }
       required: [id, referenceNumber, status, snapshotAt, documentCount]
 
+    ProcedureInstanceSummary:
+      type: object
+      description: Resumen de una instancia de trámite (devuelto por finalize-draft y submit).
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string, example: draft }
+        procedureTypeId: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
+        draftFinalizedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            HU #10349 — fecha en que el borrador se finalizó (datos completos a la espera de la
+            validación de identidad async). Null si el borrador no se ha finalizado.
+      required: [id, referenceNumber, status, procedureTypeId, tenantId, createdAt]
+
     ProcedureDocumentRequirementSnapshotRow:
       type: object
       properties:
@@ -2599,6 +2931,76 @@ components:
       required: [data]
 
     # ── Validación de identidad / Kyverum Verify (HU #10233) ──────────────────
+    StuckIdentityValidation:
+      type: object
+      description: >
+        Validación de identidad atascada (dead-letter), de cualquiera de las dos colas: el ENVÍO al proveedor
+        (kind=envio, validación en error_envio) o el ENCADENAMIENTO async firma/FUR (kind=encadenamiento,
+        outbox de completado). Incluye nombre y documento de la persona validada (vista autenticada del
+        gestor; la UI enmascara el documento a los últimos 4) para saber de quién es. No expone el payload.
+      required: [id, validationId, eventType, attempts, occurredAt, createdAt, kind]
+      properties:
+        id: { type: string, format: uuid }
+        validationId:
+          type: string
+          format: uuid
+          description: Validación biométrica de origen (procedure_instance_biometric_validations.id).
+        kind:
+          type: string
+          enum: [envio, encadenamiento]
+          description: >
+            Cola en dead-letter: `envio` = el envío al proveedor (Kyverum) agotó reintentos
+            (estado error_envio); `encadenamiento` = el encadenamiento async firma/FUR agotó reintentos.
+        eventType: { type: string, example: identity_validation.completed }
+        attempts:
+          type: integer
+          description: Intentos de entrega consumidos (>= maxDeliveryAttempts ⇒ dead-letter).
+        occurredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        nombre:
+          type: string
+          nullable: true
+          description: Nombre de la persona validada (null si la validación ya no existe).
+        tipoDoc:
+          type: string
+          nullable: true
+          description: Tipo de documento (CC, CE…). Null si la validación ya no existe.
+        documento:
+          type: string
+          nullable: true
+          description: Documento completo (la UI lo enmascara a los últimos 4). Null si ya no existe.
+    StuckIdentityValidationsResponse:
+      type: object
+      description: Eventos de validación de identidad atascados (dead-letter) del tenant (HU #10349).
+      required: [stuck, total, maxDeliveryAttempts]
+      properties:
+        stuck:
+          type: array
+          items:
+            $ref: "#/components/schemas/StuckIdentityValidation"
+        total:
+          type: integer
+          description: Cantidad de eventos atascados devueltos (acotado a 200 filas).
+        maxDeliveryAttempts:
+          type: integer
+          description: Tope de reintentos a partir del cual un evento se considera dead-letter.
+    EnsureIdentityResult:
+      type: object
+      description: Desenlace de asegurar la identidad vigente de una parte (HU #10350).
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [ya_vigente, en_proceso, reusada, requiere_validacion, sin_actor]
+          description: >
+            `ya_vigente`/`en_proceso`: el trámite ya tiene una validación utilizable. `reusada`: se clonó
+            una validación vigente de la persona. `requiere_validacion`: no hay vigente → enviar a validar.
+            `sin_actor`: la parte aún no tiene actor con documento.
+        validationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Id de la validación clonada cuando `outcome=reusada`.
     IniciarBiometriaInput:
       type: object
       required: [nombre, tipoDoc, documento, email]
@@ -2624,7 +3026,7 @@ components:
         email: { type: string }
         estado:
           type: string
-          enum: [enviado, en_proceso, aprobado, rechazado, expirado]
+          enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
         intentos: { type: integer }
         maxIntentos: { type: integer }
         score: { type: integer, nullable: true }
@@ -2669,7 +3071,7 @@ components:
           description: Documento de la persona (la UI lo enmascara al pintarlo).
         estado:
           type: string
-          enum: [enviado, en_proceso, aprobado, rechazado, expirado]
+          enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
         score: { type: integer, nullable: true }
         provider:
           type: string
@@ -2695,14 +3097,24 @@ components:
         expiradas: { type: integer }
     TenantBiometricValidationsResponse:
       type: object
-      required: [validations, stats]
+      required: [validations, stats, page, pageSize, total]
       properties:
         validations:
           type: array
+          description: Filas de la PÁGINA pedida (no todo el conjunto).
           items:
             $ref: "#/components/schemas/TenantBiometricValidationDto"
         stats:
           $ref: "#/components/schemas/BiometricValidationStatsDto"
+        page:
+          type: integer
+          description: Página devuelta (1-based).
+        pageSize:
+          type: integer
+          description: Filas por página efectivas (acotadas a [10, 50]).
+        total:
+          type: integer
+          description: Total de filas del conjunto filtrado completo (para calcular el nº de páginas).
     IniciarKyverumVerifyResult:
       type: object
       required: [validation, captureUrl]
@@ -2711,7 +3123,12 @@ components:
           $ref: "#/components/schemas/BiometricValidationDto"
         captureUrl:
           type: string
-          description: URL que abre el participante para completar la validación en Kyverum.
+          description: URL que abre el participante para completar la validación en Kyverum (vacía si `queued`).
+        queued:
+          type: boolean
+          default: false
+          description: >
+            true = el envío falló transitoriamente y quedó encolado para reintento (estado `pendiente_envio`).
     KyverumWebhookPayload:
       type: object
       required: [evento, data]

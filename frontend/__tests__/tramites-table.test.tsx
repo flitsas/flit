@@ -42,6 +42,11 @@ function makeInstances(n: number): InstanceSummary[] {
       pasoActual: 2,
       totalPasos: 6,
       createdAt: '2026-06-18T00:00:00Z',
+      // HU #10350 — defaults: borrador no finalizado, sin validación async ni firma pendiente.
+      draftFinalizedAt: null,
+      identityValidationStatus: null,
+      signaturePending: false,
+      canSubmit: false,
       tenantId: '11111111-1111-1111-1111-111111111111',
       companiaNombre: null,
     } satisfies InstanceSummary;
@@ -122,6 +127,69 @@ describe('TramitesTable — paginación', () => {
   });
 });
 
+describe('TramitesTable — validación de identidad async (HU #10350, AC3)', () => {
+  const [base] = makeInstances(1);
+
+  it('borrador finalizado en proceso muestra el chip "Pendiente validación"', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'pending',
+        placa: 'PEND01',
+        estado: 'draft',
+        draftFinalizedAt: '2026-06-20T10:00:00Z',
+        identityValidationStatus: 'en_proceso',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    const row = (await screen.findByText('PEND01')).closest('[role="button"]') as HTMLElement;
+    expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
+    // Accesible: el chip expone su estado por aria-label.
+    expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
+    // Aún no se puede radicar → la acción sigue siendo "Continuar".
+    expect(within(row).getByRole('button', { name: /Continuar/ })).toBeInTheDocument();
+  });
+
+  it('identidad aprobada con firma pendiente muestra "Pendiente firma"', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'firma',
+        placa: 'FIRM01',
+        estado: 'draft',
+        draftFinalizedAt: '2026-06-20T10:00:00Z',
+        identityValidationStatus: 'aprobado',
+        signaturePending: true,
+      },
+    ]);
+    render(<TramitesTable />);
+
+    const row = (await screen.findByText('FIRM01')).closest('[role="button"]') as HTMLElement;
+    expect(within(row).getByText('Pendiente firma')).toBeInTheDocument();
+  });
+
+  it('identidad aprobada + canSubmit muestra "Listo para radicar" y acción "Radicar"', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'ready',
+        placa: 'RDY001',
+        estado: 'draft',
+        draftFinalizedAt: '2026-06-20T10:00:00Z',
+        identityValidationStatus: 'aprobado',
+        signaturePending: false,
+        canSubmit: true,
+      },
+    ]);
+    render(<TramitesTable />);
+
+    const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
+    expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: /Radicar trámite/ })).toBeInTheDocument();
+  });
+});
+
 describe('TramitesTable — organismo de tránsito', () => {
   const [base] = makeInstances(1);
 
@@ -159,6 +227,8 @@ function instance(over: Partial<InstanceSummary>): InstanceSummary {
     placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
+    draftFinalizedAt: null, identityValidationStatus: null,
+    signaturePending: false, canSubmit: false,
     tenantId: 't', companiaNombre: null, ...over,
   };
 }
