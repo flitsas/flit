@@ -52,6 +52,7 @@ public sealed class ApproveOtClientProcedureHandler
             command.OtTenantId,
             command.ProcedureInstanceId,
             command.ApprovedBy,
+            OtTransitionSource.OtAdmin,
             cancellationToken).ConfigureAwait(false);
 
         return updated is null
