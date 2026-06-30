@@ -7,39 +7,52 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Lectura de los agregados analíticos (schema <c>analytics</c>, HU #10153/#10240) para el dashboard
-/// (HU #10243). Cada consulta fija <c>app.current_tenant_id</c> con <c>set_config(..., is_local := true)</c>
-/// (parametrizado, sin concatenar SQL) dentro de una transacción para respetar RLS — incluido el caso
-/// SuperAdmin consultando otro tenant. La normalización de categoría (family → matriculas/traspasos/otros)
-/// se hace en SQL para que el GROUP BY sea consistente con el contrato del frontend.
+/// Lectura analítica en vivo desde las tablas operacionales del módulo de trámites (schema
+/// <c>tramites</c>) e <c>identity</c> — HU #10430 / ADR-0021 (Opción C: una sola fuente de verdad,
+/// se eliminaron los agregados <c>analytics.*</c>). Cada consulta fija <c>app.current_tenant_id</c>
+/// con <c>set_config(..., is_local := true)</c> (parametrizado, sin concatenar SQL) dentro de una
+/// transacción para respetar RLS — incluido el caso SuperAdmin consultando otro tenant. La
+/// normalización de categoría (family → matriculas/traspasos/otros) se hace en SQL para que el
+/// GROUP BY sea consistente con el contrato del frontend.
 /// </summary>
 internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 {
+    // Overview en vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango
+    // de creación. Reemplaza la lectura del agregado analytics.procedure_metrics_daily.
     private const string OverviewSql = """
         SELECT
             CASE
-                WHEN upper(procedure_category) = 'MATRICULAS' THEN 'matriculas'
-                WHEN upper(procedure_category) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
                 ELSE 'otros'
             END AS category,
-            status,
-            SUM(count)::int AS total
-        FROM analytics.procedure_metrics_daily
-        WHERE tenant_id = @tenant AND metric_date BETWEEN @from AND @to
-        GROUP BY 1, status
-        ORDER BY 1, status;
+            pi.status,
+            count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.tenant_id = @tenant
+          AND pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, pi.status
+        ORDER BY 1, pi.status;
         """;
 
+    // Top productores en vivo desde status_history (misma semántica que el extinto refresh:
+    // submitted; approved = approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING
+    // preserva el contrato previo (solo usuarios con al menos una radicación en el rango).
     private const string TopProducersSql = """
-        SELECT up.user_id, u.display_name,
-               SUM(up.submitted_count)::int AS submitted,
-               SUM(up.approved_count)::int  AS approved,
-               SUM(up.rejected_count)::int  AS rejected
-        FROM analytics.user_productivity_daily up
-        JOIN identity.users u ON u.id = up.user_id
-        WHERE up.tenant_id = @tenant AND up.metric_date BETWEEN @from AND @to
-        GROUP BY up.user_id, u.display_name
-        ORDER BY SUM(up.submitted_count) DESC, u.display_name ASC
+        SELECT h.changed_by AS user_id, u.display_name,
+               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+        FROM tramites.procedure_instance_status_history h
+        JOIN identity.users u ON u.id = h.changed_by
+        WHERE h.tenant_id = @tenant
+          AND h.changed_by IS NOT NULL
+          AND h.changed_at::date BETWEEN @from AND @to
+        GROUP BY h.changed_by, u.display_name
+        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 
