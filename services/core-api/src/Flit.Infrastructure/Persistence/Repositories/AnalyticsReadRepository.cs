@@ -165,13 +165,13 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(countCmd, "status", (object?)status ?? DBNull.Value);
             var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
-            // 2) Página solicitada (más recientes primero).
+            // 2) Página solicitada (más recientes primero). Desempate por id (PK única): ORDER BY
+            // created_at solo no es determinista con timestamps repetidos → paginación estable, sin
+            // filas duplicadas entre páginas.
             await using var pageCmd = CreateCommand(conn, tx, DetailsBaseCte +
                 " SELECT id, reference_number, procedure_type_name, category, status," +
                 " created_by_display_name, submitted_at, completed_at" +
                 " FROM base" + DetailsFilter +
-                // Desempate por id (PK única): ORDER BY created_at solo no es determinista
-                // cuando hay timestamps repetidos → paginación estable sin filas duplicadas entre páginas.
                 " ORDER BY created_at DESC, id DESC LIMIT @pageSize OFFSET @offset;");
             AddParam(pageCmd, "tenant", tenantId);
             AddParam(pageCmd, "from", fromDate);
