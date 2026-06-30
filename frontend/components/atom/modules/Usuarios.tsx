@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Building2, Users, Shield, Ban, ShieldOff } from "lucide-react";
+import { Plus, Search, X, Users, Shield, Ban, ShieldOff } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
@@ -9,26 +9,12 @@ import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const COMPANIES = [
-  { name: "FLIT SAS", nit: "900.123.456-7", estado: "Activa", plan: "Enterprise", users: 250 },
-  { name: "Movilidad Antioquia", nit: "890.456.789-1", estado: "Activa", plan: "Profesional", users: 84 },
-  { name: "Transito Sabaneta", nit: "890.111.222-3", estado: "Suspendida", plan: "Básico", users: 12 },
-  { name: "Operador Valle", nit: "890.333.444-5", estado: "En prueba", plan: "Trial", users: 6 },
-];
-
 const TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
-  { id: "companias", label: "Compañías", icon: Building2 },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
-
-const BADGE: Record<string, string> = {
-  Activa: "#00DBD5",
-  Suspendida: "#FF4E00",
-  "En prueba": "#F9AC00",
-};
 
 const STATUS_BADGE: Record<TenantUser["status"], { color: string; label: string }> = {
   active: { color: "#00DBD5", label: "Activo" },
@@ -101,10 +87,6 @@ export function Usuarios() {
           tab === "usuarios" ? (
             <button onClick={() => setOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
               <Plus className="h-4 w-4" /> Invitar usuario
-            </button>
-          ) : tab === "companias" ? (
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#557EFF" }}>
-              <Plus className="h-4 w-4" /> Nueva compañía
             </button>
           ) : null
         }
@@ -266,55 +248,6 @@ export function Usuarios() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {tab === "companias" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3">
-          <div className="grid grid-cols-4 gap-3 shrink-0">
-            {[
-              ["Compañías activas", 18, "#00DBD5"],
-              ["En periodo de prueba", 4, "#F9AC00"],
-              ["Suspendidas", 2, "#FF4E00"],
-              ["Usuarios totales", 352, "#557EFF"],
-            ].map(([l, v, c]) => (
-              <div key={l as string} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
-                <p className="text-[11px] opacity-70 font-medium">{l as string}</p>
-                <p className="text-3xl font-bold mt-1" style={{ color: c as string }}>{v as number}</p>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-white dark:bg-[#0B0F14] max-w-md shrink-0" style={{ borderColor: "#DFE5ED" }}>
-            <Search className="h-4 w-4 opacity-60" />
-            <input placeholder="Buscar por nombre o NIT..." className="flex-1 bg-transparent outline-none text-xs" />
-          </div>
-          <div className="flex-1 min-h-0 flex flex-col">
-            <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl" style={{ background: "#DFE5ED", color: "#162744" }}>
-              <div className="col-span-3">Compañía</div>
-              <div className="col-span-2">NIT</div>
-              <div className="col-span-2">Estado</div>
-              <div className="col-span-2">Plan</div>
-              <div className="col-span-1">Usuarios</div>
-              <div className="col-span-2 text-right">Acciones</div>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pt-2">
-              {COMPANIES.map((c) => (
-                <div key={c.nit} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
-                  <div className="col-span-3 font-semibold">{c.name}</div>
-                  <div className="col-span-2 font-mono opacity-80">{c.nit}</div>
-                  <div className="col-span-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: BADGE[c.estado] }}>{c.estado}</span>
-                  </div>
-                  <div className="col-span-2 opacity-80">{c.plan}</div>
-                  <div className="col-span-1 font-bold" style={{ color: "#557EFF" }}>{c.users}</div>
-                  <div className="col-span-2 flex justify-end gap-2">
-                    <button className="px-2 py-1 rounded-lg text-[10px] font-semibold border" style={{ borderColor: "#557EFF", color: "#557EFF" }}>Editar</button>
-                    <button className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white" style={{ background: "#557EFF" }}>Configurar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
