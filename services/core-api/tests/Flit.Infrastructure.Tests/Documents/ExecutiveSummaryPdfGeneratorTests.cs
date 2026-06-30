@@ -42,4 +42,34 @@ public sealed class ExecutiveSummaryPdfGeneratorTests
         bytes.Should().NotBeNullOrEmpty();
         bytes.Take(4).Should().Equal(PdfMagic);
     }
+
+    [Fact] // Ajuste #10246 — KPIs + gráficas: con desglose por estado, vehicular y Top 5 → PDF válido
+    public void Generate_ConGraficasYDesgloseEstados_ProducePdfValido()
+    {
+        var data = new ExecutiveSummaryData(
+            Guid.NewGuid(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30),
+            new List<CategoryMetricsDto>
+            {
+                new("matriculas", 40, new List<StatusCountDto>
+                {
+                    new("submitted", 18), new("approved_ot", 14), new("rejected_ot", 4), new("draft", 4),
+                }),
+                new("traspasos", 25, new List<StatusCountDto> { new("submitted", 15), new("completed", 10) }),
+                new("vehicular", 18, new List<StatusCountDto> { new("submitted", 12), new("in_review", 6) }),
+                new("otros", 0, new List<StatusCountDto>()),
+            },
+            new List<TopProducerDto>
+            {
+                new(Guid.NewGuid(), "Ana Gómez", 30, 20, 3),
+                new(Guid.NewGuid(), "Luis Ríos", 18, 9, 2),
+                new(Guid.NewGuid(), "María Paz", 7, 4, 1),
+            });
+
+        var bytes = new ExecutiveSummaryPdfGenerator().Generate(data);
+
+        bytes.Should().NotBeNullOrEmpty();
+        bytes.Take(4).Should().Equal(PdfMagic);
+        // Un PDF con KPIs + 3 secciones de gráficas + 2 tablas pesa bastante más que el de solo tablas.
+        bytes.Length.Should().BeGreaterThan(3000);
+    }
 }
