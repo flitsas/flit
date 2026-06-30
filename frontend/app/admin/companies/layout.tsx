@@ -6,6 +6,7 @@ import { Login } from '@/components/atom/Login';
 import { Shell, type ModuleId } from '@/components/atom/Shell';
 import { getToken } from '@/lib/api/client';
 import { clearToken, getRememberedEmail } from '@/lib/auth/session';
+import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 
 /**
  * Layout de /admin/companies/*. Igual que el de /tramites: replica el chrome de la
@@ -25,6 +26,9 @@ export default function AdminCompaniesLayout({ children }: { children: ReactNode
     setHydrated(true);
   }, []);
 
+  const { modules: accessibleModules } = useAccessibleModules(authed);
+  const accessibleCodes = accessibleModules.map((m) => m.code);
+
   const handleNav = (m: ModuleId) => {
     if (m === 'tramites') router.push('/tramites');
     else router.push(`/?m=${m}`);
@@ -42,7 +46,7 @@ export default function AdminCompaniesLayout({ children }: { children: ReactNode
   }
 
   return (
-    <Shell active="dashboard" onNav={handleNav} onLogout={handleLogout}>
+    <Shell active="dashboard" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}>
       <div className="h-full w-full overflow-y-auto">{children}</div>
     </Shell>
   );

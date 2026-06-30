@@ -258,6 +258,27 @@ export interface ExecutivePdfParams {
   tenantId?: string;
 }
 
+// ── Analytics · Dashboard · Tendencia mensual ────────────────────────────────
+/** Punto de tendencia mensual: total de trámites de una categoría en un mes. */
+export interface MonthlyTrendPoint {
+  year: number;
+  month: number;
+  category: AnalyticsCategory;
+  total: number;
+}
+
+/** Respuesta de GET /api/v1/analytics/monthly-trend. */
+export interface MonthlyTrendResponse {
+  items: MonthlyTrendPoint[];
+}
+
+/** Query params del monthly-trend. */
+export interface MonthlyTrendParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
 /** Error de validación tipado para flujos 422 (AC2/AC3). */
 export class ApiValidationError extends Error {
   constructor(

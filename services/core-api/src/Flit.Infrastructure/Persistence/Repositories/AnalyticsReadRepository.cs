@@ -7,18 +7,22 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Lectura analítica en vivo desde las tablas operacionales del módulo de trámites (schema
-/// <c>tramites</c>) e <c>identity</c> — HU #10430 / ADR-0021 (Opción C: una sola fuente de verdad,
-/// se eliminaron los agregados <c>analytics.*</c>). Cada consulta fija <c>app.current_tenant_id</c>
-/// con <c>set_config(..., is_local := true)</c> (parametrizado, sin concatenar SQL) dentro de una
-/// transacción para respetar RLS — incluido el caso SuperAdmin consultando otro tenant. La
-/// normalización de categoría (family → matriculas/traspasos/otros) se hace en SQL para que el
+/// Lectura analítica EN VIVO desde las tablas operacionales del módulo de trámites (schema
+/// <c>tramites</c>) e <c>identity</c> — HU #10430 / ADR-0021 (Opción C: una sola fuente de verdad; se
+/// eliminaron los agregados <c>analytics.*</c>). Por tenant: se fija <c>app.current_tenant_id</c> con
+/// <c>set_config(..., is_local := true)</c> (parametrizado, sin concatenar SQL) dentro de una transacción
+/// y la consulta filtra explícitamente por <c>tenant_id</c>. Vista global (SuperAdmin, tenantId = null):
+/// se omite el filtro de tenant y se ejecuta sin GUC; el rol de conexión no está sujeto a RLS (las tablas
+/// <c>tramites.*</c> no tienen FORCE ROW LEVEL SECURITY), por lo que agrega todas las compañías. La
+/// normalización de categoría (family → matriculas/traspasos/vehicular/otros) se hace en SQL para que el
 /// GROUP BY sea consistente con el contrato del frontend.
 /// </summary>
 internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 {
-    // Overview en vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango
-    // de creación. Reemplaza la lectura del agregado analytics.procedure_metrics_daily.
+    // ── Overview ────────────────────────────────────────────────────────────────────────────────────
+
+    // En vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango de creación.
+    // La versión global omite el filtro de tenant (SuperAdmin: todas las compañías).
     private const string OverviewSql = """
         SELECT
             CASE
@@ -38,9 +42,29 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         ORDER BY 1, pi.status;
         """;
 
-    // Top productores en vivo desde status_history (misma semántica que el extinto refresh:
-    // submitted; approved = approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING
-    // preserva el contrato previo (solo usuarios con al menos una radicación en el rango).
+    private const string OverviewGlobalSql = """
+        SELECT
+            CASE
+                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
+                ELSE 'otros'
+            END AS category,
+            pi.status,
+            count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, pi.status
+        ORDER BY 1, pi.status;
+        """;
+
+    // ── Top Producers ────────────────────────────────────────────────────────────────────────────────
+
+    // En vivo desde status_history (misma semántica que el extinto refresh: submitted; approved =
+    // approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING preserva el contrato previo
+    // (solo usuarios con al menos una radicación en el rango). Requiere changed_by poblado (HU #10431).
     private const string TopProducersSql = """
         SELECT h.changed_by AS user_id, u.display_name,
                count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
@@ -56,6 +80,64 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
         LIMIT @limit;
         """;
+
+    private const string TopProducersGlobalSql = """
+        SELECT h.changed_by AS user_id, u.display_name,
+               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+        FROM tramites.procedure_instance_status_history h
+        JOIN identity.users u ON u.id = h.changed_by
+        WHERE h.changed_by IS NOT NULL
+          AND h.changed_at::date BETWEEN @from AND @to
+        GROUP BY h.changed_by, u.display_name
+        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
+        LIMIT @limit;
+        """;
+
+    // ── Monthly Trend ─────────────────────────────────────────────────────────────────────────────────
+
+    // En vivo: trámites por año/mes/categoría a partir de la fecha de creación. La versión global omite
+    // el filtro de tenant (SuperAdmin).
+    private const string MonthlyTrendWithTenantSql = """
+        SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
+               EXTRACT(MONTH FROM pi.created_at)::int AS month,
+               CASE
+                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
+                   ELSE 'otros'
+               END AS category,
+               count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.tenant_id = @tenant
+          AND pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, 2, 3
+        ORDER BY 1, 2, 3;
+        """;
+
+    private const string MonthlyTrendGlobalSql = """
+        SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
+               EXTRACT(MONTH FROM pi.created_at)::int AS month,
+               CASE
+                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
+                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
+                   ELSE 'otros'
+               END AS category,
+               count(*)::int AS total
+        FROM tramites.procedure_instances pi
+        JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
+        WHERE pi.deleted_at IS NULL
+          AND pi.created_at::date BETWEEN @from AND @to
+        GROUP BY 1, 2, 3
+        ORDER BY 1, 2, 3;
+        """;
+
+    // ── Procedure Details ─────────────────────────────────────────────────────────────────────────────
 
     // CTE compartida: proyecta el detalle de trámites con la categoría normalizada y aplica
     // los filtros opcionales (category/status). Los cast ::text permiten parámetros NULL tipados.
@@ -85,6 +167,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         " WHERE (@category::text IS NULL OR category = @category::text)" +
         "   AND (@status::text IS NULL OR status = @status::text)";
 
+    // ── Constructor ───────────────────────────────────────────────────────────────────────────────────
+
     private readonly FlitDbContext _context;
 
     public AnalyticsReadRepository(FlitDbContext context)
@@ -92,64 +176,55 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
-        Guid tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default) =>
-        ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
+    // ── IAnalyticsReadRepository ──────────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+    {
+        if (tenantId.HasValue)
         {
-            await using var cmd = CreateCommand(conn, tx, OverviewSql);
-            AddParam(cmd, "tenant", tenantId);
-            AddParam(cmd, "from", fromDate);
-            AddParam(cmd, "to", toDate);
-
-            // Acumula filas (category, status, total) agrupando por categoría preservando el orden SQL.
-            var byCategory = new Dictionary<string, (int Total, List<StatusCountDto> Statuses)>(StringComparer.Ordinal);
-            var order = new List<string>();
-            await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            return await ExecuteWithTenantAsync(tenantId.Value, async (conn, tx) =>
             {
-                var category = reader.GetString(0);
-                var status = reader.GetString(1);
-                var count = reader.GetInt32(2);
-                if (!byCategory.TryGetValue(category, out var acc))
-                {
-                    acc = (0, new List<StatusCountDto>());
-                    byCategory[category] = acc;
-                    order.Add(category);
-                }
+                await using var cmd = CreateCommand(conn, tx, OverviewSql);
+                AddParam(cmd, "tenant", tenantId.Value);
+                AddParam(cmd, "from", fromDate);
+                AddParam(cmd, "to", toDate);
+                return await ReadCategoryMetricsAsync(cmd, ct).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
+        }
 
-                acc.Statuses.Add(new StatusCountDto(status, count));
-                byCategory[category] = (acc.Total + count, acc.Statuses);
-            }
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
+        await using var globalCmd = CreateCommand(conn, null!, OverviewGlobalSql);
+        AddParam(globalCmd, "from", fromDate);
+        AddParam(globalCmd, "to", toDate);
+        return await ReadCategoryMetricsAsync(globalCmd, ct).ConfigureAwait(false);
+    }
 
-            return (IReadOnlyList<CategoryMetricsDto>)order
-                .Select(c => new CategoryMetricsDto(c, byCategory[c].Total, byCategory[c].Statuses))
-                .ToList();
-        }, ct);
-
-    public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(
-        Guid tenantId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default) =>
-        ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
+    public async Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default)
+    {
+        if (tenantId.HasValue)
         {
-            await using var cmd = CreateCommand(conn, tx, TopProducersSql);
-            AddParam(cmd, "tenant", tenantId);
-            AddParam(cmd, "from", fromDate);
-            AddParam(cmd, "to", toDate);
-            AddParam(cmd, "limit", limit);
-
-            var items = new List<TopProducerDto>();
-            await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            return await ExecuteWithTenantAsync(tenantId.Value, async (conn, tx) =>
             {
-                items.Add(new TopProducerDto(
-                    reader.GetGuid(0),
-                    reader.GetString(1),
-                    reader.GetInt32(2),
-                    reader.GetInt32(3),
-                    reader.GetInt32(4)));
-            }
+                await using var cmd = CreateCommand(conn, tx, TopProducersSql);
+                AddParam(cmd, "tenant", tenantId.Value);
+                AddParam(cmd, "from", fromDate);
+                AddParam(cmd, "to", toDate);
+                AddParam(cmd, "limit", limit);
+                return await ReadTopProducersAsync(cmd, ct).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
+        }
 
-            return (IReadOnlyList<TopProducerDto>)items;
-        }, ct);
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
+        await using var globalCmd = CreateCommand(conn, null!, TopProducersGlobalSql);
+        AddParam(globalCmd, "from", fromDate);
+        AddParam(globalCmd, "to", toDate);
+        AddParam(globalCmd, "limit", limit);
+        return await ReadTopProducersAsync(globalCmd, ct).ConfigureAwait(false);
+    }
 
     public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate,
@@ -217,7 +292,6 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(cmd, "category", (object?)category ?? DBNull.Value);
             AddParam(cmd, "status", (object?)status ?? DBNull.Value);
 
-            // CommandBehavior.SequentialAccess: el lector no bufferiza filas → memoria acotada.
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
@@ -232,6 +306,99 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             return true;
         }, ct).ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+    {
+        if (tenantId.HasValue)
+        {
+            return await ExecuteWithTenantAsync(tenantId.Value, async (conn, tx) =>
+            {
+                await using var cmd = CreateCommand(conn, tx, MonthlyTrendWithTenantSql);
+                AddParam(cmd, "tenant", tenantId.Value);
+                AddParam(cmd, "from", fromDate);
+                AddParam(cmd, "to", toDate);
+                return await ReadMonthlyTrendAsync(cmd, ct).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
+        }
+
+        // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
+        var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
+        await using var globalCmd = CreateCommand(conn, null!, MonthlyTrendGlobalSql);
+        AddParam(globalCmd, "from", fromDate);
+        AddParam(globalCmd, "to", toDate);
+        return await ReadMonthlyTrendAsync(globalCmd, ct).ConfigureAwait(false);
+    }
+
+    // ── Helpers de lectura ────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lee filas (category, status, total) y las agrupa en <see cref="CategoryMetricsDto"/> preservando
+    /// el orden que devuelve el SQL.
+    /// </summary>
+    private static async Task<IReadOnlyList<CategoryMetricsDto>> ReadCategoryMetricsAsync(
+        DbCommand cmd, CancellationToken ct)
+    {
+        var byCategory = new Dictionary<string, (int Total, List<StatusCountDto> Statuses)>(StringComparer.Ordinal);
+        var order = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var category = reader.GetString(0);
+            var status = reader.GetString(1);
+            var count = reader.GetInt32(2);
+            if (!byCategory.TryGetValue(category, out var acc))
+            {
+                acc = (0, new List<StatusCountDto>());
+                byCategory[category] = acc;
+                order.Add(category);
+            }
+
+            acc.Statuses.Add(new StatusCountDto(status, count));
+            byCategory[category] = (acc.Total + count, acc.Statuses);
+        }
+
+        return order
+            .Select(c => new CategoryMetricsDto(c, byCategory[c].Total, byCategory[c].Statuses))
+            .ToList();
+    }
+
+    private static async Task<IReadOnlyList<TopProducerDto>> ReadTopProducersAsync(
+        DbCommand cmd, CancellationToken ct)
+    {
+        var items = new List<TopProducerDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            items.Add(new TopProducerDto(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4)));
+        }
+
+        return items;
+    }
+
+    private static async Task<IReadOnlyList<MonthlyTrendPointDto>> ReadMonthlyTrendAsync(
+        DbCommand cmd, CancellationToken ct)
+    {
+        var items = new List<MonthlyTrendPointDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            items.Add(new MonthlyTrendPointDto(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                reader.GetString(2),
+                reader.GetInt32(3)));
+        }
+
+        return items;
+    }
+
+    // ── Infraestructura ───────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Abre una transacción reintentablemente, fija el GUC de tenant para RLS y ejecuta la consulta.
@@ -258,6 +425,15 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                 return result;
             }
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>Conexión abierta (sin transacción ni GUC) para las consultas globales del SuperAdmin.</summary>
+    private async Task<DbConnection> OpenGlobalConnectionAsync(CancellationToken ct)
+    {
+        var conn = _context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+        return conn;
     }
 
     private static DbCommand CreateCommand(DbConnection conn, DbTransaction tx, string sql)

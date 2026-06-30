@@ -3,8 +3,11 @@ using Flit.Analytics.Application.Dtos;
 
 namespace Flit.Analytics.Application.Queries;
 
-/// <summary>Consulta del Top de productividad por tenant y rango (HU #10243, AC3).</summary>
-public sealed record GetTopProducersQuery(Guid TenantId, DateOnly From, DateOnly To, int Limit);
+/// <summary>
+/// Consulta del Top de productividad por tenant y rango (HU #10243, AC3).
+/// <see cref="TenantId"/> null = vista global de todas las compañías (solo SuperAdmin).
+/// </summary>
+public sealed record GetTopProducersQuery(Guid? TenantId, DateOnly From, DateOnly To, int Limit);
 
 /// <summary>
 /// Valida el rango, acota el límite y devuelve el ranking de radicadores por <c>submitted_count</c>.
