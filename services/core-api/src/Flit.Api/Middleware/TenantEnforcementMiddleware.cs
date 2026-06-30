@@ -6,7 +6,8 @@ namespace Flit.Api.Middleware;
 
 /// <summary>
 /// Enforcement multi-tenant para los endpoints RUNTIME de trámites
-/// (<c>/api/v1/tramites/instances*</c>, <c>/transit-offices</c>, <c>/biometric-validations</c>).
+/// (<c>/api/v1/tramites/instances*</c>, <c>/transit-offices</c>, <c>/biometric-validations</c>,
+/// <c>/identity-validation/*</c>).
 /// El tenant se resuelve desde el JWT, NO del header que mande el cliente:
 /// <list type="bullet">
 ///   <item>No autenticado → 401.</item>
@@ -80,7 +81,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     private static bool IsRuntimeScoped(PathString path) =>
         path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase);
+        || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
+        // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
+        // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
+        // y un company-user podía leer/reencolar las atascadas de otra compañía.
+        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

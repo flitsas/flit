@@ -709,8 +709,10 @@ export const tramitesClient = {
 
   // HU #10349 (fase 2) — eventos de validación de identidad ATASCADOS (dead-letter): el encadenamiento
   // async (firma/FUR) agotó los reintentos del worker. Para observabilidad + reencolar desde la UI.
+  // El tenant se resuelve como el resto del runtime (tenant activo → JWT); NO se hardcodea DEV_TENANT_ID,
+  // que mandaba las atascadas de OTRA compañía (el backend ya lo impone desde el token, defensa en fondo).
   listStuckIdentityValidations: async (
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<StuckIdentityValidationsResponse> => {
     const res = await request<StuckIdentityValidationsResponse>(
       '/api/v1/tramites/identity-validation/stuck',
@@ -722,7 +724,7 @@ export const tramitesClient = {
   // POST reencolar ("desatascar") un evento atascado: reinicia sus intentos para que el worker lo retome.
   requeueStuckIdentityValidation: (
     id: string,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<{ requeued: boolean }> =>
     request<{ requeued: boolean }>(
       `/api/v1/tramites/identity-validation/stuck/${id}/requeue`,
@@ -731,7 +733,7 @@ export const tramitesClient = {
 
   // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
   requeueAllStuckIdentityValidations: (
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ): Promise<{ requeued: number }> =>
     request<{ requeued: number }>(
       '/api/v1/tramites/identity-validation/stuck/requeue-all',
