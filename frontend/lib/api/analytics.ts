@@ -6,6 +6,8 @@ import type {
   AnalyticsOverviewParams,
   AnalyticsOverviewResponse,
   ExecutivePdfParams,
+  MonthlyTrendParams,
+  MonthlyTrendResponse,
   ProcedureDetailsPage,
   ProcedureDetailsParams,
   TopProducersParams,
@@ -40,6 +42,20 @@ export function fetchTopProducers(
 ): Promise<TopProducersResponse> {
   return apiFetch<TopProducersResponse>(`${base}/productivity/top`, {
     query: { from: params.from, to: params.to, limit: params.limit, tenantId: params.tenantId },
+    signal,
+  });
+}
+
+/**
+ * GET /monthly-trend — tendencia mensual de trámites por categoría (Dashboard).
+ * SuperAdmin sin tenantId recibe datos de todas las compañías.
+ */
+export function fetchMonthlyTrend(
+  params: MonthlyTrendParams,
+  signal?: AbortSignal,
+): Promise<MonthlyTrendResponse> {
+  return apiFetch<MonthlyTrendResponse>(`${base}/monthly-trend`, {
+    query: { from: params.from, to: params.to, tenantId: params.tenantId },
     signal,
   });
 }

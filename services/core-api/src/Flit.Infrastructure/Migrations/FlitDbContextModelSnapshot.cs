@@ -2269,6 +2269,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
+                    b.Property<DateTimeOffset?>("DraftFinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("draft_finalized_at");
+
                     b.Property<string>("ModalidadEntrada")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2336,6 +2340,10 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("ProcedureTypeId")
                         .HasDatabaseName("ix_procedure_instances_procedure_type_id");
+
+                    b.HasIndex("TenantId", "DraftFinalizedAt")
+                        .HasDatabaseName("ix_procedure_instances_draft_finalized")
+                        .HasFilter("status = 'draft' AND draft_finalized_at IS NOT NULL");
 
                     b.HasIndex("TenantId", "ReferenceNumber")
                         .IsUnique()

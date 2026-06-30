@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
+        // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
+        services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         services.AddScoped<UploadAttachmentHandler>();
@@ -56,11 +58,21 @@ public static class DependencyInjection
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
+        // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
+        services.AddScoped<EnsureIdentityHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();
         services.AddScoped<KyverumWebhookHandler>();
+
+        // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
+        // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
+        services.AddScoped<Identity.IdentityValidationCompletedConsumer>();
+        // HU #10349 (fase 2) — observabilidad: consulta + reencolar eventos de identidad ATASCADOS (dead-letter).
+        services.AddScoped<ListStuckIdentityValidationsHandler>();
+        services.AddScoped<RequeueStuckIdentityValidationHandler>();
+        services.AddScoped<RequeueAllStuckIdentityValidationsHandler>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).

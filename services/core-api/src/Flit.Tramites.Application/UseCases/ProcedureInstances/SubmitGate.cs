@@ -76,7 +76,9 @@ public static class SubmitGate
         return lowRiskComplete ? [] : [];
     }
 
-    private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
+    // internal: reutilizado por FinalizeDraftGate (HU #10349) — misma fuente de verdad de completitud
+    // documental para finalizar borrador y para radicar.
+    internal static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
         // DEMO: ver DemoFlags.RelaxDocs — afloja el gating estricto de documentos.
         if (DemoFlags.RelaxDocs)
@@ -89,15 +91,25 @@ public static class SubmitGate
         return computed?.Completo ?? true;
     }
 
-    private static bool BiometriaAprobada(ProcedureInstance instance, string parte) =>
-        instance.BiometricValidations.Any(v =>
+    private static bool BiometriaAprobada(ProcedureInstance instance, string parte)
+    {
+        // HU #10350 — aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor actual; una aprobación
+        // vencida no radica, y una validación de una persona anterior (documento distinto) tampoco cuenta
+        // (defensa en profundidad: el gate no se fía de que el ensure del frontend haya invalidado la previa).
+        var now = DateTimeOffset.UtcNow;
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        return instance.BiometricValidations.Any(v =>
             string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado == BiometricEstados.Aprobado);
+            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
+    }
 
     private static bool FurGenerado(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
-    private static bool OrganismoSeleccionado(ProcedureInstance instance)
+    // internal: reutilizado por FinalizeDraftGate (HU #10349).
+    internal static bool OrganismoSeleccionado(ProcedureInstance instance)
     {
         var v = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase));

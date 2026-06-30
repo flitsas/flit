@@ -59,6 +59,7 @@ public sealed class RejectOtClientProcedureHandler
             command.ProcedureInstanceId,
             command.Request.Reason.Trim(),
             command.RejectedBy,
+            OtTransitionSource.OtAdmin,
             cancellationToken).ConfigureAwait(false);
 
         return updated is null

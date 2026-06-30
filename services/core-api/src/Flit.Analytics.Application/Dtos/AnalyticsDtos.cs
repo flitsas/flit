@@ -58,3 +58,8 @@ public sealed record ProcedureDetailsPageDto(
     int TotalCount,
     int Page,
     int PageSize);
+
+/// <summary>
+/// Punto de datos de tendencia mensual: total de trámites de una categoría en un mes.
+/// </summary>
+public sealed record MonthlyTrendPointDto(int Year, int Month, string Category, int Total);

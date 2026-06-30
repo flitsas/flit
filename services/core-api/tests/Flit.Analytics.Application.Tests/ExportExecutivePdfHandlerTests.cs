@@ -23,13 +23,15 @@ public sealed class ExportExecutivePdfHandlerTests
     {
         public int RequestedLimit { get; private set; }
 
-        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
             Task.FromResult(categories);
-        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default)
+        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid? t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default)
         {
             RequestedLimit = limit;
             return Task.FromResult(top);
         }
+        public Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<MonthlyTrendPointDto>>(new List<MonthlyTrendPointDto>());
         public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task ExportProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s, Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default) =>

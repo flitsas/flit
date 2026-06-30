@@ -22,6 +22,7 @@ public interface IOtClientProcedureRepository
         Guid otTenantId,
         Guid procedureInstanceId,
         Guid? approvedBy,
+        string source,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> RejectAsync(
@@ -29,5 +30,6 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         string reason,
         Guid? rejectedBy,
+        string source,
         CancellationToken cancellationToken = default);
 }

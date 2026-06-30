@@ -168,7 +168,7 @@ export interface AuditLogPageResponse {
 
 // ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
 /** Categoría de trámite normalizada por el backend (RF01). */
-export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
+export type AnalyticsCategory = "matriculas" | "traspasos" | "vehicular" | "otros";
 
 /** Conteo de trámites en un estado concreto dentro de una categoría. */
 export interface StatusCount {
@@ -253,6 +253,27 @@ export interface ProcedureDetailsParams {
 
 /** Cuerpo del POST /api/v1/analytics/export/executive-pdf (HU #10246 / #10249). */
 export interface ExecutivePdfParams {
+  from: string;
+  to: string;
+  tenantId?: string;
+}
+
+// ── Analytics · Dashboard · Tendencia mensual ────────────────────────────────
+/** Punto de tendencia mensual: total de trámites de una categoría en un mes. */
+export interface MonthlyTrendPoint {
+  year: number;
+  month: number;
+  category: AnalyticsCategory;
+  total: number;
+}
+
+/** Respuesta de GET /api/v1/analytics/monthly-trend. */
+export interface MonthlyTrendResponse {
+  items: MonthlyTrendPoint[];
+}
+
+/** Query params del monthly-trend. */
+export interface MonthlyTrendParams {
   from: string;
   to: string;
   tenantId?: string;

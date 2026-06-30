@@ -12,6 +12,7 @@ import type {
   CompletarBiometriaResult,
   ConsultationResult,
   CreateInstanceRequest,
+  EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
@@ -42,6 +43,8 @@ import type {
   SimularFirmaResult,
   SolicitarFirmaInput,
   TenantBiometricValidationsResponse,
+  TenantBiometricValidationFilters,
+  StuckIdentityValidationsResponse,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -267,7 +270,15 @@ export const tramitesClient = {
       '/api/v1/tramites/instances',
       { headers },
     );
-    return res?.items ?? [];
+    // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
+    // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
+    return (res?.items ?? []).map((item) => ({
+      ...item,
+      draftFinalizedAt: item.draftFinalizedAt ?? null,
+      identityValidationStatus: item.identityValidationStatus ?? null,
+      signaturePending: item.signaturePending ?? false,
+      canSubmit: item.canSubmit ?? false,
+    }));
   },
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
@@ -305,6 +316,19 @@ export const tramitesClient = {
   submitInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceSummary>(
       `/api/v1/tramites/instances/${id}/submit`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // HU #10350 (AC1) — finalizar el borrador: sella draftFinalizedAt SIN exigir identidad/FUR. El
+  // trámite permanece en `draft`; la firma se dispara async cuando el cliente valida su identidad.
+  // Distinto de submit (que sí radica a tránsito y exige identidad + gates completos).
+  // 409 si la instancia no es draft o faltan datos (actores/documentos/organismo).
+  finalizeDraft: (id: string, tenantId: string = DEV_TENANT_ID) =>
+    request<ProcedureInstanceSummary>(
+      `/api/v1/tramites/instances/${id}/finalize-draft`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -609,6 +633,22 @@ export const tramitesClient = {
       },
     ),
 
+  // HU #10350 — asegura la identidad de una parte al guardarla: el backend reutiliza una validación
+  // vigente (≤30 días) de la persona o responde 'requiere_validacion' para que el front la dispare.
+  ensureIdentity: (
+    instanceId: string,
+    parte: BiometricParte,
+    tenantId: string = DEV_TENANT_ID,
+  ) =>
+    request<EnsureIdentityResult>(
+      `/api/v1/tramites/instances/${instanceId}/identity/ensure`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ parte }),
+      },
+    ),
+
   // GET lista/estado de las validaciones de la instancia. Desempaqueta a arreglo.
   listBiometric: async (
     instanceId: string,
@@ -623,20 +663,86 @@ export const tramitesClient = {
 
   // HU #10234 — vista transversal del submódulo "Validaciones de Identidad": TODAS las validaciones
   // del tenant + KPIs. No es por-instancia. Devuelve { validations, stats }; default seguro si vacío.
+  // HU #10348 — filtros opcionales: se serializan como query params; los vacíos/undefined no se envían
+  // (el backend HU #10347 combina con AND y devuelve filas + KPIs del subconjunto filtrado).
   listTenantBiometricValidations: async (
+    filters: TenantBiometricValidationFilters = {},
     tenantId?: string,
   ): Promise<TenantBiometricValidationsResponse> => {
+    const params = new URLSearchParams();
+    const add = (key: string, value: string | number | undefined) => {
+      if (value === undefined) return;
+      const s = typeof value === 'number' ? String(value) : value.trim();
+      if (s !== '') params.set(key, s);
+    };
+    add('referenceNumber', filters.referenceNumber);
+    add('modalidad', filters.modalidad);
+    add('nombre', filters.nombre);
+    add('parte', filters.parte);
+    add('tipoDoc', filters.tipoDoc);
+    add('documento', filters.documento);
+    add('estado', filters.estado);
+    add('provider', filters.provider);
+    add('scoreMin', filters.scoreMin);
+    add('scoreMax', filters.scoreMax);
+    add('createdFrom', filters.createdFrom);
+    add('createdTo', filters.createdTo);
+    add('motivoRechazo', filters.motivoRechazo);
+    add('vigenciaEstado', filters.vigenciaEstado);
+    add('expiraDesde', filters.expiraDesde);
+    add('expiraHasta', filters.expiraHasta);
+    add('venceEnDias', filters.venceEnDias);
+    add('page', filters.page);
+    add('pageSize', filters.pageSize);
+
+    const query = params.toString();
     const res = await request<TenantBiometricValidationsResponse>(
-      '/api/v1/tramites/biometric-validations',
+      `/api/v1/tramites/biometric-validations${query ? `?${query}` : ''}`,
       { headers: tenantHeader(tenantId) },
     );
     return (
       res ?? {
         validations: [],
         stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+        page: 1,
+        pageSize: 20,
+        total: 0,
       }
     );
   },
+
+  // HU #10349 (fase 2) — eventos de validación de identidad ATASCADOS (dead-letter): el encadenamiento
+  // async (firma/FUR) agotó los reintentos del worker. Para observabilidad + reencolar desde la UI.
+  // El tenant se resuelve como el resto del runtime (tenant activo → JWT); NO se hardcodea DEV_TENANT_ID,
+  // que mandaba las atascadas de OTRA compañía (el backend ya lo impone desde el token, defensa en fondo).
+  listStuckIdentityValidations: async (
+    tenantId?: string,
+  ): Promise<StuckIdentityValidationsResponse> => {
+    const res = await request<StuckIdentityValidationsResponse>(
+      '/api/v1/tramites/identity-validation/stuck',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res ?? { stuck: [], total: 0, maxDeliveryAttempts: 5 };
+  },
+
+  // POST reencolar ("desatascar") un evento atascado: reinicia sus intentos para que el worker lo retome.
+  requeueStuckIdentityValidation: (
+    id: string,
+    tenantId?: string,
+  ): Promise<{ requeued: boolean }> =>
+    request<{ requeued: boolean }>(
+      `/api/v1/tramites/identity-validation/stuck/${id}/requeue`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
+  requeueAllStuckIdentityValidations: (
+    tenantId?: string,
+  ): Promise<{ requeued: number }> =>
+    request<{ requeued: number }>(
+      '/api/v1/tramites/identity-validation/stuck/requeue-all',
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 
   // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
   // el botón "Validar identidad" sea provider-aware (kyverum → validación real; mock → simular).

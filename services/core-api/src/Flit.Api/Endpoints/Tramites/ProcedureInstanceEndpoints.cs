@@ -156,16 +156,42 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("PatchProcedureInstanceFieldValues");
 
-        group.MapPost("/instances/{id:guid}/submit", async (
+        // HU #10349 (AC1) — finalizar borrador: datos completos (actores, docs, organismo) sin exigir
+        // identidad ni FUR. Deja la instancia en draft con draft_finalized_at sellado.
+        group.MapPost("/instances/{id:guid}/finalize-draft", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            SubmitProcedureInstanceHandler handler,
+            FinalizeDraftProcedureInstanceHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede finalizar un borrador en estado draft."),
+                "actores_incompletos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan datos de los actores del trámite."),
+                "documentos_incompletos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan documentos obligatorios para finalizar el borrador."),
+                "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de finalizar el borrador."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("FinalizeDraftProcedureInstance");
+
+        group.MapPost("/instances/{id:guid}/submit", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            SubmitProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            // HU #10431 — la radicación se atribuye al usuario autenticado (claim sub) para alimentar
+            // la productividad de la analítica; el handler aplica la guarda FK contra identity.users.
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

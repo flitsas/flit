@@ -149,8 +149,9 @@ public sealed class WizardStateHandlerTests
     public async Task Get_Matricula_IdentidadReachable_IncompleteWithBiometriaReason()
     {
         // Pasos 1-3 completos (VIN, docs, comprador+RUNT) → Identidad (4) alcanzable y,
-        // sin biométrica aprobada, incomplete con 'pendiente_biometria'. FUR (5) aún no
-        // alcanzable (requiere Identidad) → locked.
+        // sin biométrica aprobada, incomplete con 'pendiente_biometria'. HU #10350: FUR (5) ahora
+        // también es ALCANZABLE en cuanto los datos están completos, aunque la identidad siga
+        // pendiente — es el último paso donde el gestor finaliza el borrador → incomplete + fur_pendiente.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
@@ -165,7 +166,9 @@ public sealed class WizardStateHandlerTests
         identidad.Status.Should().Be("incomplete");
         identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
 
-        result.Steps.Single(s => s.Index == 5).Status.Should().Be("locked");
+        var fur = result.Steps.Single(s => s.Index == 5);
+        fur.Status.Should().Be("incomplete");
+        fur.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
     }
 
     [Fact]

@@ -177,7 +177,9 @@ public sealed class ProcessOtWebhookCallbackHandler
         CancellationToken cancellationToken)
     {
         var result = await _clientProcedureRepository
-            .ApproveAsync(otTenantId, procedureInstanceId, approvedBy: null, cancellationToken)
+            .ApproveAsync(
+                otTenantId, procedureInstanceId, approvedBy: null,
+                OtTransitionSource.QuipuxWebhook, cancellationToken)
             .ConfigureAwait(false);
         return result is not null;
     }
@@ -189,7 +191,9 @@ public sealed class ProcessOtWebhookCallbackHandler
         CancellationToken cancellationToken)
     {
         var result = await _clientProcedureRepository
-            .RejectAsync(otTenantId, procedureInstanceId, reason, rejectedBy: null, cancellationToken)
+            .RejectAsync(
+                otTenantId, procedureInstanceId, reason, rejectedBy: null,
+                OtTransitionSource.QuipuxWebhook, cancellationToken)
             .ConfigureAwait(false);
         return result is not null;
     }

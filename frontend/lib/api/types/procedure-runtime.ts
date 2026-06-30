@@ -49,6 +49,8 @@ export interface ProcedureInstanceSummary {
   tenantId: string;
   createdAt: string;
   submittedAt?: string | null;
+  /** HU #10350 — sello de borrador finalizado (datos completos a la espera de identidad async). */
+  draftFinalizedAt?: string | null;
 }
 
 // ── Listado de instancias (Slice M6) ───────────────────────────────
@@ -71,6 +73,16 @@ export interface InstanceSummary {
   pasoActual: number;
   totalPasos: number;
   createdAt: string;
+  // HU #10350 — desacople de la validación de identidad async. Derivan los chips del listado
+  // ("Pendiente validación" / "Pendiente firma") y la acción de la fila ("Radicar"/"Continuar").
+  /** Sello de borrador finalizado; null si el borrador no se ha finalizado. */
+  draftFinalizedAt: string | null;
+  /** Estado agregado de identidad: 'aprobado' | 'en_proceso' | 'rechazado' | null (sin iniciar). */
+  identityValidationStatus: string | null;
+  /** Traspaso: firma de la compraventa de alguna parte aún pendiente. */
+  signaturePending: boolean;
+  /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
+  canSubmit: boolean;
   /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
@@ -125,6 +137,8 @@ export interface ProcedureInstanceDetail {
   createdAt: string;
   submittedAt: string | null;
   completedAt: string | null;
+  /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
+  draftFinalizedAt?: string | null;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -374,10 +388,19 @@ export type BiometricEstado =
   | 'en_proceso'
   | 'aprobado'
   | 'rechazado'
-  | 'expirado';
+  | 'expirado'
+  // Cola de envío (provider-agnostic): el envío al proveedor falló y se reintenta / agotó intentos.
+  | 'pendiente_envio'
+  | 'error_envio';
 
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
+
+/** Proveedor de validación de identidad (espejo de BiometricProviders). */
+export type BiometricProvider = 'mock' | 'kyverum';
+
+/** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
+export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
 
 /** Tipos de documento admitidos por la captura biométrica. */
 export type BiometricTipoDoc = 'CC' | 'CE' | 'TI' | 'PPT' | 'PAS';
@@ -454,8 +477,14 @@ export interface TenantBiometricValidation {
   provider: string;
   expired: boolean;
   motivoRechazo?: string | null;
+  /** Fecha de registro (creación) de la validación. */
   createdAt: string;
+  /** Fecha de aprobación (null si aún no se aprobó). */
   validadoAt: string | null;
+  /** Fecha de fin de vigencia (aprobación + 30 días). Null si no hay aprobación. */
+  vigenciaHasta: string | null;
+  /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
+  diasRestantes: number | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -467,10 +496,82 @@ export interface BiometricValidationStats {
   expiradas: number;
 }
 
-/** Respuesta de GET /tramites/biometric-validations: filas + KPIs. */
+/** Respuesta de GET /tramites/biometric-validations: filas de la página + KPIs + metadatos de paginación. */
 export interface TenantBiometricValidationsResponse {
   validations: TenantBiometricValidation[];
   stats: BiometricValidationStats;
+  /** Página devuelta (1-based). */
+  page: number;
+  /** Filas por página efectivas (acotadas a [10, 50]). */
+  pageSize: number;
+  /** Total del conjunto filtrado completo (para calcular el nº de páginas). */
+  total: number;
+}
+
+/**
+ * Filtros del listado transversal de validaciones (HU #10348 → query params del backend HU #10347).
+ * Todos opcionales; los vacíos/undefined no se envían como query param. El backend combina con AND y
+ * devuelve filas + KPIs del mismo subconjunto. `motivoRechazo` solo aplica a rechazadas (filtrado en
+ * memoria sobre el texto sanitizado). Fechas en ISO-8601. Puede responder 400 si `estado/provider/parte`
+ * está fuera de catálogo, `scoreMin > scoreMax` o `createdFrom > createdTo`.
+ */
+export interface TenantBiometricValidationFilters {
+  referenceNumber?: string;
+  modalidad?: WizardModalidad;
+  nombre?: string;
+  parte?: BiometricParte;
+  tipoDoc?: string;
+  documento?: string;
+  estado?: BiometricEstado;
+  provider?: BiometricProvider;
+  scoreMin?: number;
+  scoreMax?: number;
+  createdFrom?: string;
+  createdTo?: string;
+  motivoRechazo?: string;
+  /** Estado de vigencia de la identidad aprobada: vigente | por_vencer | vencida. */
+  vigenciaEstado?: BiometricVigenciaEstado;
+  /** Fin de vigencia (aprobación + 30 días) desde / hasta, en ISO-8601. */
+  expiraDesde?: string;
+  expiraHasta?: string;
+  /** "Vence en ≤ N días": identidades vigentes que vencen en N días calendario o menos. */
+  venceEnDias?: number;
+  /** Página (1-based). */
+  page?: number;
+  /** Filas por página (10–50). */
+  pageSize?: number;
+}
+
+/** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó
+ * reintentos (estado error_envio); `encadenamiento` = el encadenamiento async firma/FUR agotó reintentos. */
+export type StuckIdentityValidationKind = 'envio' | 'encadenamiento';
+
+/**
+ * Validación de identidad ATASCADA (dead-letter): agotó los reintentos automáticos de su cola — el ENVÍO al
+ * proveedor (kind=envio) o el ENCADENAMIENTO async firma/FUR (kind=encadenamiento). Espejo de
+ * StuckIdentityValidationDto (HU #10349). Sin PII.
+ */
+export interface StuckIdentityValidation {
+  id: string;
+  validationId: string;
+  eventType: string;
+  attempts: number;
+  occurredAt: string;
+  createdAt: string;
+  // Persona validada (la UI muestra nombre + últimos 4 del documento). Null si la validación ya no existe.
+  nombre: string | null;
+  tipoDoc: string | null;
+  documento: string | null;
+  // Qué cola se atascó (para etiquetar la fila). Backend siempre lo envía; opcional por tolerancia a
+  // un backend en transición que aún no lo exponga (default 'encadenamiento' en la UI).
+  kind?: StuckIdentityValidationKind;
+}
+
+/** Respuesta de GET /identity-validation/stuck: eventos atascados + total + tope de reintentos. */
+export interface StuckIdentityValidationsResponse {
+  stuck: StuckIdentityValidation[];
+  total: number;
+  maxDeliveryAttempts: number;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */
@@ -488,6 +589,22 @@ export interface CompletarBiometriaResult {
   estado: BiometricEstado;
   score: number;
   motivo: string;
+}
+
+/**
+ * HU #10350 — desenlace de "asegurar identidad" de una parte al guardarla (espejo de
+ * EnsureIdentityResult). El backend reutiliza una validación vigente o indica que se requiere validar.
+ */
+export type EnsureIdentityOutcome =
+  | 'ya_vigente'           // el trámite ya tiene una validación aprobada y vigente
+  | 'en_proceso'           // ya hay una validación en curso
+  | 'reusada'              // se clonó una validación vigente de la persona (identidad aprobada)
+  | 'requiere_validacion'  // no hay vigente → el front dispara la validación automáticamente
+  | 'sin_actor';           // la parte aún no tiene actor con documento
+
+export interface EnsureIdentityResult {
+  outcome: EnsureIdentityOutcome;
+  validationId?: string | null;
 }
 
 // ── Firma electrónica (Slice 7A) ────────────────────────────────────

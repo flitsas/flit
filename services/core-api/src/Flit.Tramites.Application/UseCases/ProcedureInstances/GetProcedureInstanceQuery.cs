@@ -33,7 +33,12 @@ public sealed record ProcedureInstanceDetailDto(
     DateTimeOffset? CompletedAt,
     IReadOnlyList<ProcedureInstanceFieldValueDto> FieldValues,
     IReadOnlyList<ProcedureInstanceStatusHistoryDto> StatusHistory,
-    IReadOnlyList<ProcedureInstanceActorDto> Actors);
+    IReadOnlyList<ProcedureInstanceActorDto> Actors,
+    // HU #10349/#10350 — marca de borrador finalizado (datos completos a la espera de la
+    // validación de identidad async). Null mientras el borrador no se ha finalizado. El
+    // frontend lo usa para el modo "readOnly parcial" del wizard (datos bloqueados, identidad
+    // operable). Opcional (default null) para compat con consumidores que no lo lean.
+    DateTimeOffset? DraftFinalizedAt = null);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -67,5 +72,6 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 .ToList(),
             e.Actors
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName))
-                .ToList());
+                .ToList(),
+            e.DraftFinalizedAt);
 }

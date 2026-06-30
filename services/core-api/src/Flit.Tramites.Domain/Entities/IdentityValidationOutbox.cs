@@ -10,6 +10,13 @@ namespace Flit.Tramites.Domain.Entities;
 /// </summary>
 public sealed class IdentityValidationOutbox
 {
+    /// <summary>
+    /// Tope de intentos de entrega del worker. Al alcanzarlo, la fila deja de reclamarse y queda en
+    /// DEAD-LETTER (atascada): <c>published_at IS NULL AND attempts &gt;= MaxDeliveryAttempts</c>. Fuente
+    /// única de verdad compartida entre el procesador de outbox y la consulta de eventos atascados.
+    /// </summary>
+    public const int MaxDeliveryAttempts = 5;
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
 

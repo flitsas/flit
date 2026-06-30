@@ -1,22 +1,34 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   ExternalLink,
-  RefreshCw,
+  RotateCcw,
   ScanFace,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
 import { ModuleTitle } from './ModuleTitle';
+import {
+  ValidacionesFilterToolbar,
+  EMPTY_VALIDACIONES_FILTERS,
+  hasActiveValidacionesFilters,
+  type ValidacionesUiFilters,
+} from './ValidacionesFilterToolbar';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   BiometricEstado,
   BiometricValidationStats,
+  StuckIdentityValidation,
+  StuckIdentityValidationsResponse,
   TenantBiometricValidation,
+  TenantBiometricValidationFilters,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -29,7 +41,9 @@ import type {
  * explícito) y Lleno (KPIs + tabla). WCAG 2.1 AA: aria-labels por fila, foco visible, anuncios a
  * lectores de pantalla.
  *
- * Nota: la actualización automática por colas/suscripción es Fase 2; por ahora hay refresco manual.
+ * Auto-refresco en vivo (fase 2): la grilla se actualiza sola cada AUTO_REFRESH_MS con los filtros
+ * vigentes para reflejar los cambios que el backend persiste vía webhook/outbox de Kyverum, sin que el
+ * gestor pulse "Actualizar" (que sigue disponible). Pausa cuando la pestaña no está visible.
  */
 
 const ESTADO_META: Record<BiometricEstado, { label: string; color: string; bg: string }> = {
@@ -38,6 +52,8 @@ const ESTADO_META: Record<BiometricEstado, { label: string; color: string; bg: s
   aprobado: { label: 'Aprobado', color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' },
   rechazado: { label: 'Rechazado', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' },
   expirado: { label: 'Expirado', color: '#6B7280', bg: 'rgba(154,165,177,0.18)' },
+  pendiente_envio: { label: 'Pendiente de envío', color: '#557EFF', bg: 'rgba(85,126,255,0.12)' },
+  error_envio: { label: 'Error de envío', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' },
 };
 
 const MODALIDAD_LABEL: Record<string, string> = {
@@ -58,6 +74,27 @@ function formatFecha(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
+/** Formatea una fecha ISO solo a día (es-CO), sin hora. Para aprobación/expiración de la vigencia. */
+function formatFechaCorta(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(d);
+}
+
+/**
+ * Presentación de los días de vigencia restantes de una validación aprobada: color de urgencia
+ * (verde holgado, ámbar por vencer, rojo vencida) + etiqueta. La vigencia es de 30 días desde la
+ * aprobación; el backend ya calcula los días (0 = vencida). Null cuando la validación no está aprobada.
+ */
+function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
+  if (dias == null) return null;
+  if (dias <= 0) return { label: 'Vencida', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' };
+  const label = `${dias} día${dias === 1 ? '' : 's'}`;
+  if (dias <= 7) return { label, color: '#B26A00', bg: 'rgba(249,172,0,0.16)' };
+  return { label, color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' };
+}
+
 /** Enmascara el documento dejando visibles solo los últimos 4 (no se muestra el número completo). */
 function maskDoc(tipoDoc: string, documento: string): string {
   const tail = documento.length > 4 ? documento.slice(-4) : documento;
@@ -65,67 +102,277 @@ function maskDoc(tipoDoc: string, documento: string): string {
   return `${tipoDoc} ${masked}`.trim();
 }
 
+/**
+ * Convierte los filtros de la UI (strings controlados) a los query params del backend (HU #10347):
+ * vacíos → undefined (no se envían), score a número, fechas a ISO (createdTo a fin de día para que la
+ * fecha elegida quede incluida). motivoRechazo solo cuando se filtra por estado=rechazado.
+ */
+function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFilters {
+  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
+  const num = (s: string) => {
+    if (s.trim() === '') return undefined;
+    const n = Number(s);
+    return Number.isNaN(n) ? undefined : n;
+  };
+  return {
+    referenceNumber: text(f.referenceNumber),
+    modalidad: f.modalidad || undefined,
+    nombre: text(f.nombre),
+    parte: f.parte || undefined,
+    tipoDoc: text(f.tipoDoc),
+    documento: text(f.documento),
+    estado: f.estado || undefined,
+    provider: f.provider || undefined,
+    scoreMin: num(f.scoreMin),
+    scoreMax: num(f.scoreMax),
+    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
+    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
+    motivoRechazo: f.estado === 'rechazado' ? text(f.motivoRechazo) : undefined,
+    vigenciaEstado: f.vigenciaEstado || undefined,
+    // Rango por fecha de fin de vigencia (expiraHasta a fin de día, igual que createdTo).
+    expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
+    expiraHasta: f.expiraHasta ? `${f.expiraHasta}T23:59:59` : undefined,
+    venceEnDias: num(f.venceEnDias),
+  };
+}
+
+/** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
+const AUTO_REFRESH_MS = 15_000;
+
+/** Opciones de filas por página (el cliente decide; de 10 en 10 hasta 50). */
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
+const DEFAULT_PAGE_SIZE = 20;
+
 export function Validaciones() {
   const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  // Eventos de identidad ATASCADOS (dead-letter) del tenant + ids que se están reencolando.
+  const [stuck, setStuck] = useState<StuckIdentityValidationsResponse | null>(null);
+  const [requeuing, setRequeuing] = useState<Set<string>>(() => new Set());
+  const [requeuingAll, setRequeuingAll] = useState(false);
 
-  const load = useCallback(async () => {
+  // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [total, setTotal] = useState(0);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const pageSizeRef = useRef(pageSize);
+  pageSizeRef.current = pageSize;
+
+  // `filters` = controles de la UI (instantáneos); `applied` = lo que se consulta al backend. Los chips
+  // y fechas aplican de inmediato; los inputs de texto aplican tras un debounce (~300 ms). El filtrado
+  // se delega al backend (HU #10347) — NO se filtra client-side sobre el cap de 500 filas.
+  const [filters, setFilters] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
+  const [applied, setApplied] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refs para el auto-refresco: el intervalo lee lo último sin re-suscribirse y se evitan carreras.
+  const appliedRef = useRef(applied);
+  appliedRef.current = applied;
+  const validationsRef = useRef(validations);
+  validationsRef.current = validations;
+  const fetchingRef = useRef(false);
+  const reqIdRef = useRef(0);
+
+  const load = useCallback(
+    async (uiFilters: ValidacionesUiFilters, opts?: { background?: boolean }) => {
+      const reqId = ++reqIdRef.current; // marca de secuencia: solo se aplica el resultado más reciente
+      fetchingRef.current = true;
+      if (!opts?.background) setFetching(true);
+      try {
+        const res = await tramitesClient.listTenantBiometricValidations({
+          ...buildApiFilters(uiFilters),
+          page: pageRef.current,
+          pageSize: pageSizeRef.current,
+        });
+        if (reqId !== reqIdRef.current) return; // respuesta obsoleta (llegó otra consulta después)
+        setValidations(res.validations);
+        setStats(res.stats);
+        setTotal(res.total);
+        setError(() => null);
+        setLastUpdatedAt(new Date());
+      } catch (err) {
+        if (reqId !== reqIdRef.current) return;
+        // En auto-refresco con datos ya en pantalla, un fallo transitorio NO machaca la vista con el error.
+        if (opts?.background && validationsRef.current !== null) return;
+        setError(() =>
+          err instanceof Error ? err.message : 'No se pudieron cargar las validaciones.',
+        );
+      } finally {
+        if (reqId === reqIdRef.current) {
+          fetchingRef.current = false;
+          setFetching(false);
+          setHasLoadedOnce(true);
+        }
+      }
+    },
+    [],
+  );
+
+  // Eventos atascados (dead-letter): independiente de los filtros y tolerante a fallo (no rompe la grilla).
+  const refreshStuck = useCallback(async () => {
     try {
-      const res = await tramitesClient.listTenantBiometricValidations();
-      setValidations(res.validations);
-      setStats(res.stats);
-      setError(() => null);
-    } catch (err) {
-      setError(() =>
-        err instanceof Error ? err.message : 'No se pudieron cargar las validaciones.',
-      );
+      const res = await tramitesClient.listStuckIdentityValidations();
+      setStuck(res);
+    } catch {
+      // Observabilidad opcional: si falla, se conserva lo último mostrado.
     }
   }, []);
 
+  // Refetch cuando cambian los filtros aplicados O la página/tamaño (carga inicial incluida).
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(applied);
+  }, [applied, page, pageSize, load]);
+
+  // Los eventos atascados son por-tenant (independientes de filtros/página): refrescan con los filtros.
+  useEffect(() => {
+    void refreshStuck();
+  }, [applied, refreshStuck]);
+
+  // Auto-refresco en vivo (fase 2 — "suscripción"): tras la primera carga, refresca la grilla cada
+  // AUTO_REFRESH_MS con los filtros vigentes para reflejar los cambios que el backend persiste vía
+  // webhook/outbox de Kyverum (aprobado/rechazado/enviado) SIN que el gestor pulse "Actualizar". Pausa
+  // cuando la pestaña no está visible (ahorra red) y refresca al volver a ella; nunca solapa peticiones.
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (fetchingRef.current) return;
+      void load(appliedRef.current, { background: true });
+      void refreshStuck();
+    };
+    const intervalId = setInterval(tick, AUTO_REFRESH_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [hasLoadedOnce, load, refreshStuck]);
+
+  // Limpia el timer del debounce al desmontar.
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
+
+  const applyChange = useCallback((patch: Partial<ValidacionesUiFilters>, immediate?: boolean) => {
+    // Si el estado deja de ser 'rechazado', se oculta y limpia el filtro de motivo (AC1).
+    const normalized =
+      'estado' in patch && patch.estado !== 'rechazado'
+        ? { ...patch, motivoRechazo: '' }
+        : patch;
+    const next = { ...filtersRef.current, ...normalized };
+    setFilters(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (immediate) {
+      setApplied(next);
+      setPage(1); // un filtro nuevo vuelve a la primera página
+    } else {
+      debounceRef.current = setTimeout(() => {
+        setApplied(next);
+        setPage(1);
+      }, 300);
+    }
+  }, []);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await load(filtersRef.current);
+    void refreshStuck();
   };
 
-  // AC8 — los 4 estados se derivan de (validations, error):
-  //  • Cargando: aún no llegó la primera respuesta (validations === null) y sin error.
-  //  • Error:    `error` con role="alert".
-  //  • Vacío:    cargó pero no hay filas.
-  //  • Lleno:    cargó con filas → KPIs + tabla.
-  const initialLoading = validations === null && error === null;
+  const handleClearFilters = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setFilters(EMPTY_VALIDACIONES_FILTERS);
+    setApplied(EMPTY_VALIDACIONES_FILTERS);
+    setPage(1);
+  }, []);
+
+  const handlePageChange = useCallback((p: number) => setPage(Math.max(1, p)), []);
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setPage(1); // cambiar el tamaño reinicia a la primera página
+  }, []);
+
+  // Reencolar ("desatascar") un evento: reinicia sus intentos en el backend y refresca atascados + grilla.
+  const handleRequeue = useCallback(
+    async (id: string) => {
+      setRequeuing((s) => new Set(s).add(id));
+      try {
+        await tramitesClient.requeueStuckIdentityValidation(id);
+        // El worker lo retomará; ya no figura como atascado. Refresca ambas vistas.
+        await Promise.all([refreshStuck(), load(filtersRef.current, { background: true })]);
+      } catch {
+        void refreshStuck(); // refleja el estado real si el reencolado falló
+      } finally {
+        setRequeuing((s) => {
+          const next = new Set(s);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [refreshStuck, load],
+  );
+
+  // Reencolar TODOS los atascados de una vez.
+  const handleRequeueAll = useCallback(async () => {
+    setRequeuingAll(true);
+    try {
+      await tramitesClient.requeueAllStuckIdentityValidations();
+      await Promise.all([refreshStuck(), load(filtersRef.current, { background: true })]);
+    } catch {
+      void refreshStuck();
+    } finally {
+      setRequeuingAll(false);
+    }
+  }, [refreshStuck, load]);
+
+  // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
+  const initialLoading = !hasLoadedOnce && validations === null && error === null;
   const isEmpty = validations !== null && validations.length === 0;
+  // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
+  const filtersActive = hasActiveValidacionesFilters(applied);
 
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
+    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
       <ModuleTitle
         title="Validaciones de Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
-        right={
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Actualizar validaciones de identidad"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-            Actualizar
-          </button>
-        }
+        right={hasLoadedOnce ? <LiveIndicator at={lastUpdatedAt} /> : undefined}
       />
 
       <StatsCards stats={stats} loading={initialLoading} />
+
+      {hasLoadedOnce && (
+        <ValidacionesFilterToolbar
+          filters={filters}
+          onChange={applyChange}
+          onRefresh={() => void handleRefresh()}
+          onClearFilters={handleClearFilters}
+          loading={fetching}
+          resultCount={validations?.length ?? 0}
+        />
+      )}
+
+      {stuck && stuck.total > 0 && (
+        <StuckEventsBanner
+          stuck={stuck}
+          requeuing={requeuing}
+          requeuingAll={requeuingAll}
+          onRequeue={handleRequeue}
+          onRequeueAll={() => void handleRequeueAll()}
+        />
+      )}
 
       {error && (
         <div
@@ -159,11 +406,24 @@ export function Validaciones() {
         >
           <div className="text-center max-w-md px-6 py-10">
             <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
-            <p className="mt-3 text-sm font-semibold">Aún no hay validaciones de identidad.</p>
-            <p className="mt-1 text-xs opacity-70">
-              Las validaciones aparecen aquí cuando inicias la identidad de una parte desde el paso
-              de identidad de un trámite.
-            </p>
+            {filtersActive ? (
+              // AC2 — hubo respuesta vacía CON filtros activos: no es el estado inicial sin datos.
+              <>
+                <p className="mt-3 text-sm font-semibold">Sin resultados.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Ninguna validación coincide con los filtros aplicados. Ajusta o limpia los filtros
+                  para ver más resultados.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-sm font-semibold">Aún no hay validaciones de identidad.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Las validaciones aparecen aquí cuando inicias la identidad de una parte desde el paso
+                  de identidad de un trámite.
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -171,6 +431,227 @@ export function Validaciones() {
       {!initialLoading && !isEmpty && validations !== null && (
         <ValidacionesTable rows={validations} />
       )}
+
+      {!initialLoading && validations !== null && validations.length > 0 && (
+        <PaginationBar
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          disabled={fetching}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Indicador de auto-refresco "En vivo" + hora de la última actualización. Decorativo: NO usa aria-live
+ * (evita anunciar la hora cada 15 s a lectores de pantalla); los cambios de datos relevantes se anuncian
+ * vía el contador role="status" del toolbar. El título da el contexto en hover/foco.
+ */
+function LiveIndicator({ at }: { at: Date | null }) {
+  const time = at
+    ? at.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
+  return (
+    <span
+      className="flex items-center gap-1.5 text-[11px] font-medium opacity-70 shrink-0"
+      title="La lista se actualiza automáticamente"
+    >
+      <span className="relative flex h-2 w-2" aria-hidden="true">
+        <span
+          className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+          style={{ background: '#5B8A1F' }}
+        />
+        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#5B8A1F' }} />
+      </span>
+      En vivo{time ? ` · ${time}` : ''}
+    </span>
+  );
+}
+
+/**
+ * Banner de validaciones de identidad ATASCADAS (dead-letter): agotaron los reintentos automáticos de su
+ * cola —el envío al proveedor (Kyverum) o el encadenamiento async firma/FUR—. Se muestra solo cuando hay
+ * atascadas; cada una trae un botón "Reintentar" que la reencola (reinicia intentos en el backend) para
+ * que el sistema la procese de nuevo. Cada fila se etiqueta con su etapa (envío / firma·FUR).
+ */
+function StuckEventsBanner({
+  stuck,
+  requeuing,
+  requeuingAll,
+  onRequeue,
+  onRequeueAll,
+}: {
+  stuck: StuckIdentityValidationsResponse;
+  requeuing: Set<string>;
+  requeuingAll: boolean;
+  onRequeue: (id: string) => void;
+  onRequeueAll: () => void;
+}) {
+  return (
+    <section
+      className="rounded-2xl border p-4 shrink-0"
+      style={{ borderColor: '#B26A00', background: 'rgba(249,172,0,0.10)' }}
+      aria-label="Validaciones de identidad atascadas"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#B26A00' }} aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm font-semibold" style={{ color: '#B26A00' }} role="status" aria-live="polite">
+              {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
+              {stuck.total === 1 ? '' : 's'}
+            </p>
+            {stuck.total > 1 && (
+              <button
+                type="button"
+                onClick={onRequeueAll}
+                disabled={requeuingAll}
+                className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ borderColor: '#B26A00', color: '#B26A00' }}
+                aria-label="Reintentar todas las validaciones atascadas"
+              >
+                <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
+              </button>
+            )}
+          </div>
+          <p className="mt-0.5 text-[11px] opacity-80">
+            Agotaron {stuck.maxDeliveryAttempts} reintentos automáticos —el envío al proveedor de identidad o
+            el encadenamiento de firma/FUR. Reencólalas para que el sistema las procese de nuevo.
+          </p>
+          <ul className="mt-2 max-h-[40vh] space-y-1.5 overflow-y-auto pr-1" aria-label="Eventos atascados">
+            {stuck.stuck.map((e) => (
+              <StuckRow key={e.id} event={e} busy={requeuing.has(e.id)} onRequeue={onRequeue} />
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StuckRow({
+  event,
+  busy,
+  onRequeue,
+}: {
+  event: StuckIdentityValidation;
+  busy: boolean;
+  onRequeue: (id: string) => void;
+}) {
+  // El envío al proveedor (Kyverum) vs. el encadenamiento async firma/FUR son etapas distintas; etiquetar
+  // ayuda al gestor a entender qué se trabó. Default 'encadenamiento' si el backend no lo envía (transición).
+  const esEnvio = event.kind === 'envio';
+  const kindLabel = esEnvio ? 'Envío a proveedor' : 'Firma · FUR';
+  return (
+    <li
+      className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 text-[11px] dark:bg-[#0B0F14]"
+      style={{ borderColor: 'rgba(178,106,0,0.3)' }}
+    >
+      <span className="min-w-0 truncate">
+        <span
+          className="mr-1.5 inline-block rounded px-1.5 py-px text-[10px] font-semibold align-middle"
+          style={{ background: 'rgba(178,106,0,0.14)', color: '#8A5200' }}
+        >
+          {kindLabel}
+        </span>
+        <span className="font-medium">{event.nombre ?? 'Persona no disponible'}</span>
+        <span className="opacity-60">
+          {event.documento ? ` · ${maskDoc(event.tipoDoc ?? '', event.documento)}` : ''}
+          {' · '}
+          {event.attempts} intentos · {formatFecha(event.occurredAt)}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={() => onRequeue(event.id)}
+        disabled={busy}
+        className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ background: '#B26A00' }}
+        aria-label={`Reintentar la validación de ${event.nombre ?? 'persona no disponible'}`}
+      >
+        <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
+        {busy ? 'Reencolando…' : 'Reintentar'}
+      </button>
+    </li>
+  );
+}
+
+/** Barra de paginación: selector de filas por página (10–50) + navegación + "X–Y de N". */
+function PaginationBar({
+  page,
+  pageSize,
+  total,
+  disabled,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  disabled: boolean;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0"
+      style={{ borderColor: '#DFE5ED' }}
+    >
+      <div className="flex items-center gap-3 text-[11px]">
+        <label className="flex items-center gap-1.5">
+          <span className="opacity-60">Filas por página</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            disabled={disabled}
+            aria-label="Filas por página"
+            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
+            style={{ borderColor: '#DFE5ED' }}
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="opacity-60" role="status" aria-live="polite">
+          {from}–{to} de {total}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={disabled || page <= 1}
+          aria-label="Página anterior"
+          className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <span className="px-1 text-[11px] opacity-70">
+          Página {page} de {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={disabled || page >= totalPages}
+          aria-label="Página siguiente"
+          className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -190,29 +671,29 @@ function StatsCards({
     { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#FF4E00' },
   ];
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
       {cards.map((k) => {
         const Icon = k.i;
         return (
           <div
             key={k.l}
-            className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
+            className="rounded-2xl px-4 py-2.5 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
             style={{ borderColor: '#DFE5ED' }}
           >
             <div>
               <p className="text-[11px] opacity-70 font-medium">{k.l}</p>
               {loading ? (
                 <div
-                  className="mt-2 h-7 w-12 animate-pulse rounded bg-black/10 dark:bg-white/10"
+                  className="mt-1 h-6 w-12 animate-pulse rounded bg-black/10 dark:bg-white/10"
                   aria-hidden="true"
                 />
               ) : (
-                <p className="text-2xl font-bold mt-1" style={{ color: k.c }}>
+                <p className="text-xl font-bold mt-0.5" style={{ color: k.c }}>
                   {k.v ?? 0}
                 </p>
               )}
             </div>
-            <Icon className="h-8 w-8 opacity-40" style={{ color: k.c }} aria-hidden="true" />
+            <Icon className="h-7 w-7 opacity-40" style={{ color: k.c }} aria-hidden="true" />
           </div>
         );
       })}
@@ -241,28 +722,44 @@ function ValidacionesSkeleton() {
   );
 }
 
+/**
+ * Plantilla de columnas compartida por cabecera y filas. Columnas DESACOPLADas: Registro, Aprobación y
+ * Vigencia van por separado (cada dato en su propia columna y filtrable desde el toolbar). minmax(0,..)
+ * permite truncar el contenido dentro de cada celda del grid.
+ */
+const GRID_COLS =
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr)';
+
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila. */}
-      <div
-        className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-        style={{ background: '#DFE5ED', color: '#162744' }}
-        aria-hidden="true"
-      >
-        <div className="col-span-2">Trámite</div>
-        <div className="col-span-3">Persona</div>
-        <div className="col-span-2">Documento</div>
-        <div className="col-span-2">Estado</div>
-        <div className="col-span-1">Score</div>
-        <div className="col-span-2">Fecha</div>
+    // Scroll horizontal en pantallas angostas. `shrink-0` es CLAVE: al ser overflow-x-auto este div es
+    // un contenedor de scroll y, como ítem flex, su min-height pasa a 0 → sin shrink-0 el flex del módulo
+    // lo colapsaría a casi nada (solo se vería la paginación).
+    <div className="overflow-x-auto shrink-0">
+      <div className="min-w-[880px]">
+        {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila.
+            sticky → permanece visible al hacer scroll del módulo. */}
+        <div
+          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
+          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
+          aria-hidden="true"
+        >
+          <div>Trámite</div>
+          <div>Persona</div>
+          <div>Documento</div>
+          <div>Estado</div>
+          <div>Score</div>
+          <div>Registro</div>
+          <div>Aprobación</div>
+          <div>Vigencia</div>
+        </div>
+        <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
+          {rows.map((r) => (
+            <ValidacionRow key={r.id} row={r} />
+          ))}
+        </ul>
       </div>
-      <ul className="flex-1 overflow-y-auto space-y-2 pt-2" aria-label="Validaciones de identidad">
-        {rows.map((r) => (
-          <ValidacionRow key={r.id} row={r} />
-        ))}
-      </ul>
     </div>
   );
 }
@@ -272,39 +769,44 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
   const modalidad = MODALIDAD_LABEL[r.modalidad] ?? r.modalidad;
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.parte ? ` (${r.parte})` : '';
+  const vigencia = vigenciaBadge(r.diasRestantes);
   const ariaLabel =
     `Validación de ${r.nombre}${parte}, trámite ${r.referenceNumber} (${modalidad}), ` +
     `proveedor ${provider}, estado ${meta.label}` +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.estado === 'rechazado' && r.motivoRechazo ? `, motivo: ${r.motivoRechazo}` : '') +
-    `, ${formatFecha(r.createdAt)}. Abrir trámite.`;
+    `, registrada ${formatFecha(r.createdAt)}` +
+    (r.validadoAt ? `, aprobada ${formatFechaCorta(r.validadoAt)}` : '') +
+    (r.vigenciaHasta ? `, vigente hasta ${formatFechaCorta(r.vigenciaHasta)}` : '') +
+    (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
+    `. Abrir trámite.`;
 
   return (
     <li>
       <a
         href={`/tramites/${r.instanceId}`}
         aria-label={ariaLabel}
-        className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#DFE5ED' }}
+        className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: '#DFE5ED', gridTemplateColumns: GRID_COLS }}
       >
-        <div className="col-span-2 min-w-0">
+        <div className="min-w-0">
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
             <span className="truncate">{r.referenceNumber || '—'}</span>
             <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
           </span>
           <span className="block text-[10px] opacity-60">{modalidad}</span>
         </div>
-        <div className="col-span-3 min-w-0">
+        <div className="min-w-0">
           <span className="block font-medium truncate">{r.nombre}</span>
-          <span className="block text-[10px] opacity-60">
+          <span className="block text-[10px] opacity-60 truncate">
             {provider}
             {r.parte ? ` · ${r.parte}` : ''}
           </span>
         </div>
-        <div className="col-span-2 font-mono text-[11px] opacity-80">
+        <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
           {maskDoc(r.tipoDoc, r.documento)}
         </div>
-        <div className="col-span-2">
+        <div className="min-w-0">
           <span
             className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold"
             style={{ background: meta.bg, color: meta.color }}
@@ -317,8 +819,31 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
             </span>
           )}
         </div>
-        <div className="col-span-1 font-semibold">{r.score ?? '—'}</div>
-        <div className="col-span-2 text-[11px] opacity-70">{formatFecha(r.createdAt)}</div>
+        <div className="font-semibold">{r.score ?? '—'}</div>
+        {/* Registro: fecha + hora del registro de la validación. */}
+        <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
+        {/* Aprobación: solo la fecha (o — si aún no se aprobó). */}
+        <div className="min-w-0 text-[10px] leading-tight opacity-80">
+          {r.validadoAt ? formatFechaCorta(r.validadoAt) : '—'}
+        </div>
+        {/* Vigencia: fin de vigencia + badge de días restantes (verde/ámbar/rojo). */}
+        <div className="min-w-0 text-[10px] leading-tight">
+          {r.vigenciaHasta ? (
+            <>
+              <span className="block opacity-80">{formatFechaCorta(r.vigenciaHasta)}</span>
+              {vigencia && (
+                <span
+                  className="mt-0.5 inline-block rounded-full px-1.5 py-px font-semibold"
+                  style={{ background: vigencia.bg, color: vigencia.color }}
+                >
+                  {vigencia.label}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="opacity-80">—</span>
+          )}
+        </div>
       </a>
     </li>
   );
