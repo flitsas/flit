@@ -168,7 +168,7 @@ export interface AuditLogPageResponse {
 
 // ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
 /** Categoría de trámite normalizada por el backend (RF01). */
-export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
+export type AnalyticsCategory = "matriculas" | "traspasos" | "vehicular" | "otros";
 
 /** Conteo de trámites en un estado concreto dentro de una categoría. */
 export interface StatusCount {

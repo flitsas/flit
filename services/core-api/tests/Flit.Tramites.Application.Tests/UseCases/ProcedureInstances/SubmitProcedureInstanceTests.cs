@@ -109,7 +109,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), changedBy: null, ct);
 
         error.Should().Be("not_found");
         result.Should().BeNull();
@@ -124,7 +124,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct)
             .Returns(Instance(id, tenantId, ProcedureInstanceStatus.Submitted));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().Be("not_draft");
         result.Should().BeNull();
@@ -140,7 +140,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -184,7 +184,7 @@ public sealed class SubmitProcedureInstanceTests
         _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
             .Returns(false); // OT NO habilitado para la empresa
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().Be("organismo_no_habilitado");
         result.Should().BeNull();
@@ -206,7 +206,7 @@ public sealed class SubmitProcedureInstanceTests
         _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
         // El id se promueve a la columna para el motor de reglas OT y los listados.
@@ -225,7 +225,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().Be("documentos_incompletos");
         result.Should().BeNull();
@@ -243,7 +243,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (_, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (_, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().Be("identidad_requerida");
     }
@@ -259,7 +259,7 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -277,10 +277,67 @@ public sealed class SubmitProcedureInstanceTests
         _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
         result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);
+    }
+
+    // ── HU #10431 — autoría (changed_by) en la radicación ─────────────────────────
+
+    [Fact] // AC1 — el gestor autenticado queda sellado en status_history.changed_by
+    public async Task HandleAsync_WithExistingUser_StampsChangedBy()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
+        _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
+        _repo.UserExistsAsync(userId, ct).Returns(true);
+
+        var (_, error) = await _sut.HandleAsync(id, tenantId, userId, ct);
+
+        error.Should().BeNull();
+        instance.StatusHistory.Should().ContainSingle(h =>
+            h.ToStatus == ProcedureInstanceStatus.Submitted && h.ChangedBy == userId);
+    }
+
+    [Fact] // AC3 (negativo) — sujeto inexistente en identity.users → changed_by null seguro
+    public async Task HandleAsync_WithUnknownUser_ResolvesChangedByToNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
+        _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
+        _repo.UserExistsAsync(userId, ct).Returns(false); // no existe en identity.users
+
+        var (_, error) = await _sut.HandleAsync(id, tenantId, userId, ct);
+
+        error.Should().BeNull();
+        instance.StatusHistory.Should().ContainSingle(h =>
+            h.ToStatus == ProcedureInstanceStatus.Submitted && h.ChangedBy == null);
+    }
+
+    [Fact] // Borde — sin usuario (changedBy null) no se consulta identity.users
+    public async Task HandleAsync_WithNullChangedBy_DoesNotQueryUsers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, ct).Returns(instance);
+        _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
+
+        var (_, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        instance.StatusHistory.Should().ContainSingle(h => h.ChangedBy == null);
+        await _repo.DidNotReceive().UserExistsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 }
