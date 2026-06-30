@@ -8,6 +8,8 @@ interface CompanySelectorProps {
   value: string;
   onChange: (tenantId: string) => void;
   disabled?: boolean;
+  /** Etiqueta de la opción vacía. Por defecto "Mi compañía". */
+  defaultLabel?: string;
 }
 
 /**
@@ -15,7 +17,7 @@ interface CompanySelectorProps {
  * el backend usa el tenant del propio claim; al elegir una compañía se envía su
  * `tenantId` al overview.
  */
-export function CompanySelector({ companies, value, onChange, disabled }: CompanySelectorProps) {
+export function CompanySelector({ companies, value, onChange, disabled, defaultLabel = "Mi compañía" }: CompanySelectorProps) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor="reportes-compania" className="text-[10px] font-semibold uppercase opacity-60">
@@ -29,7 +31,7 @@ export function CompanySelector({ companies, value, onChange, disabled }: Compan
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">Mi compañía</option>
+        <option value="">{defaultLabel}</option>
         {companies.map((c) => (
           <option key={c.id} value={c.id}>
             {c.razonSocial}
