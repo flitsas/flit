@@ -21,6 +21,10 @@ public sealed record TenantBiometricValidationListQuery(
     DateTimeOffset? CreatedFrom = null,
     DateTimeOffset? CreatedTo = null,
     string? MotivoRechazo = null,
+    string? VigenciaEstado = null,
+    DateTimeOffset? ExpiraDesde = null,
+    DateTimeOffset? ExpiraHasta = null,
+    int? VenceEnDias = null,
     int Page = 1,
     int PageSize = 20)
 {
@@ -58,6 +62,13 @@ public sealed record TenantBiometricValidationListQuery(
         BiometricProviders.Kyverum,
     };
 
+    private static readonly HashSet<string> ValidVigenciaEstados = new(StringComparer.OrdinalIgnoreCase)
+    {
+        BiometricVigenciaEstados.Vigente,
+        BiometricVigenciaEstados.PorVencer,
+        BiometricVigenciaEstados.Vencida,
+    };
+
     /// <summary>
     /// Valida los parámetros de filtrado. Devuelve un mensaje de error descriptivo (sin PII) o null si es válido.
     /// </summary>
@@ -78,6 +89,15 @@ public sealed record TenantBiometricValidationListQuery(
         if (CreatedFrom is { } from && CreatedTo is { } to && from > to)
             return "createdFrom no puede ser posterior a createdTo.";
 
+        if (!string.IsNullOrWhiteSpace(VigenciaEstado) && !ValidVigenciaEstados.Contains(VigenciaEstado.Trim()))
+            return "vigenciaEstado inválido; use vigente, por_vencer o vencida.";
+
+        if (ExpiraDesde is { } expDesde && ExpiraHasta is { } expHasta && expDesde > expHasta)
+            return "expiraDesde no puede ser posterior a expiraHasta.";
+
+        if (VenceEnDias is { } venceEn && venceEn < 0)
+            return "venceEnDias no puede ser negativo.";
+
         return null;
     }
 
@@ -97,6 +117,10 @@ public sealed record TenantBiometricValidationListQuery(
         CreatedFrom = CreatedFrom,
         CreatedTo = CreatedTo,
         MotivoRechazo = Trim(MotivoRechazo),
+        VigenciaEstado = Trim(VigenciaEstado)?.ToLowerInvariant(),
+        ExpiraDesde = ExpiraDesde,
+        ExpiraHasta = ExpiraHasta,
+        VenceEnDias = VenceEnDias,
     };
 
     private static string? Trim(string? value) =>

@@ -26,7 +26,11 @@ public sealed record TenantBiometricValidationDto(
     bool Expired,
     string? MotivoRechazo,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ValidadoAt);
+    DateTimeOffset? ValidadoAt,
+    // Vigencia de la identidad APROBADA (30 días calendario desde la aprobación): fecha de fin de
+    // vigencia y días que le restan. Null cuando no hay aprobación (ValidadoAt) → no aplica vigencia.
+    DateTimeOffset? VigenciaHasta,
+    int? DiasRestantes);
 
 /// <summary>KPIs del submódulo: totales por estado (exactos, sin el cap de filas de la tabla).</summary>
 public sealed record BiometricValidationStatsDto(
@@ -122,7 +126,9 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt,
             IniciarBiometriaHandler.ExtractMotivoRechazo(v),
             v.CreatedAt,
-            v.ValidadoAt);
+            v.ValidadoAt,
+            BiometricRules.FechaFinVigencia(v),
+            BiometricRules.DiasRestantesVigencia(v, now));
 
     /// <summary>
     /// KPIs derivados de las filas ya materializadas (usado cuando el filtro de motivo se resuelve en

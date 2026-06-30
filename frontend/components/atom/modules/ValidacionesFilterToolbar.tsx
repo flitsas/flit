@@ -6,6 +6,7 @@ import type {
   BiometricEstado,
   BiometricProvider,
   BiometricParte,
+  BiometricVigenciaEstado,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -28,10 +29,15 @@ export interface ValidacionesUiFilters {
   parte: '' | BiometricParte;
   estado: '' | BiometricEstado;
   provider: '' | BiometricProvider;
+  vigenciaEstado: '' | BiometricVigenciaEstado;
   scoreMin: string;
   scoreMax: string;
   createdFrom: string;
   createdTo: string;
+  expiraDesde: string;
+  expiraHasta: string;
+  /** "Vence en ≤ N días" (string para el input numérico; vacío = sin filtro). */
+  venceEnDias: string;
   motivoRechazo: string;
 }
 
@@ -44,10 +50,14 @@ export const EMPTY_VALIDACIONES_FILTERS: ValidacionesUiFilters = {
   parte: '',
   estado: '',
   provider: '',
+  vigenciaEstado: '',
   scoreMin: '',
   scoreMax: '',
   createdFrom: '',
   createdTo: '',
+  expiraDesde: '',
+  expiraHasta: '',
+  venceEnDias: '',
   motivoRechazo: '',
 };
 
@@ -62,10 +72,14 @@ export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean 
     f.parte !== '' ||
     f.estado !== '' ||
     f.provider !== '' ||
+    f.vigenciaEstado !== '' ||
     f.scoreMin.trim() !== '' ||
     f.scoreMax.trim() !== '' ||
     f.createdFrom !== '' ||
     f.createdTo !== '' ||
+    f.expiraDesde !== '' ||
+    f.expiraHasta !== '' ||
+    f.venceEnDias.trim() !== '' ||
     f.motivoRechazo.trim() !== ''
   );
 }
@@ -78,7 +92,10 @@ function hasActiveAdvanced(f: ValidacionesUiFilters): boolean {
     f.scoreMin.trim() !== '' ||
     f.scoreMax.trim() !== '' ||
     f.createdFrom !== '' ||
-    f.createdTo !== ''
+    f.createdTo !== '' ||
+    f.expiraDesde !== '' ||
+    f.expiraHasta !== '' ||
+    f.venceEnDias.trim() !== ''
   );
 }
 
@@ -119,6 +136,13 @@ const PROVIDER_OPTIONS: { value: '' | BiometricProvider; label: string }[] = [
   { value: '', label: 'Todos' },
   { value: 'mock', label: 'Simulado' },
   { value: 'kyverum', label: 'Kyverum' },
+];
+
+const VIGENCIA_OPTIONS: { value: '' | BiometricVigenciaEstado; label: string }[] = [
+  { value: '', label: 'Todas' },
+  { value: 'vigente', label: 'Vigente' },
+  { value: 'por_vencer', label: 'Por vencer (≤7 días)' },
+  { value: 'vencida', label: 'Vencida' },
 ];
 
 const CONTROL_CLASS =
@@ -214,7 +238,7 @@ export function ValidacionesFilterToolbar({
       </div>
 
       {/* Filtros principales: dropdowns + persona (siempre visibles) */}
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <FilterSelect
           label="Modalidad"
           value={filters.modalidad}
@@ -232,6 +256,12 @@ export function ValidacionesFilterToolbar({
           value={filters.estado}
           options={ESTADO_OPTIONS}
           onSelect={(v) => onChange({ estado: v }, true)}
+        />
+        <FilterSelect
+          label="Vigencia"
+          value={filters.vigenciaEstado}
+          options={VIGENCIA_OPTIONS}
+          onSelect={(v) => onChange({ vigenciaEstado: v }, true)}
         />
         <FilterSelect
           label="Proveedor"
@@ -269,7 +299,7 @@ export function ValidacionesFilterToolbar({
 
       {/* Filtros avanzados (plegables): documento, score, fechas */}
       {showAdvanced && (
-        <div id="validaciones-filtros-avanzados" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div id="validaciones-filtros-avanzados" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Tipo doc.">
             <input
               type="text"
@@ -312,7 +342,7 @@ export function ValidacionesFilterToolbar({
               style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
-          <Field label="Desde">
+          <Field label="Registro desde">
             <input
               type="date"
               value={filters.createdFrom}
@@ -321,11 +351,41 @@ export function ValidacionesFilterToolbar({
               style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
-          <Field label="Hasta">
+          <Field label="Registro hasta">
             <input
               type="date"
               value={filters.createdTo}
               onChange={(e) => onChange({ createdTo: e.target.value }, true)}
+              className={CONTROL_CLASS}
+              style={{ borderColor: '#DFE5ED' }}
+            />
+          </Field>
+          <Field label="Vence desde">
+            <input
+              type="date"
+              value={filters.expiraDesde}
+              onChange={(e) => onChange({ expiraDesde: e.target.value }, true)}
+              className={CONTROL_CLASS}
+              style={{ borderColor: '#DFE5ED' }}
+            />
+          </Field>
+          <Field label="Vence hasta">
+            <input
+              type="date"
+              value={filters.expiraHasta}
+              onChange={(e) => onChange({ expiraHasta: e.target.value }, true)}
+              className={CONTROL_CLASS}
+              style={{ borderColor: '#DFE5ED' }}
+            />
+          </Field>
+          <Field label="Vence en ≤ N días">
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={filters.venceEnDias}
+              onChange={(e) => onChange({ venceEnDias: e.target.value })}
+              placeholder="Ej. 3"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}
             />

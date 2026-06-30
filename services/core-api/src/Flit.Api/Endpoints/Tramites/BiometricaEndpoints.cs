@@ -94,6 +94,10 @@ internal static class BiometricaEndpoints
             [FromQuery] DateTimeOffset? createdFrom,
             [FromQuery] DateTimeOffset? createdTo,
             [FromQuery] string? motivoRechazo,
+            [FromQuery] string? vigenciaEstado,
+            [FromQuery] DateTimeOffset? expiraDesde,
+            [FromQuery] DateTimeOffset? expiraHasta,
+            [FromQuery] int? venceEnDias,
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             ListTenantBiometricValidationsHandler handler,
@@ -116,6 +120,10 @@ internal static class BiometricaEndpoints
                 createdFrom,
                 createdTo,
                 motivoRechazo,
+                vigenciaEstado,
+                expiraDesde,
+                expiraHasta,
+                venceEnDias,
                 page ?? 1,
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize);
 
