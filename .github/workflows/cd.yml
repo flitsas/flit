@@ -18,9 +18,9 @@ env:
   # Nombres de imagen UNIFICADOS y con prefijo de registry ghcr.io/ (GHCR), igual que
   # el pull del docker-compose.prod.yml en el VPS. El ambiente se diferencia por TAG
   # (dev/qa/pdn), no por nombre de repo.
-  CORE_API_IMAGE: ghcr.io/flitsas/flitdev/core-api
-  FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
-  PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
+  CORE_API_IMAGE: ghcr.io/flitsas/flitqa/core-api
+  FRONTEND_IMAGE: ghcr.io/flitsas/flitqa/frontend
+  PYTHON_ML_IMAGE: ghcr.io/flitsas/flitqa/python-ml
 
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
