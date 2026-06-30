@@ -110,4 +110,28 @@ public sealed class TenantEnforcementMiddlewareTests
         // El superadmin SÍ respeta el header (acota a una compañía que elige), no su propio tenant.
         ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(OtherTenant));
     }
+
+    [Fact]
+    public async Task IdentityValidationStuck_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        // Las colas de atascadas (stuck/requeue) son runtime tenant-scoped: aunque el cliente mande OTRO
+        // tenant, el middleware lo fuerza al del JWT → un company-user no ve atascadas de otra compañía.
+        var ctx = Context("/api/v1/tramites/identity-validation/stuck",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+    }
+
+    [Fact]
+    public async Task IdentityValidationRequeue_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/identity-validation/stuck/requeue-all");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
 }

@@ -73,4 +73,24 @@ describe('tramitesClient — tenant/auth resolution (#1)', () => {
 
     expect(lastCall().headers['X-Tenant-Id']).toBe(OTHER);
   });
+
+  // Regresión: las "atascadas" mandaban DEV_TENANT_ID hardcodeado → leían la cola de OTRA compañía.
+  // Ahora resuelven el tenant del JWT como el resto del runtime.
+  it('listStuckIdentityValidations manda el X-Tenant-Id del JWT (no DEV_TENANT_ID)', async () => {
+    setCookieToken(makeToken({ sub: 'u1', role: 'AdminCompany', tenant_id: COMPANY }));
+
+    await tramitesClient.listStuckIdentityValidations();
+
+    expect(lastCall().headers['X-Tenant-Id']).toBe(COMPANY);
+  });
+
+  it('requeueAllStuckIdentityValidations resuelve el tenant del token, no un default fijo', async () => {
+    setCookieToken(makeToken({ sub: 'admin', role: 'SuperAdmin', tenant_id: COMPANY }));
+    setActiveTramitesTenant(OTHER);
+
+    await tramitesClient.requeueAllStuckIdentityValidations();
+
+    // El override activo (superadmin acotando a otra compañía) tiene prioridad, igual que per-instance.
+    expect(lastCall().headers['X-Tenant-Id']).toBe(OTHER);
+  });
 });
