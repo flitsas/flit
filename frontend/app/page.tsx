@@ -21,7 +21,7 @@ function HomeContent() {
   const params = useSearchParams();
   const [authed, setAuthed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const { modules: accessibleModules } = useAccessibleModules(authed);
+  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
   // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
@@ -84,7 +84,7 @@ function HomeContent() {
       active={module}
       onNav={handleNav}
       onLogout={handleLogout}
-      visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}
+      visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
       {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
       {module === "tramites"     && <Tramites />}
