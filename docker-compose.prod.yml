@@ -10,13 +10,13 @@
 #   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
 #   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
 #
-# Los defaults son los de DEV. El CD exporta las vars segun la rama (develop/staging/
+# Los defaults son los de QA. El CD exporta las vars segun la rama (develop/staging/
 # release); para operacion manual, fijalas en el .env del VPS de ese ambiente.
 #
 # Mapeo de dominios en el reverse-proxy del HOST (ejemplo DEV):
-#   dev.flitsas.online      -> 127.0.0.1:${FRONTEND_PORT}  (frontend)
-#   api.dev.flitsas.online  -> 127.0.0.1:${GATEWAY_PORT}   (gateway / API publica)
-#   core.dev.flitsas.online -> 127.0.0.1:${CORE_API_PORT}  (core-api, opcional/debug)
+#   qa.flitsas.online      -> 127.0.0.1:${FRONTEND_PORT}  (frontend)
+#   api.qa.flitsas.online  -> 127.0.0.1:${GATEWAY_PORT}   (gateway / API publica)
+#   core.qa.flitsas.online -> 127.0.0.1:${CORE_API_PORT}  (core-api, opcional/debug)
 #
 # Postgres NO esta aqui: corre en el HOST (host.docker.internal:5432).
 #
@@ -27,14 +27,14 @@
 # Variables de puerto (defaults DEV; el CD las inyecta por ambiente):
 #   FRONTEND_PORT / GATEWAY_PORT / CORE_API_PORT / PYTHON_ML_PORT
 # Variables para AISLAR este proyecto del resto del VPS:
-#   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitdev)
+#   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitqa)
 # Variables opcionales:
 #   CORE_API_TAG / FRONTEND_TAG / PYTHON_ML_TAG   tag de imagen (default: latest)
 #   VERIFIK_BASE_URL / VERIFIK_TIMEOUT_SECONDS
 #
 # NOTA: login deshabilitado temporalmente -> NO se requieren llaves JWT.
 # NOTA: la imagen python-ml debe construirse/publicarse en el pipeline CD
-#       (ghcr.io/flitsas/flitdev/python-ml) para que `docker compose pull` la encuentre.
+#       (ghcr.io/flitsas/flitqa/python-ml) para que `docker compose pull` la encuentre.
 # NOTA: todas las imagenes se publican en GHCR (ghcr.io). El VPS debe hacer
 #       `docker login ghcr.io` (lo hace el CD con GHCR_PAT) antes del pull.
 #
@@ -45,7 +45,7 @@
 # Nombre del proyecto: UNICO por proyecto en el VPS. Si dos repos comparten el
 # mismo nombre, `up --remove-orphans` borra los contenedores del otro. Sobrescribir
 # con COMPOSE_PROJECT_NAME en el .env de cada proyecto.
-name: flitdev
+name: flitqa
 
 x-restart-policy: &restart unless-stopped
 
@@ -58,7 +58,7 @@ x-default-logging: &default-logging
 services:
   # ── Flit.Api (interno, detras de YARP) — CORE_API_PORT ────────────────────
   core-api:
-    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/api/Flit.Api.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
     working_dir: /app/api
@@ -68,7 +68,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
-      Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      Cors__AllowedOrigins: ${CORS_ORIGIN:-https://qa.flitsas.online}
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
       # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
       Jwt__DevGenerate: "true"
@@ -114,14 +114,14 @@ services:
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
   gateway:
-    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/gateway/Flit.Gateway.dll"]
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
-      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://qa.flitsas.online}
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
@@ -144,7 +144,7 @@ services:
 
   # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — PYTHON_ML_PORT ────────
   python-ml:
-    image: ghcr.io/flitsas/flitdev/python-ml:${PYTHON_ML_TAG:-latest}
+    image: ghcr.io/flitsas/flitqa/python-ml:${PYTHON_ML_TAG:-latest}
     command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${PYTHON_ML_PORT:-4012}"]
     ports:
       - "127.0.0.1:${PYTHON_ML_PORT:-4012}:${PYTHON_ML_PORT:-4012}"
@@ -159,7 +159,7 @@ services:
 
   # ── Frontend (Next.js) — FRONTEND_PORT ────────────────────────────────────
   frontend:
-    image: ghcr.io/flitsas/flitdev/frontend:${FRONTEND_TAG:-latest}
+    image: ghcr.io/flitsas/flitqa/frontend:${FRONTEND_TAG:-latest}
     environment:
       # Next.js (next dev/start) escucha en este puerto interno.
       PORT: "${FRONTEND_PORT:-4001}"
