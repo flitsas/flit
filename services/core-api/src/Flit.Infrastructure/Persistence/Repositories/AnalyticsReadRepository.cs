@@ -24,6 +24,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             CASE
                 WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
                 WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                 ELSE 'otros'
             END AS category,
             pi.status,
@@ -65,6 +66,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                    CASE
                        WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
                        WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
+                       WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
                        ELSE 'otros'
                    END AS category,
                    pi.status,
