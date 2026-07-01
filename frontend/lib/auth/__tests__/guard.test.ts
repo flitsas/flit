@@ -4,13 +4,21 @@
 // Uso de ejemplo:
 //   const { allowed } = evaluateAdminAccess(makeToken({ role: "SuperAdmin" }));
 import { describe, expect, it } from "vitest";
-import { evaluateAdminAccess, evaluateLoginAccess, FORBIDDEN_PATH, HOME_PATH } from "../guard";
+import {
+  evaluateAdminAccess,
+  evaluateEmpresaAccess,
+  evaluateLoginAccess,
+  FORBIDDEN_PATH,
+  HOME_PATH,
+} from "../guard";
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${header}.${body}.`;
 }
+
+const PAST_EXP = Math.floor(Date.now() / 1000) - 3600;
 
 describe("evaluateAdminAccess (AC6)", () => {
   it("permite el acceso a un SuperAdmin", () => {
@@ -63,6 +71,40 @@ describe("evaluateAdminAccess (AC6)", () => {
       makeToken({ sub: "u1", role: "ot_admin" }),
       "/admin/companies",
     );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("redirige a /403 cuando el token de SuperAdmin ya expiró", () => {
+    const decision = evaluateAdminAccess(makeToken({ role: "SuperAdmin", exp: PAST_EXP }));
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("redirige a /403 cuando el token de ot_admin ya expiró", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ role: "ot_admin", exp: PAST_EXP }),
+      "/admin/transit-offices",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+});
+
+describe("evaluateEmpresaAccess", () => {
+  it("permite el acceso a AdminCompany", () => {
+    const decision = evaluateEmpresaAccess(makeToken({ role: "AdminCompany" }));
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("redirige a /403 cuando no hay token", () => {
+    const decision = evaluateEmpresaAccess(undefined);
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("redirige a /403 cuando el token de AdminCompany ya expiró", () => {
+    const decision = evaluateEmpresaAccess(makeToken({ role: "AdminCompany", exp: PAST_EXP }));
     expect(decision.allowed).toBe(false);
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
