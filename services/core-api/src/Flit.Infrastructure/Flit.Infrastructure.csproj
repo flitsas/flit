@@ -15,6 +15,11 @@
   <ItemGroup>
     <EmbeddedResource Include="Persistence\Sql\Ddl\*.sql" />
     <EmbeddedResource Include="Documents\Fur\fur-field-manifest.json" />
+    <!-- HU #10256 fix — fuentes embebidas para el resolutor de PdfSharpCore (overlay del FUR).
+         PdfSharpCore no trae fuentes y resuelve contra el SO; el runtime aspnet:10.0-alpine no
+         tiene ninguna, por lo que XFont("Arial", ...) lanzaba y el endpoint respondía HTTP 500.
+         DejaVu Sans (licencia Bitstream Vera/Arev, ver Documents/Fur/Fonts/DejaVu-LICENSE.txt). -->
+    <EmbeddedResource Include="Documents\Fur\Fonts\*.ttf" />
     <Content Include="Documents\Fur\Templates\*.pdf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
