@@ -12,6 +12,11 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
     private readonly FurFieldManifest _manifest;
     private readonly FurTemplatePaths _templates;
 
+    // HU #10256 fix — PdfSharpCore resuelve "Arial" contra las fuentes del SO y el runtime alpine
+    // no tiene ninguna, lo que provocaba HTTP 500 al generar el FUR. Registrar el resolutor con
+    // fuente embebida antes de cualquier render (idempotente) hace la generación independiente del SO.
+    static FurOverlayDocumentGenerator() => FurFontResolver.EnsureRegistered();
+
     public FurOverlayDocumentGenerator()
         : this(FurFieldManifestLoader.LoadEmbedded(), FurTemplatePaths.FromBaseDirectory(AppContext.BaseDirectory))
     {
