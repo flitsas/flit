@@ -20,7 +20,7 @@ internal sealed class TenantOperationalPolicyConfiguration
             .IsUnique()
             .HasDatabaseName("uq_tenant_operational_policies_tenant_id");
 
-        builder.Property(x => x.AllowInitialRegistration).HasDefaultValue(true);
+        builder.Property(x => x.AllowInitialRegistration).HasDefaultValue(false);
         builder.Property(x => x.AllowMiscNewVehicles).HasDefaultValue(true);
         builder.Property(x => x.OnlyOwnVehicles).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);

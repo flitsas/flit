@@ -177,11 +177,11 @@ describe("CompanyListTable (AC1)", () => {
       />,
     );
 
-    // La primera compañía está activa → botón "Desactivar"; la segunda inactiva → "Activar".
-    fireEvent.click(screen.getByRole("button", { name: /desactivar FLIT SAS/i }));
+    // La primera compañía está activa → switch "Desactivar"; la segunda inactiva → "Activar".
+    fireEvent.click(screen.getByRole("switch", { name: /desactivar FLIT SAS/i }));
     expect(onToggleStatus).toHaveBeenCalledWith(items[0]);
 
-    fireEvent.click(screen.getByRole("button", { name: /activar Movilidad Antioquia/i }));
+    fireEvent.click(screen.getByRole("switch", { name: /activar Movilidad Antioquia/i }));
     expect(onToggleStatus).toHaveBeenCalledWith(items[1]);
   });
 });

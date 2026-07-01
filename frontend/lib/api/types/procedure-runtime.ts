@@ -210,7 +210,9 @@ export interface RuntPersonLookupResult {
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
 
-export type PreflightCheckStatus = 'ok' | 'warn' | 'fail' | 'unknown';
+// 'error' = un proveedor no se pudo verificar (no-200/timeout): bloqueo DURO, no subsanable con
+// "aceptar riesgo" (a diferencia de 'fail', que sí es subsanable). Se pinta rojo como 'fail'.
+export type PreflightCheckStatus = 'ok' | 'warn' | 'fail' | 'unknown' | 'error';
 export type PreflightOverall = 'green' | 'yellow' | 'red';
 
 export interface PreflightAction {
@@ -408,23 +410,23 @@ export type BiometricTipoDoc = 'CC' | 'CE' | 'TI' | 'PPT' | 'PAS';
 /** Espejo de BiometricValidationDto (vista del gestor autenticado). */
 export interface BiometricValidation {
   id: string;
-  parte: BiometricParte | null;
-  nombre: string;
-  tipoDoc: string;
-  documento: string;
+  partyRole: BiometricParte | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
   email: string;
-  estado: BiometricEstado;
+  status: BiometricEstado;
   intentos: number;
   maxIntentos: number;
   score: number | null;
   expiresAt: string;
-  validadoAt: string | null;
+  validatedAt: string | null;
   expired: boolean;
   // HU #10233: proveedor de la validación y URL de captura (solo kyverum + en_proceso).
   provider: string;
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
-  motivoRechazo?: string | null;
+  rejectionReason?: string | null;
 }
 
 /**
@@ -468,23 +470,23 @@ export interface TenantBiometricValidation {
   instanceId: string;
   referenceNumber: string;
   modalidad: string;
-  parte: BiometricParte | null;
-  nombre: string;
-  tipoDoc: string;
-  documento: string;
-  estado: BiometricEstado;
+  partyRole: BiometricParte | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+  status: BiometricEstado;
   score: number | null;
   provider: string;
   expired: boolean;
-  motivoRechazo?: string | null;
+  rejectionReason?: string | null;
   /** Fecha de registro (creación) de la validación. */
   createdAt: string;
   /** Fecha de aprobación (null si aún no se aprobó). */
-  validadoAt: string | null;
+  validatedAt: string | null;
   /** Fecha de fin de vigencia (aprobación + 30 días). Null si no hay aprobación. */
-  vigenciaHasta: string | null;
+  validUntil: string | null;
   /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
-  diasRestantes: number | null;
+  daysRemaining: number | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -518,17 +520,17 @@ export interface TenantBiometricValidationsResponse {
 export interface TenantBiometricValidationFilters {
   referenceNumber?: string;
   modalidad?: WizardModalidad;
-  nombre?: string;
-  parte?: BiometricParte;
-  tipoDoc?: string;
-  documento?: string;
-  estado?: BiometricEstado;
+  name?: string;
+  partyRole?: BiometricParte;
+  documentType?: string;
+  documentNumber?: string;
+  status?: BiometricEstado;
   provider?: BiometricProvider;
   scoreMin?: number;
   scoreMax?: number;
   createdFrom?: string;
   createdTo?: string;
-  motivoRechazo?: string;
+  rejectionReason?: string;
   /** Estado de vigencia de la identidad aprobada: vigente | por_vencer | vencida. */
   vigenciaEstado?: BiometricVigenciaEstado;
   /** Fin de vigencia (aprobación + 30 días) desde / hasta, en ISO-8601. */
@@ -559,9 +561,9 @@ export interface StuckIdentityValidation {
   occurredAt: string;
   createdAt: string;
   // Persona validada (la UI muestra nombre + últimos 4 del documento). Null si la validación ya no existe.
-  nombre: string | null;
-  tipoDoc: string | null;
-  documento: string | null;
+  name: string | null;
+  documentType: string | null;
+  documentNumber: string | null;
   // Qué cola se atascó (para etiquetar la fila). Backend siempre lo envía; opcional por tolerancia a
   // un backend en transición que aún no lo exponga (default 'encadenamiento' en la UI).
   kind?: StuckIdentityValidationKind;

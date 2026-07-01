@@ -87,11 +87,11 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
   // el gate server-driven y habilite "Continuar" sin requerir un clic manual en "Actualizar".
   useEffect(() => {
     if (provider !== KYVERUM) return;
-    const pending = (validations ?? []).some((v) => v.estado === 'en_proceso');
+    const pending = (validations ?? []).some((v) => v.status === 'en_proceso');
     if (!pending) return;
     const timer = setInterval(async () => {
       const state = await load();
-      const stillPending = (state?.validations ?? []).some((v) => v.estado === 'en_proceso');
+      const stillPending = (state?.validations ?? []).some((v) => v.status === 'en_proceso');
       if (state && !stillPending) onRefresh?.();
     }, 5000);
     return () => clearInterval(timer);
@@ -160,8 +160,8 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
             // tras posibles reintentos (rechazado → nueva validación).
             const matches = (validations ?? []).filter((v) =>
               modalidad === 'traspaso'
-                ? v.parte === parte
-                : v.parte === null || v.parte === 'comprador',
+                ? v.partyRole === parte
+                : v.partyRole === null || v.partyRole === 'comprador',
             );
             const validation = matches.length > 0 ? matches[matches.length - 1] : null;
             return (
@@ -218,7 +218,7 @@ function ParteCard({
   validation: BiometricValidation | null;
   onChanged: () => void;
 }) {
-  const estado = validation?.estado;
+  const estado = validation?.status;
   return (
     <fieldset
       className="rounded-xl border p-4"
@@ -269,7 +269,7 @@ function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
         <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
           Identidad verificada — {v.score ?? 95}/100
         </p>
-        <p className="text-[11px] opacity-70">{v.nombre}</p>
+        <p className="text-[11px] opacity-70">{v.name}</p>
       </div>
     </div>
   );
@@ -299,7 +299,7 @@ function KyverumPendingView({ validation: v }: { validation: BiometricValidation
       <div className="flex items-center gap-2">
         <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: '#557EFF' }} aria-hidden />
         <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
-          Esperando validación de {v.nombre}
+          Esperando validación de {v.name}
         </p>
       </div>
       <p className="text-[11px] opacity-70">
@@ -365,7 +365,7 @@ function RejectedView({
   provider: string;
   onChanged: () => void;
 }) {
-  const expirado = v.estado === 'expirado' || v.expired;
+  const expirado = v.status === 'expirado' || v.expired;
   return (
     <div className="space-y-3">
       <div
@@ -386,8 +386,8 @@ function RejectedView({
             <p className="text-[11px] opacity-80">Venció el {formatFecha(v.expiresAt)}.</p>
           )}
           {/* AC4 — rechazo con motivo: detalle sanitizado del proveedor (sin PII). */}
-          {!expirado && v.motivoRechazo && (
-            <p className="text-[11px] opacity-80">Motivo: {v.motivoRechazo}</p>
+          {!expirado && v.rejectionReason && (
+            <p className="text-[11px] opacity-80">Motivo: {v.rejectionReason}</p>
           )}
         </div>
       </div>

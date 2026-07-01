@@ -16,22 +16,22 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.Parte).HasColumnName("parte").HasMaxLength(20);
-        builder.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
-        builder.Property(x => x.TipoDoc).HasColumnName("tipo_doc").HasMaxLength(20).IsRequired();
-        builder.Property(x => x.Documento).HasColumnName("documento").HasMaxLength(40).IsRequired();
+        builder.Property(x => x.PartyRole).HasColumnName("party_role").HasMaxLength(20);
+        builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+        builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
+        builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
-        builder.Property(x => x.Estado).HasColumnName("estado").HasMaxLength(20).IsRequired().HasDefaultValue("enviado");
+        builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired().HasDefaultValue("enviado");
         builder.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
-        builder.Property(x => x.Intentos).HasColumnName("intentos").IsRequired().HasDefaultValue(0);
-        builder.Property(x => x.MaxIntentos).HasColumnName("max_intentos").IsRequired().HasDefaultValue(5);
+        builder.Property(x => x.Attempts).HasColumnName("attempts").IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.MaxAttempts).HasColumnName("max_attempts").IsRequired().HasDefaultValue(5);
         builder.Property(x => x.Score).HasColumnName("score");
-        builder.Property(x => x.Detalle).HasColumnName("detalle").HasColumnType("jsonb");
-        builder.Property(x => x.FotoRostroPath).HasColumnName("foto_rostro_path").HasMaxLength(1000);
-        builder.Property(x => x.FotoCedulaFrontalPath).HasColumnName("foto_cedula_frontal_path").HasMaxLength(1000);
-        builder.Property(x => x.FotoCedulaReversoPath).HasColumnName("foto_cedula_reverso_path").HasMaxLength(1000);
-        builder.Property(x => x.ValidadoAt).HasColumnName("validado_at");
+        builder.Property(x => x.Detail).HasColumnName("detail").HasColumnType("jsonb");
+        builder.Property(x => x.FacePhotoPath).HasColumnName("face_photo_path").HasMaxLength(1000);
+        builder.Property(x => x.IdFrontPhotoPath).HasColumnName("id_front_photo_path").HasMaxLength(1000);
+        builder.Property(x => x.IdBackPhotoPath).HasColumnName("id_back_photo_path").HasMaxLength(1000);
+        builder.Property(x => x.ValidatedAt).HasColumnName("validated_at");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
@@ -42,6 +42,11 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.WebhookSecretEncrypted).HasColumnName("webhook_secret_encrypted").HasMaxLength(2000);
         builder.Property(x => x.ProviderStatus).HasColumnName("provider_status").HasMaxLength(40);
         builder.Property(x => x.ProviderPayload).HasColumnName("provider_payload").HasColumnType("jsonb");
+
+        // HU #10350 — fecha de fin de vigencia: columna NORMAL que estampa el código al aprobar
+        // (validado_at + 30 días, medianoche Colombia). Los "días restantes" NO se persisten: se calculan
+        // al leer. (Antes era mantenida por un trigger; se quitó para no meter lógica en la BD.)
+        builder.Property(x => x.ValidUntil).HasColumnName("valid_until");
 
         builder.HasIndex(x => x.KyverumVerificationId)
             .IsUnique()

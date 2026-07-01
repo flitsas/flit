@@ -13,6 +13,7 @@ public interface IJwtTokenIssuer
         Guid userId,
         string email,
         Guid tenantId,
+        string tenantName,
         Guid roleId,
         string roleCode,
         IReadOnlyList<string> permissionSlugs);

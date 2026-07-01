@@ -82,6 +82,23 @@ public sealed class TraspasoGatesTests
     }
 
     [Fact]
+    public void Paso1_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta del vehículo no verificable (error de proveedor): aunque la placa esté en
+        // field_values (VehiculoConsultado=true), el paso 1 NO se completa. Ni forzar ni aceptar
+        // riesgo lo levantan.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", ImpuestoVehicularUnknown: false, ProviderError: true),
+            ForzarContinuar = true,
+            RiesgoPreflightAceptado = true,
+        };
+        var r = TraspasoGates.PasoCompleto(1, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("preflight_provider_error");
+    }
+
+    [Fact]
     public void MaxPasoAlcanzable_SinConsultaVehiculo_Es1()
     {
         var ctx = BaseCtx() with { VehiculoConsultado = false };
@@ -110,6 +127,22 @@ public sealed class TraspasoGatesTests
         // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso 2.
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), RiesgoPreflightAceptado = true };
         TraspasoGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso2_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta no verificable (error de proveedor) = bloqueo DURO: ni "aceptar riesgo" ni
+        // forzar lo levantan. Hay que reejecutar la consulta.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, ProviderError: true),
+            RiesgoPreflightAceptado = true,
+            ForzarContinuar = true,
+        };
+        var r = TraspasoGates.PasoCompleto(2, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("preflight_provider_error");
     }
 
     [Fact]

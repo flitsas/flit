@@ -56,6 +56,20 @@ public sealed class MatriculaGatesTests
     }
 
     [Fact]
+    public void Paso2_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta no verificable (error de proveedor) = bloqueo DURO: ni "aceptar riesgo" ni
+        // forzar lo levantan. Hay que reejecutar la consulta.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, ProviderError: true),
+            RiesgoPreflightAceptado = true,
+            ForzarContinuar = true,
+        };
+        TraspasoGatesShared(ctx, 2, "preflight_provider_error");
+    }
+
+    [Fact]
     public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
     {
         // El riesgo NO afloja el gating de documentos obligatorios.
@@ -81,6 +95,21 @@ public sealed class MatriculaGatesTests
     {
         var ctx = BaseCtx() with { VehiculoConsultado = false };
         TraspasoGatesShared(ctx, 1, "vin_pendiente");
+    }
+
+    [Fact]
+    public void Paso1_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta del vehículo no verificable (error de proveedor): aunque el VIN esté en
+        // field_values (VehiculoConsultado=true), el paso 1 NO se completa. Ni forzar ni aceptar
+        // riesgo lo levantan.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, ProviderError: true),
+            ForzarContinuar = true,
+            RiesgoPreflightAceptado = true,
+        };
+        TraspasoGatesShared(ctx, 1, "preflight_provider_error");
     }
 
     [Fact]

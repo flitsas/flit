@@ -20,6 +20,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 {
     // ── Overview ────────────────────────────────────────────────────────────────────────────────────
+    // Consulta directa sobre tramites.procedure_instances (fuente de verdad) en lugar de las
+    // tablas pre-agregadas analytics.* — éstas solo se poblaban mediante refresh_procedure_aggregates
+    // que nunca se invoca automáticamente en producción, por lo que devolvían 0 para tenants reales.
 
     // En vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango de creación.
     // La versión global omite el filtro de tenant (SuperAdmin: todas las compañías).
@@ -61,6 +64,9 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         """;
 
     // ── Top Producers ────────────────────────────────────────────────────────────────────────────────
+    // Fuente: procedure_instance_status_history — misma semántica que refresh_procedure_aggregates:
+    //   submitted = transición a 'submitted', approved = a 'approved_ot'/'completed',
+    //   rejected  = a 'rejected_ot'/'cancelled'.
 
     // En vivo desde status_history (misma semántica que el extinto refresh: submitted; approved =
     // approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING preserva el contrato previo

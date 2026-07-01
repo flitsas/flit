@@ -14,23 +14,23 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>Vista interna (gestor autenticado) de una validación biométrica.</summary>
 public sealed record BiometricValidationDto(
     Guid Id,
-    string? Parte,
-    string Nombre,
-    string TipoDoc,
-    string Documento,
+    string? PartyRole,
+    string Name,
+    string DocumentType,
+    string DocumentNumber,
     string Email,
-    string Estado,
+    string Status,
     int Intentos,
     int MaxIntentos,
     int? Score,
     DateTimeOffset ExpiresAt,
-    DateTimeOffset? ValidadoAt,
+    DateTimeOffset? ValidatedAt,
     bool Expired,
     // HU #10233 (AC9): proveedor de la validación y URL de captura (solo kyverum + en_proceso).
     string Provider = BiometricProviders.Mock,
     string? CaptureUrl = null,
     // HU #10234 (AC4): motivo de rechazo SANITIZADO. Solo se expone en estado rechazado; null en otros.
-    string? MotivoRechazo = null);
+    string? RejectionReason = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -47,6 +47,9 @@ public sealed record BiometricValidationsResponse(
     IReadOnlyList<BiometricValidationDto> Validations,
     string Provider = BiometricProviders.Mock);
 
+// NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
+// captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
+// el front de iniciar/captura pública sigue enviando/leyendo estos campos en español.
 /// <summary>Entrada para iniciar una biométrica de una parte.</summary>
 public sealed record IniciarBiometriaInput(
     string? Parte,
@@ -125,8 +128,8 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
         if (existing is not null)
             return (null, "biometria_activa");
 
@@ -137,16 +140,16 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ProcedureInstanceId = id,
-            Parte = parte,
-            Nombre = input.Nombre.Trim(),
-            TipoDoc = input.TipoDoc.Trim(),
-            Documento = input.Documento.Trim(),
+            PartyRole = parte,
+            Name = input.Nombre.Trim(),
+            DocumentType = input.TipoDoc.Trim(),
+            DocumentNumber = input.Documento.Trim(),
             Email = input.Email.Trim(),
-            Estado = BiometricEstados.Enviado,
+            Status = BiometricEstados.Enviado,
             TokenHash = BiometricToken.Hash(token),
             ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
-            Intentos = 0,
-            MaxIntentos = BiometricRules.MaxIntentos,
+            Attempts = 0,
+            MaxAttempts = BiometricRules.MaxIntentos,
             CreatedAt = now,
         };
 
@@ -170,13 +173,13 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
     }
 
     internal static BiometricValidationDto ToDto(ProcedureInstanceBiometricValidation v, DateTimeOffset now) =>
-        new(v.Id, v.Parte, v.Nombre, v.TipoDoc, v.Documento, v.Email, v.Estado,
-            v.Intentos, v.MaxIntentos, v.Score, v.ExpiresAt, v.ValidadoAt,
-            v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt,
+        new(v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email, v.Status,
+            v.Attempts, v.MaxAttempts, v.Score, v.ExpiresAt, v.ValidatedAt,
+            v.Status != BiometricEstados.Aprobado && now > v.ExpiresAt,
             v.Provider,
             // AC9: la URL de captura solo se expone para Kyverum mientras la validación está en proceso.
             string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
-                && v.Estado == BiometricEstados.EnProceso
+                && v.Status == BiometricEstados.EnProceso
                     ? v.CaptureUrl
                     : null,
             ExtractMotivoRechazo(v));
@@ -189,11 +192,11 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
     /// </summary>
     internal static string? ExtractMotivoRechazo(ProcedureInstanceBiometricValidation v)
     {
-        if (v.Estado != BiometricEstados.Rechazado)
+        if (v.Status != BiometricEstados.Rechazado)
             return null;
 
-        // Mock: Detalle = { score, aprobado, motivo, ... } — el scorer ya produce texto sin PII.
-        var motivo = TryReadString(v.Detalle, "motivo");
+        // Mock: Detail = { score, aprobado, motivo, ... } — el scorer ya produce texto sin PII.
+        var motivo = TryReadString(v.Detail, "motivo");
         if (!string.IsNullOrWhiteSpace(motivo))
             return motivo;
 
@@ -283,18 +286,18 @@ public sealed class GetBiometriaByTokenHandler(IProcedureInstanceRepository repo
         var now = DateTimeOffset.UtcNow;
         if (IsExpirable(v) && now > v.ExpiresAt)
         {
-            v.Estado = BiometricEstados.Expirado;
+            v.Status = BiometricEstados.Expirado;
             v.UpdatedAt = now;
             await repo.SaveChangesAsync(ct);
         }
 
-        var expired = v.Estado == BiometricEstados.Expirado
+        var expired = v.Status == BiometricEstados.Expirado
             || (IsExpirable(v) && now > v.ExpiresAt);
-        return (new BiometriaPublicViewDto(v.Estado, v.Parte, v.Nombre, v.Intentos, v.MaxIntentos, expired), null);
+        return (new BiometriaPublicViewDto(v.Status, v.PartyRole, v.Name, v.Attempts, v.MaxAttempts, expired), null);
     }
 
     internal static bool IsExpirable(ProcedureInstanceBiometricValidation v) =>
-        v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso;
+        v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso;
 }
 
 // ── Handler 3: completar (público) ──────────────────────────────────────────
@@ -327,17 +330,17 @@ public sealed class CompletarBiometriaHandler(
         // Expiración: marca expirado y rechaza el intento.
         if (GetBiometriaByTokenHandler.IsExpirable(v) && now > v.ExpiresAt)
         {
-            v.Estado = BiometricEstados.Expirado;
+            v.Status = BiometricEstados.Expirado;
             v.UpdatedAt = now;
             await repo.SaveChangesAsync(ct);
             return (null, "expirada");
         }
 
         // Solo se puede (re)intentar desde enviado/rechazado/en_proceso; aprobado/expirado son terminales.
-        if (v.Estado is BiometricEstados.Aprobado or BiometricEstados.Expirado)
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Expirado)
             return (null, "estado_invalido");
 
-        if (v.Intentos >= v.MaxIntentos)
+        if (v.Attempts >= v.MaxAttempts)
             return (null, "intentos_agotados");
 
         // Lee las 3 fotos a memoria (el scorer es mock; el almacenamiento persiste el binario).
@@ -345,22 +348,22 @@ public sealed class CompletarBiometriaHandler(
         var frontal = await ReadAsync(input.CedulaFrontal, ct);
         var reverso = await ReadAsync(input.CedulaReverso, ct);
 
-        v.Estado = BiometricEstados.EnProceso;
-        v.Intentos += 1;
+        v.Status = BiometricEstados.EnProceso;
+        v.Attempts += 1;
         v.UpdatedAt = now;
 
         // Persiste las fotos presentes (reusa IAttachmentStorage con tipos biometric_*).
         if (rostro is { Length: > 0 })
-            v.FotoRostroPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
+            v.FacePhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
         if (frontal is { Length: > 0 })
-            v.FotoCedulaFrontalPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
+            v.IdFrontPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
         if (reverso is { Length: > 0 })
-            v.FotoCedulaReversoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
+            v.IdBackPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
 
         var score = scorer.Score(new BiometricPhotos(rostro, frontal, reverso));
 
         v.Score = score.Score;
-        v.Detalle = JsonSerializer.Serialize(new
+        v.Detail = JsonSerializer.Serialize(new
         {
             score = score.Score,
             aprobado = score.Aprobado,
@@ -371,16 +374,15 @@ public sealed class CompletarBiometriaHandler(
 
         if (score.Aprobado)
         {
-            v.Estado = BiometricEstados.Aprobado;
-            v.ValidadoAt = now;
+            v.Approve(now); // estado + validated_at + estampa valid_until
         }
         else
         {
-            v.Estado = BiometricEstados.Rechazado;
+            v.Status = BiometricEstados.Rechazado;
         }
 
         await repo.SaveChangesAsync(ct);
-        return (new CompletarBiometriaResult(v.Estado, score.Score, score.Motivo), null);
+        return (new CompletarBiometriaResult(v.Status, score.Score, score.Motivo), null);
     }
 
     private static async Task<byte[]?> ReadAsync(Stream? stream, CancellationToken ct)
@@ -429,8 +431,8 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
 
         // Idempotencia por parte: una validación ya aprobada se devuelve intacta.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.Parte, normalized, StringComparison.OrdinalIgnoreCase));
-        if (existing is { Estado: BiometricEstados.Aprobado })
+            string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase));
+        if (existing is { Status: BiometricEstados.Aprobado })
             return (IniciarBiometriaHandler.ToDto(existing, now), null);
 
         // Actor de la parte (ActorType guarda el rol: "comprador"/"vendedor").
@@ -454,15 +456,13 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         {
             // Reusa la validación existente (p.ej. enviado/rechazado): pásala a aprobado.
             validation = existing;
-            validation.Estado = BiometricEstados.Aprobado;
             validation.Score = MockScore;
-            validation.Detalle = detalle;
-            validation.Nombre = actor.FullName;
-            validation.TipoDoc = actor.DocumentType;
-            validation.Documento = actor.DocumentNumber;
+            validation.Detail = detalle;
+            validation.Name = actor.FullName;
+            validation.DocumentType = actor.DocumentType;
+            validation.DocumentNumber = actor.DocumentNumber;
             validation.Email = actor.Email ?? string.Empty;
-            validation.ValidadoAt = now;
-            validation.UpdatedAt = now;
+            validation.Approve(now); // estado + validated_at + estampa valid_until + updated_at
         }
         else
         {
@@ -471,19 +471,20 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 ProcedureInstanceId = id,
-                Parte = normalized,
-                Nombre = actor.FullName,
-                TipoDoc = actor.DocumentType,
-                Documento = actor.DocumentNumber,
+                PartyRole = normalized,
+                Name = actor.FullName,
+                DocumentType = actor.DocumentType,
+                DocumentNumber = actor.DocumentNumber,
                 Email = actor.Email ?? string.Empty,
-                Estado = BiometricEstados.Aprobado,
+                Status = BiometricEstados.Aprobado,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
-                Intentos = 0,
-                MaxIntentos = BiometricRules.MaxIntentos,
+                Attempts = 0,
+                MaxAttempts = BiometricRules.MaxIntentos,
                 Score = MockScore,
-                Detalle = detalle,
-                ValidadoAt = now,
+                Detail = detalle,
+                ValidatedAt = now,
+                ValidUntil = BiometricRules.FechaFinVigencia(now), // estampa el fin de vigencia
                 CreatedAt = now,
             };
             instance.BiometricValidations.Add(validation);

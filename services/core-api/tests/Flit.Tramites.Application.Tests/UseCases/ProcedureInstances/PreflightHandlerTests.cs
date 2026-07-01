@@ -153,6 +153,17 @@ public sealed class PreflightHandlerTests
     }
 
     [Fact]
+    public void ComposeOverall_AnyError_IsRed()
+    {
+        // "error" (proveedor no verificable) pinta red igual que fail.
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("a", "A", "ok", "s", null),
+            new PreflightCheckDto("b", "B", "error", "s", null),
+        ]).Should().Be("red");
+    }
+
+    [Fact]
     public void ComposeOverall_NoChecks_IsGreen() =>
         RunPreflightHandler.ComposeOverall([]).Should().Be("green");
 
@@ -287,11 +298,13 @@ public sealed class PreflightHandlerTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
-    // ── Degradación: provider falla → no 500, check unknown ───────────────────
+    // ── Fallo de proveedor: no 500, pero check error → bloqueo duro (red) ──────
 
     [Fact]
-    public async Task Post_ProviderThrows_DegradesToUnknownNoThrow()
+    public async Task Post_ProviderThrows_ProducesErrorCheckRedNoThrow()
     {
+        // La consulta es vital: una excepción inesperada del provider NO se degrada a unknown; se
+        // traduce a un check "error" (rojo, bloqueo duro) sin propagar 500 al caller.
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("matricula_inicial", actors: Actor("comprador"));
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
@@ -300,22 +313,22 @@ public sealed class PreflightHandlerTests
         var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.Overall.Should().Be("green"); // unknown no bloquea green.
-        result.Checks.Should().ContainSingle(c => c.Status == "unknown");
+        result!.Overall.Should().Be("red"); // error bloquea (dato vital no verificable).
+        result.Checks.Should().ContainSingle(c => c.Status == "error");
     }
 
     [Fact]
-    public async Task Post_ProviderNotRegistered_DegradesToUnknown()
+    public async Task Post_ProviderNotRegistered_ProducesErrorCheckRed()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("matricula_inicial", actors: Actor("comprador"));
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWith(); // registry vacío.
+        var handler = HandlerWith(); // registry vacío → no se puede verificar.
 
         var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.Checks.Should().ContainSingle(c => c.Status == "unknown");
-        result.Overall.Should().Be("green");
+        result!.Checks.Should().ContainSingle(c => c.Status == "error");
+        result.Overall.Should().Be("red");
     }
 }

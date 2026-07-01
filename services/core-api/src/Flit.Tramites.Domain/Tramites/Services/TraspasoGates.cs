@@ -41,6 +41,11 @@ public static class TraspasoGates
                     return GateResult.Block("sin_radicado", "Radica el trámite antes de continuar");
                 if (!ctx.VehiculoConsultado)
                     return GateResult.Block("consulta_pendiente", "Consulta el vehículo por placa antes de continuar");
+                // Bloqueo DURO: si la consulta del vehículo no se pudo verificar (proveedor caído/
+                // timeout), el paso 1 NO se completa aunque la placa esté en field_values → no se
+                // avanza con un dato vital sin verificar; hay que reejecutar la consulta.
+                if (ctx.Preflight?.ProviderError == true)
+                    return GateResult.Block("preflight_provider_error", "No fue posible verificar la información del vehículo en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
                 if (ImpuestoGateBloquea(ctx.Preflight, ctx.PazSalvoImpuestoVerificado, forzar))
                     return GateResult.Block("impuesto_pendiente", "Confirma paz y salvo de impuesto vehicular antes de continuar");
                 return GateResult.Allowed;
@@ -48,6 +53,10 @@ public static class TraspasoGates
             case 2:
                 // Paso 2 = Documentos (paridad con MatriculaGates paso 2): preflight crítico + checklist.
                 // El gestor puede asumir el riesgo de un preflight rojo subsanable (sin tocar docs).
+                // Bloqueo DURO: una consulta no verificable (proveedor caído/timeout) NO se subsana con
+                // "aceptar riesgo" ni forzando; hay que reintentar la consulta.
+                if (ctx.Preflight?.ProviderError == true)
+                    return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT/SIMIT/RNMC. Vuelve a ejecutar la consulta antes de continuar");
                 if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)

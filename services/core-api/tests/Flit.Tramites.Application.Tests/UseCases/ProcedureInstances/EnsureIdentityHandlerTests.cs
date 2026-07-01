@@ -92,10 +92,10 @@ public sealed class EnsureIdentityHandlerTests
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
         // Clonó una validación aprobada en este trámite y persistió.
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceBiometricValidation>(v =>
-            v.Estado == BiometricEstados.Aprobado
-            && v.Parte == "comprador"
-            && v.Documento == Documento
-            && v.ValidadoAt == source.ValidadoAt   // hereda la fecha → mismo vencimiento
+            v.Status == BiometricEstados.Aprobado
+            && v.PartyRole == "comprador"
+            && v.DocumentNumber == Documento
+            && v.ValidatedAt == source.ValidatedAt   // hereda la fecha → mismo vencimiento
             && v.Score == 95));
         await _repo.Received(1).SaveChangesAsync(ct);
     }
@@ -174,7 +174,7 @@ public sealed class EnsureIdentityHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var instance = MatriculaConComprador(); // actor.DocumentNumber = "1020304050"
         var previa = Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow, parte: "comprador");
-        previa.Documento = "9999999"; // documento de la persona ANTERIOR (distinto al actor actual)
+        previa.DocumentNumber = "9999999"; // documento de la persona ANTERIOR (distinto al actor actual)
         instance.BiometricValidations.Add(previa);
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
@@ -184,7 +184,7 @@ public sealed class EnsureIdentityHandlerTests
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
-        previa.Estado.Should().Be(BiometricEstados.Expirado); // la identidad anterior quedó invalidada
+        previa.Status.Should().Be(BiometricEstados.Expirado); // la identidad anterior quedó invalidada
         await _repo.Received().SaveChangesAsync(ct);
     }
 
@@ -202,7 +202,7 @@ public sealed class EnsureIdentityHandlerTests
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
-        previa.Estado.Should().Be(BiometricEstados.Aprobado); // NO se invalida (misma persona)
+        previa.Status.Should().Be(BiometricEstados.Aprobado); // NO se invalida (misma persona)
     }
 
     [Fact]
@@ -269,15 +269,15 @@ public sealed class EnsureIdentityHandlerTests
     {
         Id = Guid.NewGuid(),
         TenantId = TenantId,
-        Parte = parte,
-        Estado = estado,
-        Nombre = "Ana Compradora",
-        TipoDoc = TipoDoc,
-        Documento = Documento,
+        PartyRole = parte,
+        Status = estado,
+        Name = "Ana Compradora",
+        DocumentType = TipoDoc,
+        DocumentNumber = Documento,
         Email = "ana@x.com",
         TokenHash = Guid.NewGuid().ToString("N"),
         ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-        ValidadoAt = validadoAt,
+        ValidatedAt = validadoAt,
         CreatedAt = DateTimeOffset.UtcNow,
     };
 }

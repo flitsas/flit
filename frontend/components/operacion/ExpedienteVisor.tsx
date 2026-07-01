@@ -72,14 +72,14 @@ export default function ExpedienteVisor({
   // Validación del comprador: matrícula => parte null; traspaso => parte 'comprador'.
   const compradorBio = useMemo(
     () =>
-      biometric.find((b) => b.parte === 'comprador') ??
-      biometric.find((b) => b.parte === null) ??
+      biometric.find((b) => b.partyRole === 'comprador') ??
+      biometric.find((b) => b.partyRole === null) ??
       null,
     [biometric],
   );
   // Validación del vendedor (solo traspaso): parte 'vendedor'.
   const vendedorBio = useMemo(
-    () => biometric.find((b) => b.parte === 'vendedor') ?? null,
+    () => biometric.find((b) => b.partyRole === 'vendedor') ?? null,
     [biometric],
   );
 
@@ -252,7 +252,7 @@ export default function ExpedienteVisor({
 
 /** Bloque de estado de identidad (sin fotos: placeholder «Sin foto»). */
 function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
-  const estado = bio?.estado;
+  const estado = bio?.status;
   const aprobado = estado === 'aprobado';
   const rechazado = estado === 'rechazado';
   const pendiente = estado === 'enviado' || estado === 'en_proceso';

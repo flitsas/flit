@@ -55,11 +55,11 @@ internal sealed class IntempoConsultationProvider(
             using var response = await http.PostAsJsonAsync(path, body, JsonOptions, ct);
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable($"INTEMPO respondió {(int)response.StatusCode}");
+                return ProviderUnavailable();
 
             var payload = await response.Content.ReadFromJsonAsync<IntempoVehicleResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable("Respuesta vacía de INTEMPO");
+                return ProviderUnavailable();
 
             return IntempoVehicleResultMapper.Map(payload);
         }
@@ -69,15 +69,15 @@ internal sealed class IntempoConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable("Timeout consultando INTEMPO");
+            return ProviderUnavailable();
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return ProviderUnavailable($"Error de red consultando INTEMPO: {ex.Message}");
+            return ProviderUnavailable();
         }
         catch (JsonException)
         {
-            return ProviderUnavailable("No se pudo interpretar la respuesta de INTEMPO");
+            return ProviderUnavailable();
         }
     }
 
@@ -130,9 +130,12 @@ internal sealed class IntempoConsultationProvider(
         return IntempoVehicleResultMapper.Map(mock);
     }
 
-    private static ConsultationResult ProviderUnavailable(string message) =>
-        new("intempo", "yellow",
-            [new ConsultationCheck("provider", "Proveedor INTEMPO", "unknown", "intempo", message)],
+    // No se pudo verificar el vehículo (no-200/timeout/red/respuesta ilegible). Dato crítico:
+    // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.
+    private static ConsultationResult ProviderUnavailable() =>
+        new("intempo", "red",
+            [new ConsultationCheck("provider", "Consulta de vehículo", "error", "intempo",
+                "No fue posible verificar la información del vehículo en el RUNT en este momento. Vuelve a intentarlo en unos minutos.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

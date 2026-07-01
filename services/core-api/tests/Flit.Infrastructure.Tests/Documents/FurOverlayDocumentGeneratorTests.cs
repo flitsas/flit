@@ -2,6 +2,7 @@ using System.Text;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
 using FluentAssertions;
+using PdfSharpCore.Fonts;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Documents;
@@ -165,6 +166,48 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["processing_day"].Text.Should().Be("15");
         values["processing_month"].Text.Should().Be("3");
         values["processing_year"].Text.Should().Be("2026");
+    }
+
+    // ── HU #10256 fix — resolutor de fuentes embebido (raíz del HTTP 500 en runtime alpine) ──
+
+    [Fact]
+    public void Templates_ArePresentInTestOutput()
+    {
+        // Guardia explícita: si esto falla, los tests de render están pasando en vacío por el
+        // early-return `if (!TemplatesExist()) return;` y NO ejercitan el overlay ni las fuentes.
+        TemplatesExist().Should().BeTrue(
+            "las plantillas blank del FUR deben copiarse al output de test; sin ellas los tests de render no prueban nada");
+    }
+
+    [Fact]
+    public void Generator_RegistersFontResolver_ForOsIndependentRendering()
+    {
+        // Construir el generador dispara el static ctor que registra el resolutor embebido.
+        _ = CreateGenerator();
+        GlobalFontSettings.FontResolver.Should().BeOfType<FurFontResolver>(
+            "sin resolutor, PdfSharpCore no resuelve 'Arial' en runtimes sin fuentes (alpine) y el FUR responde HTTP 500");
+    }
+
+    [Fact]
+    public void FontResolver_ResolvesArial_ToEmbeddedTrueType()
+    {
+        FurFontResolver.EnsureRegistered();
+        var resolver = GlobalFontSettings.FontResolver;
+
+        foreach (var isBold in new[] { false, true })
+        {
+            var info = resolver.ResolveTypeface("Arial", isBold, isItalic: false);
+            info.Should().NotBeNull();
+
+            var bytes = resolver.GetFont(info.FaceName);
+            bytes.Should().NotBeNullOrEmpty();
+            // Cabecera sfnt de TrueType (0x00 01 00 00): confirma que el recurso embebido es una fuente válida.
+            bytes.Length.Should().BeGreaterThan(4);
+            bytes[0].Should().Be(0x00);
+            bytes[1].Should().Be(0x01);
+            bytes[2].Should().Be(0x00);
+            bytes[3].Should().Be(0x00);
+        }
     }
 
     private static bool TemplatesExist()

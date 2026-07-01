@@ -115,11 +115,11 @@ public sealed class GetPortalByTokenHandler(IProcedureInstanceRepository repo)
 
         // Biométrica del rol: surface del flujo existente. Si no existe, queda pendiente de creación
         // por el admin (NO se auto-crea aquí: requiere tipo_doc/documento que el portal no captura).
-        var bio = FindForRol(instance.BiometricValidations, p.Rol, v => v.Parte);
+        var bio = FindForRol(instance.BiometricValidations, p.Rol, v => v.PartyRole);
         var biometrica = new PortalBiometricaStatus(
             Existe: bio is not null,
-            Estado: bio?.Estado,
-            Pendiente: bio is null || bio.Estado is not BiometricEstados.Aprobado);
+            Estado: bio?.Status,
+            Pendiente: bio is null || bio.Status is not BiometricEstados.Aprobado);
 
         // Firma del rol: solo aplica a traspaso (comprador|vendedor). Mandatario no firma compraventa.
         var aplicaFirma = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase)

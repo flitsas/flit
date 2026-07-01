@@ -28,8 +28,8 @@ public sealed class SubmitGateKyverumTests
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
-            Parte = "comprador",
-            Estado = biometriaEstado,
+            PartyRole = "comprador",
+            Status = biometriaEstado,
             Provider = provider,
             KyverumVerificationId = provider == BiometricProviders.Kyverum ? "kyv_1" : null,
             TokenHash = "h",

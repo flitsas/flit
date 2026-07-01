@@ -18,9 +18,9 @@ public sealed record StuckIdentityValidationDto(
     int Attempts,
     DateTimeOffset OccurredAt,
     DateTimeOffset CreatedAt,
-    string? Nombre,
-    string? TipoDoc,
-    string? Documento,
+    string? Name,
+    string? DocumentType,
+    string? DocumentNumber,
     string Kind);
 
 /// <summary>Respuesta: los eventos atascados + el total devuelto (acotado a <see cref="ListStuckIdentityValidationsHandler.MaxRows"/>).</summary>
@@ -48,7 +48,7 @@ public sealed class ListStuckIdentityValidationsHandler(IIdentityValidationOutbo
         var dtos = rows
             .Select(o => new StuckIdentityValidationDto(
                 o.Id, o.ValidationId, o.EventType, o.Attempts, o.OccurredAt, o.CreatedAt,
-                o.Nombre, o.TipoDoc, o.Documento, o.Kind))
+                o.Name, o.DocumentType, o.DocumentNumber, o.Kind))
             .ToList();
 
         return new StuckIdentityValidationsResponse(dtos, dtos.Count, IdentityValidationOutbox.MaxDeliveryAttempts);

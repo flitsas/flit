@@ -8,6 +8,13 @@ import type {
   DocumentType,
   UpdateDocumentTypeRequest,
 } from "@/lib/api/types-documents";
+import {
+  hasLetterOrDigit,
+  sanitizeDocCode,
+  sanitizeName,
+  sanitizeNoAngleBrackets,
+  validateReadableName,
+} from "@/lib/validation/fieldRules";
 
 // Modal de alta/edición de tipo de documento (HU #10198, AC1). Valida campos
 // obligatorios (código, nombre) en cliente antes de enviar y mapea los errores 422
@@ -66,8 +73,12 @@ export function CreateDocumentTypeDialog({
   // Validación client-side de campos requeridos antes de llamar a la API.
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
-    if (!codigo.trim()) next.codigo = "El código es obligatorio.";
-    if (!nombre.trim()) next.nombre = "El nombre es obligatorio.";
+    const cod = codigo.trim();
+    const nom = nombre.trim();
+    if (!cod) next.codigo = "El código es obligatorio.";
+    else if (!hasLetterOrDigit(cod)) next.codigo = "El código debe contener al menos una letra o número.";
+    if (!nom) next.nombre = "El nombre es obligatorio.";
+    else { const e = validateReadableName(nom, "El nombre"); if (e) next.nombre = e; }
     return next;
   };
 
@@ -137,7 +148,7 @@ export function CreateDocumentTypeDialog({
               id="dt-codigo"
               type="text"
               value={codigo}
-              onChange={(e) => setCodigo(e.target.value)}
+              onChange={(e) => setCodigo(sanitizeDocCode(e.target.value))}
               maxLength={50}
               aria-describedby={errors.codigo ? "dt-codigo-error" : undefined}
               className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
@@ -150,7 +161,7 @@ export function CreateDocumentTypeDialog({
               id="dt-nombre"
               type="text"
               value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
+              onChange={(e) => setNombre(sanitizeName(e.target.value))}
               maxLength={150}
               aria-describedby={errors.nombre ? "dt-nombre-error" : undefined}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
@@ -162,7 +173,7 @@ export function CreateDocumentTypeDialog({
             <textarea
               id="dt-desc"
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
+              onChange={(e) => setDescripcion(sanitizeNoAngleBrackets(e.target.value))}
               maxLength={500}
               rows={3}
               aria-describedby={errors.descripcion ? "dt-desc-error" : undefined}

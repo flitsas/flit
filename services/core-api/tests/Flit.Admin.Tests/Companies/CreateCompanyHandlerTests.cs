@@ -169,6 +169,119 @@ public sealed class CreateCompanyHandlerTests
         result.Errors.Should().ContainSingle(e => e.Field == "code");
     }
 
+    [Theory]
+    [InlineData("900ABC123")]   // letras en el NIT
+    [InlineData("900 123")]      // espacio
+    [InlineData("900/123")]      // caracter especial
+    public async Task InvalidNitCharacters_Returns422(string nit)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest("Compañía Válida", nit, "NITCHARS", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "nit");
+        (await ctx.Tenants.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("Empresa <script>")]   // ángulos
+    [InlineData("Empresa @ Hogar")]     // arroba
+    [InlineData("Empresa #1 {test}")]   // llaves / numeral
+    public async Task InvalidRazonSocialCharacters_Returns422(string razonSocial)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "RAZONCHARS", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "razonSocial");
+    }
+
+    [Theory]
+    [InlineData("BAD CODE")]    // espacio
+    [InlineData("CODE!")]        // signo
+    [InlineData("CÓDIGO")]       // tilde (el code solo admite ASCII alfanumérico + - _)
+    public async Task InvalidCodeCharacters_Returns422(string code)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest("Compañía Válida", "900123456-1", code, "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "code");
+    }
+
+    [Theory]
+    [InlineData("'--.,''''/-,.-'°&/()")]               // pura puntuación
+    [InlineData(".")]
+    [InlineData("---")]
+    [InlineData("°&&//(/(()°&&/()1234567890'''''")]   // empieza con símbolo, sin letras, puntuación repetida
+    [InlineData("1234567890")]                          // solo dígitos (sin letra)
+    [InlineData("AB&&//CD")]                             // puntuación repetida (&&, //)
+    [InlineData("(Hola)")]                               // empieza con símbolo
+    public async Task RazonSocialWeakOrPunctuation_Returns422(string razonSocial)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "OKCODE", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "razonSocial");
+    }
+
+    [Theory]
+    [InlineData(".-.")]    // NIT sin dígitos
+    [InlineData("--")]
+    public async Task NitWithoutDigits_Returns422(string nit)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest("Compañía Válida", nit, "OKCODE", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "nit");
+    }
+
+    [Theory]
+    [InlineData("Renting Andino S.A.S.")]
+    [InlineData("Autos & Más Ltda. (Sede 1)")]
+    [InlineData("Compañía N° 1 / Calle 100")]
+    [InlineData("3M Colombia")]      // empieza con dígito, tiene letras
+    [InlineData("A&W Foods")]         // & entre letras
+    public async Task ValidNameWithBusinessPunctuation_IsAccepted(string razonSocial)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest(razonSocial, "900123456-1", "OKCODE", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-create-company-{Guid.NewGuid()}";

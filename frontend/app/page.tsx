@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Login } from "@/components/atom/Login";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
@@ -11,17 +10,15 @@ import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
 import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
-import { getToken } from "@/lib/api/client";
-import { clearToken, getRememberedEmail } from "@/lib/auth/session";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
+import { useAuthGate } from "@/hooks/useAuthGate";
 import { buildValidModules, parseModule } from "@/lib/nav/modules";
 
 function HomeContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const [authed, setAuthed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const { modules: accessibleModules } = useAccessibleModules(authed);
+  const { authed, hydrated, logout } = useAuthGate();
+  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
   // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
@@ -29,13 +26,6 @@ function HomeContent() {
   const validModules = buildValidModules(accessibleCodes);
 
   const [module, setModule] = useState<ModuleId>(() => parseModule(params.get("m"), []));
-
-  useEffect(() => {
-    // Token solo disponible en cliente; se lee tras el montaje.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAuthed(Boolean(getToken()));
-    setHydrated(true);
-  }, []);
 
   // Sync active module with URL so the browser back/forward and deep-links work.
   useEffect(() => {
@@ -59,32 +49,14 @@ function HomeContent() {
     router.replace(`/?m=${m}`, { scroll: false });
   }
 
-  function handleLogout() {
-    clearToken();
-    setAuthed(false);
-    handleNav("dashboard");
-  }
-
-  if (!hydrated) return null;
-
-  if (!authed) {
-    return (
-      <Login
-        onAuthenticated={() => {
-          setAuthed(true);
-          handleNav(module);
-        }}
-        defaultEmail={getRememberedEmail()}
-      />
-    );
-  }
+  if (!hydrated || !authed) return null;
 
   return (
     <Shell
       active={module}
       onNav={handleNav}
-      onLogout={handleLogout}
-      visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}
+      onLogout={logout}
+      visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
       {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
       {module === "tramites"     && <Tramites />}

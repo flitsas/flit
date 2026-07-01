@@ -16,21 +16,21 @@ public sealed record TenantBiometricValidationDto(
     Guid InstanceId,
     string ReferenceNumber,
     string Modalidad,
-    string? Parte,
-    string Nombre,
-    string TipoDoc,
-    string Documento,
-    string Estado,
+    string? PartyRole,
+    string Name,
+    string DocumentType,
+    string DocumentNumber,
+    string Status,
     int? Score,
     string Provider,
     bool Expired,
-    string? MotivoRechazo,
+    string? RejectionReason,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ValidadoAt,
+    DateTimeOffset? ValidatedAt,
     // Vigencia de la identidad APROBADA (30 días calendario desde la aprobación): fecha de fin de
-    // vigencia y días que le restan. Null cuando no hay aprobación (ValidadoAt) → no aplica vigencia.
-    DateTimeOffset? VigenciaHasta,
-    int? DiasRestantes);
+    // vigencia y días que le restan. Null cuando no hay aprobación (ValidatedAt) → no aplica vigencia.
+    DateTimeOffset? ValidUntil,
+    int? DaysRemaining);
 
 /// <summary>KPIs del submódulo: totales por estado (exactos, sin el cap de filas de la tabla).</summary>
 public sealed record BiometricValidationStatsDto(
@@ -90,8 +90,8 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             var term = filter.MotivoRechazo;
             var all = scan
                 .Select(v => ToDto(v, now))
-                .Where(d => d.MotivoRechazo is not null
-                    && d.MotivoRechazo.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .Where(d => d.RejectionReason is not null
+                    && d.RejectionReason.Contains(term, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             var pageDtos = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
@@ -115,19 +115,22 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             v.ProcedureInstanceId,
             v.ProcedureInstance?.ReferenceNumber ?? string.Empty,
             v.ProcedureInstance?.ModalidadEntrada ?? string.Empty,
-            v.Parte,
-            v.Nombre,
-            v.TipoDoc,
-            v.Documento,
-            v.Estado,
+            v.PartyRole,
+            v.Name,
+            v.DocumentType,
+            v.DocumentNumber,
+            v.Status,
             v.Score,
             v.Provider,
             // Mismo criterio que BiometricValidationDto: expirada si no aprobada y ya pasó expires_at.
-            v.Estado != BiometricEstados.Aprobado && now > v.ExpiresAt,
+            v.Status != BiometricEstados.Aprobado && now > v.ExpiresAt,
             IniciarBiometriaHandler.ExtractMotivoRechazo(v),
             v.CreatedAt,
-            v.ValidadoAt,
-            BiometricRules.FechaFinVigencia(v),
+            v.ValidatedAt,
+            // Vigencia (HU #10350): la fecha de fin se PERSISTE (la estampa el código al aprobar) y se lee
+            // de la columna; los días restantes NO se persisten — se calculan al vuelo contra HOY, así que
+            // siempre van frescos sin job ni columna materializada.
+            v.ValidUntil,
             BiometricRules.DiasRestantesVigencia(v, now));
 
     /// <summary>
@@ -138,10 +141,10 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
     internal static BiometricValidationStatsDto BuildStatsFromRows(IReadOnlyList<TenantBiometricValidationDto> dtos) =>
         new(
             Total: dtos.Count,
-            Aprobadas: dtos.Count(d => d.Estado == BiometricEstados.Aprobado),
-            EnProceso: dtos.Count(d => d.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso),
-            Rechazadas: dtos.Count(d => d.Estado == BiometricEstados.Rechazado),
-            Expiradas: dtos.Count(d => d.Estado == BiometricEstados.Expirado || d.Expired));
+            Aprobadas: dtos.Count(d => d.Status == BiometricEstados.Aprobado),
+            EnProceso: dtos.Count(d => d.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso),
+            Rechazadas: dtos.Count(d => d.Status == BiometricEstados.Rechazado),
+            Expiradas: dtos.Count(d => d.Status == BiometricEstados.Expirado || d.Expired));
 
     internal static BiometricValidationStatsDto BuildStats(IReadOnlyDictionary<string, int> counts) =>
         new(

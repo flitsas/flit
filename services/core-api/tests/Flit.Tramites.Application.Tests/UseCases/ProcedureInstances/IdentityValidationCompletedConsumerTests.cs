@@ -57,12 +57,12 @@ public sealed class IdentityValidationCompletedConsumerTests
             Id = validationId,
             TenantId = tenant,
             ProcedureInstanceId = Guid.NewGuid(),
-            Parte = parte,
-            Nombre = "Ana Compradora",
-            TipoDoc = TipoDoc,
-            Documento = Documento,
+            PartyRole = parte,
+            Name = "Ana Compradora",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
             Email = "ana@x.com",
-            Estado = BiometricEstados.Aprobado,
+            Status = BiometricEstados.Aprobado,
             Provider = BiometricProviders.Kyverum,
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -131,8 +131,8 @@ public sealed class IdentityValidationCompletedConsumerTests
         });
         i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Parte = "comprador",
-            Estado = BiometricEstados.Aprobado, Nombre = "Ana", TipoDoc = TipoDoc, Documento = Documento, Email = "ana@x.com",
+            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado, Name = "Ana", DocumentType = TipoDoc, DocumentNumber = Documento, Email = "ana@x.com",
             TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
         });
         i.FieldValues.Add(new ProcedureInstanceFieldValue

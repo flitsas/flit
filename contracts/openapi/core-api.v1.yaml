@@ -1541,38 +1541,38 @@ paths:
           in: query
           required: false
           description: Coincidencia parcial (case-insensitive) sobre el número de referencia del trámite.
-          schema: { type: string }
+          schema: { type: string, maxLength: 100 }
         - name: modalidad
           in: query
           required: false
           description: Coincidencia parcial (case-insensitive) sobre la modalidad del trámite.
           schema: { type: string }
-        - name: nombre
+        - name: name
           in: query
           required: false
           description: Coincidencia parcial (case-insensitive) sobre el nombre de la persona validada.
-          schema: { type: string }
-        - name: parte
+          schema: { type: string, maxLength: 100 }
+        - name: partyRole
           in: query
           required: false
-          description: Filtro exacto por parte (comprador | vendedor).
+          description: Filtro exacto por parte (comprador | vendedor). Los VALORES siguen en español.
           schema: { type: string, enum: [comprador, vendedor] }
-        - name: tipoDoc
+        - name: documentType
           in: query
           required: false
           description: Filtro exacto por tipo de documento (p.ej. CC, CE).
-          schema: { type: string }
-        - name: documento
+          schema: { type: string, maxLength: 100 }
+        - name: documentNumber
           in: query
           required: false
           description: Coincidencia parcial por número de documento (sin exponer PII en errores).
-          schema: { type: string }
-        - name: estado
+          schema: { type: string, maxLength: 100 }
+        - name: status
           in: query
           required: false
           description: >
-            Filtro por estado. Valores: enviado, en_proceso, aprobado, rechazado, expirado. El valor
-            expirado incluye estado persistido y validaciones vencidas no aprobadas (flag expired).
+            Filtro por estado. Valores (en español): enviado, en_proceso, aprobado, rechazado, expirado. El
+            valor expirado incluye estado persistido y validaciones vencidas no aprobadas (flag expired).
           schema:
             type: string
             enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
@@ -1607,7 +1607,29 @@ paths:
           description: >
             Coincidencia parcial case-insensitive en el motivo de rechazo sanitizado (solo filas
             rechazadas; busca en Detalle y ProviderPayload).
-          schema: { type: string }
+          schema: { type: string, maxLength: 100 }
+        - name: vigenciaEstado
+          in: query
+          required: false
+          description: >
+            Filtro por estado de vigencia de la identidad APROBADA: vigente | por_vencer (≤ 7 días) | vencida.
+          schema: { type: string, enum: [vigente, por_vencer, vencida] }
+        - name: expiraDesde
+          in: query
+          required: false
+          description: Fin de vigencia (validUntil) mínimo inclusive, ISO-8601 (HU #10350).
+          schema: { type: string, format: date-time }
+        - name: expiraHasta
+          in: query
+          required: false
+          description: Fin de vigencia (validUntil) máximo inclusive, ISO-8601 (HU #10350).
+          schema: { type: string, format: date-time }
+        - name: venceEnDias
+          in: query
+          required: false
+          description: >
+            "Vence en ≤ N días": identidades vigentes cuya vigencia se agota dentro de N días calendario.
+          schema: { type: integer, minimum: 0 }
         - name: page
           in: query
           required: false
@@ -2308,10 +2330,11 @@ components:
         code: { type: string, description: Código único del tenant (inmutable). }
         tenantType:
           type: string
+          enum: [RENTING, CONCESIONARIO, FLIT]
           description: >-
-            Tipo de compañía. Normalmente del catálogo B2B (RENTING, CONCESIONARIO,
-            FLIT), pero el listado también incluye tenants con tipos heredados fuera
-            del catálogo (p.ej. standard, transit_office), por lo que no es un enum cerrado.
+            Tipo de compañía del catálogo B2B. La migración RestrictTenantTypeCatalog
+            normalizó los tipos heredados (p.ej. standard, transit_office) a RENTING y
+            agregó el CHECK ck_tenants_tenant_type, por lo que la BD solo admite estos tres.
         estadoActivo: { type: boolean }
         fechaCreacion: { type: string, format: date-time }
         rowVersion:
@@ -2337,9 +2360,23 @@ components:
     CreateCompanyRequest:
       type: object
       properties:
-        razonSocial: { type: string, maxLength: 255, description: Razón social (legal_name). }
-        nit: { type: string, maxLength: 20, description: NIT (tax_id). }
-        code: { type: string, maxLength: 32, description: Código único del tenant. }
+        razonSocial:
+          type: string
+          maxLength: 255
+          pattern: "^(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9](?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\\s]|[.,&()/'°-](?![.,&()/'°-]))*$"
+          description: >-
+            Razón social (legal_name). Solo letras, números, espacios y puntuación básica
+            de nombres (. , & ( ) / ' ° -).
+        nit:
+          type: string
+          maxLength: 20
+          pattern: "^(?=.*[0-9])[0-9.\\-]+$"
+          description: NIT (tax_id). Solo dígitos, puntos y guiones.
+        code:
+          type: string
+          maxLength: 32
+          pattern: "^(?=.*[A-Za-z0-9])[A-Za-z0-9_-]+$"
+          description: Código único del tenant. Alfanumérico con guion y guion bajo.
         tenantType:
           type: string
           enum: [RENTING, CONCESIONARIO, FLIT]
@@ -2350,8 +2387,18 @@ components:
       type: object
       description: Edición de compañía. El código es inmutable, por lo que no se incluye.
       properties:
-        razonSocial: { type: string, maxLength: 255, description: Razón social (legal_name). }
-        nit: { type: string, maxLength: 20, description: NIT (tax_id). }
+        razonSocial:
+          type: string
+          maxLength: 255
+          pattern: "^(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9](?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\\s]|[.,&()/'°-](?![.,&()/'°-]))*$"
+          description: >-
+            Razón social (legal_name). Solo letras, números, espacios y puntuación básica
+            de nombres (. , & ( ) / ' ° -).
+        nit:
+          type: string
+          maxLength: 20
+          pattern: "^(?=.*[0-9])[0-9.\\-]+$"
+          description: NIT (tax_id). Solo dígitos, puntos y guiones.
         tenantType:
           type: string
           description: >-
@@ -2643,9 +2690,20 @@ components:
         codigo:
           type: string
           maxLength: 50
+          pattern: "^(?=.*[A-Za-z0-9])[A-Za-z0-9-]+$"
           description: Código único (letras, números y guiones).
-        nombre: { type: string, maxLength: 150 }
-        descripcion: { type: string, nullable: true, maxLength: 500 }
+        nombre:
+          type: string
+          maxLength: 150
+          pattern: "^(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9](?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\\s]|[.,&()/'°-](?![.,&()/'°-]))*$"
+          description: >-
+            Nombre. Solo letras, números, espacios y puntuación básica (. , & ( ) / ' ° -).
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 500
+          pattern: "^[^<>]*$"
+          description: Opcional. No permite los caracteres < ni >.
         obligatorio:
           type: boolean
           nullable: true
@@ -2661,9 +2719,20 @@ components:
         codigo:
           type: string
           maxLength: 50
+          pattern: "^(?=.*[A-Za-z0-9])[A-Za-z0-9-]+$"
           description: Código único (letras, números y guiones).
-        nombre: { type: string, maxLength: 150 }
-        descripcion: { type: string, nullable: true, maxLength: 500 }
+        nombre:
+          type: string
+          maxLength: 150
+          pattern: "^(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9](?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\\s]|[.,&()/'°-](?![.,&()/'°-]))*$"
+          description: >-
+            Nombre. Solo letras, números, espacios y puntuación básica (. , & ( ) / ' ° -).
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 500
+          pattern: "^[^<>]*$"
+          description: Opcional. No permite los caracteres < ni >.
       required: [codigo, nombre]
 
     DocumentRef:
@@ -2957,15 +3026,15 @@ components:
           description: Intentos de entrega consumidos (>= maxDeliveryAttempts ⇒ dead-letter).
         occurredAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
-        nombre:
+        name:
           type: string
           nullable: true
           description: Nombre de la persona validada (null si la validación ya no existe).
-        tipoDoc:
+        documentType:
           type: string
           nullable: true
           description: Tipo de documento (CC, CE…). Null si la validación ya no existe.
-        documento:
+        documentNumber:
           type: string
           nullable: true
           description: Documento completo (la UI lo enmascara a los últimos 4). Null si ya no existe.
@@ -3016,22 +3085,22 @@ components:
         email: { type: string, format: email }
     BiometricValidationDto:
       type: object
-      required: [id, estado, intentos, maxIntentos, expiresAt, expired, provider]
+      required: [id, status, intentos, maxIntentos, expiresAt, expired, provider]
       properties:
         id: { type: string, format: uuid }
-        parte: { type: string, nullable: true }
-        nombre: { type: string }
-        tipoDoc: { type: string }
-        documento: { type: string }
+        partyRole: { type: string, nullable: true }
+        name: { type: string }
+        documentType: { type: string }
+        documentNumber: { type: string }
         email: { type: string }
-        estado:
+        status:
           type: string
           enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
         intentos: { type: integer }
         maxIntentos: { type: integer }
         score: { type: integer, nullable: true }
         expiresAt: { type: string, format: date-time }
-        validadoAt: { type: string, format: date-time, nullable: true }
+        validatedAt: { type: string, format: date-time, nullable: true }
         expired: { type: boolean }
         provider:
           type: string
@@ -3041,15 +3110,15 @@ components:
           type: string
           nullable: true
           description: URL de captura de Kyverum. Solo presente con provider=kyverum y estado=en_proceso (AC9).
-        motivoRechazo:
+        rejectionReason:
           type: string
           nullable: true
           description: >
-            Motivo de rechazo SANITIZADO (sin PII), solo presente con estado=rechazado (HU #10234 AC4).
+            Motivo de rechazo SANITIZADO (sin PII), solo presente con status=rechazado (HU #10234 AC4).
             Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
     TenantBiometricValidationDto:
       type: object
-      required: [id, instanceId, referenceNumber, modalidad, nombre, tipoDoc, documento, estado, provider, expired, createdAt]
+      required: [id, instanceId, referenceNumber, modalidad, name, documentType, documentNumber, status, provider, expired, createdAt]
       description: Fila de la vista transversal del submódulo de Validaciones (HU #10234).
       properties:
         id: { type: string, format: uuid }
@@ -3063,13 +3132,13 @@ components:
         modalidad:
           type: string
           description: Modalidad de entrada del trámite (matricula_inicial | traspaso).
-        parte: { type: string, nullable: true }
-        nombre: { type: string }
-        tipoDoc: { type: string }
-        documento:
+        partyRole: { type: string, nullable: true }
+        name: { type: string }
+        documentType: { type: string }
+        documentNumber:
           type: string
           description: Documento de la persona (la UI lo enmascara al pintarlo).
-        estado:
+        status:
           type: string
           enum: [enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio, error_envio]
         score: { type: integer, nullable: true }
@@ -3077,12 +3146,25 @@ components:
           type: string
           enum: [mock, kyverum]
         expired: { type: boolean }
-        motivoRechazo:
+        rejectionReason:
           type: string
           nullable: true
-          description: Motivo de rechazo SANITIZADO (sin PII), solo con estado=rechazado.
+          description: Motivo de rechazo SANITIZADO (sin PII), solo con status=rechazado.
         createdAt: { type: string, format: date-time }
-        validadoAt: { type: string, format: date-time, nullable: true }
+        validatedAt: { type: string, format: date-time, nullable: true }
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fin de vigencia de la identidad APROBADA (validatedAt + 30 días, medianoche Colombia). La
+            estampa el código al aprobar. Null si no hay aprobación (HU #10350).
+        daysRemaining:
+          type: integer
+          nullable: true
+          description: >
+            Días calendario restantes de vigencia (0 = vencida). Se calcula al vuelo contra HOY, no se
+            persiste. Null si no hay aprobación (HU #10350).
     BiometricValidationStatsDto:
       type: object
       required: [total, aprobadas, enProceso, rechazadas, expiradas]

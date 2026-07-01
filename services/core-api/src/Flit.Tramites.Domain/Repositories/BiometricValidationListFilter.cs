@@ -8,11 +8,11 @@ public sealed class BiometricValidationListFilter
 {
     public string? ReferenceNumber { get; init; }
     public string? Modalidad { get; init; }
-    public string? Nombre { get; init; }
-    public string? Parte { get; init; }
-    public string? TipoDoc { get; init; }
-    public string? Documento { get; init; }
-    public string? Estado { get; init; }
+    public string? Name { get; init; }
+    public string? PartyRole { get; init; }
+    public string? DocumentType { get; init; }
+    public string? DocumentNumber { get; init; }
+    public string? Status { get; init; }
     public string? Provider { get; init; }
     public int? ScoreMin { get; init; }
     public int? ScoreMax { get; init; }
@@ -40,11 +40,11 @@ public sealed class BiometricValidationListFilter
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(ReferenceNumber)
         || !string.IsNullOrWhiteSpace(Modalidad)
-        || !string.IsNullOrWhiteSpace(Nombre)
-        || !string.IsNullOrWhiteSpace(Parte)
-        || !string.IsNullOrWhiteSpace(TipoDoc)
-        || !string.IsNullOrWhiteSpace(Documento)
-        || !string.IsNullOrWhiteSpace(Estado)
+        || !string.IsNullOrWhiteSpace(Name)
+        || !string.IsNullOrWhiteSpace(PartyRole)
+        || !string.IsNullOrWhiteSpace(DocumentType)
+        || !string.IsNullOrWhiteSpace(DocumentNumber)
+        || !string.IsNullOrWhiteSpace(Status)
         || !string.IsNullOrWhiteSpace(Provider)
         || ScoreMin is not null
         || ScoreMax is not null

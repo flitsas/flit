@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { activateAccount } from "@/lib/api/auth";
+import { getToken } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
+import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 
 const INPUT_CLASS =
@@ -13,6 +15,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
+  const [hadPriorSession, setHadPriorSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,6 +31,11 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
     return (
       <div role="status" className="space-y-4">
         <p className="text-sm" style={{ color: "#162744" }}>Tu cuenta fue activada correctamente.</p>
+        {hadPriorSession && (
+          <p className="text-xs opacity-50" style={{ color: "#162744" }}>
+            Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
+          </p>
+        )}
         <Link
           href="/login"
           className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
@@ -56,6 +64,8 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
     setLoading(true);
     try {
       await activateAccount(token as string, password);
+      setHadPriorSession(Boolean(getToken()));
+      clearToken();
       setDone(true);
     } catch (err) {
       const apiErr = err as ApiError;

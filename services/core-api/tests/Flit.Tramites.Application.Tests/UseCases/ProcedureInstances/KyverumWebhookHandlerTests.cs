@@ -30,12 +30,12 @@ public sealed class KyverumWebhookHandlerTests
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureInstanceId = Guid.NewGuid(),
-            Parte = "comprador",
-            Nombre = "Juan",
-            TipoDoc = "CC",
-            Documento = "123",
+            PartyRole = "comprador",
+            Name = "Juan",
+            DocumentType = "CC",
+            DocumentNumber = "123",
             Email = "j@x.com",
-            Estado = estado,
+            Status = estado,
             Provider = BiometricProviders.Kyverum,
             KyverumVerificationId = "kyv_123",
             // Guardado "cifrado" con el mismo fake protector.
@@ -75,8 +75,8 @@ public sealed class KyverumWebhookHandlerTests
 
         error.Should().BeNull();
         result.Should().Be("ok");
-        v.Estado.Should().Be(BiometricEstados.Aprobado);
-        v.ValidadoAt.Should().NotBeNull();
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.ValidatedAt.Should().NotBeNull();
         v.ProviderStatus.Should().Be("validation.completed");
         v.Score.Should().Be(92);
         // Payload sanitizado: sin OCR/PII.
@@ -96,8 +96,8 @@ public sealed class KyverumWebhookHandlerTests
         var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
 
         error.Should().BeNull();
-        v.Estado.Should().Be(BiometricEstados.Rechazado);
-        v.ValidadoAt.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        v.ValidatedAt.Should().BeNull();
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class KyverumWebhookHandlerTests
 
         error.Should().Be("firma_invalida");
         // AC3: sin cambios en BD ni evento.
-        v.Estado.Should().Be(BiometricEstados.EnProceso);
+        v.Status.Should().Be(BiometricEstados.EnProceso);
         await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

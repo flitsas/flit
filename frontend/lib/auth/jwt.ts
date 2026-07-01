@@ -9,6 +9,7 @@ export interface JwtPayload {
   roles?: string[];
   permissions?: string[];
   tenant_id?: string;
+  tenant_name?: string;
   role_id?: string;
   exp?: number;
   [key: string]: unknown;

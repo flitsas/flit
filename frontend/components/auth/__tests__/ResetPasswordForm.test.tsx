@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetPassword } from "@/lib/api/auth";
+import { getToken } from "@/lib/api/client";
+import { clearToken } from "@/lib/auth/session";
 import { ResetPasswordForm } from "../ResetPasswordForm";
 
 vi.mock("@/lib/api/auth", () => ({ resetPassword: vi.fn() }));
+vi.mock("@/lib/api/client", () => ({ getToken: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ clearToken: vi.fn() }));
 const resetMock = vi.mocked(resetPassword);
+const getTokenMock = vi.mocked(getToken);
+const clearTokenMock = vi.mocked(clearToken);
 
 function fill(pw: string, confirm: string) {
   fireEvent.change(screen.getByLabelText(/nueva contraseña/i), { target: { value: pw } });
@@ -12,7 +18,10 @@ function fill(pw: string, confirm: string) {
 }
 
 describe("ResetPasswordForm (HU #10173)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTokenMock.mockReturnValue(null);
+  });
 
   it("AC2 — sin token muestra error claro sin formulario", () => {
     render(<ResetPasswordForm token={null} />);
@@ -29,6 +38,30 @@ describe("ResetPasswordForm (HU #10173)", () => {
     await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
     expect(resetMock).toHaveBeenCalledWith("tok123", "NewPass123");
     expect(screen.getByRole("link", { name: /iniciar sesión/i })).toHaveAttribute("href", "/login");
+  });
+
+  // Caso reportado: restablecer desde un navegador con otra sesión ya abierta debe
+  // limpiarla y avisar, para que /login no rebote a la sesión vieja.
+  it("si había una sesión activa en el navegador, la limpia y muestra el aviso", async () => {
+    resetMock.mockResolvedValue(undefined);
+    getTokenMock.mockReturnValue("admin-jwt");
+    render(<ResetPasswordForm token="tok123" />);
+    fill("NewPass123", "NewPass123");
+    fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
+
+    await waitFor(() => expect(clearTokenMock).toHaveBeenCalled());
+    expect(screen.getByText(/cerramos la sesión que estaba activa/i)).toBeInTheDocument();
+  });
+
+  it("sin sesión previa activa, no muestra el aviso", async () => {
+    resetMock.mockResolvedValue(undefined);
+    getTokenMock.mockReturnValue(null);
+    render(<ResetPasswordForm token="tok123" />);
+    fill("NewPass123", "NewPass123");
+    fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
+
+    await waitFor(() => expect(clearTokenMock).toHaveBeenCalled());
+    expect(screen.queryByText(/cerramos la sesión que estaba activa/i)).toBeNull();
   });
 
   it("rechaza contraseña que no cumple política (sin llamar API)", () => {
