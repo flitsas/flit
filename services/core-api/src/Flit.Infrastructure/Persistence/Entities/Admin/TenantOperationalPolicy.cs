@@ -10,7 +10,7 @@ public sealed class TenantOperationalPolicy
 
     public Guid TenantId { get; set; }
 
-    public bool AllowInitialRegistration { get; set; } = true;
+    public bool AllowInitialRegistration { get; set; }
 
     public bool AllowMiscNewVehicles { get; set; } = true;
 

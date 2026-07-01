@@ -9,6 +9,7 @@ import type {
   BiometricVigenciaEstado,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
 
 /**
  * Barra de filtros del submódulo "Validaciones de Identidad" (HU #10348). Presentacional: el estado de
@@ -217,7 +218,8 @@ export function ValidacionesFilterToolbar({
           <input
             type="search"
             value={filters.referenceNumber}
-            onChange={(e) => onChange({ referenceNumber: e.target.value })}
+            onChange={(e) => onChange({ referenceNumber: sanitizeNoAngleBrackets(e.target.value) })}
+            maxLength={SEARCH_TEXT_MAX_LENGTH}
             placeholder="Buscar por número de trámite…"
             aria-label="Filtrar por número de trámite"
             className={`${CONTROL_CLASS} pl-9`}
@@ -273,7 +275,8 @@ export function ValidacionesFilterToolbar({
           <input
             type="text"
             value={filters.name}
-            onChange={(e) => onChange({ name: e.target.value })}
+            onChange={(e) => onChange({ name: sanitizeNoAngleBrackets(e.target.value) })}
+            maxLength={SEARCH_TEXT_MAX_LENGTH}
             placeholder="Nombre…"
             className={CONTROL_CLASS}
             style={{ borderColor: '#DFE5ED' }}
@@ -288,7 +291,8 @@ export function ValidacionesFilterToolbar({
             <input
               type="text"
               value={filters.rejectionReason}
-              onChange={(e) => onChange({ rejectionReason: e.target.value })}
+              onChange={(e) => onChange({ rejectionReason: sanitizeNoAngleBrackets(e.target.value) })}
+              maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Texto del motivo…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}
@@ -304,7 +308,8 @@ export function ValidacionesFilterToolbar({
             <input
               type="text"
               value={filters.documentType}
-              onChange={(e) => onChange({ documentType: e.target.value })}
+              onChange={(e) => onChange({ documentType: sanitizeNoAngleBrackets(e.target.value) })}
+              maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="CC, CE…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}
@@ -314,7 +319,8 @@ export function ValidacionesFilterToolbar({
             <input
               type="text"
               value={filters.documentNumber}
-              onChange={(e) => onChange({ documentNumber: e.target.value })}
+              onChange={(e) => onChange({ documentNumber: sanitizeNoAngleBrackets(e.target.value) })}
+              maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Número…"
               className={CONTROL_CLASS}
               style={{ borderColor: '#DFE5ED' }}

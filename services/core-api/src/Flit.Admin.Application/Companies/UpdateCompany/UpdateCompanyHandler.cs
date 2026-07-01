@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Common;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.Create;
@@ -47,6 +48,10 @@ public sealed class UpdateCompanyHandler
             errors.Add(new CompanyValidationError(
                 "razonSocial", $"La razón social no puede superar {LegalNameMaxLength} caracteres."));
         }
+        else if (TextFieldPatterns.ValidateReadableName(razonSocial, "La razón social") is { } razonError)
+        {
+            errors.Add(new CompanyValidationError("razonSocial", razonError));
+        }
 
         if (nit.Length == 0)
         {
@@ -56,6 +61,16 @@ public sealed class UpdateCompanyHandler
         {
             errors.Add(new CompanyValidationError(
                 "nit", $"El NIT no puede superar {TaxIdMaxLength} caracteres."));
+        }
+        else if (!TextFieldPatterns.TaxId().IsMatch(nit))
+        {
+            errors.Add(new CompanyValidationError(
+                "nit", "El NIT solo permite dígitos, puntos y guiones."));
+        }
+        else if (!TextFieldPatterns.HasDigit().IsMatch(nit))
+        {
+            errors.Add(new CompanyValidationError(
+                "nit", "El NIT debe contener al menos un dígito."));
         }
 
         // El listado administrativo incluye tenants con tipos heredados fuera del catálogo

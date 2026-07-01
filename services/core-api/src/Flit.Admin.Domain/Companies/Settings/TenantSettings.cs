@@ -31,13 +31,13 @@ public sealed class TenantSettings
     public required IReadOnlyList<string> PaymentMethods { get; init; }
 
     /// <summary>
-    /// Configuración por defecto coherente con el DDL
-    /// (07-HU10154-admin-tenants.sql) cuando aún no existe fila para el tenant.
+    /// Configuración por defecto cuando aún no existe fila para el tenant. La matrícula
+    /// inicial nace APAGADA (default false): la compañía debe habilitarla explícitamente.
     /// </summary>
     public static TenantSettings Default(Guid tenantId) => new()
     {
         TenantId = tenantId,
-        AllowInitialRegistration = true,
+        AllowInitialRegistration = false,
         AllowMiscNewVehicles = true,
         OnlyOwnVehicles = false,
         SignatureVaultEnabled = false,

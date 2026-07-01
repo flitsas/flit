@@ -5,6 +5,14 @@ import { Building2, Loader2, X } from "lucide-react";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiValidationError, TENANT_TYPE_LABELS } from "@/lib/api/types";
 import type { CompanyListItem, CreateCompanyRequest, TenantType } from "@/lib/api/types";
+import {
+  hasDigit,
+  hasLetterOrDigit,
+  sanitizeName,
+  sanitizeTaxId,
+  sanitizeTenantCode,
+  validateReadableName,
+} from "@/lib/validation/fieldRules";
 
 // Modal de alta de compañía (botón "Crear compañía", #10118). Formulario completo:
 // Razón Social, NIT, Código, Tipo y Estado. Validación inline en cliente + mapeo de
@@ -55,9 +63,15 @@ export function CreateCompanyDialog({ open, onClose, onCreate, onCreated }: Crea
   // Validación client-side de campos requeridos antes de llamar a la API.
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
-    if (!razonSocial.trim()) next.razonSocial = "La razón social es obligatoria.";
-    if (!nit.trim()) next.nit = "El NIT es obligatorio.";
-    if (!code.trim()) next.code = "El código es obligatorio.";
+    const rs = razonSocial.trim();
+    const n = nit.trim();
+    const c = code.trim();
+    if (!rs) next.razonSocial = "La razón social es obligatoria.";
+    else { const e = validateReadableName(rs, "La razón social"); if (e) next.razonSocial = e; }
+    if (!n) next.nit = "El NIT es obligatorio.";
+    else if (!hasDigit(n)) next.nit = "El NIT debe contener al menos un dígito.";
+    if (!c) next.code = "El código es obligatorio.";
+    else if (!hasLetterOrDigit(c)) next.code = "El código debe contener al menos una letra o número.";
     return next;
   };
 
@@ -126,7 +140,7 @@ export function CreateCompanyDialog({ open, onClose, onCreate, onCreated }: Crea
               id="cc-razon"
               type="text"
               value={razonSocial}
-              onChange={(e) => setRazonSocial(e.target.value)}
+              onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
               maxLength={255}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
@@ -138,7 +152,7 @@ export function CreateCompanyDialog({ open, onClose, onCreate, onCreated }: Crea
               id="cc-nit"
               type="text"
               value={nit}
-              onChange={(e) => setNit(e.target.value)}
+              onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
               maxLength={20}
               placeholder="900123456-1"
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
@@ -151,7 +165,7 @@ export function CreateCompanyDialog({ open, onClose, onCreate, onCreated }: Crea
               id="cc-code"
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => setCode(sanitizeTenantCode(e.target.value))}
               maxLength={32}
               className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               style={{ borderColor: errors.code ? "#FF4E00" : "#DFE5ED" }}
