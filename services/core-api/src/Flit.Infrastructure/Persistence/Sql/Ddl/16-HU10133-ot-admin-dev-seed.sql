@@ -32,7 +32,7 @@ VALUES (
     'OT-BOGOTA',
     'Secretaría de Movilidad Bogotá OT (DEV)',
     '900000009-9',
-    'transit_office',
+    'RENTING',
     true,
     now()
 )

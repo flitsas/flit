@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Common;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.Create;
 
@@ -47,6 +48,10 @@ public sealed class CreateCompanyHandler
             errors.Add(new CompanyValidationError(
                 "razonSocial", $"La razón social no puede superar {LegalNameMaxLength} caracteres."));
         }
+        else if (TextFieldPatterns.ValidateReadableName(razonSocial, "La razón social") is { } razonError)
+        {
+            errors.Add(new CompanyValidationError("razonSocial", razonError));
+        }
 
         if (nit.Length == 0)
         {
@@ -57,6 +62,16 @@ public sealed class CreateCompanyHandler
             errors.Add(new CompanyValidationError(
                 "nit", $"El NIT no puede superar {TaxIdMaxLength} caracteres."));
         }
+        else if (!TextFieldPatterns.TaxId().IsMatch(nit))
+        {
+            errors.Add(new CompanyValidationError(
+                "nit", "El NIT solo permite dígitos, puntos y guiones."));
+        }
+        else if (!TextFieldPatterns.HasDigit().IsMatch(nit))
+        {
+            errors.Add(new CompanyValidationError(
+                "nit", "El NIT debe contener al menos un dígito."));
+        }
 
         if (code.Length == 0)
         {
@@ -66,6 +81,16 @@ public sealed class CreateCompanyHandler
         {
             errors.Add(new CompanyValidationError(
                 "code", $"El código no puede superar {CodeMaxLength} caracteres."));
+        }
+        else if (!TextFieldPatterns.TenantCode().IsMatch(code))
+        {
+            errors.Add(new CompanyValidationError(
+                "code", "El código solo permite letras, números, guion y guion bajo."));
+        }
+        else if (!TextFieldPatterns.HasLetterOrDigit().IsMatch(code))
+        {
+            errors.Add(new CompanyValidationError(
+                "code", "El código debe contener al menos una letra o número."));
         }
 
         if (!CompanyTenantTypes.IsValid(tenantType))

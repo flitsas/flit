@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search, X } from "lucide-react";
+import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
 
 // Panel de filtros del listado de compañías (HU #10194, AC1). El filtrado es
 // server-side: NIT/Razón Social/fechas se confirman al pulsar "Buscar"; el
@@ -52,7 +53,8 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
         <input
           id="filter-nit"
           value={filters.nit ?? ""}
-          onChange={(e) => setFilters((f) => ({ ...f, nit: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, nit: sanitizeNoAngleBrackets(e.target.value) }))}
+          maxLength={SEARCH_TEXT_MAX_LENGTH}
           className={INPUT_CLS}
           placeholder="900.123.456-7"
         />
@@ -62,7 +64,8 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
         <input
           id="filter-razon"
           value={filters.razonSocial ?? ""}
-          onChange={(e) => setFilters((f) => ({ ...f, razonSocial: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, razonSocial: sanitizeNoAngleBrackets(e.target.value) }))}
+          maxLength={SEARCH_TEXT_MAX_LENGTH}
           className={INPUT_CLS}
           placeholder="Nombre de la compañía"
         />

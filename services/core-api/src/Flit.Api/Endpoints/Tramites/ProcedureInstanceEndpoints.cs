@@ -53,12 +53,11 @@ internal static class ProcedureInstanceEndpoints
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
             };
 
-            // #5 — La compañía debe tener HABILITADA explícitamente la matrícula inicial vía
-            // el toggle "Permitir matrícula inicial" (admin/companies) para poder crear ese
-            // trámite. Solo se permite cuando existe fila de settings Y el flag está en true:
-            // sin fila (tenant aún no configurado) o con el flag en false → se bloquea. Así se
-            // alinea con el default del admin (toggle apagado para empresas nuevas) y se evita
-            // iniciar matrícula inicial en compañías sin configuración.
+            // #5 — La compañía debe habilitar explícitamente la matrícula inicial vía el
+            // toggle "Permitir matrícula inicial" (admin/companies). Por defecto está en OFF:
+            // solo se permite crear ese trámite si existe configuración del tenant Y el flag
+            // está en true. Sin fila de settings (tenant no configurado) → NO permitido, para
+            // que una compañía sin configuración no radique matrícula inicial por accidente.
             if (EsMatriculaInicial(effectiveRequest.Modalidad))
             {
                 var settings = await settingsHandler.HandleAsync(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import type { TransitOffice } from "@/lib/api/types";
 
 // Matriz de organismos de tránsito (HU #10194, AC4). Catálogo completo en memoria
@@ -21,6 +21,8 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
   const [search, setSearch] = useState("");
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
+  // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
+  const [justSaved, setJustSaved] = useState<Set<string>>(() => new Set());
 
   const filtered = useMemo(() => {
     const term = fold(search);
@@ -47,6 +49,15 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
 
     try {
       await onToggle(office.id, enable);
+      // Confirmación sutil: se guardó al instante (endpoint propio, sin "Guardar todo").
+      setJustSaved((current) => new Set(current).add(office.id));
+      setTimeout(() => {
+        setJustSaved((current) => {
+          const next = new Set(current);
+          next.delete(office.id);
+          return next;
+        });
+      }, 2500);
     } catch {
       // Rollback.
       setGranted((current) => {
@@ -70,7 +81,12 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
 
   return (
     <section aria-label="Organismos de tránsito" className="space-y-3">
-      <h4 className="text-sm font-semibold">Organismos de Tránsito</h4>
+      <div>
+        <h4 className="text-sm font-semibold">Organismos de Tránsito</h4>
+        <p className="mt-0.5 text-[11px] opacity-60">
+          Los cambios se guardan al instante al marcar; no requieren «Guardar todo».
+        </p>
+      </div>
 
       <div
         className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 dark:bg-[#0B0F14]"
@@ -117,6 +133,17 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
                     <span className="ml-2 font-mono opacity-60">{office.code}</span>
                   </span>
                 </label>
+                {pending.has(office.id) ? (
+                  <span className="shrink-0 text-[10px] opacity-60">Guardando…</span>
+                ) : justSaved.has(office.id) ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 text-[10px] font-semibold"
+                    style={{ color: "#0a8f8b" }}
+                    role="status"
+                  >
+                    <Check className="h-3 w-3" /> Guardado
+                  </span>
+                ) : null}
               </li>
             );
           })}

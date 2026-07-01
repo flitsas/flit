@@ -13,6 +13,13 @@ namespace Flit.Api.Endpoints.Analytics;
 /// El tenant se resuelve del claim JWT <c>tenant_id</c> (AC1); el SuperAdmin puede
 /// indicar <c>tenantId</c> por query para consultar otra compañía (AC2). Un Tenant Admin
 /// que solicite un tenant distinto al de su token recibe 403.
+/// Las lecturas (overview, monthly-trend, productivity/top, procedures) están
+/// intencionalmente abiertas a cualquier usuario autenticado del tenant: el dashboard
+/// debe estar disponible para todos los roles, no solo AdminCompany/SuperAdmin. Solo la
+/// exportación (Excel/PDF) exige <see cref="AdminAuthorization.AdminCompanyPolicy"/>,
+/// aplicada explícitamente en cada endpoint de exportación — no la reintroduzcas a nivel
+/// de grupo sin confirmar con negocio, ya que eso reproduce el bug de "dashboard en 0
+/// para roles personalizados".
 /// </summary>
 public static class AnalyticsEndpoints
 {
@@ -22,7 +29,7 @@ public static class AnalyticsEndpoints
 
         var group = app
             .MapGroup("/api/v1/analytics")
-            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .RequireAuthorization()
             .WithTags("Analytics · Dashboard");
 
         group.MapGet("/overview", GetOverviewAsync)
@@ -50,6 +57,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/export/excel", ExportExcel)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .WithName("AnalyticsExportExcel")
             .WithSummary("Exporta a Excel (.xlsx) el detalle de trámites filtrado, por streaming")
             .Produces(StatusCodes.Status200OK, contentType: ExcelContentType)
@@ -58,6 +66,7 @@ public static class AnalyticsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/export/executive-pdf", ExportExecutivePdfAsync)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .WithName("AnalyticsExecutivePdf")
             .WithSummary("Genera el PDF de Resumen Ejecutivo del periodo")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")

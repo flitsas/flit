@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Pencil, Power } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import type { DocumentType } from "@/lib/api/types-documents";
+import { SwitchToggle } from "@/components/ui/SwitchToggle";
 
 // Tabla paginada del catálogo de tipos de documento (HU #10198, AC1). Columnas:
 // Código, Nombre, Estado, Fecha de creación + acciones Editar/Desactivar.
@@ -87,27 +88,11 @@ export function DocumentTypeListTable({
                     >
                       <Pencil className="h-3 w-3" /> Editar
                     </button>
-                    {activo ? (
-                      <button
-                        type="button"
-                        onClick={() => onDeactivate(d)}
-                        aria-label={`Desactivar ${d.nombre}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                      >
-                        <Power className="h-3 w-3" /> Desactivar
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onReactivate(d)}
-                        aria-label={`Activar ${d.nombre}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "#00DBD5", color: "#0a8f8b" }}
-                      >
-                        <Power className="h-3 w-3" /> Activar
-                      </button>
-                    )}
+                    <SwitchToggle
+                      checked={activo}
+                      onChange={() => (activo ? onDeactivate(d) : onReactivate(d))}
+                      label={`${activo ? "Desactivar" : "Activar"} ${d.nombre}`}
+                    />
                   </div>
                 </td>
               </tr>

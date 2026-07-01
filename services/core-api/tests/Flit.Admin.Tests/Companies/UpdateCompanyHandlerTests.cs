@@ -160,6 +160,46 @@ public sealed class UpdateCompanyHandlerTests
         result.Errors.Should().ContainSingle(e => e.Field == "razonSocial");
     }
 
+    [Theory]
+    [InlineData("900ABC")]   // letras en el NIT
+    [InlineData("900 12")]    // espacio
+    public async Task InvalidNitCharacters_Returns422(string nit)
+    {
+        var db = NewDbName();
+        var tenantId = await SeedTenantAsync(db);
+
+        await using var ctx = NewContext(db);
+        var handler = new UpdateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new UpdateCompanyCommand
+        {
+            TenantId = tenantId,
+            Request = new UpdateCompanyRequest("Renting Andino", nit, "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateCompanyOutcome.Invalid);
+        result.Errors.Should().ContainSingle(e => e.Field == "nit");
+    }
+
+    [Fact]
+    public async Task InvalidRazonSocialCharacters_Returns422()
+    {
+        var db = NewDbName();
+        var tenantId = await SeedTenantAsync(db);
+
+        await using var ctx = NewContext(db);
+        var handler = new UpdateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new UpdateCompanyCommand
+        {
+            TenantId = tenantId,
+            Request = new UpdateCompanyRequest("Empresa <script>", "900123456-1", "RENTING", true),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateCompanyOutcome.Invalid);
+        result.Errors.Should().ContainSingle(e => e.Field == "razonSocial");
+    }
+
     [Fact]
     public async Task LegacyTenantType_OutsideB2BCatalog_IsPreserved_WhenUnchanged()
     {

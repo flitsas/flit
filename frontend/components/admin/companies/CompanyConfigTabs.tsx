@@ -1,26 +1,27 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { Building2, FileClock, FileSignature, Save, Shuffle, Stamp } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Building2, FileClock, Save, Shuffle, Stamp } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
-import { formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
+import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
+import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
 import { MatriculaInicialTab } from "./tabs/MatriculaInicialTab";
 import { TraspasosTab } from "./tabs/TraspasosTab";
 import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
-import { ContingenciaFlitTab } from "./tabs/ContingenciaFlitTab";
 
 // Contenedor multi-pestaña de configuración (HU #10194, AC2). Mantiene un único
-// estado de formulario para las 4 pestañas de config y persiste todo con un solo
-// PUT atómico ("Guardar todo"). Whitelist (AC3), matriz OT (AC4) e historial (AC5)
-// se inyectan como slots — tienen endpoints propios y no entran en el PUT.
+// estado de formulario para las pestañas de config y persiste todo con un solo PUT
+// atómico. "Guardar todo" NO guarda directo: detecta los cambios realizados y abre una
+// ventana de confirmación (SaveConfigDialog) que los lista y pide confirmar; el resultado
+// se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
+// Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "contingencia" | "historial";
+type TabId = "matricula" | "traspasos" | "config" | "historial";
 
 const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[] = [
   { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
   { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
-  { id: "contingencia", label: "Contingencia FLIT", icon: FileSignature, isConfig: true },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -31,7 +32,6 @@ export interface CompanyConfigTabsProps {
   whitelistSlot?: ReactNode;
   otSlot?: ReactNode;
   auditSlot?: ReactNode;
-  onNotify?: (message: string, type: "success" | "error") => void;
 }
 
 export function CompanyConfigTabs({
@@ -40,24 +40,40 @@ export function CompanyConfigTabs({
   whitelistSlot,
   otSlot,
   auditSlot,
-  onNotify,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
+  // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
+  const [initialForm, setInitialForm] = useState<SettingsForm>(() => formFromSettings(settings));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [banner, setBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhase, setConfirmPhase] = useState<SaveConfigPhase>("confirm");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const patch = (p: Partial<SettingsForm>) => setForm((f) => ({ ...f, ...p }));
 
-  const handleSaveAll = async () => {
-    setBanner(null);
+  const changes = useMemo(() => diffSettings(initialForm, form), [initialForm, form]);
+
+  // "Guardar todo" no persiste directo: abre la confirmación con el resumen de cambios.
+  const openConfirm = () => {
+    setConfirmError(null);
+    setConfirmPhase("confirm");
+    setConfirmOpen(true);
+  };
+
+  const closeConfirm = () => setConfirmOpen(false);
+
+  // Persiste tras la confirmación. El guardado es atómico: un único PUT con todos los campos.
+  const doSave = async () => {
+    setConfirmError(null);
+    setConfirmPhase("saving");
+    setErrorBanner(null);
     setFieldErrors({});
-    setSaving(true);
     try {
       await onSaveSettings(formToUpdate(form));
-      setBanner({ type: "success", message: "Configuración guardada correctamente." });
-      onNotify?.("Configuración guardada correctamente.", "success");
+      setInitialForm(form); // nueva línea base: ya no quedan cambios pendientes
+      setConfirmPhase("success");
     } catch (error) {
       const errors = (error as { errors?: { field: string; message: string }[] })?.errors;
       if (Array.isArray(errors) && errors.length > 0) {
@@ -66,17 +82,14 @@ export function CompanyConfigTabs({
           mapped[e.field] = e.message;
         }
         setFieldErrors(mapped);
-        setBanner({
-          type: "error",
-          message: "Revisa los campos marcados: hay valores inválidos.",
-        });
-        onNotify?.("La configuración tiene campos inválidos.", "error");
+        setErrorBanner("Revisa los campos marcados: hay valores inválidos.");
+        // Cierra la confirmación para revelar los campos marcados bajo las pestañas.
+        setConfirmOpen(false);
+        setConfirmPhase("confirm");
       } else {
-        setBanner({ type: "error", message: "No se pudo guardar la configuración. Intenta de nuevo." });
-        onNotify?.("No se pudo guardar la configuración.", "error");
+        setConfirmPhase("confirm");
+        setConfirmError("No se pudo guardar la configuración. Intenta de nuevo.");
       }
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -117,21 +130,17 @@ export function CompanyConfigTabs({
         {tab === "config" && (
           <ConfiguracionEmpresaTab form={form} onChange={patch} otSlot={otSlot} fieldErrors={fieldErrors} />
         )}
-        {tab === "contingencia" && <ContingenciaFlitTab form={form} />}
         {tab === "historial" && auditSlot}
       </div>
 
-      {banner && (
+      {errorBanner && (
         <div
-          role={banner.type === "error" ? "alert" : "status"}
+          role="alert"
           aria-live="polite"
           className="rounded-xl border px-4 py-3 text-xs font-medium"
-          style={{
-            borderColor: banner.type === "success" ? "#00DBD5" : "#FF4E00",
-            color: banner.type === "success" ? "#0a8f8b" : "#FF4E00",
-          }}
+          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
         >
-          {banner.message}
+          {errorBanner}
         </div>
       )}
 
@@ -142,14 +151,25 @@ export function CompanyConfigTabs({
         >
           <button
             type="button"
-            onClick={handleSaveAll}
-            disabled={saving}
+            onClick={openConfirm}
+            disabled={confirmOpen}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
           >
-            <Save className="h-4 w-4" /> {saving ? "Guardando…" : "Guardar todo"}
+            <Save className="h-4 w-4" /> Guardar todo
           </button>
         </div>
+      )}
+
+      {confirmOpen && (
+        <SaveConfigDialog
+          changes={changes}
+          phase={confirmPhase}
+          error={confirmError}
+          onConfirm={doSave}
+          onCancel={closeConfirm}
+          onClose={closeConfirm}
+        />
       )}
     </div>
   );
