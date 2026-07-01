@@ -84,6 +84,42 @@ public sealed class ActorsHandlerTests
         result.Should().BeNull();
     }
 
+    // ── Charset del número de documento (Ajuste 3) ────────────────────────────
+
+    [Theory]
+    [InlineData("CC", "12A4")]   // cédula con letra
+    [InlineData("CE", "12.34")]  // con puntuación
+    [InlineData("NIT", "900-1")] // NIT con guion (solo dígitos)
+    [InlineData("TI", "10 20")]  // con espacio
+    public async Task Put_DocumentoNoNumerico_ReturnsInvalidDocumentNumber(string tipo, string doc)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", tipo, doc, "Juan Comprador", "c@x.com", null);
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("invalid_document_number");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Put_PasaporteAlfanumerico_EsValido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", "PAS", "AB123CD", "Juan Comprador", "c@x.com", null);
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+    }
+
     // ── Roles por modalidad ───────────────────────────────────────────────────
 
     [Fact]
@@ -327,7 +363,7 @@ public sealed class ActorsHandlerTests
         _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant,
-            new PutActorsRequest([Vendedor(), Comprador(doc: "NEW")]), ct);
+            new PutActorsRequest([Vendedor(), Comprador(doc: "456")]), ct);
 
         error.Should().BeNull();
         result!.Actors.Should().HaveCount(2);
