@@ -32,7 +32,11 @@ function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
     startedRef.current = true;
     void (async () => {
       const summary = await start({ modalidad });
-      if (summary) router.replace(`/tramites/${summary.id}`);
+      // Propaga el tenant REAL de la instancia recién creada (?t=) para que la página
+      // destino fije activeTramitesTenant y el primer field-values use el MISMO tenant que
+      // el create. Sin esto, el SuperAdmin cae en jwtTenantId() (su propio tenant) ≠ el de
+      // la instancia → 404 "Procedure instance not found." hasta re-entrar desde la tabla.
+      if (summary) router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
     })();
   }, [modalidad, start, router]);
 
@@ -50,7 +54,7 @@ function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
               startedRef.current = false;
               void (async () => {
                 const summary = await start({ modalidad });
-                if (summary) router.replace(`/tramites/${summary.id}`);
+                if (summary) router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
               })();
             }}
             className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white"

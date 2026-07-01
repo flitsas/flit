@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Lock, Pencil, Power, PowerOff, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Pencil, Settings2 } from "lucide-react";
 import { isB2BTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
+import { SwitchToggle } from "@/components/ui/SwitchToggle";
 
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
 // Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
@@ -98,23 +99,11 @@ export function CompanyListTable({
                   >
                     {editable ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />} Editar
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onToggleStatus(c)}
-                    aria-label={`${c.estadoActivo ? "Desactivar" : "Activar"} ${c.razonSocial}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                    style={{ background: c.estadoActivo ? "#FF4E00" : "#00DBD5" }}
-                  >
-                    {c.estadoActivo ? (
-                      <>
-                        <PowerOff className="h-3 w-3" /> Desactivar
-                      </>
-                    ) : (
-                      <>
-                        <Power className="h-3 w-3" /> Activar
-                      </>
-                    )}
-                  </button>
+                  <SwitchToggle
+                    checked={c.estadoActivo}
+                    onChange={() => onToggleStatus(c)}
+                    label={`${c.estadoActivo ? "Desactivar" : "Activar"} ${c.razonSocial}`}
+                  />
                   <button
                     type="button"
                     onClick={() => onConfigure(c.id)}

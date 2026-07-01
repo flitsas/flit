@@ -18,7 +18,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 INSERT INTO identity.tenants (id, code, legal_name, tax_id, tenant_type, is_active, created_at)
 VALUES ('11111111-1111-1111-1111-111111111111', 'FLITDEV', 'Flit Dev Tenant',
-        '900000000-0', 'standard', true, now())
+        '900000000-0', 'FLIT', true, now())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO identity.users (id, email, display_name, status, created_at)

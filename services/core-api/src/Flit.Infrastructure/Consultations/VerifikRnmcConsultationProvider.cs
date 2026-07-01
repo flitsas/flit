@@ -68,11 +68,11 @@ internal sealed class VerifikRnmcConsultationProvider(
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable($"Verifik RNMC respondió {(int)response.StatusCode}");
+                return ProviderUnavailable();
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikRnmcResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable("Respuesta vacía de Verifik RNMC");
+                return ProviderUnavailable();
 
             return VerifikRnmcResultMapper.Map(payload);
         }
@@ -82,15 +82,15 @@ internal sealed class VerifikRnmcConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable("Timeout consultando Verifik RNMC");
+            return ProviderUnavailable();
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return ProviderUnavailable($"Error de red consultando Verifik RNMC: {ex.Message}");
+            return ProviderUnavailable();
         }
         catch (JsonException)
         {
-            return ProviderUnavailable("No se pudo interpretar la respuesta de Verifik RNMC");
+            return ProviderUnavailable();
         }
     }
 
@@ -119,9 +119,12 @@ internal sealed class VerifikRnmcConsultationProvider(
             [new ConsultationCheck("medidas_correctivas", "Medidas correctivas (Policía)", "ok", Key_, "Sin registros RNMC")],
             []);
 
-    private static ConsultationResult ProviderUnavailable(string message) =>
-        new(Key_, "yellow",
-            [new ConsultationCheck("provider", "Proveedor Verifik RNMC", "unknown", Key_, message)],
+    // No se pudo verificar RNMC (no-200/timeout/red/respuesta ilegible). Dato crítico:
+    // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.
+    private static ConsultationResult ProviderUnavailable() =>
+        new(Key_, "red",
+            [new ConsultationCheck("provider", "Consulta RNMC (Policía)", "error", Key_,
+                "No fue posible verificar la información en el RNMC en este momento. Vuelve a intentarlo en unos minutos.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

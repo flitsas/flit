@@ -18,7 +18,7 @@ VALUES (
     'FLITDEV',
     'Flit Dev Tenant',
     '900000000-0',
-    'standard',
+    'FLIT',
     true,
     now()
 )

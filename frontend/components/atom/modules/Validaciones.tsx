@@ -117,17 +117,17 @@ function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFil
   return {
     referenceNumber: text(f.referenceNumber),
     modalidad: f.modalidad || undefined,
-    nombre: text(f.nombre),
-    parte: f.parte || undefined,
-    tipoDoc: text(f.tipoDoc),
-    documento: text(f.documento),
-    estado: f.estado || undefined,
+    name: text(f.name),
+    partyRole: f.partyRole || undefined,
+    documentType: text(f.documentType),
+    documentNumber: text(f.documentNumber),
+    status: f.status || undefined,
     provider: f.provider || undefined,
     scoreMin: num(f.scoreMin),
     scoreMax: num(f.scoreMax),
     createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
     createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
-    motivoRechazo: f.estado === 'rechazado' ? text(f.motivoRechazo) : undefined,
+    rejectionReason: f.status === 'rechazado' ? text(f.rejectionReason) : undefined,
     vigenciaEstado: f.vigenciaEstado || undefined,
     // Rango por fecha de fin de vigencia (expiraHasta a fin de día, igual que createdTo).
     expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
@@ -267,8 +267,8 @@ export function Validaciones() {
   const applyChange = useCallback((patch: Partial<ValidacionesUiFilters>, immediate?: boolean) => {
     // Si el estado deja de ser 'rechazado', se oculta y limpia el filtro de motivo (AC1).
     const normalized =
-      'estado' in patch && patch.estado !== 'rechazado'
-        ? { ...patch, motivoRechazo: '' }
+      'status' in patch && patch.status !== 'rechazado'
+        ? { ...patch, rejectionReason: '' }
         : patch;
     const next = { ...filtersRef.current, ...normalized };
     setFilters(next);
@@ -559,9 +559,9 @@ function StuckRow({
         >
           {kindLabel}
         </span>
-        <span className="font-medium">{event.nombre ?? 'Persona no disponible'}</span>
+        <span className="font-medium">{event.name ?? 'Persona no disponible'}</span>
         <span className="opacity-60">
-          {event.documento ? ` · ${maskDoc(event.tipoDoc ?? '', event.documento)}` : ''}
+          {event.documentNumber ? ` · ${maskDoc(event.documentType ?? '', event.documentNumber)}` : ''}
           {' · '}
           {event.attempts} intentos · {formatFecha(event.occurredAt)}
         </span>
@@ -572,7 +572,7 @@ function StuckRow({
         disabled={busy}
         className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ background: '#B26A00' }}
-        aria-label={`Reintentar la validación de ${event.nombre ?? 'persona no disponible'}`}
+        aria-label={`Reintentar la validación de ${event.name ?? 'persona no disponible'}`}
       >
         <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
         {busy ? 'Reencolando…' : 'Reintentar'}
@@ -765,19 +765,19 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
 }
 
 function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
-  const meta = ESTADO_META[r.estado] ?? ESTADO_META.enviado;
+  const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
   const modalidad = MODALIDAD_LABEL[r.modalidad] ?? r.modalidad;
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
-  const parte = r.parte ? ` (${r.parte})` : '';
-  const vigencia = vigenciaBadge(r.diasRestantes);
+  const parte = r.partyRole ? ` (${r.partyRole})` : '';
+  const vigencia = vigenciaBadge(r.daysRemaining);
   const ariaLabel =
-    `Validación de ${r.nombre}${parte}, trámite ${r.referenceNumber} (${modalidad}), ` +
+    `Validación de ${r.name}${parte}, trámite ${r.referenceNumber} (${modalidad}), ` +
     `proveedor ${provider}, estado ${meta.label}` +
     (r.score != null ? `, score ${r.score}` : '') +
-    (r.estado === 'rechazado' && r.motivoRechazo ? `, motivo: ${r.motivoRechazo}` : '') +
+    (r.status === 'rechazado' && r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '') +
     `, registrada ${formatFecha(r.createdAt)}` +
-    (r.validadoAt ? `, aprobada ${formatFechaCorta(r.validadoAt)}` : '') +
-    (r.vigenciaHasta ? `, vigente hasta ${formatFechaCorta(r.vigenciaHasta)}` : '') +
+    (r.validatedAt ? `, aprobada ${formatFechaCorta(r.validatedAt)}` : '') +
+    (r.validUntil ? `, vigente hasta ${formatFechaCorta(r.validUntil)}` : '') +
     (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
     `. Abrir trámite.`;
 
@@ -797,14 +797,14 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
           <span className="block text-[10px] opacity-60">{modalidad}</span>
         </div>
         <div className="min-w-0">
-          <span className="block font-medium truncate">{r.nombre}</span>
+          <span className="block font-medium truncate">{r.name}</span>
           <span className="block text-[10px] opacity-60 truncate">
             {provider}
-            {r.parte ? ` · ${r.parte}` : ''}
+            {r.partyRole ? ` · ${r.partyRole}` : ''}
           </span>
         </div>
         <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
-          {maskDoc(r.tipoDoc, r.documento)}
+          {maskDoc(r.documentType, r.documentNumber)}
         </div>
         <div className="min-w-0">
           <span
@@ -813,9 +813,9 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
           >
             {meta.label}
           </span>
-          {r.estado === 'rechazado' && r.motivoRechazo && (
-            <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.motivoRechazo}>
-              {r.motivoRechazo}
+          {r.status === 'rechazado' && r.rejectionReason && (
+            <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
+              {r.rejectionReason}
             </span>
           )}
         </div>
@@ -824,13 +824,13 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
         <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
         {/* Aprobación: solo la fecha (o — si aún no se aprobó). */}
         <div className="min-w-0 text-[10px] leading-tight opacity-80">
-          {r.validadoAt ? formatFechaCorta(r.validadoAt) : '—'}
+          {r.validatedAt ? formatFechaCorta(r.validatedAt) : '—'}
         </div>
         {/* Vigencia: fin de vigencia + badge de días restantes (verde/ámbar/rojo). */}
         <div className="min-w-0 text-[10px] leading-tight">
-          {r.vigenciaHasta ? (
+          {r.validUntil ? (
             <>
-              <span className="block opacity-80">{formatFechaCorta(r.vigenciaHasta)}</span>
+              <span className="block opacity-80">{formatFechaCorta(r.validUntil)}</span>
               {vigencia && (
                 <span
                   className="mt-0.5 inline-block rounded-full px-1.5 py-px font-semibold"

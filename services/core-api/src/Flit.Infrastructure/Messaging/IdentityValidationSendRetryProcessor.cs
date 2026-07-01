@@ -102,7 +102,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
         if (provider is null)
         {
             // Proveedor no registrado (mala config / proveedor retirado): no se puede reintentar.
-            v.Estado = BiometricEstados.ErrorEnvio;
+            v.Status = BiometricEstados.ErrorEnvio;
             v.UpdatedAt = now;
             SendRetryLog.NoProvider(logger, v.Id, v.Provider);
             await db.SaveChangesAsync(ct);
@@ -114,11 +114,11 @@ internal sealed class IdentityValidationSendRetryProcessor(
         {
             var result = await provider.StartAsync(
                 new IdentityProviderStartRequest(
-                    v.ProcedureInstanceId, v.Id, v.Parte, v.Nombre, v.TipoDoc, v.Documento, v.Email),
+                    v.ProcedureInstanceId, v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email),
                 ct);
 
             // Envío logrado → en_proceso con los datos del proveedor.
-            v.Estado = BiometricEstados.EnProceso;
+            v.Status = BiometricEstados.EnProceso;
             v.KyverumVerificationId = result.VerificationId;
             v.CaptureUrl = result.CaptureUrl;
             v.WebhookSecretEncrypted = string.IsNullOrEmpty(result.WebhookSecret)
@@ -134,26 +134,26 @@ internal sealed class IdentityValidationSendRetryProcessor(
                 ProcedureInstanceId = v.ProcedureInstanceId,
                 ValidationId = v.Id,
                 Provider = v.Provider,
-                Parte = v.Parte,
+                Parte = v.PartyRole,
                 ProviderVerificationId = result.VerificationId,
             }, ct);
 
-            SendRetryLog.Sent(logger, v.Id, v.Provider, v.Intentos);
+            SendRetryLog.Sent(logger, v.Id, v.Provider, v.Attempts);
         }
         catch (IdentityProviderException ex)
         {
-            v.Intentos += 1;
+            v.Attempts += 1;
             v.UpdatedAt = now;
             // Definitivo, o agotó intentos → dead-letter (error_envio). Transitorio con intentos restantes
             // → sigue en pendiente_envio y se reintenta en el próximo ciclo.
-            if (!ex.Transient || v.Intentos >= v.MaxIntentos)
+            if (!ex.Transient || v.Attempts >= v.MaxAttempts)
             {
-                v.Estado = BiometricEstados.ErrorEnvio;
-                SendRetryLog.DeadLettered(logger, v.Id, v.Provider, v.Intentos, ex.Transient);
+                v.Status = BiometricEstados.ErrorEnvio;
+                SendRetryLog.DeadLettered(logger, v.Id, v.Provider, v.Attempts, ex.Transient);
             }
             else
             {
-                SendRetryLog.RetryScheduled(logger, v.Id, v.Provider, v.Intentos, ex);
+                SendRetryLog.RetryScheduled(logger, v.Id, v.Provider, v.Attempts, ex);
             }
         }
 
@@ -172,14 +172,14 @@ internal sealed class IdentityValidationSendRetryProcessor(
         cmd.CommandText = """
             SELECT id
             FROM tramites.procedure_instance_biometric_validations
-            WHERE estado = @estado
-              AND intentos < max_intentos
+            WHERE status = @status
+              AND attempts < max_attempts
             ORDER BY created_at
             LIMIT 1
             FOR UPDATE SKIP LOCKED
             """;
         var p = cmd.CreateParameter();
-        p.ParameterName = "estado";
+        p.ParameterName = "status";
         p.Value = BiometricEstados.PendienteEnvio;
         cmd.Parameters.Add(p);
 

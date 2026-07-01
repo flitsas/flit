@@ -6,6 +6,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { resetPassword } from "@/lib/api/auth";
+import { getToken } from "@/lib/api/client";
+import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 
 const INPUT_CLASS =
@@ -15,6 +17,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
+  const [hadPriorSession, setHadPriorSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,6 +33,11 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     return (
       <div role="status" className="space-y-4">
         <p className="text-sm text-slate-700">Tu contraseña fue actualizada correctamente.</p>
+        {hadPriorSession && (
+          <p className="text-xs text-slate-500">
+            Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
+          </p>
+        )}
         <Link
           href="/login"
           className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
@@ -55,6 +63,8 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     setLoading(true);
     try {
       await resetPassword(token as string, password);
+      setHadPriorSession(Boolean(getToken()));
+      clearToken();
       setDone(true);
     } catch (err) {
       const status = (err as { status?: number }).status;

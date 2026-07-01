@@ -323,19 +323,23 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     }
 
     /// <summary>
-    /// Blockers globales que vetan el submit. Preflight red (subsanable: se levanta si el gestor
-    /// aceptó el riesgo) + gating ESTRICTO de documentos obligatorios: faltan obligatorios →
-    /// <c>documentos_incompletos</c> (sin override). El blocker global es necesario porque en
-    /// traspaso el paso 6 (docs) es diferido y quedaría excluido del cómputo de pasos no-diferidos
-    /// de <see cref="CanSubmit"/>.
+    /// Blockers globales que vetan el submit. Preflight con error de proveedor (consulta no
+    /// verificable) → <c>preflight_provider_error</c>: bloqueo DURO, NO se levanta aceptando el
+    /// riesgo (la información es vital). Preflight red subsanable → <c>preflight_red</c> (se levanta
+    /// si el gestor aceptó el riesgo). + gating ESTRICTO de documentos obligatorios: faltan
+    /// obligatorios → <c>documentos_incompletos</c> (sin override). El blocker global es necesario
+    /// porque en traspaso el paso 6 (docs) es diferido y quedaría excluido del cómputo de pasos
+    /// no-diferidos de <see cref="CanSubmit"/>.
     /// </summary>
     private static List<string> BlockersFrom(
         PreflightSnapshot? preflight,
         bool documentosCompletos,
         bool riesgoAceptado)
     {
-        var blockers = new List<string>(2);
-        if (preflight?.Overall == "red" && !riesgoAceptado)
+        var blockers = new List<string>(3);
+        if (preflight?.ProviderError == true)
+            blockers.Add("preflight_provider_error");
+        else if (preflight?.Overall == "red" && !riesgoAceptado)
             blockers.Add("preflight_red");
         if (!documentosCompletos)
             blockers.Add("documentos_incompletos");
@@ -383,7 +387,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         return instance.BiometricValidations.Any(v =>
-            string.Equals(v.Parte, parte, StringComparison.OrdinalIgnoreCase)
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && BiometricRules.EsAprobadaVigente(v, now)
             && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }
@@ -466,8 +470,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             return null;
 
         // El preflight ya corrió SIMIT del comprador. red por multas se refleja vía Overall;
-        // aquí reportamos 0 comparendos salvo que el overall sea red (multas → bloqueo).
-        var totalComparendos = preflight.Overall == "red" ? 1 : 0;
+        // aquí reportamos 0 comparendos salvo que el overall sea red (multas → bloqueo). Un red por
+        // ERROR de proveedor (consulta no verificable) NO implica comparendos: no se infiere.
+        var totalComparendos = preflight.Overall == "red" && !preflight.ProviderError ? 1 : 0;
         return new SimitSnapshot(Consultado: true, Documento: comprador.Documento, TotalComparendos: totalComparendos);
     }
 
@@ -479,14 +484,13 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         if (latest is null)
             return null;
 
-        var impuestoUnknown = ImpuestoUnknown(latest.Checks);
-        return new PreflightSnapshot(latest.Overall, impuestoUnknown);
+        var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
+        var impuestoUnknown = checks.Any(c =>
+            c.Key.Contains("impuesto", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Status, "unknown", StringComparison.OrdinalIgnoreCase));
+        var providerError = checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
+        return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError);
     }
-
-    private static bool ImpuestoUnknown(string? checksJson) =>
-        GetPreflightHandler.DeserializeChecks(checksJson)
-            .Any(c => c.Key.Contains("impuesto", StringComparison.OrdinalIgnoreCase) &&
-                      string.Equals(c.Status, "unknown", StringComparison.OrdinalIgnoreCase));
 
     // Heurísticas de field_values (RUNT/VIN se hidratan en Slice 5).
     private static bool HasVehiculoConsulta(Dictionary<string, string?> fv) =>

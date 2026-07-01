@@ -10,11 +10,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed record TenantBiometricValidationListQuery(
     string? ReferenceNumber = null,
     string? Modalidad = null,
-    string? Nombre = null,
-    string? Parte = null,
-    string? TipoDoc = null,
-    string? Documento = null,
-    string? Estado = null,
+    string? Name = null,
+    string? PartyRole = null,
+    string? DocumentType = null,
+    string? DocumentNumber = null,
+    string? Status = null,
     string? Provider = null,
     int? ScoreMin = null,
     int? ScoreMax = null,
@@ -77,10 +77,10 @@ public sealed record TenantBiometricValidationListQuery(
         if (ScoreMin is { } min && ScoreMax is { } max && min > max)
             return "scoreMin no puede ser mayor que scoreMax.";
 
-        if (!string.IsNullOrWhiteSpace(Estado) && !ValidEstados.Contains(Estado.Trim()))
+        if (!string.IsNullOrWhiteSpace(Status) && !ValidEstados.Contains(Status.Trim()))
             return "estado inválido; use enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio o error_envio.";
 
-        if (!string.IsNullOrWhiteSpace(Parte) && !ValidPartes.Contains(Parte.Trim()))
+        if (!string.IsNullOrWhiteSpace(PartyRole) && !ValidPartes.Contains(PartyRole.Trim()))
             return "parte inválida; use comprador o vendedor.";
 
         if (!string.IsNullOrWhiteSpace(Provider) && !ValidProviders.Contains(Provider.Trim()))
@@ -101,22 +101,30 @@ public sealed record TenantBiometricValidationListQuery(
         return null;
     }
 
+    /// <summary>Tope de longitud de los términos de búsqueda de texto libre (saneo anti-abuso).</summary>
+    public const int TextFilterMaxLength = 100;
+
     /// <summary>Mapea a <see cref="BiometricValidationListFilter"/> para el repositorio.</summary>
+    /// <remarks>
+    /// Los campos de texto libre (búsqueda) solo se SANEAN: trim + tope de longitud. No se valida
+    /// el conjunto de caracteres (no se bloquea al usuario por buscar parcial); los comodines LIKE
+    /// (<c>%</c>, <c>_</c>) se escapan en el repositorio para que se traten como literales.
+    /// </remarks>
     public BiometricValidationListFilter ToFilter() => new()
     {
-        ReferenceNumber = Trim(ReferenceNumber),
-        Modalidad = Trim(Modalidad),
-        Nombre = Trim(Nombre),
-        Parte = Trim(Parte),
-        TipoDoc = Trim(TipoDoc),
-        Documento = Trim(Documento),
-        Estado = Trim(Estado),
+        ReferenceNumber = TrimCap(ReferenceNumber),
+        Modalidad = TrimCap(Modalidad),
+        Name = TrimCap(Name),
+        PartyRole = Trim(PartyRole),
+        DocumentType = TrimCap(DocumentType),
+        DocumentNumber = TrimCap(DocumentNumber),
+        Status = Trim(Status),
         Provider = Trim(Provider),
         ScoreMin = ScoreMin,
         ScoreMax = ScoreMax,
         CreatedFrom = CreatedFrom,
         CreatedTo = CreatedTo,
-        MotivoRechazo = Trim(MotivoRechazo),
+        MotivoRechazo = TrimCap(MotivoRechazo),
         VigenciaEstado = Trim(VigenciaEstado)?.ToLowerInvariant(),
         ExpiraDesde = ExpiraDesde,
         ExpiraHasta = ExpiraHasta,
@@ -125,4 +133,13 @@ public sealed record TenantBiometricValidationListQuery(
 
     private static string? Trim(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Trim + tope de longitud para términos de búsqueda de texto libre.</summary>
+    private static string? TrimCap(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        return trimmed.Length > TextFilterMaxLength ? trimmed[..TextFilterMaxLength] : trimmed;
+    }
 }

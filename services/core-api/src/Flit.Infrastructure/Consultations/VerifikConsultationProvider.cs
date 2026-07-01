@@ -119,12 +119,12 @@ internal sealed class VerifikConsultationProvider(
                 // 5xx (502/503/504) = el gateway de Verifik no obtuvo respuesta del RUNT:
                 // transitorio, vale la pena reintentar. 4xx (auth/bad request) es definitivo.
                 var transient = (int)response.StatusCode >= 500;
-                return (ProviderUnavailable($"Verifik respondió {(int)response.StatusCode}"), transient);
+                return (ProviderUnavailable(), transient);
             }
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikVehicleResponse>(JsonOptions, ct);
             if (payload is null)
-                return (ProviderUnavailable("Respuesta vacía de Verifik"), false);
+                return (ProviderUnavailable(), false);
 
             return (VerifikResultMapper.MapVehicle(payload), false);
         }
@@ -135,16 +135,16 @@ internal sealed class VerifikConsultationProvider(
         catch (TaskCanceledException)
         {
             // Timeout del HttpClient (no cancelación del caller): transitorio.
-            return (ProviderUnavailable("Timeout consultando Verifik"), true);
+            return (ProviderUnavailable(), true);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
             // Error de red (DNS/conexión/reset): transitorio.
-            return (ProviderUnavailable($"Error de red consultando Verifik: {ex.Message}"), true);
+            return (ProviderUnavailable(), true);
         }
         catch (JsonException)
         {
-            return (ProviderUnavailable("No se pudo interpretar la respuesta de Verifik"), false);
+            return (ProviderUnavailable(), false);
         }
     }
 
@@ -157,14 +157,21 @@ internal sealed class VerifikConsultationProvider(
             ],
             []);
 
-    private static ConsultationResult ProviderUnavailable(string message) =>
+    // No se pudo verificar el vehículo en el RUNT (no-200/timeout/red/respuesta ilegible).
+    // El dato es crítico para el trámite: se emite un check "error" (bloqueo DURO, overall red,
+    // no subsanable con "aceptar riesgo"), con un mensaje amigable que NO expone el proveedor
+    // ni el código HTTP crudo (el panel ya rotula la fuente como RUNT).
+    private static ConsultationResult ProviderUnavailable() =>
         new(
             "verifik",
-            "yellow",
+            "red",
             [
-                new ConsultationCheck("provider", "Proveedor Verifik", "unknown", "verifik", message)
+                new ConsultationCheck("provider", "Consulta de vehículo", "error", "verifik", ProviderUnavailableMessage)
             ],
             []);
+
+    private const string ProviderUnavailableMessage =
+        "No fue posible verificar la información del vehículo en el RUNT en este momento. Vuelve a intentarlo en unos minutos.";
 
     private static ConsultationResult RequiresOwnerDocument() =>
         new(

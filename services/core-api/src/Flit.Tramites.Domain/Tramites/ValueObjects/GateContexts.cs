@@ -6,7 +6,10 @@ public sealed record ParteDatos(string? Nombre, string? Documento, string? Email
 /// <summary>Estado de preflight (SOAT/RTM/impuesto) consolidado.</summary>
 /// <param name="Overall">Semáforo global: "green" | "amber" | "red".</param>
 /// <param name="ImpuestoVehicularUnknown">El check de impuesto vehicular quedó en "unknown".</param>
-public sealed record PreflightSnapshot(string? Overall, bool ImpuestoVehicularUnknown);
+/// <param name="ProviderError">Algún proveedor no se pudo verificar (check "error"): la información
+/// es vital, así que es un bloqueo DURO no subsanable con "aceptar riesgo" (distinto del rojo por
+/// SOAT/RTM/estado, que sí es subsanable). Obliga a reintentar la consulta antes de continuar.</param>
+public sealed record PreflightSnapshot(string? Overall, bool ImpuestoVehicularUnknown, bool ProviderError = false);
 
 /// <summary>Snapshot de una consulta RUNT contra un documento concreto.</summary>
 /// <param name="Consultado">Si la consulta se realizó.</param>

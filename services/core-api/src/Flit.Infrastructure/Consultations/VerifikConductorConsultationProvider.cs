@@ -64,11 +64,11 @@ internal sealed class VerifikConductorConsultationProvider(
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable($"Verifik RUNT conductor respondió {(int)response.StatusCode}");
+                return ProviderUnavailable();
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikConductorResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable("Respuesta vacía de Verifik RUNT conductor");
+                return ProviderUnavailable();
 
             return VerifikConductorResultMapper.Map(payload);
         }
@@ -78,15 +78,15 @@ internal sealed class VerifikConductorConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable("Timeout consultando Verifik RUNT conductor");
+            return ProviderUnavailable();
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return ProviderUnavailable($"Error de red consultando Verifik RUNT conductor: {ex.Message}");
+            return ProviderUnavailable();
         }
         catch (JsonException)
         {
-            return ProviderUnavailable("No se pudo interpretar la respuesta de Verifik RUNT conductor");
+            return ProviderUnavailable();
         }
     }
 
@@ -138,9 +138,13 @@ internal sealed class VerifikConductorConsultationProvider(
             [new ConsultationCheck("conductor", "Persona en RUNT", "unknown", Key_, "Persona no encontrada en RUNT")],
             []);
 
-    private static ConsultationResult ProviderUnavailable(string message) =>
-        new(Key_, "yellow",
-            [new ConsultationCheck("provider", "Proveedor Verifik RUNT conductor", "unknown", Key_, message)],
+    // No se pudo consultar la persona en el RUNT (no-200/timeout/red/respuesta ilegible).
+    // Check "error" (contrato consistente); el lookup de persona solo lee HydratedFields y cae
+    // al ingreso manual, así que esto no bloquea la identidad, solo evita exponer detalle crudo.
+    private static ConsultationResult ProviderUnavailable() =>
+        new(Key_, "red",
+            [new ConsultationCheck("provider", "Consulta de persona (RUNT)", "error", Key_,
+                "No fue posible verificar la información en el RUNT en este momento. Vuelve a intentarlo en unos minutos.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

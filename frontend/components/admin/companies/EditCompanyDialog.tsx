@@ -5,6 +5,7 @@ import { Building2, Loader2, X } from "lucide-react";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiError, ApiValidationError, TENANT_TYPE_LABELS } from "@/lib/api/types";
 import type { CompanyListItem, TenantType, UpdateCompanyRequest } from "@/lib/api/types";
+import { hasDigit, sanitizeName, sanitizeTaxId, validateReadableName } from "@/lib/validation/fieldRules";
 
 // Modal de edición de compañía (botón "Editar" del listado, #10118). Edita Razón
 // Social, NIT, Tipo y Estado; el Código es inmutable (campo de solo lectura). Valida
@@ -87,8 +88,12 @@ export function EditCompanyDialog({
   // Validación client-side de campos requeridos antes de llamar a la API.
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
-    if (!razonSocial.trim()) next.razonSocial = "La razón social es obligatoria.";
-    if (!nit.trim()) next.nit = "El NIT es obligatorio.";
+    const rs = razonSocial.trim();
+    const n = nit.trim();
+    if (!rs) next.razonSocial = "La razón social es obligatoria.";
+    else { const e = validateReadableName(rs, "La razón social"); if (e) next.razonSocial = e; }
+    if (!n) next.nit = "El NIT es obligatorio.";
+    else if (!hasDigit(n)) next.nit = "El NIT debe contener al menos un dígito.";
     return next;
   };
 
@@ -174,7 +179,7 @@ export function EditCompanyDialog({
               id="ec-razon"
               type="text"
               value={razonSocial}
-              onChange={(e) => setRazonSocial(e.target.value)}
+              onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
               maxLength={255}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
@@ -186,7 +191,7 @@ export function EditCompanyDialog({
               id="ec-nit"
               type="text"
               value={nit}
-              onChange={(e) => setNit(e.target.value)}
+              onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
               maxLength={20}
               placeholder="900123456-1"
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"

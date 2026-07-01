@@ -195,7 +195,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   );
   // Identidad aprobada si CUALQUIER validación está en estado 'aprobado'.
   const identidadAprobada = useMemo(
-    () => biometric.some((b) => b.estado === 'aprobado'),
+    () => biometric.some((b) => b.status === 'aprobado'),
     [biometric],
   );
 

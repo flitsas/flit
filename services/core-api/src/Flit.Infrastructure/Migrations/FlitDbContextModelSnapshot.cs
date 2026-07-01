@@ -377,7 +377,7 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<bool>("AllowInitialRegistration")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("allow_initial_registration");
 
                     b.Property<bool>("AllowMiscNewVehicles")
@@ -2535,6 +2535,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
                     b.Property<string>("CaptureUrl")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
@@ -2544,15 +2550,21 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("Detalle")
+                    b.Property<string>("Detail")
                         .HasColumnType("jsonb")
-                        .HasColumnName("detalle");
+                        .HasColumnName("detail");
 
-                    b.Property<string>("Documento")
+                    b.Property<string>("DocumentNumber")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("documento");
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("document_type");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -2560,60 +2572,46 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
 
-                    b.Property<string>("Estado")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("enviado")
-                        .HasColumnName("estado");
-
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
-                    b.Property<string>("FotoCedulaFrontalPath")
+                    b.Property<string>("FacePhotoPath")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
-                        .HasColumnName("foto_cedula_frontal_path");
+                        .HasColumnName("face_photo_path");
 
-                    b.Property<string>("FotoCedulaReversoPath")
+                    b.Property<string>("IdBackPhotoPath")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
-                        .HasColumnName("foto_cedula_reverso_path");
+                        .HasColumnName("id_back_photo_path");
 
-                    b.Property<string>("FotoRostroPath")
+                    b.Property<string>("IdFrontPhotoPath")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
-                        .HasColumnName("foto_rostro_path");
-
-                    b.Property<int>("Intentos")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("intentos");
+                        .HasColumnName("id_front_photo_path");
 
                     b.Property<string>("KyverumVerificationId")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("kyverum_verification_id");
 
-                    b.Property<int>("MaxIntentos")
+                    b.Property<int>("MaxAttempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(5)
-                        .HasColumnName("max_intentos");
+                        .HasColumnName("max_attempts");
 
-                    b.Property<string>("Nombre")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("nombre");
+                        .HasColumnName("name");
 
-                    b.Property<string>("Parte")
+                    b.Property<string>("PartyRole")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("parte");
+                        .HasColumnName("party_role");
 
                     b.Property<Guid>("ProcedureInstanceId")
                         .HasColumnType("uuid")
@@ -2640,15 +2638,17 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("score");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("enviado")
+                        .HasColumnName("status");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
-
-                    b.Property<string>("TipoDoc")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("tipo_doc");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -2660,9 +2660,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<DateTimeOffset?>("ValidadoAt")
+                    b.Property<DateTimeOffset?>("ValidUntil")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("validado_at");
+                        .HasColumnName("valid_until");
+
+                    b.Property<DateTimeOffset?>("ValidatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("validated_at");
 
                     b.Property<string>("WebhookSecretEncrypted")
                         .HasMaxLength(2000)

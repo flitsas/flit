@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Flit.Admin.Application.Common;
 
 namespace Flit.Admin.Application.DocumentTypes;
 
@@ -38,6 +39,11 @@ public static partial class DocumentTypeValidator
             return "El código solo permite letras, números y guiones.";
         }
 
+        if (!TextFieldPatterns.HasLetterOrDigit().IsMatch(code))
+        {
+            return "El código debe contener al menos una letra o número.";
+        }
+
         if (string.IsNullOrWhiteSpace(name))
         {
             return "El nombre es obligatorio.";
@@ -48,9 +54,19 @@ public static partial class DocumentTypeValidator
             return $"El nombre no puede superar {NameMaxLength} caracteres.";
         }
 
+        if (TextFieldPatterns.ValidateReadableName(name, "El nombre") is { } nameError)
+        {
+            return nameError;
+        }
+
         if (description is { Length: > DescriptionMaxLength })
         {
             return $"La descripción no puede superar {DescriptionMaxLength} caracteres.";
+        }
+
+        if (description is { Length: > 0 } && !TextFieldPatterns.FreeTextNoAngleBrackets().IsMatch(description))
+        {
+            return "La descripción no permite los caracteres < ni >.";
         }
 
         return null;

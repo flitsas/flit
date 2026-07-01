@@ -40,6 +40,12 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
         if (tenantId is null)
             return null;
 
+        var tenantName = await db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId.Value)
+            .Select(t => t.LegalName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         var now = DateTimeOffset.UtcNow;
         var isSuspended = await db.UserTempSuspensions
             .AsNoTracking()
@@ -70,6 +76,7 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             PasswordHash = credential.PasswordHash,
             MustChangePassword = credential.MustChangePassword,
             TenantId = tenantId.Value,
+            TenantName = tenantName,
             RoleId = assignment?.RoleId ?? Guid.Empty,
             RoleCode = assignment?.RoleCode ?? string.Empty,
             PermissionSlugs = permissionSlugs,

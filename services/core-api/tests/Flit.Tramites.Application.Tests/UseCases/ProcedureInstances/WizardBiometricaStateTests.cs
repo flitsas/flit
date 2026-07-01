@@ -44,11 +44,11 @@ public sealed class WizardBiometricaStateTests
         new()
         {
             Id = Guid.NewGuid(),
-            Parte = parte,
-            Estado = estado,
-            Nombre = "X",
-            TipoDoc = "CC",
-            Documento = documento,
+            PartyRole = parte,
+            Status = estado,
+            Name = "X",
+            DocumentType = "CC",
+            DocumentNumber = documento,
             Email = "x@y.com",
             TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -216,7 +216,7 @@ public sealed class WizardBiometricaStateTests
         // Simular validación de identidad (mock, sin fotos).
         var (sim, simError) = await _simular.HandleAsync(instance.Id, instance.TenantId, parte: null, ct);
         simError.Should().BeNull();
-        sim!.Estado.Should().Be(BiometricEstados.Aprobado);
+        sim!.Status.Should().Be(BiometricEstados.Aprobado);
 
         // Después: paso 4 (identidad) completo.
         var (after, _) = await _handler.HandleAsync(instance.Id, instance.TenantId, ct);

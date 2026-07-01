@@ -71,18 +71,18 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
         // identidad anterior). El gate ya excluye los estados no-aprobados, así no toca la lógica de gating.
         var changed = false;
         foreach (var v in instance.BiometricValidations.Where(v =>
-                     string.Equals(v.Parte, normalized, StringComparison.OrdinalIgnoreCase)
-                     && v.Estado != BiometricEstados.Expirado
+                     string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase)
+                     && v.Status != BiometricEstados.Expirado
                      && !DocCoincide(v, tipoActual, docActual)))
         {
-            v.Estado = BiometricEstados.Expirado;
+            v.Status = BiometricEstados.Expirado;
             v.UpdatedAt = now;
             changed = true;
         }
 
         // 1) ¿El trámite ya tiene una validación utilizable para ESTA persona (documento actual)?
         var locales = instance.BiometricValidations
-            .Where(v => string.Equals(v.Parte, normalized, StringComparison.OrdinalIgnoreCase)
+            .Where(v => string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase)
                 && DocCoincide(v, tipoActual, docActual))
             .ToList();
         if (locales.Any(v => BiometricRules.EsAprobadaVigente(v, now)))
@@ -90,7 +90,7 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
             if (changed) await repo.SaveChangesAsync(ct);
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.YaVigente), null);
         }
-        if (locales.Any(v => v.Estado is BiometricEstados.Enviado or BiometricEstados.EnProceso))
+        if (locales.Any(v => v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso))
         {
             if (changed) await repo.SaveChangesAsync(ct);
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.EnProceso), null);
@@ -105,22 +105,24 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 ProcedureInstanceId = id,
-                Parte = normalized,
-                Nombre = string.IsNullOrWhiteSpace(actor.FullName) ? source.Nombre : actor.FullName,
-                TipoDoc = actor.DocumentType,
-                Documento = actor.DocumentNumber,
+                PartyRole = normalized,
+                Name = string.IsNullOrWhiteSpace(actor.FullName) ? source.Name : actor.FullName,
+                DocumentType = actor.DocumentType,
+                DocumentNumber = actor.DocumentNumber,
                 Email = string.IsNullOrWhiteSpace(actor.Email) ? source.Email : actor.Email,
-                Estado = BiometricEstados.Aprobado,
+                Status = BiometricEstados.Aprobado,
                 Score = source.Score,
-                // Hereda la fecha de aprobación original → conserva el MISMO vencimiento (no reinicia el reloj).
-                ValidadoAt = source.ValidadoAt,
+                // Hereda la fecha de aprobación original Y su fin de vigencia → conserva el MISMO vencimiento
+                // (no reinicia el reloj; por eso copia valid_until en vez de llamar a Approve(now)).
+                ValidatedAt = source.ValidatedAt,
+                ValidUntil = source.ValidUntil,
                 Provider = source.Provider,
                 ProviderStatus = source.ProviderStatus,
                 TokenHash = Guid.NewGuid().ToString("N"),
                 ExpiresAt = source.ExpiresAt,
-                MaxIntentos = BiometricRules.MaxIntentos,
+                MaxAttempts = BiometricRules.MaxIntentos,
                 CreatedAt = now,
-                Detalle = $"{{\"reuso\":true,\"origen\":\"{source.Id}\"}}",
+                Detail = $"{{\"reuso\":true,\"origen\":\"{source.Id}\"}}",
             };
             repo.Add(clone);
             await repo.SaveChangesAsync(ct);
@@ -135,8 +137,8 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
 
     /// <summary>¿La validación corresponde al documento (tipo + número) del actor actual de la parte?</summary>
     private static bool DocCoincide(ProcedureInstanceBiometricValidation v, string tipoDoc, string documento) =>
-        string.Equals(v.Documento?.Trim(), documento, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(v.TipoDoc?.Trim(), tipoDoc, StringComparison.OrdinalIgnoreCase);
+        string.Equals(v.DocumentNumber?.Trim(), documento, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(v.DocumentType?.Trim(), tipoDoc, StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeParte(string? parte)
     {

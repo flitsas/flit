@@ -31,6 +31,34 @@ public sealed class TenantBiometricValidationListQueryTests
     }
 
     [Fact]
+    public void ToFilter_RecortaTextoLibreDeBusquedaAlTope()
+    {
+        var largo = new string('a', TenantBiometricValidationListQuery.TextFilterMaxLength + 50);
+        var query = new TenantBiometricValidationListQuery(
+            ReferenceNumber: largo,
+            Name: largo,
+            DocumentNumber: largo,
+            DocumentType: largo,
+            MotivoRechazo: largo);
+
+        var filter = query.ToFilter();
+
+        filter.ReferenceNumber!.Length.Should().Be(TenantBiometricValidationListQuery.TextFilterMaxLength);
+        filter.Name!.Length.Should().Be(TenantBiometricValidationListQuery.TextFilterMaxLength);
+        filter.DocumentNumber!.Length.Should().Be(TenantBiometricValidationListQuery.TextFilterMaxLength);
+        filter.DocumentType!.Length.Should().Be(TenantBiometricValidationListQuery.TextFilterMaxLength);
+        filter.MotivoRechazo!.Length.Should().Be(TenantBiometricValidationListQuery.TextFilterMaxLength);
+    }
+
+    [Fact]
+    public void ToFilter_RecortaConTrimYTope_PreservaTextoCorto()
+    {
+        var query = new TenantBiometricValidationListQuery(Name: "  Juan Pérez  ");
+
+        query.ToFilter().Name.Should().Be("Juan Pérez");
+    }
+
+    [Fact]
     public void Validate_ExpiraDesdeMayorQueHasta_DevuelveError()
     {
         var query = new TenantBiometricValidationListQuery(

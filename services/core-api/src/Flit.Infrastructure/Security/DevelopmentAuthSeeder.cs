@@ -27,6 +27,11 @@ public static class DevelopmentAuthSeeder
     public const string DemoAdminCompanyPassword = "AdminPass1!";
     public const string DemoEmpresaTenantCode = "EMPRESA_DEMO";
 
+    /// <summary>Radicador de pruebas en EMPRESA_DEMO (compañía sin configurar): rol propio con acceso
+    /// al módulo Trámites (leer + crear). Sirve para probar el flujo de radicación / matrícula inicial.</summary>
+    public const string DemoRadicadorEmail = "radicador@empresa.local";
+    public const string DemoRadicadorPassword = "RadicadorPass1!";
+
     /// <summary>Tenant OT fijo para validación E2E del módulo /admin/transit-offices (HU #10133).</summary>
     public static readonly Guid OtDevTenantId =
         Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
@@ -53,6 +58,118 @@ public static class DevelopmentAuthSeeder
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedTenantModuleGrantsAsync(db, cancellationToken);
+        await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
+    }
+
+    /// <summary>
+    /// Crea un usuario RADICADOR de pruebas (<see cref="DemoRadicadorEmail"/>) en el tenant
+    /// EMPRESA_DEMO con un rol propio "Radicador" que solo tiene acceso al módulo Trámites
+    /// (leer + crear) y al Dashboard. EMPRESA_DEMO no tiene configuración operativa, por lo que
+    /// sirve para verificar que la matrícula inicial nace apagada (sin config → no permitida).
+    /// Idempotente: reusa rol/usuario/credencial/asignación si ya existen.
+    /// </summary>
+    private static async Task SeedRadicadorUserAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var empresaTenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, cancellationToken);
+        if (empresaTenant is null)
+            return;
+
+        // 1. Rol "Radicador" del tenant (idempotente).
+        var role = await db.Roles.FirstOrDefaultAsync(
+            r => r.TenantId == empresaTenant.Id && r.Code == "Radicador" && r.DeletedAt == null,
+            cancellationToken);
+        if (role is null)
+        {
+            role = new Role
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = empresaTenant.Id,
+                Code = "Radicador",
+                Name = "Radicador",
+                IsSystem = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+                RowVersion = 0,
+            };
+            db.Roles.Add(role);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        // 2. Grants: acceso a Operación (trámites: leer + crear) y al dashboard. Solo se agregan
+        //    los permisos que aún no tenga el rol (idempotente).
+        var slugs = new[] { "dashboard.read", "tramites.read", "tramites.create" };
+        var actions = await db.RbacActions
+            .Where(a => slugs.Contains(a.Slug))
+            .ToListAsync(cancellationToken);
+        var existingGrants = await db.RoleGrants
+            .Where(g => g.RoleId == role.Id)
+            .Select(g => g.PermissionId)
+            .ToListAsync(cancellationToken);
+        var toGrant = actions.Where(a => !existingGrants.Contains(a.Id)).ToList();
+        if (toGrant.Count > 0)
+        {
+            var grantedAt = DateTimeOffset.UtcNow;
+            db.RoleGrants.AddRange(toGrant.Select(a => new RoleGrant
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = empresaTenant.Id,
+                RoleId = role.Id,
+                PermissionId = a.Id,
+                CreatedAt = grantedAt,
+            }));
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        // 3. Usuario + credencial (idempotente).
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == DemoRadicadorEmail, cancellationToken);
+        if (user is null)
+        {
+            user = new User
+            {
+                Id = Guid.CreateVersion7(),
+                Email = DemoRadicadorEmail,
+                DisplayName = "Radicador Empresa Demo",
+                Status = "active",
+                HomeTenantId = empresaTenant.Id,
+                CreatedAt = DateTimeOffset.UtcNow,
+                RowVersion = 0,
+            };
+            db.Users.Add(user);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await EnsureUserCredentialsAsync(db, user.Id, DemoRadicadorPassword, passwordHasher, cancellationToken);
+
+        // 4. Asignación de rol (respeta la constraint UNIQUE(user_id, tenant_id): reusa/realinea).
+        var existing = await db.UserRoleAssignments
+            .FirstOrDefaultAsync(a => a.UserId == user.Id && a.TenantId == empresaTenant.Id, cancellationToken);
+        if (existing is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = empresaTenant.Id,
+                UserId = user.Id,
+                RoleId = role.Id,
+                AssignedAt = now,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else if (existing.DeletedAt is not null || existing.RoleId != role.Id)
+        {
+            existing.DeletedAt = null;
+            existing.DeletedBy = null;
+            existing.RoleId = role.Id;
+            existing.AssignedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task SeedSuperAdminAsync(
@@ -79,7 +196,7 @@ public static class DevelopmentAuthSeeder
             Code = DemoTenantCode,
             LegalName = "Empresa Demo FLIT",
             TaxId = "9000000001",
-            TenantType = "standard",
+            TenantType = "FLIT",
             IsActive = true,
             CreatedAt = now,
             RowVersion = 0,
@@ -376,7 +493,7 @@ public static class DevelopmentAuthSeeder
                 Code = DemoEmpresaTenantCode,
                 LegalName = "Empresa Demo S.A.S",
                 TaxId = "9000000002",
-                TenantType = "standard",
+                TenantType = "RENTING",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
                 RowVersion = 0,
@@ -512,7 +629,7 @@ public static class DevelopmentAuthSeeder
 
         var actions = new RbacAction[]
         {
-            new() { Id = Guid.CreateVersion7(), ModuleId = mid["dashboard"],    Slug = "dashboard.read",        Name = "Ver dashboard",                 HttpMethod = "GET",  RoutePattern = "/api/v1/dashboard",                  IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["dashboard"],    Slug = "dashboard.read",        Name = "Ver dashboard",                 HttpMethod = "GET",  RoutePattern = "/api/v1/analytics/overview",         IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.read",         Name = "Ver trámites",                  HttpMethod = "GET",  RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.create",       Name = "Crear trámite",                 HttpMethod = "POST", RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["reportes"],     Slug = "reportes.read",         Name = "Ver reportes",                  HttpMethod = "GET",  RoutePattern = "/api/v1/reportes",                   IsActive = true, CreatedAt = now },

@@ -20,5 +20,7 @@ public sealed class UserAuthSnapshot
 
     public IReadOnlyList<string> PermissionSlugs { get; init; } = [];
 
+    public string TenantName { get; init; } = string.Empty;
+
     public bool IsTemporarilySuspended { get; init; }
 }

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { ToastProvider, useToast } from "@/components/admin/Toast";
+import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
@@ -28,7 +28,6 @@ function CompanyDetail() {
   const router = useRouter();
   const params = useParams<{ tenantId: string }>();
   const tenantId = params.tenantId;
-  const { show } = useToast();
 
   const [status, setStatus] = useState<UiStatus>("loading");
   const [settings, setSettings] = useState<TenantSettings | null>(null);
@@ -108,7 +107,6 @@ function CompanyDetail() {
               <CompanyConfigTabs
                 settings={settings}
                 onSaveSettings={handleSaveSettings}
-                onNotify={show}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
                 otSlot={<OTMatrixPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}

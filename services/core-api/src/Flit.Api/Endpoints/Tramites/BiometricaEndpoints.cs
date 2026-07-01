@@ -59,7 +59,9 @@ internal static class BiometricaEndpoints
                 "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{result!.Validation.Id}", result),
             };
-        }).WithName("IniciarProcedureInstanceBiometric");
+        })
+        .WithName("IniciarProcedureInstanceBiometric")
+        .Produces<IniciarBiometriaResult>(StatusCodes.Status201Created);
 
         // GET lista/estado de biométricas -> { validations: [...] }
         group.MapGet("/instances/{id:guid}/biometric", async (
@@ -75,7 +77,9 @@ internal static class BiometricaEndpoints
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
-        }).WithName("ListProcedureInstanceBiometric");
+        })
+        .WithName("ListProcedureInstanceBiometric")
+        .Produces<BiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET vista transversal del tenant: TODAS las validaciones de identidad + KPIs (HU #10234,
         // submódulo "Validaciones de Identidad"). Filtros opcionales por columna (HU #10347).
@@ -83,11 +87,11 @@ internal static class BiometricaEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             [FromQuery] string? referenceNumber,
             [FromQuery] string? modalidad,
-            [FromQuery] string? nombre,
-            [FromQuery] string? parte,
-            [FromQuery] string? tipoDoc,
-            [FromQuery] string? documento,
-            [FromQuery] string? estado,
+            [FromQuery] string? name,
+            [FromQuery] string? partyRole,
+            [FromQuery] string? documentType,
+            [FromQuery] string? documentNumber,
+            [FromQuery] string? status,
             [FromQuery] string? provider,
             [FromQuery] int? scoreMin,
             [FromQuery] int? scoreMax,
@@ -109,11 +113,11 @@ internal static class BiometricaEndpoints
             var query = new TenantBiometricValidationListQuery(
                 referenceNumber,
                 modalidad,
-                nombre,
-                parte,
-                tipoDoc,
-                documento,
-                estado,
+                name,
+                partyRole,
+                documentType,
+                documentNumber,
+                status,
                 provider,
                 scoreMin,
                 scoreMax,
@@ -131,7 +135,9 @@ internal static class BiometricaEndpoints
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
-        }).WithName("ListTenantBiometricValidations");
+        })
+        .WithName("ListTenantBiometricValidations")
+        .Produces<TenantBiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET eventos de validación de identidad ATASCADOS (dead-letter): pendientes que agotaron los
         // reintentos del worker de outbox (fase 2). Observabilidad para reencolar manualmente.
@@ -145,7 +151,9 @@ internal static class BiometricaEndpoints
 
             var result = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(result);
-        }).WithName("ListStuckIdentityValidations");
+        })
+        .WithName("ListStuckIdentityValidations")
+        .Produces<StuckIdentityValidationsResponse>(StatusCodes.Status200OK);
 
         // POST reencolar ("desatascar") un evento de identidad atascado: reinicia sus intentos para que el
         // worker lo vuelva a procesar. 404 si no hay un evento atascado con ese id para el tenant.
@@ -196,7 +204,9 @@ internal static class BiometricaEndpoints
                 "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de simular la biométrica."),
                 _ => Results.Ok(result),
             };
-        }).WithName("SimularProcedureInstanceBiometric");
+        })
+        .WithName("SimularProcedureInstanceBiometric")
+        .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.
@@ -217,7 +227,9 @@ internal static class BiometricaEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 _ => Results.Ok(result),
             };
-        }).WithName("EnsureProcedureInstanceIdentity");
+        })
+        .WithName("EnsureProcedureInstanceIdentity")
+        .Produces<EnsureIdentityResult>(StatusCodes.Status200OK);
 
         return app;
     }

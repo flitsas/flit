@@ -67,7 +67,7 @@ describe("DocumentTypeListTable (AC1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /editar cédula/i }));
     expect(onEdit).toHaveBeenCalledWith(items[0]);
 
-    fireEvent.click(screen.getByRole("button", { name: /desactivar cédula/i }));
+    fireEvent.click(screen.getByRole("switch", { name: /desactivar cédula/i }));
     expect(onDeactivate).toHaveBeenCalledWith(items[0]);
   });
 
@@ -87,8 +87,8 @@ describe("DocumentTypeListTable (AC1)", () => {
     );
 
     // El inactivo (SOAT) no muestra 'Desactivar' sino 'Activar'.
-    expect(screen.queryByRole("button", { name: /desactivar soat/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /activar soat/i }));
+    expect(screen.queryByRole("switch", { name: /desactivar soat/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: /activar soat/i }));
     expect(onReactivate).toHaveBeenCalledWith(items[1]);
   });
 
