@@ -41,6 +41,7 @@ public sealed class LoginHandlerTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<string>>())

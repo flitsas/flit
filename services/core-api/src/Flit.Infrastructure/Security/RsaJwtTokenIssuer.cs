@@ -29,6 +29,7 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
         Guid userId,
         string email,
         Guid tenantId,
+        string tenantName,
         Guid roleId,
         string roleCode,
         IReadOnlyList<string> permissionSlugs)
@@ -42,6 +43,7 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Email, email),
             new("tenant_id", tenantId.ToString()),
+            new("tenant_name", tenantName),
             new("role_id", roleId.ToString()),
             new("role_code", roleCode),
             // "role" es el RoleClaimType que exige la policy SuperAdmin del módulo Admin

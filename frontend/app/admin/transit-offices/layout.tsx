@@ -26,7 +26,7 @@ export default function AdminTransitOfficesLayout({ children }: { children: Reac
     setHydrated(true);
   }, []);
 
-  const { modules: accessibleModules } = useAccessibleModules(authed);
+  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
   const accessibleCodes = accessibleModules.map((m) => m.code);
 
   const handleNav = (m: ModuleId) => {
@@ -46,7 +46,7 @@ export default function AdminTransitOfficesLayout({ children }: { children: Reac
   }
 
   return (
-    <Shell active="dashboard" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={accessibleCodes.length > 0 ? accessibleCodes : undefined}>
+    <Shell active="dashboard" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
       <div className="h-full w-full overflow-y-auto pb-24">{children}</div>
     </Shell>
   );
