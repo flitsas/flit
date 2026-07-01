@@ -629,7 +629,7 @@ public static class DevelopmentAuthSeeder
 
         var actions = new RbacAction[]
         {
-            new() { Id = Guid.CreateVersion7(), ModuleId = mid["dashboard"],    Slug = "dashboard.read",        Name = "Ver dashboard",                 HttpMethod = "GET",  RoutePattern = "/api/v1/dashboard",                  IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["dashboard"],    Slug = "dashboard.read",        Name = "Ver dashboard",                 HttpMethod = "GET",  RoutePattern = "/api/v1/analytics/overview",         IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.read",         Name = "Ver trámites",                  HttpMethod = "GET",  RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["tramites"],     Slug = "tramites.create",       Name = "Crear trámite",                 HttpMethod = "POST", RoutePattern = "/api/v1/tramites",                   IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["reportes"],     Slug = "reportes.read",         Name = "Ver reportes",                  HttpMethod = "GET",  RoutePattern = "/api/v1/reportes",                   IsActive = true, CreatedAt = now },
