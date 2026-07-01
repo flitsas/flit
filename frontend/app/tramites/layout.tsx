@@ -1,21 +1,19 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { List } from 'lucide-react';
-import { Login } from '@/components/atom/Login';
 import { Shell, type ModuleId } from '@/components/atom/Shell';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { ToastProvider } from '@/components/admin/Toast';
-import { getToken } from '@/lib/api/client';
-import { clearToken, getRememberedEmail } from '@/lib/auth/session';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
+import { useAuthGate } from '@/hooks/useAuthGate';
 
 /**
  * Track B — layout de las rutas /tramites/*. Replica el chrome de la SPA atom
  * (auth real por JWT + Shell con dock) pero como segmento de ruta propio:
  *
- * - Auth: si no hay token, renderiza <Login> en lugar del Shell (igual que /).
+ * - Auth: sin sesión activa (useAuthGate), navega a /login en vez de renderizar.
  * - Dock: "Trámites" navega a /tramites; el resto vuelve a / (allí viven por
  *   setState; deep-link por módulo queda para después — fuera de alcance).
  * - Chrome compartido (ModuleTitle + tab Operación) se pinta aquí salvo en modo
@@ -25,15 +23,7 @@ import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 export default function TramitesLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [authed, setAuthed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    // El token solo está disponible en cliente; se lee tras el montaje.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAuthed(Boolean(getToken()));
-    setHydrated(true);
-  }, []);
+  const { authed, hydrated, logout } = useAuthGate();
 
   // Modo inmersivo: ruta /tramites/[instanceId] (2 segmentos, el 2º no es
   // "nuevo"). /tramites → 1 segmento; /tramites/nuevo/x → 3 segmentos.
@@ -49,25 +39,14 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     else router.push(`/?m=${m}`);
   };
 
-  const handleLogout = () => {
-    clearToken();
-    setAuthed(false);
-  };
-
-  if (!hydrated) return null;
-
-  if (!authed) {
-    return (
-      <Login onAuthenticated={() => setAuthed(true)} defaultEmail={getRememberedEmail()} />
-    );
-  }
+  if (!hydrated || !authed) return null;
 
   return (
     // ToastProvider envuelve todas las rutas /tramites/*: el layout no se
     // desmonta al ir de /tramites/[id] → /tramites, así el toast de "enviado a
     // tránsito" sigue visible tras la redirección que dispara Finalizar.
     <ToastProvider>
-    <Shell active="tramites" onNav={handleNav} onLogout={handleLogout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
+    <Shell active="tramites" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
       <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
         {!immersive && (
           <>

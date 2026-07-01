@@ -17,7 +17,7 @@ export interface AdminAccessDecision {
  * Evalúa si un token habilita el acceso a la consola admin.
  *
  * Reglas:
- * - Sin token o token malformado → no renderizar, redirigir a /403.
+ * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
  * - Otros roles → redirigir a /403.
@@ -26,6 +26,10 @@ export function evaluateAdminAccess(
   token: string | null | undefined,
   pathname?: string,
 ): AdminAccessDecision {
+  if (!hasActiveSession(token)) {
+    return { allowed: false, redirectTo: FORBIDDEN_PATH };
+  }
+
   const payload = decodeJwtPayload(token);
 
   if (payload && isSuperAdmin(payload)) {
@@ -45,9 +49,14 @@ export function evaluateAdminAccess(
 
 /**
  * Evalúa si un token habilita el acceso a la sección de empresa (/empresa/*).
- * Permitido para AdminCompany y SuperAdmin.
+ * Permitido para AdminCompany y SuperAdmin. Sin sesión activa (sin token,
+ * malformado o expirado) → /403.
  */
 export function evaluateEmpresaAccess(token: string | null | undefined): AdminAccessDecision {
+  if (!hasActiveSession(token)) {
+    return { allowed: false, redirectTo: FORBIDDEN_PATH };
+  }
+
   const payload = decodeJwtPayload(token);
 
   if (payload && (isSuperAdmin(payload) || isAdminCompany(payload))) {
