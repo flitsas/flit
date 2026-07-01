@@ -142,9 +142,10 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 
 /**
  * Mensaje de error legible a partir de una respuesta fallida. Si el cuerpo es un
- * ProblemDetails (RFC 7807) con `detail`/`title`, usa ese texto para mostrarlo tal
- * cual al usuario (p. ej. "La compañía no tiene habilitada la matrícula inicial.").
- * Si no es JSON, cae al formato genérico `status statusText: body`.
+ * ProblemDetails (RFC 7807) con `detail`/`title` (lo que responde nuestra API), usa ese texto
+ * tal cual (p. ej. "La compañía no tiene habilitada la matrícula inicial."). Si NO es JSON
+ * (p. ej. el HTML crudo de un gateway/ingress ante un 502/503/504) NUNCA se vuelca al usuario:
+ * se traduce a un mensaje amigable según el tipo de fallo.
  */
 function problemMessage(res: Response, body: string): string {
   if (body) {
@@ -153,10 +154,15 @@ function problemMessage(res: Response, body: string): string {
       const msg = problem.detail || problem.title;
       if (msg) return msg;
     } catch {
-      // body no es JSON → formato genérico abajo.
+      // body no es JSON (HTML de gateway, texto plano) → mensaje amigable abajo.
     }
   }
-  return `${res.status} ${res.statusText}${body ? ': ' + body : ''}`;
+  // Servicio no disponible / timeout de gateway: sin conexión (status 0) o 502/503/504.
+  if (res.status === 0 || res.status === 502 || res.status === 503 || res.status === 504)
+    return 'El servicio no está disponible en este momento. Vuelve a intentarlo en unos minutos.';
+  if (res.status >= 500)
+    return 'Ocurrió un error en el servidor. Vuelve a intentarlo en unos minutos.';
+  return 'No se pudo completar la solicitud. Revisa los datos e inténtalo de nuevo.';
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

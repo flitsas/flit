@@ -28,6 +28,7 @@ const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> 
   warn: { dot: '#F9AC00', text: '#F9AC00' },
   fail: { dot: '#FF4E00', text: '#FF4E00' },
   unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  error: { dot: '#FF4E00', text: '#FF4E00' },
 };
 
 const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
@@ -70,6 +71,9 @@ export function PreflightPanel({
   const overall = snapshot?.overall;
   const checks = snapshot?.checks ?? [];
   const ov = overall ? OVERALL[overall] : null;
+  // Un check "error" = consulta no verificable (proveedor caído/timeout): bloqueo DURO. NO se
+  // ofrece "aceptar riesgo" (no es subsanable); el gestor debe reintentar la consulta.
+  const hasProviderError = checks.some((c) => c.status === 'error');
 
   return (
     <div
@@ -162,7 +166,21 @@ export function PreflightPanel({
         </ul>
       )}
 
-      {overall === 'red' && (
+      {hasProviderError && (
+        <div
+          className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            No fue posible verificar la información en este momento. Vuelve a
+            ejecutar la consulta antes de continuar; no es posible avanzar sin
+            estos datos.
+          </span>
+        </div>
+      )}
+
+      {overall === 'red' && !hasProviderError && (
         <label
           className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
           style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}

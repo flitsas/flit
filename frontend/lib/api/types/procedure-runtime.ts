@@ -210,7 +210,9 @@ export interface RuntPersonLookupResult {
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
 
-export type PreflightCheckStatus = 'ok' | 'warn' | 'fail' | 'unknown';
+// 'error' = un proveedor no se pudo verificar (no-200/timeout): bloqueo DURO, no subsanable con
+// "aceptar riesgo" (a diferencia de 'fail', que sí es subsanable). Se pinta rojo como 'fail'.
+export type PreflightCheckStatus = 'ok' | 'warn' | 'fail' | 'unknown' | 'error';
 export type PreflightOverall = 'green' | 'yellow' | 'red';
 
 export interface PreflightAction {
