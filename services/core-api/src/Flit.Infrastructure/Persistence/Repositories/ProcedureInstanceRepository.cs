@@ -197,6 +197,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null);
 
+    /// <summary>Carácter de escape para los patrones LIKE/ILIKE (saneo de búsqueda).</summary>
+    private const string LikeEscapeChar = "\\";
+
+    /// <summary>
+    /// Escapa los comodines LIKE (<c>\</c>, <c>%</c>, <c>_</c>) de un término de búsqueda para
+    /// que se traten como literales y no como patrón. El backslash se escapa primero.
+    /// </summary>
+    private static string EscapeLike(string term) =>
+        term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
     private static IQueryable<ProcedureInstanceBiometricValidation> ApplyBiometricValidationFilters(
         IQueryable<ProcedureInstanceBiometricValidation> query,
         BiometricValidationListFilter? filter,
@@ -207,22 +217,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         if (!string.IsNullOrWhiteSpace(filter.ReferenceNumber))
         {
-            var term = filter.ReferenceNumber.Trim();
+            var term = EscapeLike(filter.ReferenceNumber.Trim());
             query = query.Where(v => v.ProcedureInstance != null
-                && EF.Functions.ILike(v.ProcedureInstance.ReferenceNumber, $"%{term}%"));
+                && EF.Functions.ILike(v.ProcedureInstance.ReferenceNumber, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))
         {
-            var term = filter.Modalidad.Trim();
+            var term = EscapeLike(filter.Modalidad.Trim());
             query = query.Where(v => v.ProcedureInstance != null
-                && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%"));
+                && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Name))
         {
-            var term = filter.Name.Trim().ToLower();
-            query = query.Where(v => EF.Functions.ILike(v.Name.ToLower(), $"%{term}%"));
+            var term = EscapeLike(filter.Name.Trim().ToLower());
+            query = query.Where(v => EF.Functions.ILike(v.Name.ToLower(), $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.PartyRole))
@@ -239,8 +249,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         if (!string.IsNullOrWhiteSpace(filter.DocumentNumber))
         {
-            var term = filter.DocumentNumber.Trim();
-            query = query.Where(v => EF.Functions.ILike(v.DocumentNumber, $"%{term}%"));
+            var term = EscapeLike(filter.DocumentNumber.Trim());
+            query = query.Where(v => EF.Functions.ILike(v.DocumentNumber, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Status))

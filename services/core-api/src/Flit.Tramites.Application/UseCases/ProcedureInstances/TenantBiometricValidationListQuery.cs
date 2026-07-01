@@ -101,22 +101,30 @@ public sealed record TenantBiometricValidationListQuery(
         return null;
     }
 
+    /// <summary>Tope de longitud de los términos de búsqueda de texto libre (saneo anti-abuso).</summary>
+    public const int TextFilterMaxLength = 100;
+
     /// <summary>Mapea a <see cref="BiometricValidationListFilter"/> para el repositorio.</summary>
+    /// <remarks>
+    /// Los campos de texto libre (búsqueda) solo se SANEAN: trim + tope de longitud. No se valida
+    /// el conjunto de caracteres (no se bloquea al usuario por buscar parcial); los comodines LIKE
+    /// (<c>%</c>, <c>_</c>) se escapan en el repositorio para que se traten como literales.
+    /// </remarks>
     public BiometricValidationListFilter ToFilter() => new()
     {
-        ReferenceNumber = Trim(ReferenceNumber),
-        Modalidad = Trim(Modalidad),
-        Name = Trim(Name),
+        ReferenceNumber = TrimCap(ReferenceNumber),
+        Modalidad = TrimCap(Modalidad),
+        Name = TrimCap(Name),
         PartyRole = Trim(PartyRole),
-        DocumentType = Trim(DocumentType),
-        DocumentNumber = Trim(DocumentNumber),
+        DocumentType = TrimCap(DocumentType),
+        DocumentNumber = TrimCap(DocumentNumber),
         Status = Trim(Status),
         Provider = Trim(Provider),
         ScoreMin = ScoreMin,
         ScoreMax = ScoreMax,
         CreatedFrom = CreatedFrom,
         CreatedTo = CreatedTo,
-        MotivoRechazo = Trim(MotivoRechazo),
+        MotivoRechazo = TrimCap(MotivoRechazo),
         VigenciaEstado = Trim(VigenciaEstado)?.ToLowerInvariant(),
         ExpiraDesde = ExpiraDesde,
         ExpiraHasta = ExpiraHasta,
@@ -125,4 +133,13 @@ public sealed record TenantBiometricValidationListQuery(
 
     private static string? Trim(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Trim + tope de longitud para términos de búsqueda de texto libre.</summary>
+    private static string? TrimCap(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        return trimmed.Length > TextFilterMaxLength ? trimmed[..TextFilterMaxLength] : trimmed;
+    }
 }

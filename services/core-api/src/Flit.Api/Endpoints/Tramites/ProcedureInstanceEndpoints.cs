@@ -53,16 +53,16 @@ internal static class ProcedureInstanceEndpoints
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
             };
 
-            // #5 — La compañía puede deshabilitar la matrícula inicial vía el toggle
-            // "Permitir matrícula inicial" (admin/companies). Si está en off para el
-            // tenant, no se permite crear ese trámite. Sin fila de settings → permisivo
-            // (default de la columna allow_initial_registration = true), para no romper
-            // tenants aún no configurados.
+            // #5 — La compañía debe habilitar explícitamente la matrícula inicial vía el
+            // toggle "Permitir matrícula inicial" (admin/companies). Por defecto está en OFF:
+            // solo se permite crear ese trámite si existe configuración del tenant Y el flag
+            // está en true. Sin fila de settings (tenant no configurado) → NO permitido, para
+            // que una compañía sin configuración no radique matrícula inicial por accidente.
             if (EsMatriculaInicial(effectiveRequest.Modalidad))
             {
                 var settings = await settingsHandler.HandleAsync(
                     new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
-                if (settings is { SwitchesMatricula.AllowInitialRegistration: false })
+                if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
                     return Results.Problem(
                         statusCode: 422,
                         title: "Unprocessable Entity",

@@ -2,8 +2,11 @@ namespace Flit.Admin.Domain.Companies.Create;
 
 /// <summary>
 /// Catálogo de tipos de compañía (<c>identity.tenants.tenant_type</c>) admitidos
-/// al dar de alta una compañía B2B. La columna es <c>varchar(20)</c> sin CHECK en
-/// BD, por lo que la validación del valor vive en la capa de aplicación.
+/// al dar de alta una compañía B2B. La validación de negocio vive en la capa de
+/// aplicación (mensajes 422 por campo) y, además, la BD la enforce con el CHECK
+/// <c>ck_tenants_tenant_type</c> (migración <c>RestrictTenantTypeCatalog</c>), que
+/// impide insertar/actualizar tipos fuera de este catálogo incluso por SQL manual.
+/// Mantener ambos lados en sync.
 /// </summary>
 public static class CompanyTenantTypes
 {
