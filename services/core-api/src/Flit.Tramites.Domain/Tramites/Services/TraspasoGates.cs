@@ -48,6 +48,10 @@ public static class TraspasoGates
             case 2:
                 // Paso 2 = Documentos (paridad con MatriculaGates paso 2): preflight crítico + checklist.
                 // El gestor puede asumir el riesgo de un preflight rojo subsanable (sin tocar docs).
+                // Bloqueo DURO: una consulta no verificable (proveedor caído/timeout) NO se subsana con
+                // "aceptar riesgo" ni forzando; hay que reintentar la consulta.
+                if (ctx.Preflight?.ProviderError == true)
+                    return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT/SIMIT/RNMC. Vuelve a ejecutar la consulta antes de continuar");
                 if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)

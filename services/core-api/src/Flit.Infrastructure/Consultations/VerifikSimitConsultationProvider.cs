@@ -73,11 +73,11 @@ internal sealed class VerifikSimitConsultationProvider(
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable($"Verifik SIMIT respondió {(int)response.StatusCode}");
+                return ProviderUnavailable();
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikSimitResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable("Respuesta vacía de Verifik SIMIT");
+                return ProviderUnavailable();
 
             return VerifikSimitResultMapper.Map(payload);
         }
@@ -87,15 +87,15 @@ internal sealed class VerifikSimitConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable("Timeout consultando Verifik SIMIT");
+            return ProviderUnavailable();
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            return ProviderUnavailable($"Error de red consultando Verifik SIMIT: {ex.Message}");
+            return ProviderUnavailable();
         }
         catch (JsonException)
         {
-            return ProviderUnavailable("No se pudo interpretar la respuesta de Verifik SIMIT");
+            return ProviderUnavailable();
         }
     }
 
@@ -129,9 +129,12 @@ internal sealed class VerifikSimitConsultationProvider(
             [new ConsultationCheck("multas", "Multas SIMIT", "ok", Key_, "Sin registros SIMIT")],
             []);
 
-    private static ConsultationResult ProviderUnavailable(string message) =>
-        new(Key_, "yellow",
-            [new ConsultationCheck("provider", "Proveedor Verifik SIMIT", "unknown", Key_, message)],
+    // No se pudo verificar SIMIT (no-200/timeout/red/respuesta ilegible). Dato crítico:
+    // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.
+    private static ConsultationResult ProviderUnavailable() =>
+        new(Key_, "red",
+            [new ConsultationCheck("provider", "Consulta SIMIT", "error", Key_,
+                "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

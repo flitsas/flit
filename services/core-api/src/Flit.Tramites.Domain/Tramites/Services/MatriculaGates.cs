@@ -27,6 +27,10 @@ public static class MatriculaGates
                     : GateResult.Block("vin_pendiente", "Consulta el VIN del vehículo antes de continuar");
 
             case 2:
+                // Bloqueo DURO: si una consulta no se pudo verificar (proveedor caído/timeout), la
+                // información es vital y NO se puede continuar ni "aceptando el riesgo" ni forzando.
+                if (ctx.Preflight?.ProviderError == true)
+                    return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
                 if (!forzar && !ctx.RiesgoPreflightAceptado && ctx.Preflight?.Overall == "red")
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos en los documentos. Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)

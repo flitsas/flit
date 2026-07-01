@@ -56,6 +56,20 @@ public sealed class MatriculaGatesTests
     }
 
     [Fact]
+    public void Paso2_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta no verificable (error de proveedor) = bloqueo DURO: ni "aceptar riesgo" ni
+        // forzar lo levantan. Hay que reejecutar la consulta.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, ProviderError: true),
+            RiesgoPreflightAceptado = true,
+            ForzarContinuar = true,
+        };
+        TraspasoGatesShared(ctx, 2, "preflight_provider_error");
+    }
+
+    [Fact]
     public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
     {
         // El riesgo NO afloja el gating de documentos obligatorios.
