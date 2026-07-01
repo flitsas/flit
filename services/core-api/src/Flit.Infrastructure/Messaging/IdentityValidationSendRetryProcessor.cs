@@ -172,14 +172,14 @@ internal sealed class IdentityValidationSendRetryProcessor(
         cmd.CommandText = """
             SELECT id
             FROM tramites.procedure_instance_biometric_validations
-            WHERE estado = @estado
-              AND intentos < max_intentos
+            WHERE status = @status
+              AND attempts < max_attempts
             ORDER BY created_at
             LIMIT 1
             FOR UPDATE SKIP LOCKED
             """;
         var p = cmd.CreateParameter();
-        p.ParameterName = "estado";
+        p.ParameterName = "status";
         p.Value = BiometricEstados.PendienteEnvio;
         cmd.Parameters.Add(p);
 
