@@ -314,6 +314,30 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
+    public async Task Get_PreflightProviderError_AddsHardBlocker_NotLiftedByRiesgo()
+    {
+        // Una consulta no verificable (check "error") es un bloqueo DURO: aunque el gestor acepte
+        // el riesgo, el blocker preflight_provider_error se mantiene, el paso 2 NO se completa y el
+        // submit sigue vetado. Solo se levanta reejecutando la consulta con éxito.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "riesgo_aceptado", ValueText = "true", Source = "user" });
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance);
+        instance.PreflightSnapshots.Add(Preflight("red",
+            "[{\"Key\":\"provider\",\"Label\":\"Consulta de vehículo\",\"Status\":\"error\",\"Source\":\"verifik\",\"Message\":\"No fue posible verificar\"}]"));
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().Contain("preflight_provider_error");
+        result.Blockers.Should().NotContain("preflight_red");
+        result.Steps.Single(s => s.Index == 2).Status.Should().NotBe("complete");
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Get_Matricula_AllNonDeferredComplete_CanSubmitTrue()
     {
         var ct = TestContext.Current.CancellationToken;

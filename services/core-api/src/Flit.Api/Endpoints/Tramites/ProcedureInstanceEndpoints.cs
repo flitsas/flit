@@ -66,7 +66,7 @@ internal static class ProcedureInstanceEndpoints
                     return Results.Problem(
                         statusCode: 422,
                         title: "Unprocessable Entity",
-                        detail: "La compañía no tiene habilitada la matrícula inicial.");
+                        detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla.");
             }
 
             var (result, error) = await handler.HandleAsync(effectiveRequest, ct);

@@ -127,8 +127,10 @@ public sealed class RunPreflightHandler(
     }
 
     /// <summary>
-    /// Regla del dominio: cualquier <c>fail</c> → red; algún <c>warn</c> → yellow; resto → green.
-    /// <c>unknown</c> NO impide green (provider degradado no bloquea). Sin checks → green.
+    /// Regla del dominio: cualquier <c>fail</c> o <c>error</c> → red; algún <c>warn</c> → yellow;
+    /// resto → green. <c>unknown</c> NO impide green (dato ausente no crítico no bloquea).
+    /// <c>error</c> = proveedor no verificable: pinta red igual que <c>fail</c>, pero además el
+    /// wizard lo trata como bloqueo DURO (no subsanable) vía blocker propio. Sin checks → green.
     /// </summary>
     public static string ComposeOverall(IReadOnlyList<PreflightCheckDto> checks)
     {
@@ -139,6 +141,7 @@ public sealed class RunPreflightHandler(
             switch (c.Status)
             {
                 case "fail":
+                case "error":
                     hasFail = true;
                     break;
                 case "warn":
@@ -187,7 +190,8 @@ public sealed class RunPreflightHandler(
         var provider = registry.Resolve(ProviderVerifik);
         if (provider is null)
         {
-            checks.Add(new PreflightCheckDto("vehiculo", "Vehículo RUNT", "unknown", ProviderVerifik, "Proveedor de vehículo no disponible"));
+            checks.Add(new PreflightCheckDto("vehiculo", "Consulta de vehículo", "error", ProviderVerifik,
+                "No fue posible verificar la información del vehículo en el RUNT en este momento. Vuelve a intentarlo en unos minutos."));
             return [];
         }
 
@@ -216,7 +220,8 @@ public sealed class RunPreflightHandler(
         var provider = registry.Resolve(ProviderVerifikSimit);
         if (provider is null)
         {
-            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "unknown", ProviderVerifikSimit, "Proveedor SIMIT no disponible"));
+            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "error", ProviderVerifikSimit,
+                "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos."));
             return;
         }
 
@@ -245,7 +250,8 @@ public sealed class RunPreflightHandler(
         var provider = registry.Resolve(ProviderVerifikRnmc);
         if (provider is null)
         {
-            checks.Add(new PreflightCheckDto("rnmc", "RNMC comprador", "unknown", ProviderVerifikRnmc, "Proveedor RNMC no disponible"));
+            checks.Add(new PreflightCheckDto("rnmc", "Consulta RNMC (Policía)", "error", ProviderVerifikRnmc,
+                "No fue posible verificar la información en el RNMC en este momento. Vuelve a intentarlo en unos minutos."));
             return;
         }
 
@@ -269,7 +275,8 @@ public sealed class RunPreflightHandler(
     /// Ejecuta un provider con un contexto a medida y vuelca sus checks en el snapshot.
     /// Devuelve los <see cref="HydratedField"/> que el provider extrajo de la MISMA respuesta
     /// (p. ej. los atributos del vehículo del RUNT), para persistirlos en field_values sin una
-    /// segunda consulta. Cualquier excepción inesperada degrada a un check unknown (no propaga 500).
+    /// segunda consulta. Cualquier excepción inesperada se traduce a un check <c>error</c> (bloqueo
+    /// duro: no se pudo verificar) SIN propagar 500 al caller.
     /// </summary>
     private static async Task<IReadOnlyList<HydratedField>> RunProviderAsync(
         List<PreflightCheckDto> checks,
@@ -294,10 +301,11 @@ public sealed class RunPreflightHandler(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             var key = keyPrefix ?? "provider";
-            checks.Add(new PreflightCheckDto(key, provider.Key, "unknown", provider.Key, $"Error inesperado: {ex.Message}"));
+            checks.Add(new PreflightCheckDto(key, "Consulta no disponible", "error", provider.Key,
+                "No fue posible verificar la información en este momento. Vuelve a intentarlo en unos minutos."));
             return [];
         }
     }

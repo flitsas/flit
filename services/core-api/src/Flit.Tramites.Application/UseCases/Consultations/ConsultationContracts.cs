@@ -13,7 +13,10 @@ public sealed record ConsultationResult(
     IReadOnlyList<HydratedField> HydratedFields);
 
 /// <summary>
-/// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown"}.
+/// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown","error"}.
+/// <c>"error"</c> = el proveedor no respondió correctamente (no-200, timeout, red) y NO se
+/// pudo verificar la información: es un BLOQUEO DURO (no subsanable con "aceptar riesgo"),
+/// distinto de <c>"unknown"</c> (dato ausente pero no crítico, no bloquea).
 /// </summary>
 public sealed record ConsultationCheck(
     string Key,

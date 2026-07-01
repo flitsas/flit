@@ -15,6 +15,7 @@ const REASON_COPY: Record<string, string> = {
   // preflight / semáforo legal
   preflight_pendiente: 'Falta correr el pre-vuelo',
   preflight_red: 'Hay bloqueos críticos',
+  preflight_provider_error: 'No se pudo verificar la consulta; vuelve a intentarla',
   preflight_yellow: 'Hay advertencias por revisar',
   validacion_pendiente: 'Falta validar el resultado legal',
   // documentos
@@ -35,6 +36,7 @@ const REASON_COPY: Record<string, string> = {
 /** Bloqueos que impiden enviar/finalizar el trámite. */
 const BLOCKER_COPY: Record<string, string> = {
   preflight_red: 'Hay bloqueos críticos en el pre-vuelo',
+  preflight_provider_error: 'No se pudo verificar la consulta (RUNT/SIMIT/RNMC); vuelve a intentarla antes de continuar',
   documentos_incompletos: 'Faltan documentos obligatorios',
   actores_incompletos: 'Faltan datos de los participantes',
   comercial_incompleto: 'Faltan datos comerciales',
