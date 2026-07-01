@@ -98,6 +98,21 @@ public sealed class MatriculaGatesTests
     }
 
     [Fact]
+    public void Paso1_PreflightProviderError_BloqueaDuroNoSubsanable()
+    {
+        // Consulta del vehículo no verificable (error de proveedor): aunque el VIN esté en
+        // field_values (VehiculoConsultado=true), el paso 1 NO se completa. Ni forzar ni aceptar
+        // riesgo lo levantan.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, ProviderError: true),
+            ForzarContinuar = true,
+            RiesgoPreflightAceptado = true,
+        };
+        TraspasoGatesShared(ctx, 1, "preflight_provider_error");
+    }
+
+    [Fact]
     public void Paso3_CompradorIncompleto_Bloquea()
     {
         var ctx = BaseCtx() with { Comprador = new ParteDatos("C", "", "c@x.co") };
