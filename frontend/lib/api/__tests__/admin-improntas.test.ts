@@ -13,6 +13,7 @@ const originalFetch = global.fetch;
 
 const validBody = {
   placa: "ABC123",
+  documento: "1040326572",
   numMotor: "MTR-1",
   orgNombre: "Renting Demo S.A.S.",
   orgNit: "900123456-7",
