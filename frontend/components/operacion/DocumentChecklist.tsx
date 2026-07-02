@@ -62,73 +62,195 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Campos clave a resumir por tipo de documento en la UI del OCR. */
-const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<{ key: string; label: string }>> = {
+/** Formatea un monto como moneda COP: 119990000 → "$119.990.000". '' si no es un número &gt; 0. */
+function formatCOP(value: unknown): string {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+/** Valor string no vacío de un campo del JSON del OCR (trim); '' si es null/undefined. */
+function pickStr(data: Record<string, unknown>, key: string): string {
+  const v = data[key];
+  return v === null || v === undefined ? '' : String(v).trim();
+}
+
+/** Une varios campos no vacíos con un separador (p. ej. marca + línea + modelo). */
+function joinFields(data: Record<string, unknown>, keys: string[], sep = ' '): string {
+  return keys.map((k) => pickStr(data, k)).filter(Boolean).join(sep);
+}
+
+/** Descriptor de un campo del resumen OCR. */
+interface OcrField {
+  label: string;
+  /** Valor a mostrar (ya formateado); '' → la fila se omite. */
+  value: (d: Record<string, unknown>) => string;
+  /** 'state' → se pinta como chip de color (coincide/no_coincide/…). */
+  kind?: 'state';
+  /** Campo VIN: se resalta en rojo si el rechazo fue por cruce de VIN. */
+  vin?: boolean;
+  /** Valor en negrita (p. ej. Total). */
+  strong?: boolean;
+}
+
+/** Campos del resumen por tipo de documento (set ampliado). */
+const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
   factura: [
-    { key: 'numero_factura', label: 'Factura' },
-    { key: 'total', label: 'Total' },
-    { key: 'vehiculo_vin', label: 'VIN' },
+    { label: 'N.º factura', value: (d) => pickStr(d, 'numero_factura') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha') },
+    { label: 'Emisor', value: (d) => pickStr(d, 'emisor_nombre') },
+    { label: 'NIT', value: (d) => pickStr(d, 'emisor_nit') },
+    { label: 'Comprador', value: (d) => pickStr(d, 'comprador_nombre') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'Color', value: (d) => pickStr(d, 'vehiculo_color') },
+    { label: 'IVA', value: (d) => formatCOP(d.iva) },
+    { label: 'Total', value: (d) => formatCOP(d.total), strong: true },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
   ],
   aduana: [
-    { key: 'numero_documento', label: 'Documento' },
-    { key: 'aduana', label: 'Aduana' },
-    { key: 'vehiculo_vin', label: 'VIN' },
+    { label: 'N.º documento', value: (d) => pickStr(d, 'numero_documento') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha') },
+    { label: 'Aduana', value: (d) => pickStr(d, 'aduana') },
+    { label: 'Importador', value: (d) => pickStr(d, 'importador_nombre') },
+    { label: 'Subpartida', value: (d) => pickStr(d, 'subpartida_arancelaria') },
+    { label: 'País origen', value: (d) => pickStr(d, 'pais_origen') },
+    { label: 'Valor CIF', value: (d) => formatCOP(d.valor_cif_cop), strong: true },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') || pickStr(d, 'vehiculo_chasis'), vin: true },
   ],
   impronta: [
-    { key: 'numero_certificado', label: 'Certificado' },
-    { key: 'estado_vin', label: 'VIN' },
-    { key: 'estado_motor', label: 'Motor' },
+    { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
+    { label: 'Entidad', value: (d) => pickStr(d, 'entidad_emisora') },
+    { label: 'Estado motor', value: (d) => pickStr(d, 'estado_motor'), kind: 'state' },
+    { label: 'Estado VIN', value: (d) => pickStr(d, 'estado_vin'), kind: 'state' },
+    { label: 'Estado chasis', value: (d) => pickStr(d, 'estado_chasis'), kind: 'state' },
+    { label: 'Alertas', value: (d) => (Array.isArray(d.alertas) ? d.alertas.join(', ') : '') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') || pickStr(d, 'vehiculo_chasis'), vin: true },
   ],
   soat: [
-    { key: 'numero_poliza', label: 'Póliza' },
-    { key: 'aseguradora', label: 'Aseguradora' },
-    { key: 'estado_poliza', label: 'Estado' },
+    { label: 'N.º póliza', value: (d) => pickStr(d, 'numero_poliza') },
+    { label: 'Aseguradora', value: (d) => pickStr(d, 'aseguradora') },
+    { label: 'Vigencia', value: (d) => joinFields(d, ['fecha_inicio', 'fecha_vencimiento'], ' – ') },
+    { label: 'Estado', value: (d) => pickStr(d, 'estado_poliza') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
   ],
 };
 
-/** Extrae los pares label/valor no vacíos del JSON del OCR para el resumen del tipo. */
-function ocrResumen(
-  tipo: string,
-  data: Record<string, unknown> | null,
-): Array<{ label: string; value: string }> {
-  if (!data) return [];
-  const fields = OCR_RESUMEN_FIELDS[tipo] ?? [];
-  const out: Array<{ label: string; value: string }> = [];
-  for (const { key, label } of fields) {
-    const raw = data[key];
-    if (raw === null || raw === undefined || raw === '') continue;
-    out.push({ label, value: String(raw) });
-  }
-  return out;
+/** Nombre corto del tipo para el encabezado de la tarjeta. */
+const TIPO_LABEL: Record<string, string> = {
+  factura: 'Factura',
+  aduana: 'Aduana',
+  impronta: 'Impronta',
+  soat: 'SOAT',
+};
+
+/** Colores del chip de estado (coincide / no_coincide / no_aplica / no_verificado). */
+function stateChipStyle(value: string): { color: string; background: string } {
+  const v = value.toLowerCase();
+  if (v === 'coincide') return { color: '#3B8A00', background: 'rgba(140,198,63,0.20)' };
+  if (v === 'no_coincide') return { color: '#FF4E00', background: 'rgba(255,78,0,0.12)' };
+  if (v === 'no_aplica') return { color: '#5B6472', background: 'rgba(120,130,145,0.15)' };
+  return { color: '#B77900', background: 'rgba(249,172,0,0.18)' }; // no_verificado / otros
 }
 
-/** Presenta el estado OCR de un ítem: verificado (verde) / rechazado (rojo) / no analizado (ámbar) + resumen. */
+/** Chip "PDF recortado (X/Y págs)" cuando el OCR recortó un subconjunto de páginas. */
+function recorteLabel(data: Record<string, unknown> | null): string | null {
+  if (!data || data._paginas_extraidas !== true) return null;
+  const extraidas = Array.isArray(data.paginas_documento) ? data.paginas_documento.length : null;
+  const originales = typeof data._paginas_originales === 'number' ? data._paginas_originales : null;
+  return extraidas && originales ? `PDF recortado (${extraidas}/${originales} págs)` : 'PDF recortado';
+}
+
+/**
+ * Tarjeta de estado OCR de un documento: encabezado (verificado/rechazado/no analizado) + chip del
+ * tipo, motivo cuando aplica, y una grilla legible de pares etiqueta/valor (set ampliado por tipo).
+ */
 function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
   const palette =
     ocr.status === 'verified'
-      ? { color: '#8CC63F', bg: 'rgba(140,198,63,0.10)', label: 'Verificado' }
+      ? { color: '#3B8A00', border: '#8CC63F', bg: 'rgba(140,198,63,0.08)', icon: '✓', label: 'Verificado' }
       : ocr.status === 'rejected'
-        ? { color: '#FF4E00', bg: 'rgba(255,78,0,0.08)', label: 'Rechazado' }
-        : { color: '#F9AC00', bg: 'rgba(249,172,0,0.10)', label: 'No analizado' };
-  const resumen = ocrResumen(tipo, ocr.data);
+        ? { color: '#FF4E00', border: '#FF4E00', bg: 'rgba(255,78,0,0.06)', icon: '✗', label: 'Rechazado' }
+        : { color: '#B77900', border: '#F9AC00', bg: 'rgba(249,172,0,0.08)', icon: '!', label: 'No analizado' };
+
+  const data = ocr.data;
+  const nombre = TIPO_LABEL[tipo] ?? tipo;
+  const tipoDocumento = data ? pickStr(data, 'tipo_documento') : '';
+  const recorte = recorteLabel(data);
+  const rechazoPorVin = ocr.status === 'rejected' && !!ocr.motivo && /VIN/i.test(ocr.motivo);
+
+  const fields = data
+    ? (OCR_RESUMEN_FIELDS[tipo] ?? [])
+        .map((field) => ({ field, value: field.value(data) }))
+        .filter((x) => x.value !== '')
+    : [];
 
   return (
     <div
-      className="mt-2 rounded-lg px-2.5 py-1.5 text-[10px]"
-      style={{ background: palette.bg, color: palette.color }}
+      className="mt-2 rounded-lg border p-2.5"
+      style={{ background: palette.bg, borderColor: palette.border }}
       role="status"
       aria-live="polite"
     >
-      <span className="font-bold uppercase tracking-wide">{palette.label}</span>
-      {ocr.motivo && <span className="ml-1.5 opacity-90">· {ocr.motivo}</span>}
-      {resumen.length > 0 && (
-        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 opacity-90">
-          {resumen.map((r) => (
-            <li key={r.label}>
-              <span className="opacity-70">{r.label}:</span> {r.value}
-            </li>
+      {/* Encabezado: estado + chip del tipo + chip de recorte */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-bold" style={{ color: palette.color }}>
+          <span aria-hidden="true">{palette.icon}</span> {nombre} — {palette.label}
+        </span>
+        {tipoDocumento && (
+          <span
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold"
+            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+          >
+            {tipoDocumento}
+          </span>
+        )}
+        {recorte && (
+          <span
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold"
+            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+          >
+            {recorte}
+          </span>
+        )}
+      </div>
+
+      {/* Motivo (rechazado / no analizado) */}
+      {ocr.motivo && (
+        <p className="mt-1 text-[10px] font-medium" style={{ color: palette.color }}>
+          {ocr.motivo}
+        </p>
+      )}
+
+      {/* Grilla de campos: 2 columnas, etiqueta mutada + valor con buen contraste */}
+      {fields.length > 0 && (
+        <dl className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+          {fields.map(({ field, value }) => (
+            <div key={field.label} className="flex items-baseline gap-1.5 text-[11px]">
+              <dt className="shrink-0 opacity-60">{field.label}:</dt>
+              {field.kind === 'state' ? (
+                <dd>
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={stateChipStyle(value)}
+                  >
+                    {value.replace(/_/g, ' ')}
+                  </span>
+                </dd>
+              ) : (
+                <dd
+                  className={`min-w-0 wrap-break-word ${field.strong ? 'font-bold' : ''}`}
+                  style={field.vin && rechazoPorVin ? { color: '#FF4E00', fontWeight: 700 } : undefined}
+                >
+                  {value}
+                </dd>
+              )}
+            </div>
           ))}
-        </ul>
+        </dl>
       )}
     </div>
   );
