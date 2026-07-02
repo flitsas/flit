@@ -4,8 +4,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
-import { generarImpronta } from "@/lib/api/admin-improntas";
-import type { GenerarImprontaRequest } from "@/lib/api/types-improntas";
+import { describeImprontaError, generarImpronta } from "@/lib/api/admin-improntas";
+import type { GenerarImprontaRequest, GenerarImprontaResult } from "@/lib/api/types-improntas";
 import { IMPRONTA_INPUT_CLS, IMPRONTA_LABEL_CLS, IMPRONTA_SECTION_CLS } from "./improntas-form-styles";
 
 type SubmitStatus = "idle" | "submitting" | "error" | "success";
@@ -37,11 +37,12 @@ function useSessionDefaults(): SessionDefaults {
 }
 
 /**
- * Formulario de captura del módulo "Generación de improntas" (HU #10469, AC1/AC3).
- * Controlado con `useState` (sin react-hook-form/zod, no están en el proyecto).
- * Envía la solicitud a Kyverum RUNT vía `generarImpronta` (descarga directa del PDF);
- * el manejo fino de mensajes de error por tipo (validación/auth/upstream de Kyverum)
- * es alcance de la HU #10471 — aquí se resuelve con un estado de error genérico.
+ * Formulario de captura del módulo "Generación de improntas" (HU #10469 AC1/AC3,
+ * HU #10471 AC1/AC2/AC3). Controlado con `useState` (sin react-hook-form/zod, no están
+ * en el proyecto). Envía la solicitud a Kyverum RUNT vía `generarImpronta` (descarga
+ * directa del PDF mediante `downloadFile`) y traduce cada tipo de error del backend
+ * (`VALIDATION_ERROR`/`UNAUTHORIZED`/`UPSTREAM_UNAVAILABLE`) a un mensaje específico
+ * vía `describeImprontaError`, sin exponer detalles técnicos crudos del proveedor.
  */
 export function ImprontaFormPanel() {
   const defaults = useSessionDefaults();
@@ -61,6 +62,7 @@ export function ImprontaFormPanel() {
   const [attempted, setAttempted] = useState(false);
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<GenerarImprontaResult | null>(null);
 
   const placaMissing = placa.trim().length === 0;
   const vehicleIdMissing =
@@ -73,6 +75,13 @@ export function ImprontaFormPanel() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    // HU #10471 AC3 — evita un doble envío concurrente si por algún medio (p. ej.
+    // Enter en un campo) se dispara `submit` mientras ya hay una solicitud en curso.
+    if (status === "submitting") {
+      return;
+    }
+
     setAttempted(true);
 
     // AC3 — bloquea el envío sin invocar al backend si falta placa o los tres
@@ -83,6 +92,7 @@ export function ImprontaFormPanel() {
 
     setStatus("submitting");
     setErrorMessage(null);
+    setResult(null);
 
     const body: GenerarImprontaRequest = {
       placa: placa.trim().toUpperCase(),
@@ -99,13 +109,12 @@ export function ImprontaFormPanel() {
     };
 
     try {
-      await generarImpronta(body);
+      const generated = await generarImpronta(body);
+      setResult(generated);
       setStatus("success");
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setErrorMessage(
-        "No se pudo generar la impronta. Verifica los datos del vehículo e intenta nuevamente.",
-      );
+      setErrorMessage(describeImprontaError(error));
     }
   }
 
@@ -298,9 +307,24 @@ export function ImprontaFormPanel() {
         </div>
       </fieldset>
 
+      {submitting && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 text-[11px] font-medium"
+          style={{ color: "#162744" }}
+          data-testid="impronta-loading"
+        >
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          Generando impronta… puede tardar unos segundos porque se consulta un servicio externo
+          (RUNT).
+        </p>
+      )}
+
       {status === "error" && errorMessage && (
         <div
           role="alert"
+          aria-live="assertive"
           className="flex items-start gap-2 rounded-xl border p-3 text-xs font-medium"
           style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
           data-testid="impronta-error"
@@ -319,15 +343,34 @@ export function ImprontaFormPanel() {
           data-testid="impronta-success"
         >
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#00DBD5" }} aria-hidden="true" />
-          <span>
-            Impronta generada correctamente. La descarga del PDF se inició en tu navegador.
-          </span>
+          <div className="flex flex-col gap-1">
+            <span>
+              Impronta generada y descargada. La descarga del PDF se inició en tu navegador.
+            </span>
+            {(result?.radicado || result?.hash) && (
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-[11px] font-normal opacity-80 md:grid-cols-2">
+                {result?.radicado && (
+                  <div className="flex gap-1">
+                    <dt className="font-semibold">Radicado:</dt>
+                    <dd data-testid="impronta-radicado">{result.radicado}</dd>
+                  </div>
+                )}
+                {result?.hash && (
+                  <div className="flex gap-1 break-all">
+                    <dt className="font-semibold">Hash:</dt>
+                    <dd data-testid="impronta-hash">{result.hash}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </div>
         </div>
       )}
 
       <button
         type="submit"
         disabled={submitting}
+        aria-busy={submitting}
         className="flex w-fit items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
         style={{ background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)" }}
       >
