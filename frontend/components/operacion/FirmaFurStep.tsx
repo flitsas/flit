@@ -1151,7 +1151,7 @@ function FurSection({
           : msg.includes('documentos_incompletos')
             ? 'Sube los documentos obligatorios antes de generar el consolidado.'
             : msg.includes('modalidad_no_soportada')
-              ? 'El consolidado solo aplica a matrícula inicial.'
+              ? 'El consolidado no está disponible para esta modalidad.'
               : 'No se pudo generar el consolidado.',
       );
     } finally {
@@ -1223,14 +1223,15 @@ function FurSection({
         </ul>
       )}
 
-      {modalidad === 'matricula_inicial' && (
+      {(modalidad === 'matricula_inicial' || modalidad === 'traspaso') && (
         <div className="space-y-3 pt-2 border-t" style={{ borderColor: '#DFE5ED' }}>
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
               Un solo PDF con el FUR, el certificado de identidad y los documentos
-              cargados en el trámite. Opcional: puedes generarlo cuando el FUR
-              esté listo.
+              cargados en el trámite
+              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}.
+              Opcional: puedes generarlo cuando el FUR esté listo.
             </p>
           </div>
 
