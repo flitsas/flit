@@ -1,12 +1,10 @@
-using Flit.Admin.Application.Companies.TransitOffices;
-using Flit.Admin.Domain.Companies.TransitOffices;
 using FluentAssertions;
 using Xunit;
 
-namespace Flit.Admin.Tests.Companies.TransitGrants;
+namespace Flit.Admin.Tests.TestDoubles;
 
 /// <summary>
-/// Catálogo estático de organismos de tránsito (HU #10192, AC1) — búsqueda
+/// Test double en memoria de organismos de tránsito (HU #10192, AC1) — búsqueda
 /// case-insensitive e insensible a tildes sobre nombre y código, término vacío
 /// devuelve todo, y término sin coincidencias devuelve vacío.
 ///

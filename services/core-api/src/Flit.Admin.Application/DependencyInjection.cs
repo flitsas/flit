@@ -6,8 +6,10 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
+using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
@@ -97,6 +99,11 @@ public static class DependencyInjection
         services.AddScoped<SearchTransitOfficesHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
+
+        // Refactor adminOT — alta/listado de tenants OT.
+        // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<CreateTransitOfficeHandler>();
+        services.AddScoped<ListTransitOfficeTenantsHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 

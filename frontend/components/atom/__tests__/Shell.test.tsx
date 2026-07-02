@@ -1,11 +1,18 @@
 // Dock del Shell (artefacto inferior): el FAB de inicio debe quedar SIEMPRE centrado y el
 // botón "Ayuda" (soporte universal) debe verse aunque RBAC filtre los demás módulos.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Shell } from "../Shell";
+import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 // Shell usa usePathname para resaltar la ruta admin activa.
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+
+function makeToken(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.`;
+}
 
 function renderShell(visibleModuleCodes?: string[]) {
   return render(
@@ -32,5 +39,27 @@ describe("Shell — dock", () => {
     const before = fabIndex;
     const after = children.length - fabIndex - 1;
     expect(before).toBe(after);
+  });
+});
+
+describe("Shell — ot_admin (refactor adminOT)", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  });
+
+  it("muestra el roleLabel 'Admin OT' y el botón 'Tránsito', sin botones de SuperAdmin/AdminCompany", () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    expect(screen.getByText("Admin OT")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "RBAC Admin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
   });
 });

@@ -1,18 +1,19 @@
 using System.Text;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
-namespace Flit.Admin.Application.Companies.TransitOffices;
+namespace Flit.Admin.Tests.TestDoubles;
 
 /// <summary>
-/// Catálogo estático en memoria de organismos de tránsito (HU #10192, RF13, AC1).
+/// Test double en memoria de <see cref="ITransitOfficeCatalog"/> usado por los tests
+/// de casos de uso (HU #10192 y siguientes) para no depender de <c>DbTransitOfficeCatalog</c>
+/// / EF Core InMemory al ejercitar solo la lógica de aplicación.
 ///
-/// La HU exige un catálogo estático (sin sync externo ni consulta a
-/// <c>catalogs.transit_offices</c> vía EF). Los UUIDs son fijos y deterministas para
-/// que los tests y los grants puedan referenciarlos. La búsqueda es insensible a
-/// mayúsculas y a tildes sobre nombre y código.
+/// Movido desde <c>Flit.Admin.Application</c> (donde no estaba registrado en DI —
+/// <c>DbTransitOfficeCatalog</c> es la única implementación real, ver
+/// <c>AdminInfrastructureExtensions.cs</c>) a este proyecto de tests, porque sigue
+/// siendo usado como test double por varios handlers de tests (refactor adminOT).
 ///
-/// Compatible con AOT (sin reflexión): la normalización usa
-/// <see cref="string.Normalize(NormalizationForm)"/> + categorías Unicode.
+/// La búsqueda es case-insensitive e insensible a tildes sobre nombre y código.
 ///
 /// Uso de ejemplo:
 /// <code>

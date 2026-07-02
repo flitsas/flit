@@ -25,7 +25,12 @@ using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Api.Endpoints;
 
@@ -193,6 +198,53 @@ public static class AdminOtEndpoints
         group.MapDelete("/document-tags/{id:guid}", DeleteDocumentTagAsync)
             .WithName("AdminOtDeleteDocumentTag")
             .WithSummary("Elimina una etiqueta documental OT")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // ── Self-service de usuarios OT (refactor adminOT) ─────────────────────────
+        // Mismo grupo/policy (OtModulePolicy: SuperAdmin + ot_admin). Sirve tanto para
+        // que SuperAdmin invite al primer adminOT de un tenant recién creado
+        // (?transitOfficeId=, resuelto contra admin.transit_office_profiles) como para
+        // que un ot_admin autogestione sus propios colaboradores (siempre su tenant del
+        // JWT, ignora el query param). No se crean roles personalizados: todo invitado
+        // recibe el único rol ot_admin del tenant.
+        group.MapPost("/users/invite", InviteUserAsync)
+            .WithName("AdminOtInviteUser")
+            .WithSummary("Invita un usuario al tenant OT")
+            .WithDescription("Crea una invitación por email con el rol ot_admin del tenant resuelto (propio "
+                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). 409 si ya hay una "
+                + "invitación pendiente o si el correo ya tiene cuenta.")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/users", ListUsersAsync)
+            .WithName("AdminOtListUsers")
+            .WithSummary("Lista los usuarios del tenant OT")
+            .WithDescription("Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto (propio "
+                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin).")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/users/{userId:guid}/suspend", SuspendUserAsync)
+            .WithName("AdminOtSuspendUser")
+            .WithSummary("Suspende temporalmente a un usuario del tenant OT")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/users/{userId:guid}/suspend", UnsuspendUserAsync)
+            .WithName("AdminOtUnsuspendUser")
+            .WithSummary("Levanta la suspensión activa de un usuario del tenant OT")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -811,4 +863,302 @@ public static class AdminOtEndpoints
             _ => Results.NoContent(),
         };
     }
+
+    // ── Self-service de usuarios OT (refactor adminOT) ─────────────────────────────
+
+    private static async Task<IResult> InviteUserAsync(
+        HttpContext httpContext,
+        InviteOtUserRequest request,
+        FlitDbContext db,
+        CreateInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var invitedBy = ResolveUserId(httpContext.User);
+        if (invitedBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
+        // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        var role = await db.Roles.AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.TenantId == tenantId && r.Code == TransitOfficeTenantWriteRepositoryRoleCode,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (role is null)
+        {
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new CreateInvitationCommand(
+                    tenantId, request.Email, request.FullName ?? string.Empty, role.Id, invitedBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Created(
+                $"/api/v1/admin/ot/users/invite/{result.InvitationId}",
+                new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (RoleNotFoundException)
+        {
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "El rol ot_admin no existe en el tenant." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationAlreadyPendingException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_ALREADY_PENDING", message = "Ya existe una invitación pendiente para este correo." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            return Results.Json(
+                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+
+    private static async Task<IResult> ListUsersAsync(
+        HttpContext httpContext,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        var activeUsers = await (
+            from a in db.UserRoleAssignments.AsNoTracking()
+            join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+            join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+            where a.TenantId == tenantId && a.DeletedAt == null && u.DeletedAt == null
+            select new OtUserDto(
+                u.Id.ToString(),
+                u.DisplayName,
+                u.Email,
+                r.Name,
+                r.Code,
+                a.RoleId,
+                u.Status == "active" ? "active" : "inactive",
+                null,
+                db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
+                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var usersWithoutRole = await (
+            from u in db.Users.AsNoTracking()
+            where u.HomeTenantId == tenantId
+                  && u.DeletedAt == null
+                  && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.TenantId == tenantId && a.DeletedAt == null)
+            select new OtUserDto(
+                u.Id.ToString(),
+                u.DisplayName,
+                u.Email,
+                null,
+                null,
+                null,
+                u.Status == "active" ? "active" : "inactive",
+                null,
+                db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
+                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var pending = await db.UserInvitations
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Status == "pending")
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new OtUserDto(
+                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
+    }
+
+    private static async Task<IResult> SuspendUserAsync(
+        Guid userId,
+        HttpContext httpContext,
+        SuspendOtUserRequest request,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var callerId = ResolveUserId(httpContext.User);
+        if (callerId == userId)
+        {
+            return Results.BadRequest(new { error = "SELF_SUSPEND", message = "No puedes suspenderte a ti mismo." });
+        }
+
+        // El scope ya garantiza que ot_admin solo puede resolver su propio tenant (no
+        // recibe transitOfficeId de otro OT); este chequeo evita además que se
+        // suspenda a un usuario que no pertenece al tenant resuelto.
+        var userExistsInTenant = await db.Users.AsNoTracking()
+            .AnyAsync(u => u.Id == userId && u.DeletedAt == null
+                && (db.UserRoleAssignments.Any(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)
+                    || u.HomeTenantId == tenantId),
+                cancellationToken).ConfigureAwait(false);
+
+        if (!userExistsInTenant)
+        {
+            return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        var existing = await db.UserTempSuspensions
+            .Where(s => s.UserId == userId && s.TenantId == tenantId && s.DeletedAt == null && s.EndsAt >= now)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var s in existing)
+        {
+            s.DeletedAt = now;
+            s.DeletedBy = callerId;
+        }
+
+        var suspension = new UserTempSuspension
+        {
+            TenantId = tenantId,
+            UserId = userId,
+            StartsAt = now,
+            EndsAt = request.EndsAt.ToUniversalTime(),
+            Reason = request.Reason,
+            CreatedAt = now,
+            CreatedBy = callerId,
+        };
+
+        db.UserTempSuspensions.Add(suspension);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Results.Created($"/api/v1/admin/ot/users/{userId}/suspend", new { id = suspension.Id });
+    }
+
+    private static async Task<IResult> UnsuspendUserAsync(
+        Guid userId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var callerId = ResolveUserId(httpContext.User);
+        var now = DateTimeOffset.UtcNow;
+
+        var active = await db.UserTempSuspensions
+            .Where(s => s.UserId == userId && s.TenantId == tenantId
+                     && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        if (active.Count == 0)
+        {
+            return Results.NotFound(new { error = "NO_ACTIVE_SUSPENSION", message = "El usuario no tiene una suspensión activa." });
+        }
+
+        foreach (var s in active)
+        {
+            s.DeletedAt = now;
+            s.DeletedBy = callerId;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Results.NoContent();
+    }
+
+    /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
+    private const string TransitOfficeTenantWriteRepositoryRoleCode = "ot_admin";
+
+    /// <summary>
+    /// Resuelve el tenant OT destino del self-service de usuarios: <c>ot_admin</c>
+    /// siempre usa su propio tenant (claim JWT, ignora <paramref name="transitOfficeId"/>);
+    /// SuperAdmin debe indicar <paramref name="transitOfficeId"/> (oficina del catálogo)
+    /// y se resuelve el tenant OT que la tiene vinculada vía
+    /// <c>admin.transit_office_profiles</c>.
+    /// </summary>
+    private static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
+        ClaimsPrincipal user,
+        Guid? transitOfficeId,
+        FlitDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(user, out var callerTenantId))
+        {
+            return (Guid.Empty, Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized));
+        }
+
+        if (!IsSuperAdmin(user))
+        {
+            return (callerTenantId, null);
+        }
+
+        if (transitOfficeId is null || transitOfficeId == Guid.Empty)
+        {
+            return (Guid.Empty, Results.Json(
+                new { error = "transitOfficeId es obligatorio para SuperAdmin." },
+                statusCode: StatusCodes.Status400BadRequest));
+        }
+
+        var targetTenantId = await db.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TransitOfficeId == transitOfficeId.Value)
+            .Select(p => p.TenantId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (targetTenantId == Guid.Empty)
+        {
+            return (Guid.Empty, Results.NotFound(
+                new { error = "No existe un tenant OT vinculado a ese transitOfficeId." }));
+        }
+
+        return (targetTenantId, null);
+    }
+
+    private sealed record InviteOtUserRequest(string Email, string? FullName);
+
+    private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset EndsAt);
+
+    private sealed record OtUserDto(
+        string Id,
+        string FullName,
+        string Email,
+        string? Role,
+        string? RoleCode,
+        Guid? RoleId,
+        string Status,
+        DateTimeOffset? CreatedAt,
+        bool IsSuspended);
 }

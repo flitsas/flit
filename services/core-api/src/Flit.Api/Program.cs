@@ -180,6 +180,7 @@ app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
