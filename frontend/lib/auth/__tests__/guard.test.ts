@@ -90,6 +90,23 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.allowed).toBe(false);
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
+
+  it("permite el acceso de SuperAdmin a /admin/improntas (HU #10469 AC1)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "SuperAdmin" }),
+      "/admin/improntas",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("deniega el acceso a /admin/improntas para un rol distinto de SuperAdmin (HU #10469 AC2)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "ot_admin" }),
+      "/admin/improntas",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
 });
 
 describe("getUserRole (refactor adminOT)", () => {
