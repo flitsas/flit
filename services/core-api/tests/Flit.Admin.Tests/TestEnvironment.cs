@@ -19,4 +19,15 @@ internal static class TestEnvironment
     {
         Environment.SetEnvironmentVariable("Database__AutoMigrate", "false");
     }
+
+    /// <summary>
+    /// Fuerza el proveedor OCR a mock en las pruebas. El host lee env vars CRUDAS (OCR_PROVIDER tiene
+    /// prioridad sobre appsettings), así los tests de integración del OCR son deterministas y NUNCA
+    /// llaman a Anthropic real, sin importar el <c>appsettings.Development.json</c> local del desarrollador.
+    /// </summary>
+    [ModuleInitializer]
+    public static void ForceOcrMock()
+    {
+        Environment.SetEnvironmentVariable("OCR_PROVIDER", "mock");
+    }
 }

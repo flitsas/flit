@@ -13,18 +13,18 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 ///
 /// <para><b>Matrícula</b> exige: documentos completos (factura+aduana+impronta) y biométrica del
 /// comprador aprobada. FUR, consolidado y organismo de tránsito NO bloquean el envío.</para>
-/// <para><b>Traspaso</b> aplica el gate análogo (ambas biométricas + firma compraventa + FUR + docs +
-/// organismo) SOLO en bajo riesgo. Si los datos del traspaso aún no satisfacen el gate, se deja pasar
-/// para no romper los flujos existentes (deuda M5: endurecer traspaso cuando el flujo esté completo).</para>
+/// <para><b>Traspaso</b> (HU #10459) aplica el gate COMPLETO y bloquea la radicación si falta algo:
+/// documentos obligatorios completos, ambas biométricas aprobadas+vigentes, firma de compraventa de
+/// comprador y vendedor, FUR generado y organismo de tránsito seleccionado.</para>
 ///
 /// Devuelve la lista de códigos de error (vacía = puede radicar). Códigos: documentos_incompletos,
-/// identidad_requerida. Los códigos fur_requerido y organismo_requerido se conservan como constantes
-/// para otros endpoints (p.ej. generación de consolidado) pero no aplican al submit.
+/// identidad_requerida, firma_compraventa_requerida, fur_requerido, organismo_requerido.
 /// </summary>
 public static class SubmitGate
 {
     public const string DocumentosIncompletos = "documentos_incompletos";
     public const string IdentidadRequerida = "identidad_requerida";
+    public const string FirmaCompraventaRequerida = "firma_compraventa_requerida";
     public const string FurRequerido = "fur_requerido";
     public const string OrganismoRequerido = "organismo_requerido";
 
@@ -57,33 +57,32 @@ public static class SubmitGate
     }
 
     /// <summary>
-    /// Gate de traspaso (bajo riesgo): ambas biométricas + firma compraventa + FUR + docs + organismo.
-    /// Si NO se cumple todo, NO se bloquea el submit (se deja pasar) para preservar los flujos de
-    /// traspaso existentes; el endurecimiento queda como deuda M5.
+    /// Gate de traspaso (HU #10459): documentos completos + ambas biométricas + firma de compraventa
+    /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
+    /// incumplidos; lista vacía = puede radicar.
     /// </summary>
     private static List<string> EvaluateTraspaso(ProcedureInstance instance)
     {
-        var lowRiskComplete =
-            DocumentosObligatoriosCompletos(instance)
-            && BiometriaAprobada(instance, "comprador")
-            && BiometriaAprobada(instance, "vendedor")
-            && FirmaCompraventaAmbas(instance)
-            && FurGenerado(instance)
-            && OrganismoSeleccionado(instance);
+        var errors = new List<string>(5);
 
-        // Solo gateamos cuando el trámite ya satisface el flujo completo (no introducimos un blocker
-        // nuevo en traspasos parciales preexistentes).
-        return lowRiskComplete ? [] : [];
+        if (!DocumentosObligatoriosCompletos(instance))
+            errors.Add(DocumentosIncompletos);
+        if (!BiometriaAprobada(instance, "comprador") || !BiometriaAprobada(instance, "vendedor"))
+            errors.Add(IdentidadRequerida);
+        if (!FirmaCompraventaAmbas(instance))
+            errors.Add(FirmaCompraventaRequerida);
+        if (!FurGenerado(instance))
+            errors.Add(FurRequerido);
+        if (!OrganismoSeleccionado(instance))
+            errors.Add(OrganismoRequerido);
+
+        return errors;
     }
 
     // internal: reutilizado por FinalizeDraftGate (HU #10349) — misma fuente de verdad de completitud
     // documental para finalizar borrador y para radicar.
     internal static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
-        // DEMO: ver DemoFlags.RelaxDocs — afloja el gating estricto de documentos.
-        if (DemoFlags.RelaxDocs)
-            return true;
-
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);

@@ -22,7 +22,8 @@ interface SessionDefaults {
  * Limitación conocida (documentada en el handoff de la HU #10469): el JWT solo trae
  * `tenant_name` y `email`/`display_name`; no existe hoy un endpoint que devuelva NIT
  * ni ciudad de la empresa/tenant activa, así que `orgNit` y `orgCiudad` arrancan
- * vacíos y editables — no se dejan de pre-cargar, simplemente no hay fuente aún.
+ * vacíos y editables — no se dejan de pre-cargar, simplemente no hay fuente aún. Tampoco son
+ * obligatorios (verificado contra el proveedor real: Kyverum genera la impronta sin ellos).
  */
 function useSessionDefaults(): SessionDefaults {
   return useMemo(() => {
@@ -48,6 +49,7 @@ export function ImprontaFormPanel() {
   const defaults = useSessionDefaults();
 
   const [placa, setPlaca] = useState("");
+  const [documento, setDocumento] = useState("");
   const [numMotor, setNumMotor] = useState("");
   const [numChasis, setNumChasis] = useState("");
   const [numSerie, setNumSerie] = useState("");
@@ -65,13 +67,14 @@ export function ImprontaFormPanel() {
   const [result, setResult] = useState<GenerarImprontaResult | null>(null);
 
   const placaMissing = placa.trim().length === 0;
-  const vehicleIdMissing =
-    numMotor.trim().length === 0 && numChasis.trim().length === 0 && numSerie.trim().length === 0;
-  const orgFieldsMissing =
-    orgNombre.trim().length === 0 || orgNit.trim().length === 0 || orgCiudad.trim().length === 0;
+  const documentoMissing = documento.trim().length === 0;
+  // numMotor/numChasis/numSerie y orgNit/orgCiudad ya NO son obligatorios: verificado contra el
+  // proveedor real (Kyverum RUNT resuelve los identificadores del vehículo internamente vía
+  // placa+documento, y genera la impronta sin orgNit/orgCiudad).
+  const orgNombreMissing = orgNombre.trim().length === 0;
   const operadorMissing = operador.trim().length === 0;
 
-  const hasBlockingErrors = placaMissing || vehicleIdMissing || orgFieldsMissing || operadorMissing;
+  const hasBlockingErrors = placaMissing || documentoMissing || orgNombreMissing || operadorMissing;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,8 +87,8 @@ export function ImprontaFormPanel() {
 
     setAttempted(true);
 
-    // AC3 — bloquea el envío sin invocar al backend si falta placa o los tres
-    // identificadores del vehículo están vacíos.
+    // AC3 — bloquea el envío sin invocar al backend si falta placa, documento, nombre de
+    // organización u operador.
     if (hasBlockingErrors) {
       return;
     }
@@ -96,6 +99,7 @@ export function ImprontaFormPanel() {
 
     const body: GenerarImprontaRequest = {
       placa: placa.trim().toUpperCase(),
+      documento: documento.trim(),
       numMotor: numMotor.trim() || undefined,
       numChasis: numChasis.trim() || undefined,
       numSerie: numSerie.trim() || undefined,
@@ -103,8 +107,8 @@ export function ImprontaFormPanel() {
       linea: linea.trim() || undefined,
       modelo: modelo.trim() || undefined,
       orgNombre: orgNombre.trim(),
-      orgNit: orgNit.trim(),
-      orgCiudad: orgCiudad.trim(),
+      orgNit: orgNit.trim() || undefined,
+      orgCiudad: orgCiudad.trim() || undefined,
       operador: operador.trim(),
     };
 
@@ -146,6 +150,29 @@ export function ImprontaFormPanel() {
           </p>
         )}
 
+        <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-documento">
+          Documento del propietario <span aria-hidden="true">*</span>
+          <input
+            id="impronta-documento"
+            className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
+            value={documento}
+            onChange={(e) => setDocumento(e.target.value)}
+            placeholder="1040326572"
+            aria-required="true"
+            aria-invalid={attempted && documentoMissing}
+            aria-describedby={attempted && documentoMissing ? "impronta-documento-error" : undefined}
+          />
+        </label>
+        {attempted && documentoMissing && (
+          <p id="impronta-documento-error" role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            El documento del propietario es obligatorio.
+          </p>
+        )}
+
+        <p className="text-[11px] opacity-70">
+          El número de motor, chasis o serie es opcional: Kyverum RUNT los resuelve
+          automáticamente a partir de la placa y el documento cuando no se diligencian.
+        </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-motor">
             Número de motor
@@ -154,7 +181,6 @@ export function ImprontaFormPanel() {
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
               value={numMotor}
               onChange={(e) => setNumMotor(e.target.value)}
-              aria-describedby={attempted && vehicleIdMissing ? "impronta-vehicle-id-error" : undefined}
             />
           </label>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-chasis">
@@ -164,7 +190,6 @@ export function ImprontaFormPanel() {
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
               value={numChasis}
               onChange={(e) => setNumChasis(e.target.value)}
-              aria-describedby={attempted && vehicleIdMissing ? "impronta-vehicle-id-error" : undefined}
             />
           </label>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-serie">
@@ -174,21 +199,9 @@ export function ImprontaFormPanel() {
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
               value={numSerie}
               onChange={(e) => setNumSerie(e.target.value)}
-              aria-describedby={attempted && vehicleIdMissing ? "impronta-vehicle-id-error" : undefined}
             />
           </label>
         </div>
-        {attempted && vehicleIdMissing && (
-          <p
-            id="impronta-vehicle-id-error"
-            role="alert"
-            className="text-[11px] font-medium"
-            style={{ color: "#FF4E00" }}
-          >
-            Debes diligenciar al menos un identificador del vehículo: número de motor, chasis o
-            serie.
-          </p>
-        )}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-marca">
@@ -251,39 +264,25 @@ export function ImprontaFormPanel() {
           </div>
           <div>
             <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-nit">
-              NIT <span aria-hidden="true">*</span>
+              NIT
               <input
                 id="impronta-org-nit"
                 className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
                 value={orgNit}
                 onChange={(e) => setOrgNit(e.target.value)}
-                aria-required="true"
-                aria-invalid={attempted && orgNit.trim().length === 0}
               />
             </label>
-            {attempted && orgNit.trim().length === 0 && (
-              <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
-                El NIT es obligatorio.
-              </p>
-            )}
           </div>
           <div>
             <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-ciudad">
-              Ciudad <span aria-hidden="true">*</span>
+              Ciudad
               <input
                 id="impronta-org-ciudad"
                 className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
                 value={orgCiudad}
                 onChange={(e) => setOrgCiudad(e.target.value)}
-                aria-required="true"
-                aria-invalid={attempted && orgCiudad.trim().length === 0}
               />
             </label>
-            {attempted && orgCiudad.trim().length === 0 && (
-              <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
-                La ciudad es obligatoria.
-              </p>
-            )}
           </div>
         </div>
 
