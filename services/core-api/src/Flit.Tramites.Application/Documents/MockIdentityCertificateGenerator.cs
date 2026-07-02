@@ -4,13 +4,10 @@ using System.Text;
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>
-/// MOCK Certificado de validación de identidad — sin librería PDF; swap a generador real (deuda).
-/// Produce el contenido del documento como TEXTO PLANO (.txt) con el comprador (nombre/doc) y el
-/// resultado de la biométrica (score + APROBADO/RECHAZADO). El pipeline (ensamblado + persistencia
-/// vía IAttachmentStorage) es real; solo el render del documento es placeholder.
-///
-/// TODO(slice-fur-real): reemplazar por un generador real (plantilla PDF) que emita el certificado
-/// oficial. Implementar IIdentityCertificateGenerator y cambiar el registro en DI — los handlers no cambian.
+/// Certificado de identidad de TEXTO PLANO (.txt) — SOLO para tests, SIN registro en DI. La
+/// implementación productiva es <c>IdentityCertificatePdfGenerator</c> (QuestPDF, HU #10458). Se
+/// conserva para tests que dependen de un <see cref="IIdentityCertificateGenerator"/> liviano y
+/// determinista.
 /// </summary>
 public sealed class MockIdentityCertificateGenerator : IIdentityCertificateGenerator
 {

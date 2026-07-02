@@ -4,14 +4,10 @@ using System.Text;
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>
-/// MOCK FUR — sin librería PDF; swap a generador real (deuda).
-/// Produce el contenido del documento como TEXTO PLANO (.txt) con los datos reales del trámite
-/// (vehículo, partes, valor, causal, sellos de firma). El pipeline (ensamblado de datos + gating +
-/// persistencia vía IAttachmentStorage) es real; solo el render del documento es placeholder.
-///
-/// TODO(slice-fur-real): reemplazar por un generador real (plantilla PDF) que emita el FUR oficial
-/// y el contrato de compraventa. Implementar IFurDocumentGenerator y cambiar el registro en DI —
-/// los handlers no cambian.
+/// Generador FUR/compraventa de TEXTO PLANO (.txt) — SOLO para tests, SIN registro en DI. La
+/// implementación productiva es <c>FurOverlayDocumentGenerator</c> (overlay PdfSharpCore, HU #10256).
+/// Se conserva porque varios tests de handler dependen de un <see cref="IFurDocumentGenerator"/>
+/// liviano y determinista (no ejercita librería de PDF).
 /// </summary>
 public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
 {

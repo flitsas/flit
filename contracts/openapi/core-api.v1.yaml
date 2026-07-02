@@ -2255,6 +2255,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/ocr/{tipo}:
+    post:
+      operationId: analyzeTramiteDocumentOcr
+      tags: [Tramites]
+      summary: OCR semántico de un documento de trámite
+      description: >
+        Analiza un documento (factura, aduana, impronta o soat) con un modelo de visión ANTES de subirlo
+        al expediente. Es stateless: no asocia el documento a ninguna instancia ni persiste el resultado.
+        Con `Ocr:Provider = mock` devuelve datos de ejemplo; con `anthropic` llama a la Anthropic Messages
+        API. Si el documento ocupa sólo un subconjunto de páginas de un PDF multi-documento, la respuesta
+        incluye `extractedPdfBase64` con el PDF recortado para subir al expediente sólo lo relevante.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tipo
+          in: path
+          required: true
+          description: Tipo de documento a analizar.
+          schema:
+            type: string
+            enum: [factura, aduana, impronta, soat]
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Documento a analizar (PDF, JPG o PNG). Máximo 10 MB.
+      responses:
+        "200":
+          description: Análisis correcto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOcrResponse"
+        "400":
+          description: >
+            Tipo no soportado, archivo ausente o vacío, archivo mayor a 10 MB, o formato no PDF/JPG/PNG.
+            También si falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: No se pudo extraer datos del documento (respuesta del modelo no interpretable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            El servicio de lectura automática no está disponible (proveedor caído, timeout o sin API key).
+            El operador puede adjuntar el documento manualmente y continuar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/webhooks/kyverum-verify/{validationId}:
     post:
       operationId: kyverumVerifyWebhook
@@ -2744,6 +2811,33 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    DocumentOcrResponse:
+      type: object
+      description: Resultado del OCR semántico de un documento de trámite.
+      required: [ok, tipo]
+      properties:
+        ok:
+          type: boolean
+          description: true cuando el análisis fue correcto.
+        tipo:
+          type: string
+          enum: [factura, aduana, impronta, soat]
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >
+            JSON extraído por el modelo (campos según el tipo). Incluye la validez semántica
+            (`es_factura_valida` para factura, `es_valido` para el resto), datos del documento/vehículo y,
+            en PDFs multi-documento, `paginas_documento`/`total_paginas` (y `_paginas_extraidas` /
+            `_paginas_originales` cuando hubo recorte).
+        extractedPdfBase64:
+          type: string
+          nullable: true
+          description: >
+            PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de páginas de un PDF
+            multi-documento; null si no hubo recorte (imagen, PDF de una página, o el tipo abarca todo el PDF).
 
     DocumentTypeAssociationsError:
       type: object
