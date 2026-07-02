@@ -38,6 +38,14 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
     /// </summary>
     private const string ProviderValidationMessagePrefix = "Datos de la impronta inválidos:";
 
+    /// <summary>
+    /// Prefijo que <c>ImprontaRuntClient</c> arma cuando Kyverum responde 200 con <c>ok:false</c> (no
+    /// es un error HTTP, es un motivo de negocio — ej. "el RUNT no expone identificadores para este
+    /// vehículo"). Se clasifica igual que <see cref="ProviderValidationMessagePrefix"/> (422): no se
+    /// puede generar el certificado con los datos enviados, pero no es un fallo de autenticación.
+    /// </summary>
+    private const string ProviderUnavailableForRequestMessagePrefix = "Impronta no disponible:";
+
     public async Task<GenerarImprontaResult> HandleAsync(
         GenerarImprontaCommand command, CancellationToken cancellationToken = default)
     {
@@ -47,6 +55,7 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
         var errors = new List<CompanyValidationError>();
 
         var placa = request.Placa?.Trim() ?? string.Empty;
+        var documento = request.Documento?.Trim() ?? string.Empty;
         var numMotor = NormalizeOptional(request.NumMotor);
         var numChasis = NormalizeOptional(request.NumChasis);
         var numSerie = NormalizeOptional(request.NumSerie);
@@ -54,8 +63,8 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
         var linea = NormalizeOptional(request.Linea);
         var modelo = NormalizeOptional(request.Modelo);
         var orgNombre = request.OrgNombre?.Trim() ?? string.Empty;
-        var orgNit = request.OrgNit?.Trim() ?? string.Empty;
-        var orgCiudad = request.OrgCiudad?.Trim() ?? string.Empty;
+        var orgNit = NormalizeOptional(request.OrgNit);
+        var orgCiudad = NormalizeOptional(request.OrgCiudad);
         var operador = request.Operador?.Trim() ?? string.Empty;
 
         if (placa.Length == 0)
@@ -63,25 +72,20 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             errors.Add(new CompanyValidationError("placa", "La placa es obligatoria."));
         }
 
-        if (numMotor is null && numChasis is null && numSerie is null)
+        if (documento.Length == 0)
         {
             errors.Add(new CompanyValidationError(
-                "numMotor", "Debe indicar al menos uno de numMotor, numChasis o numSerie."));
+                "documento", "El documento del propietario es obligatorio (requerido por Kyverum RUNT para consultas por placa)."));
         }
+
+        // numMotor/numChasis/numSerie y orgNit/orgCiudad NO son obligatorios: verificado contra el
+        // proveedor real (Kyverum genera la impronta sin ellos, resolviendo los identificadores del
+        // vehículo directamente desde el RUNT vía placa+documento). CONTRATO-API.md documentaba "al
+        // menos un identificador obligatorio", pero eso no se sostuvo en pruebas reales.
 
         if (orgNombre.Length == 0)
         {
             errors.Add(new CompanyValidationError("orgNombre", "El nombre de la organización es obligatorio."));
-        }
-
-        if (orgNit.Length == 0)
-        {
-            errors.Add(new CompanyValidationError("orgNit", "El NIT de la organización es obligatorio."));
-        }
-
-        if (orgCiudad.Length == 0)
-        {
-            errors.Add(new CompanyValidationError("orgCiudad", "La ciudad de la organización es obligatoria."));
         }
 
         if (operador.Length == 0)
@@ -100,6 +104,7 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             providerResult = await externalClient.GenerarAsync(
                 new ImprontaExternalRequest(
                     Placa: placa,
+                    Documento: documento,
                     NumMotor: numMotor,
                     NumChasis: numChasis,
                     NumSerie: numSerie,
@@ -135,8 +140,8 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             Linea = linea,
             Modelo = modelo,
             OrgNombre = orgNombre,
-            OrgNit = orgNit,
-            OrgCiudad = orgCiudad,
+            OrgNit = orgNit ?? string.Empty,
+            OrgCiudad = orgCiudad ?? string.Empty,
             Operador = operador,
             PdfContent = pdfBytes,
             PdfSizeBytes = pdfBytes.Length,
@@ -181,6 +186,7 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
         }
 
         return ex.Message.StartsWith(ProviderValidationMessagePrefix, StringComparison.Ordinal)
+            || ex.Message.StartsWith(ProviderUnavailableForRequestMessagePrefix, StringComparison.Ordinal)
             ? GenerarImprontaResult.ProviderValidation(ex.Message)
             : GenerarImprontaResult.ProviderUnauthorized(ex.Message);
     }

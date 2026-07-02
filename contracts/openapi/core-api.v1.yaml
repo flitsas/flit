@@ -3933,11 +3933,17 @@ components:
       type: object
       description: >
         Datos del vehículo y de la organización solicitante para generar el Certificado de
-        Improntas Digitales (Res. 17145/2023). Placa y al menos uno de numMotor/numChasis/numSerie
-        son obligatorios; el certificado siempre imprime los tres bloques, marcando "(SIN DATO)"
-        los que no se envíen.
+        Improntas Digitales (Res. 17145/2023). Placa y documento son obligatorios; Kyverum RUNT
+        resuelve motor/chasis/serie internamente vía placa+documento cuando no se envían
+        (verificado contra el proveedor real). El certificado siempre imprime los tres bloques,
+        marcando "(SIN DATO)" los que no se resuelvan.
       properties:
         placa: { type: string }
+        documento:
+          type: string
+          description: >
+            Documento de identidad del propietario del vehículo. Requerido por Kyverum RUNT para
+            toda consulta por placa (no documentado originalmente en el contrato del proveedor).
         numMotor: { type: string, nullable: true }
         numChasis: { type: string, nullable: true }
         numSerie: { type: string, nullable: true }
@@ -3945,7 +3951,7 @@ components:
         linea: { type: string, nullable: true }
         modelo: { type: string, nullable: true }
         orgNombre: { type: string }
-        orgNit: { type: string }
-        orgCiudad: { type: string }
+        orgNit: { type: string, nullable: true }
+        orgCiudad: { type: string, nullable: true }
         operador: { type: string }
-      required: [placa, orgNombre, orgNit, orgCiudad, operador]
+      required: [placa, documento, orgNombre, operador]

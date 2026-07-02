@@ -95,8 +95,11 @@ public sealed class GenerarImprontaHandlerTests
     }
 
     [Fact]
-    public async Task ValidacionLocal_PlacaYTodosLosIdentificadoresVacios_Retorna422SinLlamarAlProveedorNiPersistir()
+    public async Task ValidacionLocal_PlacaVacia_Retorna422SinLlamarAlProveedorNiPersistir()
     {
+        // numMotor/numChasis/numSerie y orgNit/orgCiudad ya NO son obligatorios (verificado contra
+        // el proveedor real: Kyverum resuelve los identificadores del vehículo vía placa+documento
+        // sin necesitarlos) — este caso solo prueba que placa vacía sigue bloqueando localmente.
         var db = NewDbName();
         var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
             "data:application/pdf;base64,AAAA", "hash", "IMPR-NOPE", "2026-07-02T10:00:00Z"));
@@ -112,10 +115,35 @@ public sealed class GenerarImprontaHandlerTests
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(GenerarImprontaStatus.ValidationFailed);
-        result.Errors.Should().Contain(e => e.Field == "placa");
-        result.Errors.Should().Contain(e => e.Field == "numMotor");
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("placa");
         client.LastRequest.Should().BeNull("no debe invocarse Kyverum RUNT si la validación local falla");
         (await act.ImprontaGenerations.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ValidacionLocal_SinIdentificadorNiOrgNitNiOrgCiudad_NoBloqueaLocalmente()
+    {
+        // Regla relajada: al no ser obligatorios, la solicitud debe pasar la validación local y
+        // llegar al proveedor externo (aunque el proveedor real pueda rechazarla por su cuenta).
+        var db = NewDbName();
+        var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
+            "data:application/pdf;base64,AAAA", "hash-sin-extras", "IMPR-SINEXTRAS", "2026-07-02T10:00:00Z"));
+
+        await using var act = NewContext(db);
+        var handler = new GenerarImprontaHandler(client, new ImprontaRepository(act));
+
+        var result = await handler.HandleAsync(new GenerarImprontaCommand
+        {
+            TenantId = TenantId,
+            FlitUserId = FlitUserId,
+            Request = ValidRequest() with { NumMotor = null, NumChasis = null, NumSerie = null, OrgNit = null, OrgCiudad = null },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(GenerarImprontaStatus.Success);
+        client.LastRequest.Should().NotBeNull();
+        client.LastRequest!.NumMotor.Should().BeNull();
+        client.LastRequest!.OrgNit.Should().BeNull();
+        client.LastRequest!.OrgCiudad.Should().BeNull();
     }
 
     [Fact]
@@ -215,6 +243,7 @@ public sealed class GenerarImprontaHandlerTests
 
     private static GenerarImprontaRequest ValidRequest() => new(
         Placa: "ABC123",
+        Documento: "1040326572",
         NumMotor: "MTR-123",
         NumChasis: null,
         NumSerie: null,
