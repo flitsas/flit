@@ -12,6 +12,20 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flit_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d flit_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -28,9 +42,22 @@ jobs:
         working-directory: services/core-api
         run: dotnet build --no-restore --configuration Release
 
+      - name: Apply migrations
+        working-directory: services/core-api
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.1
+          dotnet ef database update \
+            --project src/Flit.Infrastructure \
+            --startup-project src/Flit.Api \
+            --no-build --configuration Release
+        env:
+          ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
+
       - name: Test
         working-directory: services/core-api
         run: dotnet test --no-build --configuration Release --logger "trx" --collect "XPlat Code Coverage"
+        env:
+          ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
 
       - name: Upload test results
         if: always()
