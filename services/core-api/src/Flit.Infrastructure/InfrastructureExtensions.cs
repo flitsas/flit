@@ -7,12 +7,14 @@ using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Ocr;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
@@ -76,10 +78,14 @@ public static class InfrastructureExtensions
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
+        // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
+        // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
+        services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
+        AddOcr(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -348,6 +354,49 @@ public static class InfrastructureExtensions
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
+    }
+
+    private static void AddOcr(IServiceCollection services, IConfiguration configuration)
+    {
+        // OCR semántico de documentos de trámites. Env var CRUDA primero (override 12-factor),
+        // fallback a configuration — mismo orden y motivo que el resto de integraciones externas.
+        // La API key NUNCA se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<AnthropicOptions>(o =>
+        {
+            o.BaseUrl = Cfg("Anthropic:BaseUrl", "ANTHROPIC_BASE_URL") ?? "https://api.anthropic.com";
+            o.ApiKey = Cfg("Anthropic:ApiKey", "ANTHROPIC_API_KEY") ?? "";
+            o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+            o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
+        });
+
+        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum).
+        services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+
+        // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
+        // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
+        services.AddSingleton<IPdfPageExtractor, PdfSharpPageExtractor>();
+
+        // Feature flag de proveedor (mock por defecto ⇒ no rompe dev/CI sin API key). Mismo patrón que
+        // BiometricsProviderOptions / ConsultationProviderModeOptions. El MockDocumentOcrAnalyzer vive en
+        // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
+        var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
+        if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+        else
+            services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
     }
 
     public static async Task InitializeInfrastructureAsync(

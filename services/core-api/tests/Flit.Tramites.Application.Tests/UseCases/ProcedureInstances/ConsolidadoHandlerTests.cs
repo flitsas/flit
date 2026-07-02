@@ -85,6 +85,33 @@ public sealed class ConsolidadoHandlerTests
         return instance;
     }
 
+    private static ProcedureInstance TraspasoInstance(Guid id, Guid tenantId)
+    {
+        var instance = new ProcedureInstance
+        {
+            Id = id,
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000100",
+            Status = ProcedureInstanceStatus.Draft,
+            ModalidadEntrada = "traspaso",
+            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        // Obligatorios del checklist de traspaso + FUR + certificado + compraventa.
+        AddAttachment(instance, "fur", "fur.pdf", "%PDF-fur");
+        AddAttachment(instance, "certificado_identidad", "cert.pdf", "%PDF-cert");
+        AddAttachment(instance, "compraventa", "compraventa.pdf", "%PDF-compraventa");
+        AddAttachment(instance, "impronta", "impronta.pdf", "%PDF-impronta");
+        AddAttachment(instance, "soat", "soat.pdf", "%PDF-soat");
+        AddAttachment(instance, "rtm", "rtm.pdf", "%PDF-rtm");
+        AddAttachment(instance, "paz_salvo", "paz_salvo.pdf", "%PDF-pazsalvo");
+        AddAttachment(instance, "cedulas", "cedulas.pdf", "%PDF-cedulas");
+
+        return instance;
+    }
+
     private static void AddAttachment(ProcedureInstance instance, string tipo, string filename, string contentMarker)
     {
         var id = Guid.NewGuid();
@@ -106,13 +133,13 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_Traspaso_ReturnsModalidadNoSoportada()
+    public async Task HandleAsync_ModalidadDesconocida_ReturnsModalidadNoSoportada()
     {
+        // AC3 (#10455): una modalidad no habilitada distinta de matrícula/traspaso sigue rechazando.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
-        instance.ModalidadEntrada = "traspaso";
-        instance.TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard;
+        instance.ModalidadEntrada = "sucesion";
 
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
@@ -121,6 +148,47 @@ public sealed class ConsolidadoHandlerTests
 
         result.Should().BeNull();
         error.Should().Be("modalidad_no_soportada");
+    }
+
+    [Fact]
+    public async Task HandleAsync_TraspasoSinFur_ReturnsFurRequerido()
+    {
+        // AC2 (#10455): traspaso sin FUR → fur_requerido, NUNCA modalidad_no_soportada.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
+
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        result.Should().BeNull();
+        error.Should().Be(SubmitGate.FurRequerido);
+    }
+
+    [Fact]
+    public async Task HandleAsync_TraspasoCompleto_IncluyeCompraventa()
+    {
+        // AC1 (#10455): traspaso completo → consolidado con la compraventa en paginas_incluidas.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Document.Tipo.Should().Be("consolidado");
+        instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado")
+            .Which.Payload.Should().Contain("compraventa");
     }
 
     [Fact]

@@ -57,3 +57,47 @@ export const validateReadableName = (value: string, fieldLabel: string): string 
 
 /** Tope de longitud de los términos de texto libre de BÚSQUEDA (espejo del backend). */
 export const SEARCH_TEXT_MAX_LENGTH = 100;
+
+// --- Trámites: VIN, placa y número de documento ----------------------------
+
+/**
+ * VIN (ISO 3779): 17 caracteres, letras A–Z EXCLUYENDO I, O, Q (se confunden con
+ * 1/0) y dígitos 0–9. NO se valida el dígito verificador (posición 9): es un
+ * requisito norteamericano (ISO 3780/FMVSS) y muchos VIN importados no lo cumplen.
+ */
+export const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
+/** Deja solo el charset válido de VIN, en mayúsculas y tope de 17. */
+export const sanitizeVin = (v: string): string =>
+  v.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "").slice(0, 17);
+export const validateVin = (value: string): string | null =>
+  VIN_PATTERN.test(value)
+    ? null
+    : "El VIN debe tener 17 caracteres (letras y números, sin I, O ni Q).";
+
+/**
+ * Placa colombiana (unión de formatos): carro/público `AAA123`, moto actual
+ * `AAA12A` o antigua `AAA12`, y remolque/semirremolque `R12345`/`S12345`. La placa
+ * la valida en definitiva el RUNT; este patrón es un chequeo anti-error de tipeo.
+ */
+export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5})$/;
+/** Deja solo alfanumérico en mayúsculas, tope de 6 (el más largo válido). */
+export const sanitizePlate = (v: string): string =>
+  v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+export const validatePlate = (value: string): string | null =>
+  PLATE_PATTERN.test(value)
+    ? null
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto) o R12345 (remolque).";
+
+/** ¿El tipo de documento es pasaporte? (admite letras y números). */
+export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";
+/**
+ * Número de documento por tipo: pasaporte admite letras y números; el resto
+ * (CC, CE, TI, NIT) solo dígitos. Se sanea en onChange según el tipo actual.
+ */
+export const sanitizeDocNumber = (v: string, docType: string): string =>
+  isPassport(docType) ? v.replace(/[^A-Za-z0-9]/g, "") : v.replace(/[^0-9]/g, "");
+export const validateDocNumber = (value: string, docType: string): string | null => {
+  if (isPassport(docType))
+    return /^[A-Za-z0-9]+$/.test(value) ? null : "El pasaporte solo admite letras y números.";
+  return /^[0-9]+$/.test(value) ? null : "El número de documento solo admite dígitos.";
+};

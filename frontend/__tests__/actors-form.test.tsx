@@ -398,4 +398,20 @@ describe('validateActors — unidad', () => {
     );
     expect(v.valid).toBe(false);
   });
+
+  it('rechaza número de documento con letras cuando el tipo no es pasaporte', () => {
+    const v = validateActors([{ ...base, tipoDocumento: 'CC', numeroDocumento: '12A4' }], 'matricula_inicial');
+    expect(v.valid).toBe(false);
+    expect(v.byActor[0].numeroDocumento).toContain('dígitos');
+  });
+
+  it('acepta pasaporte alfanumérico', () => {
+    const v = validateActors([{ ...base, tipoDocumento: 'PAS', numeroDocumento: 'AB123CD' }], 'matricula_inicial');
+    expect(v.valid).toBe(true);
+  });
+
+  it('rechaza nombre con caracteres especiales', () => {
+    const v = validateActors([{ ...base, nombreCompleto: '<script>' }], 'matricula_inicial');
+    expect(v.valid).toBe(false);
+  });
 });

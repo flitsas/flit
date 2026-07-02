@@ -12,6 +12,7 @@ import type {
   CompletarBiometriaResult,
   ConsultationResult,
   CreateInstanceRequest,
+  DocumentOcrResult,
   EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
@@ -432,6 +433,29 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.attachments ?? [];
+  },
+
+  // OCR semántico de un documento ANTES de subirlo al expediente. Multipart POST a través del API
+  // (a diferencia de uploadAttachment, que sube el binario directo a S3). Devuelve el JSON extraído y,
+  // en PDFs multi-documento, el recorte en base64. Lanza si la respuesta no es OK (proveedor caído/
+  // timeout/tipo o archivo inválido) → el hook aborta la subida y ofrece carga manual.
+  analyzeDocument: async (
+    tipo: string,
+    file: File,
+    tenantId?: string,
+  ): Promise<DocumentOcrResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    // Sin Content-Type manual: el navegador fija el boundary del multipart. tenantHeader añade Bearer + X-Tenant-Id.
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/ocr/${encodeURIComponent(tipo)}`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as DocumentOcrResult;
   },
 
   // Subida directa navegador→S3 (presigned). El binario NO pasa por el request del
