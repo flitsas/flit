@@ -101,6 +101,11 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
 
+        // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
+        // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura
+        // (AddOcr) — mismo split app-layer/infra que los consultation providers.
+        services.AddScoped<Ocr.AnalyzeDocumentHandler>();
+
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();
         services.AddScoped<ListConsultationTemplatesHandler>();
