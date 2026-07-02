@@ -36,6 +36,14 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  sanitizeVin,
+  validateVin,
+  sanitizePlate,
+  validatePlate,
+  sanitizeDocNumber,
+  validateDocNumber,
+} from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
   BiometricParte,
@@ -991,6 +999,14 @@ function ConsultaStep({
       );
       return;
     }
+    // Validación de formato antes de gastar una consulta al RUNT.
+    const formatError = isVin
+      ? validateVin(vin.trim())
+      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), ownerDocType));
+    if (formatError) {
+      setError(formatError);
+      return;
+    }
     setError(null);
     setPersisting(true);
     try {
@@ -1087,7 +1103,7 @@ function ConsultaStep({
               id="consulta-vin"
               type="text"
               value={vin}
-              onChange={(e) => setVin(e.target.value)}
+              onChange={(e) => setVin(sanitizeVin(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleRun();
               }}
@@ -1114,7 +1130,7 @@ function ConsultaStep({
                 id="consulta-plate"
                 type="text"
                 value={plate}
-                onChange={(e) => setPlate(e.target.value)}
+                onChange={(e) => setPlate(sanitizePlate(e.target.value))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
@@ -1131,7 +1147,12 @@ function ConsultaStep({
               <select
                 id="consulta-owner-doc-type"
                 value={ownerDocType}
-                onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
+                onChange={(e) => {
+                  const next = e.target.value as ActorDocumentType;
+                  setOwnerDocType(next);
+                  // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
+                  setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                }}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
@@ -1154,7 +1175,7 @@ function ConsultaStep({
                 id="consulta-owner-doc-number"
                 type="text"
                 value={ownerDocNumber}
-                onChange={(e) => setOwnerDocNumber(e.target.value)}
+                onChange={(e) => setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
                 style={{ borderColor: '#DFE5ED' }}
@@ -1270,7 +1291,12 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
+        <DocumentChecklist
+          instanceId={instanceId}
+          onChanged={onRefresh}
+          hideHeader
+          modalidad={modalidad}
+        />
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
