@@ -7,6 +7,9 @@ namespace Flit.Infrastructure.Documents.Fur;
 /// <summary>Mapea <see cref="FurDocumentData"/> al diccionario de tokens del manifest overlay.</summary>
 public static class FurFieldMapper
 {
+    /// <summary>Sello impreso en el espacio de firma cuando no hay validación de identidad (HU #10463).</summary>
+    private const string NoFirmadoSello = "NO FIRMADO";
+
     public static IReadOnlyDictionary<string, FurFieldValue> Map(FurDocumentData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -93,6 +96,15 @@ public static class FurFieldMapper
         }
 
         MarkDocType(dict, propietario?.Documento, propietario?.DocumentType, "vehicle_owner");
+
+        // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
+        // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
+        if (!data.IdentidadValidada)
+        {
+            dict["vehicle_owner_signature"] = Text(NoFirmadoSello);
+            if (esTraspaso)
+                dict["vehicle_buyer_signature"] = Text(NoFirmadoSello);
+        }
 
         return dict;
     }

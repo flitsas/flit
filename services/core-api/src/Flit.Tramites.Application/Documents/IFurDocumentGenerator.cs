@@ -56,7 +56,10 @@ public sealed record FurDocumentData(
     IReadOnlyList<string> SellosFirma,
     DateTime? FechaTramite = null,
     string? Observaciones = null,
-    IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null)
+    IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
+    // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
+    // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).
+    bool IdentidadValidada = true)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

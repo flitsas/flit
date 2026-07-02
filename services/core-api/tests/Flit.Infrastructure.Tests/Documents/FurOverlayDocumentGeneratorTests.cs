@@ -224,6 +224,29 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["plate_number"].Text.Should().Be("123");
     }
 
+    // ── HU #10463 — sello "NO FIRMADO" cuando no hay validación de identidad ──
+
+    [Fact]
+    public void FurFieldMapper_WithoutIdentity_PaintsNoFirmadoInSignatures()
+    {
+        // AC1: sin validación de identidad, el espacio de firma muestra "NO FIRMADO"
+        // (traspaso: vendedor/propietario + comprador).
+        var data = TraspasoData() with { IdentidadValidada = false };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().Be("NO FIRMADO");
+    }
+
+    [Fact]
+    public void FurFieldMapper_WithIdentity_DoesNotPaintNoFirmado()
+    {
+        // AC2: con validación (por defecto), no se pinta "NO FIRMADO".
+        var values = FurFieldMapper.Map(TraspasoData());
+        values["vehicle_owner_signature"].Text.Should().NotBe("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().NotBe("NO FIRMADO");
+    }
+
     // ── HU #10256 fix — resolutor de fuentes embebido (raíz del HTTP 500 en runtime alpine) ──
 
     [Fact]
