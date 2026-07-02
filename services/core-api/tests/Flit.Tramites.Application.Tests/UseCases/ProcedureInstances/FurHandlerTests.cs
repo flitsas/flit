@@ -102,19 +102,43 @@ public sealed class FurHandlerTests
     }
 
     [Fact]
-    public async Task Generar_Traspaso_WithoutBiometria_RejectsGate()
+    public async Task Generar_Traspaso_WithoutBiometria_GeneratesFurNoFirmadoWithoutCertificate()
     {
+        // HU #10463 AC1/AC5: sin validación (falta vendedor) el FUR se genera igual (NO biometria_gate)
+        // y NO se emite el certificado de identidad.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
-        instance.BiometricValidations.Add(Bio("comprador")); // falta vendedor
+        WithOrganismo(instance);
+        instance.BiometricValidations.Add(Bio("comprador")); // falta vendedor -> identidad no válida
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
-        error.Should().Be("biometria_gate");
-        _storage.Saved.Should().BeEmpty();
+        error.Should().BeNull();
+        // FUR + compraventa (traspaso), SIN certificado_identidad.
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "compraventa"]);
+        instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    [Fact]
+    public async Task Generar_Matricula_WithoutBiometria_GeneratesOnlyFurNoCertificate()
+    {
+        // HU #10463 AC1/AC5: matrícula sin biométrica del comprador → FUR sin certificado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance); // sin biométrica
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
+        instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
     }
 
     [Fact]
