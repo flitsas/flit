@@ -60,6 +60,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<OtApiCallLogEntity> OtApiCallLogs => Set<OtApiCallLogEntity>();
 
+    // HU #10466 — historial de improntas generadas (ADR-0022). Sin RLS (dispensa documentada A10).
+    public DbSet<ImprontaGenerationEntity> ImprontaGenerations => Set<ImprontaGenerationEntity>();
+
     public DbSet<OtDocumentPrecedenceEntity> OtDocumentPrecedences => Set<OtDocumentPrecedenceEntity>();
 
     public DbSet<OtDocumentTagEntity> OtDocumentTags => Set<OtDocumentTagEntity>();
