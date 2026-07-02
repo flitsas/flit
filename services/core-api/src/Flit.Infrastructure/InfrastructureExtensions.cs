@@ -1,8 +1,10 @@
+using Flit.Admin.Domain.Improntas;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Persistence;
@@ -77,6 +79,7 @@ public static class InfrastructureExtensions
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
+        AddImprontas(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -315,6 +318,36 @@ public static class InfrastructureExtensions
         services.AddScoped<IIdentityValidationProvider, KyverumIdentityValidationProvider>();
         services.AddScoped<IIdentityValidationProviderResolver, IdentityValidationProviderResolver>();
         services.AddHostedService<IdentityValidationSendRetryProcessor>();
+    }
+
+    private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #10465 — Kyverum RUNT (improntas:generar). Mismo orden de precedencia que Kyverum Verify
+        // (AddIdentityValidation): env var CRUDA primero (override de deploy 12-factor), fallback a
+        // configuration (appsettings/user-secrets/`ImprontaRunt__*`). runt.kyverum.com es un dominio
+        // DISTINTO de verify.kyverum.com (mismo proveedor, otro producto/scope). La API key NUNCA se
+        // loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<ImprontaRuntOptions>(o =>
+        {
+            o.BaseUrl = Cfg("ImprontaRunt:BaseUrl", "KYVERUM_RUNT_BASE_URL") ?? "https://runt.kyverum.com";
+            o.ApiKey = Cfg("ImprontaRunt:ApiKey", "KYVERUM_RUNT_API_KEY") ?? "";
+            o.AuthScheme = Cfg("ImprontaRunt:AuthScheme", "KYVERUM_RUNT_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("ImprontaRunt:TimeoutSeconds", "KYVERUM_RUNT_TIMEOUT_SECONDS"), out var t)
+                ? t : 30;
+        });
+
+        services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
     }
 
     public static async Task InitializeInfrastructureAsync(
