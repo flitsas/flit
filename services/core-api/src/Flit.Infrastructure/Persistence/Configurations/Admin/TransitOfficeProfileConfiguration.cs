@@ -20,6 +20,12 @@ internal sealed class TransitOfficeProfileConfiguration : IEntityTypeConfigurati
             .HasDatabaseName("uq_transit_office_profiles_tenant_id");
 
         builder.Property(x => x.TransitOfficeId).IsRequired();
+        // Refactor adminOT: una oficina física del catálogo = un solo tenant OT. Antes de
+        // este índice, nada impedía crear dos tenants OT apuntando a la misma oficina; la
+        // regla ya se valida en CreateTransitOfficeHandler, pero se blinda también en BD.
+        builder.HasIndex(x => x.TransitOfficeId)
+            .IsUnique()
+            .HasDatabaseName("uq_transit_office_profiles_transit_office_id");
         builder.Property(x => x.OperationMode)
             .HasMaxLength(20)
             .HasDefaultValue("dashboard")

@@ -64,17 +64,30 @@ public static class SecurityEndpoints
 
                 targetTenantId = request.TargetTenantId.Value;
 
-                // Rol siempre forzado a AdminCompany en el tenant destino
-                var adminCompanyRole = await db.Roles
+                // Rol de sistema forzado según el tipo de tenant destino (refactor adminOT):
+                // tenants OT (con TransitOfficeProfile asociado) reciben ot_admin; el resto
+                // (compañías) sigue recibiendo AdminCompany, comportamiento sin cambios.
+                var isOtTenant = await db.TransitOfficeProfiles
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == AdminAuthorization.AdminCompanyRole, cancellationToken);
+                    .AnyAsync(p => p.TenantId == targetTenantId, cancellationToken);
+                var targetRoleCode = isOtTenant
+                    ? AdminAuthorization.OtAdminRole
+                    : AdminAuthorization.AdminCompanyRole;
 
-                if (adminCompanyRole is null)
+                var adminRole = await db.Roles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == targetRoleCode, cancellationToken);
+
+                if (adminRole is null)
                     return Results.Json(
-                        new ErrorResponse("ADMIN_ROLE_NOT_FOUND", "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
+                        new ErrorResponse(
+                            "ADMIN_ROLE_NOT_FOUND",
+                            isOtTenant
+                                ? "El organismo de tránsito destino no tiene configurado el rol ot_admin. Verifica que se creó correctamente."
+                                : "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
                         statusCode: StatusCodes.Status409Conflict);
 
-                roleId = adminCompanyRole.Id;
+                roleId = adminRole.Id;
             }
             else
             {

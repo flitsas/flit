@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text.Json;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -52,8 +53,15 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new("role", roleCode),
         };
 
-        foreach (var slug in permissionSlugs)
-            claims.Add(new Claim("permissions", slug));
+        // Un solo Claim("permissions", ...) por slug colapsa a un string plano (no array) en el
+        // JSON del token cuando permissionSlugs tiene exactamente un elemento — el serializador de
+        // JwtSecurityToken solo emite un array JSON si hay 2+ claims del mismo tipo. Con roles OT
+        // curados por SuperAdmin (con frecuencia 1 solo permiso) esto rompe el parseo del frontend
+        // (que espera siempre un array). Se serializa explícitamente como JSON array, incluso vacío.
+        claims.Add(new Claim(
+            "permissions",
+            JsonSerializer.Serialize(permissionSlugs),
+            JsonClaimValueTypes.JsonArray));
 
         var token = new JwtSecurityToken(
             issuer: keyMaterial.Issuer,

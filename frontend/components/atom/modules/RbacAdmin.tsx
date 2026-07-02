@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, X } from "lucide-react";
+import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, X } from "lucide-react";
 import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
+import {
+  fetchTransitOfficeTenants,
+  type TransitOfficeTenantItem,
+} from "@/lib/api/admin-transit-office-tenants";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
@@ -336,6 +340,7 @@ export function RbacAdmin() {
 
 function RolesTab() {
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [roles, setRoles] = useState<RbacRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
@@ -345,6 +350,11 @@ function RolesTab() {
   useEffect(() => {
     superadminClient.listCompanies()
       .then((r) => setCompanies(r.data))
+      .catch(() => {});
+    // Tenants OT (refactor adminOT): el SuperAdmin también puede curar los permisos
+    // del rol ot_admin de cada organismo de tránsito, no solo de compañías.
+    fetchTransitOfficeTenants({ pageSize: 100 })
+      .then((r) => setTransitOfficeTenants(r.data))
       .catch(() => {});
   }, []);
 
@@ -376,7 +386,7 @@ function RolesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Selector de tenant */}
+      {/* Selector de tenant: compañías y tenants OT (refactor adminOT) en un mismo picker */}
       <div className="flex items-center gap-3">
         <label htmlFor="tenant-picker" className="text-sm font-semibold shrink-0">Tenant:</label>
         <select
@@ -386,11 +396,28 @@ function RolesTab() {
           className="text-sm px-3 py-2 rounded-xl border bg-white outline-none focus:border-[#557EFF]"
           style={{ borderColor: "#DFE5ED", minWidth: 280 }}
         >
-          <option value="">— Selecciona una compañía —</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
-          ))}
+          <option value="">— Selecciona un tenant —</option>
+          {companies.length > 0 && (
+            <optgroup label="Compañías">
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
+              ))}
+            </optgroup>
+          )}
+          {transitOfficeTenants.length > 0 && (
+            <optgroup label="Organismos de Tránsito">
+              {transitOfficeTenants.map((t) => (
+                <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
+              ))}
+            </optgroup>
+          )}
         </select>
+        {selectedTenantId && transitOfficeTenants.some((t) => t.id === selectedTenantId) && (
+          <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#557EFF" }}>
+            <Landmark className="h-3.5 w-3.5" aria-hidden="true" />
+            Organismo de Tránsito
+          </span>
+        )}
         {selectedTenantId && (
           <button
             onClick={() => setShowCreateRole(true)}
@@ -404,7 +431,7 @@ function RolesTab() {
 
       {/* Tabla de roles */}
       {!selectedTenantId && (
-        <div className="py-12 text-center text-sm opacity-60">Selecciona una compañía para ver sus roles.</div>
+        <div className="py-12 text-center text-sm opacity-60">Selecciona un tenant para ver sus roles.</div>
       )}
       {selectedTenantId && (
         <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden" style={{ borderColor: "#DFE5ED" }}>
