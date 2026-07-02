@@ -12,7 +12,7 @@ namespace Flit.Infrastructure.Tests.Improntas;
 /// <summary>
 /// Uso de ejemplo:
 /// var client = new ImprontaRuntClient(httpClient, Options.Create(new ImprontaRuntOptions { ApiKey = "kr_live_..." }), logger);
-/// var result = await client.GenerarAsync(new ImprontaExternalRequest("ABC123", "MOT1", null, null, "TOYOTA", "COROLLA", "2022", "CERVIAL", "900123456-1", "MANIZALES", "jefe.instructores"), ct);
+/// var result = await client.GenerarAsync(new ImprontaExternalRequest("ABC123", "1040326572", "MOT1", null, null, "TOYOTA", "COROLLA", "2022", "CERVIAL", "900123456-1", "MANIZALES", "jefe.instructores"), ct);
 /// HU #10465 — AC1 (200 ⇒ DTO parseado), AC2 (VALIDATION_ERROR ⇒ excepción no transitoria) y
 /// AC3 (401 ambiguo inspeccionando error.message ⇒ UNAUTHORIZED no transitorio; 502 ⇒ UPSTREAM_UNAVAILABLE transitorio).
 /// </summary>
@@ -20,6 +20,7 @@ public sealed class ImprontaRuntClientTests
 {
     private static readonly ImprontaExternalRequest ValidRequest = new(
         Placa: "ABC123",
+        Documento: "1040326572",
         NumMotor: "MOT12345",
         NumChasis: "CHA98765",
         NumSerie: "5HTSN3527D7T91789",
@@ -58,6 +59,7 @@ public sealed class ImprontaRuntClientTests
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v1/improntas:generar");
         // El body enviado corresponde al contrato (placa + al menos un identificador + org/operador).
         handler.LastBody.Should().Contain("\"placa\":\"ABC123\"");
+        handler.LastBody.Should().Contain("\"documento\":\"1040326572\"");
         handler.LastBody.Should().Contain("\"operador\":\"jefe.instructores\"");
     }
 
@@ -176,6 +178,56 @@ public sealed class ImprontaRuntClientTests
         var act = async () => await Client(handler).GenerarAsync(ValidRequest, ct);
 
         (await act.Should().ThrowAsync<ImprontaRuntException>()).Which.IsTransient.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AC3_RespuestaOkFalse_LanzaExcepcionConMensajeDeNegocioYPrefijoPropio()
+    {
+        // 200 OK con ok:false (no documentado en CONTRATO-API.md, descubierto contra el proveedor
+        // real): Kyverum no pudo generar la impronta por un motivo de negocio, no es un error HTTP.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK, """
+            {"ok":false,"message":"El RUNT no expone identificadores (motor/chasis/serie) para este vehículo — no hay nada que improntar.","fromCache":true}
+            """));
+
+        var act = async () => await Client(handler).GenerarAsync(ValidRequest, ct);
+
+        var ex = await act.Should().ThrowAsync<ImprontaRuntException>();
+        ex.Which.IsTransient.Should().BeFalse();
+        ex.Which.Message.Should().StartWith("Impronta no disponible:");
+        ex.Which.Message.Should().Contain("El RUNT no expone identificadores");
+    }
+
+    [Fact]
+    public async Task AC3_RespuestaOkFalseSinMensaje_UsaMensajeGenerico()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK, """{"ok":false}"""));
+
+        var act = async () => await Client(handler).GenerarAsync(ValidRequest, ct);
+
+        var ex = await act.Should().ThrowAsync<ImprontaRuntException>();
+        ex.Which.IsTransient.Should().BeFalse();
+        ex.Which.Message.Should().StartWith("Impronta no disponible:");
+    }
+
+    [Fact]
+    public async Task AC1_SinOrgNitNiOrgCiudadNiIdentificadorVehiculo_OmiteEsosCamposDelBody()
+    {
+        // Verificado contra el proveedor real: Kyverum resuelve el vehículo vía placa+documento y
+        // genera la impronta sin numMotor/numChasis/numSerie ni orgNit/orgCiudad.
+        var ct = TestContext.Current.CancellationToken;
+        var minimalRequest = ValidRequest with { NumMotor = null, NumChasis = null, NumSerie = null, OrgNit = null, OrgCiudad = null };
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK, """
+            {"ok":true,"pdf":"data:application/pdf;base64,JVBERi0xLjQK","hash":"9f2c","radicado":"IMPR-2","fechaImpresa":"2026-07-02T14:19:41"}
+            """));
+
+        var result = await Client(handler).GenerarAsync(minimalRequest, ct);
+
+        result.Radicado.Should().Be("IMPR-2");
+        handler.LastBody.Should().NotContain("numMotor");
+        handler.LastBody.Should().NotContain("orgNit");
+        handler.LastBody.Should().NotContain("orgCiudad");
     }
 
     private static HttpResponseMessage Json(HttpStatusCode code, string body) =>

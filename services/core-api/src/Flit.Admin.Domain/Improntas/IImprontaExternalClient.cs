@@ -7,18 +7,33 @@ namespace Flit.Admin.Domain.Improntas;
 /// contrato del proveedor; esa validación se hace en la capa de aplicación (HU #10467), no aquí.
 /// </summary>
 /// <param name="Placa">Placa del vehículo.</param>
-/// <param name="NumMotor">Número de motor. Opcional si se envía al menos otro identificador.</param>
-/// <param name="NumChasis">Número de chasis. Opcional si se envía al menos otro identificador.</param>
-/// <param name="NumSerie">Número de serie/VIN. Opcional si se envía al menos otro identificador.</param>
+/// <param name="Documento">
+/// Documento de identidad del propietario del vehículo. Requerido por Kyverum RUNT para toda
+/// consulta por placa (no documentado originalmente en CONTRATO-API.md — descubierto validando
+/// contra el proveedor real: <c>"Documento del propietario requerido para consulta por placa"</c>).
+/// </param>
+/// <param name="NumMotor">
+/// Número de motor. Opcional — verificado contra el proveedor real: Kyverum resuelve los
+/// identificadores del vehículo directamente desde el RUNT vía placa+documento cuando no se envían.
+/// </param>
+/// <param name="NumChasis">Número de chasis. Opcional, mismo hallazgo que <see cref="NumMotor"/>.</param>
+/// <param name="NumSerie">Número de serie/VIN. Opcional, mismo hallazgo que <see cref="NumMotor"/>.</param>
 /// <param name="Marca">Marca del vehículo. Opcional.</param>
 /// <param name="Linea">Línea del vehículo. Opcional.</param>
 /// <param name="Modelo">Modelo (año) del vehículo. Opcional.</param>
 /// <param name="OrgNombre">Nombre de la organización solicitante (impreso en el certificado).</param>
-/// <param name="OrgNit">NIT de la organización solicitante (impreso en el certificado).</param>
-/// <param name="OrgCiudad">Ciudad de la organización solicitante (impresa en el certificado).</param>
+/// <param name="OrgNit">
+/// NIT de la organización solicitante (impreso en el certificado). Opcional — verificado contra el
+/// proveedor real: Kyverum genera la impronta sin este dato.
+/// </param>
+/// <param name="OrgCiudad">
+/// Ciudad de la organización solicitante (impresa en el certificado). Opcional — mismo hallazgo que
+/// <see cref="OrgNit"/>.
+/// </param>
 /// <param name="Operador">Operador que solicita la impronta (impreso en el certificado).</param>
 public sealed record ImprontaExternalRequest(
     string Placa,
+    string Documento,
     string? NumMotor,
     string? NumChasis,
     string? NumSerie,
@@ -26,8 +41,8 @@ public sealed record ImprontaExternalRequest(
     string? Linea,
     string? Modelo,
     string OrgNombre,
-    string OrgNit,
-    string OrgCiudad,
+    string? OrgNit,
+    string? OrgCiudad,
     string Operador);
 
 /// <summary>

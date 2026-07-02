@@ -36,6 +36,7 @@ internal sealed class ImprontaRuntClient(
     {
         var body = new ImprontaRuntRequestBody(
             Placa: request.Placa,
+            Documento: request.Documento,
             NumMotor: request.NumMotor,
             NumChasis: request.NumChasis,
             NumSerie: request.NumSerie,
@@ -63,8 +64,20 @@ internal sealed class ImprontaRuntClient(
                 throw await BuildErrorAsync(response, ct);
 
             var payload = await response.Content.ReadFromJsonAsync<ImprontaRuntResponseBody>(JsonOptions, ct);
+
+            // 200 OK con ok:false (no es un error HTTP): Kyverum no pudo generar la impronta por una
+            // razón de negocio (ej. el RUNT no expone identificadores para este vehículo) — distinto de
+            // una respuesta malformada. Se usa un prefijo propio para que la capa de aplicación (HU
+            // #10467) lo clasifique como 422, no como 401 genérico.
+            if (payload is { Ok: false })
+            {
+                var providerMessage = string.IsNullOrWhiteSpace(payload.Message)
+                    ? "Kyverum RUNT no pudo generar la impronta para los datos enviados."
+                    : payload.Message;
+                throw new ImprontaRuntException($"Impronta no disponible: {providerMessage}", isTransient: false);
+            }
+
             if (payload is null
-                || !payload.Ok
                 || string.IsNullOrWhiteSpace(payload.Pdf)
                 || string.IsNullOrWhiteSpace(payload.Hash)
                 || string.IsNullOrWhiteSpace(payload.Radicado)
@@ -162,6 +175,7 @@ internal sealed class ImprontaRuntClient(
     // ── Contrato Kyverum RUNT (CONTRATO-API.md — POST /v1/improntas:generar) ──────────────────
     private sealed record ImprontaRuntRequestBody(
         [property: JsonPropertyName("placa")] string Placa,
+        [property: JsonPropertyName("documento")] string Documento,
         [property: JsonPropertyName("numMotor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NumMotor,
         [property: JsonPropertyName("numChasis"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NumChasis,
         [property: JsonPropertyName("numSerie"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NumSerie,
@@ -169,8 +183,8 @@ internal sealed class ImprontaRuntClient(
         [property: JsonPropertyName("linea"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Linea,
         [property: JsonPropertyName("modelo"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Modelo,
         [property: JsonPropertyName("orgNombre")] string OrgNombre,
-        [property: JsonPropertyName("orgNit")] string OrgNit,
-        [property: JsonPropertyName("orgCiudad")] string OrgCiudad,
+        [property: JsonPropertyName("orgNit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OrgNit,
+        [property: JsonPropertyName("orgCiudad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OrgCiudad,
         [property: JsonPropertyName("operador")] string Operador);
 
     private sealed record ImprontaRuntResponseBody(
@@ -178,7 +192,10 @@ internal sealed class ImprontaRuntClient(
         [property: JsonPropertyName("pdf")] string? Pdf,
         [property: JsonPropertyName("hash")] string? Hash,
         [property: JsonPropertyName("radicado")] string? Radicado,
-        [property: JsonPropertyName("fechaImpresa")] string? FechaImpresa);
+        [property: JsonPropertyName("fechaImpresa")] string? FechaImpresa,
+        // Presente cuando ok:false (200 con motivo de negocio, ej. "El RUNT no expone identificadores
+        // para este vehículo") — no documentado en CONTRATO-API.md, descubierto contra el proveedor real.
+        [property: JsonPropertyName("message")] string? Message = null);
 
     private sealed record ImprontaRuntErrorEnvelope(
         [property: JsonPropertyName("error")] ImprontaRuntErrorBody? Error);
