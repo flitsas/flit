@@ -9,11 +9,11 @@ namespace Flit.Admin.Tests.Improntas;
 /// var impronta = new ImprontaGeneration { NumMotor = "M123" };
 /// impronta.TieneIdentificadorVehiculo(); // true
 ///
-/// Cubre el invariante de negocio de HU #10466 / AC1 (ADR-0022): al menos uno de
-/// NumMotor/NumChasis/NumSerie debe estar presente. Es la primera línea de defensa en
-/// código; el CHECK <c>ck_impronta_generations_identificador_vehiculo</c> en BD (verificado
-/// contra Postgres real en <see cref="ImprontaRepositoryTests"/> / evidencia de migración)
-/// es la segunda.
+/// <see cref="ImprontaGeneration.TieneIdentificadorVehiculo"/> es un helper informativo (ej. para UI),
+/// NO un invariante obligatorio: el CHECK <c>ck_impronta_generations_identificador_vehiculo</c> que
+/// originalmente lo exigía en BD se eliminó (migración <c>DropImprontaVehiculoIdentificadorCheck</c>) —
+/// verificado contra el proveedor real que Kyverum genera la impronta sin ningún identificador de
+/// vehículo, resolviéndolo internamente vía placa+documento.
 /// </summary>
 public sealed class ImprontaGenerationTests
 {

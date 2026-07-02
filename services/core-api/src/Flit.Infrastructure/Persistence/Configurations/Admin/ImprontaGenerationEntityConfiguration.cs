@@ -7,18 +7,20 @@ namespace Flit.Infrastructure.Persistence.Configurations.Admin;
 
 /// <summary>
 /// Mapeo de <c>admin.impronta_generations</c> (HU #10466 / ADR-0022). FKs a
-/// <c>identity.tenants</c>/<c>identity.users</c>, CHECK de identificador de vehículo, trigger de
-/// auditoría (sin <c>row_version</c>) y política RLS se materializan vía SQL crudo en la migración
-/// (mismo patrón que el resto del schema <c>admin</c> — ver <c>TransitOfficeProfileConfiguration</c>).
+/// <c>identity.tenants</c>/<c>identity.users</c>, trigger de auditoría (sin <c>row_version</c>) y
+/// política RLS se materializan vía SQL crudo en la migración (mismo patrón que el resto del schema
+/// <c>admin</c> — ver <c>TransitOfficeProfileConfiguration</c>).
+///
+/// El CHECK <c>ck_impronta_generations_identificador_vehiculo</c> (al menos un identificador de
+/// vehículo obligatorio) se eliminó en la migración <c>DropImprontaVehiculoIdentificadorCheck</c>:
+/// verificado contra el proveedor real (Kyverum RUNT) que la impronta se genera correctamente sin
+/// numMotor/numChasis/numSerie, resolviendo el vehículo vía placa+documento.
 /// </summary>
 internal sealed class ImprontaGenerationEntityConfiguration : IEntityTypeConfiguration<ImprontaGenerationEntity>
 {
     public void Configure(EntityTypeBuilder<ImprontaGenerationEntity> builder)
     {
-        builder.ToTable("impronta_generations", SchemaNames.Admin, table =>
-            table.HasCheckConstraint(
-                "ck_impronta_generations_identificador_vehiculo",
-                "num_motor IS NOT NULL OR num_chasis IS NOT NULL OR num_serie IS NOT NULL"));
+        builder.ToTable("impronta_generations", SchemaNames.Admin);
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");

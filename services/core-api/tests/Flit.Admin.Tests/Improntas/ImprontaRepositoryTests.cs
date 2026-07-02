@@ -17,9 +17,11 @@ namespace Flit.Admin.Tests.Improntas;
 /// <c>Flit.Admin.Tests/Companies/TransitOffices/CreateTransitOfficeHandlerTests</c>. El proveedor
 /// InMemory no aplica CHECK/FK/RLS de Postgres — esas reglas de esquema se verificaron
 /// directamente contra Postgres real al generar la migración (ver evidencia PASO 6, AC1/AC3):
-/// CHECK <c>ck_impronta_generations_identificador_vehiculo</c>, FKs a <c>identity.tenants</c>/
-/// <c>identity.users</c>, UNIQUE <c>uq_impronta_generations_radicado</c>, trigger de auditoría,
-/// ausencia de RLS y rollback (Down) sin objetos huérfanos.
+/// FKs a <c>identity.tenants</c>/<c>identity.users</c>, UNIQUE <c>uq_impronta_generations_radicado</c>,
+/// trigger de auditoría, ausencia de RLS y rollback (Down) sin objetos huérfanos. El CHECK
+/// <c>ck_impronta_generations_identificador_vehiculo</c> que originalmente exigía al menos un
+/// identificador se eliminó (migración <c>DropImprontaVehiculoIdentificadorCheck</c>) tras verificar
+/// contra el proveedor real que Kyverum no lo requiere.
 /// </summary>
 public sealed class ImprontaRepositoryTests
 {
