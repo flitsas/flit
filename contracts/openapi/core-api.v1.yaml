@@ -41,6 +41,10 @@ tags:
       requeridos congelados al crear el trámite (cualquier JWT válido).
   - name: Trámites · Traspaso
     description: Radicación de traspasos vehiculares.
+  - name: Admin · Improntas
+    description: >
+      Generación del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte) vía Kyverum RUNT, con persistencia de trazabilidad (rol SuperAdmin).
 
 paths:
   /api/v1/auth/login:
@@ -2556,6 +2560,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/improntas/generate:
+    post:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasGenerate
+      summary: Genera, persiste y entrega el PDF del Certificado de Improntas Digitales (HU #10467)
+      description: >
+        Llama a Kyverum RUNT (HU #10465), decodifica el PDF del Data URI base64 devuelto, persiste
+        el registro de trazabilidad (HU #10466: radicado, hash, fechaImpresa, datos del vehículo,
+        organización, operador, tenant y usuario SuperAdmin que la generó) y responde con el binario
+        íntegro, listo para descarga (`impronta_{radicado}.pdf`). Requiere rol SuperAdmin (AC2).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerarImprontaRequest"
+      responses:
+        "200":
+          description: PDF del Certificado de Improntas Digitales.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: No autenticado, o Kyverum RUNT rechazó la autenticación (key inválida/scope insuficiente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Usuario autenticado sin rol SuperAdmin (AC2).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Falta placa/identificador de vehículo/organización/operador (validación local), o
+            Kyverum RUNT respondió VALIDATION_ERROR (AC3).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Kyverum RUNT no disponible temporalmente (UPSTREAM_UNAVAILABLE, AC3).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3775,3 +3834,24 @@ components:
         to: { type: string, format: date }
         tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin." }
       required: [from, to]
+
+    GenerarImprontaRequest:
+      type: object
+      description: >
+        Datos del vehículo y de la organización solicitante para generar el Certificado de
+        Improntas Digitales (Res. 17145/2023). Placa y al menos uno de numMotor/numChasis/numSerie
+        son obligatorios; el certificado siempre imprime los tres bloques, marcando "(SIN DATO)"
+        los que no se envíen.
+      properties:
+        placa: { type: string }
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string }
+        orgCiudad: { type: string }
+        operador: { type: string }
+      required: [placa, orgNombre, orgNit, orgCiudad, operador]
