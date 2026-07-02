@@ -11,6 +11,8 @@ import type {
 const mocks = vi.hoisted(() => ({
   getChecklist: vi.fn(),
   getAttachments: vi.fn(),
+  getInstance: vi.fn(),
+  analyzeDocument: vi.fn(),
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
 }));
@@ -19,6 +21,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getChecklist: mocks.getChecklist,
     getAttachments: mocks.getAttachments,
+    getInstance: mocks.getInstance,
+    analyzeDocument: mocks.analyzeDocument,
     uploadAttachment: mocks.uploadAttachment,
     deleteAttachment: mocks.deleteAttachment,
   },
@@ -63,6 +67,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getChecklist.mockResolvedValue(CHECKLIST);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getInstance.mockResolvedValue({ fieldValues: [] });
+  mocks.analyzeDocument.mockResolvedValue({ ok: true, tipo: 'soat', data: { es_valido: true } });
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
   mocks.deleteAttachment.mockResolvedValue(undefined);
 });

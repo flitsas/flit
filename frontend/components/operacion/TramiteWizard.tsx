@@ -1270,7 +1270,12 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
+        <DocumentChecklist
+          instanceId={instanceId}
+          onChanged={onRefresh}
+          hideHeader
+          modalidad={modalidad}
+        />
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma

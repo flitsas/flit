@@ -1,11 +1,15 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useProcedureDocuments } from '@/hooks/useProcedureDocuments';
+import {
+  useProcedureDocuments,
+  type OcrUiResult,
+} from '@/hooks/useProcedureDocuments';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
+  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
 interface Props {
@@ -21,6 +25,8 @@ interface Props {
    * ya pinta el título del paso (el wizard lo hace con su h2 + subtítulo).
    */
   hideHeader?: boolean;
+  /** Modalidad del trámite: decide qué tipos pasan por OCR (matrícula: 4; traspaso: impronta+soat). */
+  modalidad?: WizardModalidad;
 }
 
 /** MIME permitidos por el contrato. */
@@ -56,6 +62,78 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Campos clave a resumir por tipo de documento en la UI del OCR. */
+const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<{ key: string; label: string }>> = {
+  factura: [
+    { key: 'numero_factura', label: 'Factura' },
+    { key: 'total', label: 'Total' },
+    { key: 'vehiculo_vin', label: 'VIN' },
+  ],
+  aduana: [
+    { key: 'numero_documento', label: 'Documento' },
+    { key: 'aduana', label: 'Aduana' },
+    { key: 'vehiculo_vin', label: 'VIN' },
+  ],
+  impronta: [
+    { key: 'numero_certificado', label: 'Certificado' },
+    { key: 'estado_vin', label: 'VIN' },
+    { key: 'estado_motor', label: 'Motor' },
+  ],
+  soat: [
+    { key: 'numero_poliza', label: 'Póliza' },
+    { key: 'aseguradora', label: 'Aseguradora' },
+    { key: 'estado_poliza', label: 'Estado' },
+  ],
+};
+
+/** Extrae los pares label/valor no vacíos del JSON del OCR para el resumen del tipo. */
+function ocrResumen(
+  tipo: string,
+  data: Record<string, unknown> | null,
+): Array<{ label: string; value: string }> {
+  if (!data) return [];
+  const fields = OCR_RESUMEN_FIELDS[tipo] ?? [];
+  const out: Array<{ label: string; value: string }> = [];
+  for (const { key, label } of fields) {
+    const raw = data[key];
+    if (raw === null || raw === undefined || raw === '') continue;
+    out.push({ label, value: String(raw) });
+  }
+  return out;
+}
+
+/** Presenta el estado OCR de un ítem: verificado (verde) / rechazado (rojo) / no analizado (ámbar) + resumen. */
+function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
+  const palette =
+    ocr.status === 'verified'
+      ? { color: '#8CC63F', bg: 'rgba(140,198,63,0.10)', label: 'Verificado' }
+      : ocr.status === 'rejected'
+        ? { color: '#FF4E00', bg: 'rgba(255,78,0,0.08)', label: 'Rechazado' }
+        : { color: '#F9AC00', bg: 'rgba(249,172,0,0.10)', label: 'No analizado' };
+  const resumen = ocrResumen(tipo, ocr.data);
+
+  return (
+    <div
+      className="mt-2 rounded-lg px-2.5 py-1.5 text-[10px]"
+      style={{ background: palette.bg, color: palette.color }}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="font-bold uppercase tracking-wide">{palette.label}</span>
+      {ocr.motivo && <span className="ml-1.5 opacity-90">· {ocr.motivo}</span>}
+      {resumen.length > 0 && (
+        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 opacity-90">
+          {resumen.map((r) => (
+            <li key={r.label}>
+              <span className="opacity-70">{r.label}:</span> {r.value}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * Caja de subida por ítem del checklist. Presentacional + un input de archivo
  * oculto; valida cliente-side antes de delegar la subida al hook.
@@ -64,14 +142,18 @@ function DocumentSlot({
   item,
   attachment,
   uploading,
+  analyzing,
   deleting,
+  ocr,
   onUpload,
   onRemove,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
   uploading: boolean;
+  analyzing: boolean;
   deleting: boolean;
+  ocr: OcrUiResult | undefined;
   onUpload: (file: File) => void;
   onRemove: (attachmentId: string) => void;
 }) {
@@ -80,8 +162,9 @@ function DocumentSlot({
   // En solo lectura el checklist es visualización: sin subir/reemplazar/borrar.
   const readOnly = useWizardReadOnly();
 
+  const tipo = item.docTipo ?? item.key;
   const done = item.satisfied || !!attachment;
-  const busy = uploading || deleting;
+  const busy = uploading || analyzing || deleting;
 
   const handlePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -148,7 +231,13 @@ function DocumentSlot({
               className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
-              {uploading ? 'Subiendo…' : attachment ? 'Reemplazar' : 'Subir'}
+              {analyzing
+                ? 'Analizando…'
+                : uploading
+                  ? 'Subiendo…'
+                  : attachment
+                    ? 'Reemplazar'
+                    : 'Subir'}
             </button>
             {attachment && (
               <button
@@ -176,6 +265,8 @@ function DocumentSlot({
           {localError}
         </p>
       )}
+
+      {ocr && <OcrStatusPanel tipo={tipo} ocr={ocr} />}
     </li>
   );
 }
@@ -186,10 +277,18 @@ function DocumentSlot({
  * la tipología) y los adjuntos, marca ✓ los satisfechos, valida mime/tamaño
  * antes de subir y resume "faltan N obligatorios / completo".
  */
-export function DocumentChecklist({ instanceId, onChanged, hideHeader = false }: Props) {
-  const { state, upload, remove, clearError } =
-    useProcedureDocuments(instanceId);
-  const { checklist, attachments, uploadingTipo, deletingId } = state;
+export function DocumentChecklist({
+  instanceId,
+  onChanged,
+  hideHeader = false,
+  modalidad,
+}: Props) {
+  const { state, upload, remove, clearError } = useProcedureDocuments(
+    instanceId,
+    { modalidad },
+  );
+  const { checklist, attachments, uploadingTipo, analyzingTipo, deletingId, ocrResults } =
+    state;
 
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
   for (const a of attachments) {
@@ -276,7 +375,9 @@ export function DocumentChecklist({ instanceId, onChanged, hideHeader = false }:
                 item={item}
                 attachment={attachment}
                 uploading={uploadingTipo === tipo}
+                analyzing={analyzingTipo === tipo}
                 deleting={!!attachment && deletingId === attachment.id}
+                ocr={ocrResults[tipo]}
                 onUpload={(file) =>
                   void upload(tipo, file).then((ok) => {
                     if (ok) onChanged?.();
