@@ -3,8 +3,13 @@
 // del Feature (integración Kyverum RUNT); el backend real se implementa en la HU #10467,
 // aún no disponible al momento de esta HU. Se consume igual, siguiendo el patrón de
 // descarga binaria de `exportExecutivePdf` (lib/api/analytics.ts).
+import { apiFetch } from "./client";
 import { downloadFile } from "./download";
-import type { GenerarImprontaRequest } from "./types-improntas";
+import type {
+  GenerarImprontaRequest,
+  ImprontasHistorialPagedResult,
+  ImprontasHistorialParams,
+} from "./types-improntas";
 
 const base = "/api/v1/admin/improntas";
 
@@ -19,6 +24,23 @@ export function generarImpronta(body: GenerarImprontaRequest, signal?: AbortSign
     method: "POST",
     body,
     fallbackFilename: `impronta_${body.placa.trim().toUpperCase() || "vehiculo"}.pdf`,
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/admin/improntas — historial de improntas generadas para el tenant en
+ * sesión, filtrable por placa y rango de fecha (HU #10470 AC1/AC3). A diferencia de
+ * `generarImpronta`, es un listado JSON normal (no descarga binaria): usa `apiFetch`,
+ * igual patrón que `fetchOtClientProcedures` (lib/api/admin-ot.ts). El backend real de
+ * este endpoint se implementa en la HU #10468 y aún no existe al momento de esta HU.
+ */
+export function fetchImprontasHistorial(
+  params: ImprontasHistorialParams = {},
+  signal?: AbortSignal,
+): Promise<ImprontasHistorialPagedResult> {
+  return apiFetch<ImprontasHistorialPagedResult>(base, {
+    query: { ...params },
     signal,
   });
 }

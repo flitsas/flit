@@ -7,3 +7,7 @@ export const IMPRONTA_LABEL_CLS = "block text-xs font-semibold";
 
 export const IMPRONTA_SECTION_CLS =
   "flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]";
+
+/** Grid del formulario de filtros del historial — mismo patrón que OT_FILTER_FORM_CLS. */
+export const IMPRONTA_FILTER_FORM_CLS =
+  "grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 md:grid-cols-4 dark:bg-[#0B0F14]";
