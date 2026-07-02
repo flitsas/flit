@@ -295,6 +295,22 @@ export interface PresignAttachmentResponse {
   fields: Record<string, string>;
 }
 
+/**
+ * Respuesta de POST /instances.../ocr/{tipo}: análisis semántico del documento con el modelo de
+ * visión, ANTES de subirlo al expediente. No persiste nada en el backend.
+ */
+export interface DocumentOcrResult {
+  ok: boolean;
+  tipo: string;
+  /** JSON extraído por el modelo (campos según el tipo). null si no se pudo interpretar. */
+  data: Record<string, unknown> | null;
+  /**
+   * PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de páginas de un PDF
+   * multi-documento; null/ausente si no hubo recorte. El wizard sube este recorte en vez del original.
+   */
+  extractedPdfBase64?: string | null;
+}
+
 /** Item del checklist guiado por la tipología del trámite. */
 export interface ChecklistItemView {
   key: string;

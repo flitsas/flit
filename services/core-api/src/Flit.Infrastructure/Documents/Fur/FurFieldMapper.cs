@@ -7,6 +7,9 @@ namespace Flit.Infrastructure.Documents.Fur;
 /// <summary>Mapea <see cref="FurDocumentData"/> al diccionario de tokens del manifest overlay.</summary>
 public static class FurFieldMapper
 {
+    /// <summary>Sello impreso en el espacio de firma cuando no hay validación de identidad (HU #10463).</summary>
+    private const string NoFirmadoSello = "NO FIRMADO";
+
     public static IReadOnlyDictionary<string, FurFieldValue> Map(FurDocumentData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -77,6 +80,10 @@ public static class FurFieldMapper
         }
         else
         {
+            // AC2 (#10457): traspaso sin comprador resuelto (o matrícula) → la sección comprador
+            // queda EN BLANCO, sin '-' ni basura. Los checkboxes de tipo de documento del comprador
+            // se marcan explícitamente como no seleccionados (simetría con vehicle_owner, que siempre
+            // se marca en L90) para no dejar casillas en estado indefinido en el overlay.
             dict["vehicle_buyer_first_last_name"] = Text("");
             dict["vehicle_buyer_second_last_name"] = Text("");
             dict["vehicle_buyer_name"] = Text("");
@@ -85,9 +92,19 @@ public static class FurFieldMapper
             dict["vehicle_buyer_city"] = Text("");
             dict["vehicle_buyer_phone"] = Text("");
             dict["vehicle_buyer_signature"] = Text("");
+            MarkDocType(dict, null, null, "vehicle_buyer");
         }
 
         MarkDocType(dict, propietario?.Documento, propietario?.DocumentType, "vehicle_owner");
+
+        // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
+        // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
+        if (!data.IdentidadValidada)
+        {
+            dict["vehicle_owner_signature"] = Text(NoFirmadoSello);
+            if (esTraspaso)
+                dict["vehicle_buyer_signature"] = Text(NoFirmadoSello);
+        }
 
         return dict;
     }

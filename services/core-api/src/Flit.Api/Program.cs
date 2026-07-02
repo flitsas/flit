@@ -199,6 +199,7 @@ app.MapPublicPortalEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
 app.MapTramitesAttachmentEndpoints();
+app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();
 app.MapTramitesFirmaEndpoints();

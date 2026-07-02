@@ -33,10 +33,12 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
+        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        // HU #10455 — el consolidado soporta matrícula inicial Y traspaso. Cualquier otra modalidad
+        // no habilitada (o un código no reconocido) sigue devolviendo modalidad_no_soportada.
+        if (modalidad is not TramiteModalidadEntrada.MatriculaInicial and not TramiteModalidadEntrada.Traspaso)
             return (null, "modalidad_no_soportada");
+        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
 
         if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
             return (null, SubmitGate.FurRequerido);
@@ -44,7 +46,10 @@ public sealed class GenerarConsolidadoHandler(
         if (!DocumentosObligatoriosCompletos(instance))
             return (null, SubmitGate.DocumentosIncompletos);
 
-        var ordered = MatriculaConsolidadoOrdering.SelectOrdered(instance.Attachments);
+        // Traspaso incluye el contrato de compraventa en el expediente; matrícula lo excluye.
+        var ordered = esTraspaso
+            ? TraspasoConsolidadoOrdering.SelectOrdered(instance.Attachments)
+            : MatriculaConsolidadoOrdering.SelectOrdered(instance.Attachments);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -123,9 +128,6 @@ public sealed class GenerarConsolidadoHandler(
 
     private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
-        if (DemoFlags.RelaxDocs)
-            return true;
-
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
