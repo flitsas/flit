@@ -18,8 +18,11 @@ internal static class OcrEndpoints
     {
         var group = app.MapGroup("/api/v1/tramites");
 
-        // POST /ocr/{tipo} (multipart/form-data: file) -> 200 { ok, tipo, data }
+        // POST /ocr/{tipo} (multipart/form-data: file) -> 200 { ok, tipo, data, extractedPdfBase64 }
         // tipo ∈ { factura, aduana, impronta, soat }. Máx 10 MB. Formato validado por magic bytes.
+        // extractedPdfBase64: PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de
+        // páginas de un PDF multi-documento; null si no hubo recorte (imagen, PDF de una página, o el
+        // tipo abarca todo el PDF). El frontend sube ese recorte al expediente en vez del PDF completo.
         group.MapPost("/ocr/{tipo}", async (
             string tipo,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

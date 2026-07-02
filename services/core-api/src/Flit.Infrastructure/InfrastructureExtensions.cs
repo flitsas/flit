@@ -349,6 +349,10 @@ public static class InfrastructureExtensions
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
 
+        // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
+        // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
+        services.AddSingleton<IPdfPageExtractor, PdfSharpPageExtractor>();
+
         // Feature flag de proveedor (mock por defecto ⇒ no rompe dev/CI sin API key). Mismo patrón que
         // BiometricsProviderOptions / ConsultationProviderModeOptions. El MockDocumentOcrAnalyzer vive en
         // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
