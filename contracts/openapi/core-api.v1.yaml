@@ -35,6 +35,11 @@ tags:
     description: >
       Overrides de orden documental por OT/Cliente y matriz documental resuelta
       con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Admin · Improntas
+    description: >
+      Historial del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte, integración Kyverum RUNT — ADR-0022). Vista global cross-tenant
+      sin RLS, rol SuperAdmin.
   - name: Trámites · Documentos
     description: >
       Alta de trámite con snapshot documental inmutable y lectura de los documentos
@@ -709,6 +714,64 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: El tenant no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/improntas:
+    get:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasIndex
+      summary: Listado paginado del historial de improntas (HU #10468)
+      description: >
+        Retorna el listado paginado y filtrable (placa, radicado, rango de fecha de
+        creación) del historial de improntas generadas (admin.impronta_generations —
+        ADR-0022), ordenado por fecha de creación descendente. Vista global
+        cross-tenant (sin RLS): no expone el PDF, solo metadata. Requiere JWT con
+        rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la placa.
+        - name: radicado
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre el radicado.
+        - name: createdFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite inferior (inclusive) del rango de fecha de creación.
+        - name: createdTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite superior (inclusive) del rango de fecha de creación.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImprontaGenerationPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
           content:
             application/json:
               schema:
@@ -2987,6 +3050,48 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TransitOfficeTenantItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    ImprontaGenerationItem:
+      type: object
+      description: >
+        Metadata de una generación de impronta (admin.impronta_generations — ADR-0022).
+        Deliberadamente NO incluye el PDF (pdf_content): el listado nunca arrastra el
+        binario del certificado, solo pdfSizeBytes como sustituto liviano.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        flitUserId: { type: string, format: uuid }
+        radicado: { type: string }
+        hashSha256: { type: string }
+        fechaImpresa: { type: string, format: date-time }
+        placa: { type: string }
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string }
+        orgCiudad: { type: string }
+        operador: { type: string }
+        pdfSizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required:
+        [id, tenantId, flitUserId, radicado, hashSha256, fechaImpresa, placa, orgNombre,
+         orgNit, orgCiudad, operador, pdfSizeBytes, createdAt]
+
+    ImprontaGenerationPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImprontaGenerationItem"
         totalCount: { type: integer, format: int64 }
         page: { type: integer }
         pageSize: { type: integer }
