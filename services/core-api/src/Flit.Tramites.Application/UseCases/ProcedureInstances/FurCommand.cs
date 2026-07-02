@@ -15,8 +15,10 @@ public sealed record GenerarFurResult(IReadOnlyList<FurDocumentDto> Documents);
 
 /// <summary>
 /// Genera el FUR (y, en traspaso, el contrato de compraventa) con los datos reales de la instancia.
-/// <para><b>Gating biométrica</b> (paridad Johan): traspaso requiere AMBAS partes aprobadas;
-/// matrícula_inicial requiere comprador aprobada (Parte == "comprador"). Si falta → <c>biometria_gate</c> (409).</para>
+/// <para><b>Validación de identidad</b> (HU #10463): ya NO bloquea la generación. Si la biométrica de
+/// las partes requeridas (traspaso: comprador + vendedor; matrícula: comprador) no está aprobada+vigente,
+/// el FUR se genera con el sello "NO FIRMADO" en el espacio de firma y NO se emite el certificado de
+/// identidad. La RADICACIÓN sí sigue exigiendo identidad (SubmitGate/#10459).</para>
 /// El documento se genera vía el generador MOCK (sin librería PDF) y se persiste como ADJUNTO
 /// (<c>IAttachmentStorage</c> + fila en procedure_instance_attachments, tipo 'fur' / 'compraventa').
 /// Idempotente: re-generar reemplaza los adjuntos FUR/compraventa previos. Registra un evento
@@ -40,9 +42,11 @@ public sealed class GenerarFurHandler(
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
 
-        // Gating biométrica: traspaso → ambas partes; matrícula → comprador (Parte == "comprador").
-        if (!BiometriaGateOk(instance, esTraspaso))
-            return (null, "biometria_gate");
+        // HU #10463 — la validación de identidad ya NO bloquea la GENERACIÓN del FUR/consolidado.
+        // Si no hay biométrica aprobada+vigente de las partes requeridas, el FUR se genera con el
+        // sello "NO FIRMADO" en el espacio de firma y NO se emite el certificado de identidad (evita
+        // declarar "APROBADO" en falso). La RADICACIÓN sigue exigiendo identidad (SubmitGate/#10459).
+        var identidadValidada = BiometriaGateOk(instance, esTraspaso);
 
         var fv = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
@@ -51,19 +55,32 @@ public sealed class GenerarFurHandler(
         if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
             return (null, "organismo_requerido");
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada);
 
         var now = DateTimeOffset.UtcNow;
-        var docs = new List<FurDocumentDto>(2);
+        var docs = new List<FurDocumentDto>(3);
 
-        // FUR siempre + certificado de validación de identidad. Compraventa solo en traspaso.
-        var generated = new List<GeneratedDocument>
-        {
-            generator.GenerateFur(data),
-            identityGenerator.GenerateIdentityCertificate(AssembleIdentityData(instance)),
-        };
+        // FUR siempre. Certificado de identidad SOLO si hay biométrica aprobada+vigente (HU #10463:
+        // sin validación no se emite, para no declarar "APROBADO" en falso). Compraventa solo en traspaso.
+        var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
+        if (identidadValidada)
+            generated.Add(identityGenerator.GenerateIdentityCertificate(AssembleIdentityData(instance)));
         if (esTraspaso)
             generated.Add(generator.GenerateCompraventa(data));
+
+        // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
+        // consolidado no debe incluir un certificado de identidad obsoleto (AC5).
+        if (!identidadValidada)
+        {
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "certificado_identidad", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
 
         foreach (var doc in generated)
         {
@@ -145,7 +162,8 @@ public sealed class GenerarFurHandler(
     }
 
     private static FurDocumentData AssembleData(
-        ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv)
+        ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
+        bool identidadValidada)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -194,7 +212,8 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            Observaciones: Get(fv, "fur_observations"));
+            Observaciones: Get(fv, "fur_observations"),
+            IdentidadValidada: identidadValidada);
     }
 
     /// <summary>

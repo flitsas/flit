@@ -78,7 +78,9 @@ public static class DependencyInjection
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).
         // MockFurDocumentGenerator se conserva para tests; solo se quitó el registro de DI.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
-        services.AddSingleton<Documents.IIdentityCertificateGenerator, Documents.MockIdentityCertificateGenerator>();
+        // HU #10458 — IIdentityCertificateGenerator se registra en Infrastructure
+        // (IdentityCertificatePdfGenerator — QuestPDF, PDF real). MockIdentityCertificateGenerator
+        // se conserva para tests; solo se quitó el registro de DI (mismo patrón que IFurDocumentGenerator).
         services.AddScoped<SolicitarFirmaHandler>();
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();

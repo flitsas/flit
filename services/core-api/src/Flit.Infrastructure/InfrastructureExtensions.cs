@@ -74,6 +74,9 @@ public static class InfrastructureExtensions
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
+        // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
+        // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
+        services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
