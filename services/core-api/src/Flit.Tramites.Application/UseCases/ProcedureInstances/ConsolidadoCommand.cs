@@ -128,9 +128,6 @@ public sealed class GenerarConsolidadoHandler(
 
     private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
-        if (DemoFlags.RelaxDocs)
-            return true;
-
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
