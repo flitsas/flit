@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Users, Shield, Ban, ShieldOff } from "lucide-react";
+import { Plus, Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -424,17 +425,28 @@ function InviteModal({
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
   const [invitedEmail, setInvitedEmail] = useState("");
 
+  // El rol de sistema a asignar ya no se limita a AdminCompany: el backend lo resuelve
+  // según el tipo de tenant destino (ot_admin para organismos de tránsito).
+  const isSelectedTenantOt = transitOfficeTenants.some((t) => t.id === selectedTenantId);
+
   useEffect(() => {
     if (!isSuperAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTenantsLoading(true);
-    fetchCompaniesIndex({ pageSize: 200 })
-      .then((r) => setCompanies(r.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial }))))
+    Promise.all([
+      fetchCompaniesIndex({ pageSize: 200 }),
+      fetchTransitOfficeTenants({ pageSize: 200 }),
+    ])
+      .then(([companiesResult, otResult]) => {
+        setCompanies(companiesResult.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial })));
+        setTransitOfficeTenants(otResult.data);
+      })
       .catch(() => { /* silencioso */ })
       .finally(() => setTenantsLoading(false));
   }, [isSuperAdmin]);
@@ -515,7 +527,7 @@ function InviteModal({
           <form onSubmit={handleSubmit} className="space-y-3">
             {isSuperAdmin && (
               <div>
-                <label htmlFor="invite-tenant" className="text-xs font-semibold block mb-1">Empresa destino *</label>
+                <label htmlFor="invite-tenant" className="text-xs font-semibold block mb-1">Empresa u organismo destino *</label>
                 <select
                   id="invite-tenant"
                   required
@@ -525,10 +537,21 @@ function InviteModal({
                   className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
                   style={{ borderColor: "#DFE5ED" }}
                 >
-                  <option value="">{tenantsLoading ? "Cargando empresas…" : "Seleccionar empresa…"}</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
+                  {companies.length > 0 && (
+                    <optgroup label="Compañías">
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {transitOfficeTenants.length > 0 && (
+                    <optgroup label="Organismos de Tránsito">
+                      {transitOfficeTenants.map((t) => (
+                        <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             )}
@@ -560,8 +583,13 @@ function InviteModal({
             </div>
             {isSuperAdmin ? (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
-                <Shield className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />
-                <span>Se creará como <strong>Administrador de Compañía</strong></span>
+                {isSelectedTenantOt
+                  ? <Landmark className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />
+                  : <Shield className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />}
+                <span>
+                  Se creará como{" "}
+                  <strong>{isSelectedTenantOt ? "Administrador OT" : "Administrador de Compañía"}</strong>
+                </span>
               </div>
             ) : roles.length > 0 ? (
               <div>

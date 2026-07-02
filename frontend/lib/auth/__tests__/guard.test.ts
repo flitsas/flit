@@ -8,6 +8,7 @@ import {
   evaluateAdminAccess,
   evaluateEmpresaAccess,
   evaluateLoginAccess,
+  getUserRole,
   FORBIDDEN_PATH,
   HOME_PATH,
 } from "../guard";
@@ -88,6 +89,25 @@ describe("evaluateAdminAccess (AC6)", () => {
     );
     expect(decision.allowed).toBe(false);
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+});
+
+describe("getUserRole (refactor adminOT)", () => {
+  it("devuelve 'superadmin' para un token SuperAdmin", () => {
+    expect(getUserRole(makeToken({ role: "SuperAdmin" }))).toBe("superadmin");
+  });
+
+  it("devuelve 'admincompany' para un token AdminCompany", () => {
+    expect(getUserRole(makeToken({ role: "AdminCompany" }))).toBe("admincompany");
+  });
+
+  it("devuelve 'ot_admin' para un token ot_admin", () => {
+    expect(getUserRole(makeToken({ sub: "u1", role: "ot_admin" }))).toBe("ot_admin");
+  });
+
+  it("devuelve 'user' para un rol desconocido o sin token", () => {
+    expect(getUserRole(makeToken({ role: "Operador" }))).toBe("user");
+    expect(getUserRole(undefined)).toBe("user");
   });
 });
 

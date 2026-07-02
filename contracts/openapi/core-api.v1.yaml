@@ -19,6 +19,14 @@ tags:
     description: Autenticación y sesión (login, perfil del usuario).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Admin · Tenants OT
+    description: >
+      Alta y listado de tenants Organismo de Tránsito (rol SuperAdmin, refactor
+      adminOT). El self-service de usuarios OT vive bajo el tag Admin · OT.
+  - name: Admin · OT
+    description: >
+      Perfil OT, módulo operativo y self-service de usuarios del tenant OT (rol
+      SuperAdmin u ot_admin).
   - name: Admin · Documentos
     description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
   - name: Admin · Documentos por Trámite
@@ -571,6 +579,314 @@ paths:
       responses:
         "200":
           description: Perfil actualizado.
+
+  /api/v1/admin/transit-office-tenants/index:
+    get:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantsIndex
+      summary: Listado paginado de tenants OT (refactor adminOT)
+      description: >
+        Retorna el listado paginado de tenants Organismo de Tránsito (join
+        identity.tenants + admin.transit_office_profiles), ordenado por fecha de
+        creación descendente. Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: legalName
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: estadoActivo
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitOfficeTenantPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-office-tenants:
+    post:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantCreate
+      summary: Alta de tenant OT (refactor adminOT)
+      description: >
+        Da de alta un tenant Organismo de Tránsito: tenant (tenant_type=RENTING,
+        decisión intencional — ver RestrictTenantTypeCatalog), rol de sistema
+        ot_admin SIN permisos (el SuperAdmin los cura después vía RBAC Admin,
+        `PUT /api/v1/superadmin/roles/{id}/permissions`) y perfil OT vinculado a la
+        oficina del catálogo. La oficina no debe tener ya un tenant OT asociado.
+        Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransitOfficeRequest"
+      responses:
+        "201":
+          description: Tenant OT creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitOfficeTenantItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Datos inválidos (campos requeridos, longitudes, código duplicado,
+            oficina inexistente/inactiva u oficina ya asignada a otro tenant OT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
+  /api/v1/admin/transit-office-tenants/{tenantId}/status:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant OT.
+    put:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantSetStatus
+      summary: Activa o desactiva un tenant OT (refactor adminOT)
+      description: >
+        Cambia el estado activo/inactivo del tenant OT (identity.tenants.is_active).
+        Reutiliza el mismo caso de uso genérico del alta de compañías. Idempotente.
+        Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCompanyStatusRequest"
+      responses:
+        "200":
+          description: Estado actualizado; devuelve el tenant con su nuevo estado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyListItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tenant no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users/invite:
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtInviteUser
+      summary: Invita un usuario al tenant OT (self-service, refactor adminOT)
+      description: >
+        Crea una invitación por email con el rol ot_admin del tenant resuelto.
+        ot_admin invita colaboradores de su propio tenant (JWT); SuperAdmin debe
+        indicar `?transitOfficeId=` (oficina del catálogo) para invitar al primer
+        adminOT de un tenant recién creado. El rol se resuelve automáticamente:
+        un tenant OT solo tiene el rol de sistema ot_admin (sin roles
+        personalizados). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Oficina del catálogo cuyo tenant OT es el destino. Obligatorio para
+            SuperAdmin; ignorado para ot_admin (siempre usa su propio tenant).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteOtUserRequest"
+      responses:
+        "201":
+          description: Invitación creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteOtUserResponse"
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Invitación pendiente duplicada o el correo ya tiene cuenta activa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListUsers
+      summary: Lista los usuarios del tenant OT (self-service, refactor adminOT)
+      description: >
+        Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto
+        (propio para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Usuarios del tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtUserListResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users/{userId}/suspend:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtSuspendUser
+      summary: Suspende temporalmente a un usuario del tenant OT (self-service, refactor adminOT)
+      description: >
+        Suspende a un usuario del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin). El usuario debe
+        pertenecer al tenant resuelto (no se puede suspender usuarios de otro OT).
+        Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendOtUserRequest"
+      responses:
+        "201":
+          description: Suspensión creada.
+        "400":
+          description: Auto-suspensión no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtUnsuspendUser
+      summary: Levanta la suspensión activa de un usuario del tenant OT (self-service, refactor adminOT)
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Suspensión levantada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no tiene una suspensión activa en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/integrations/ot/webhooks/{subscriptionId}/callback:
     post:
@@ -2630,6 +2946,128 @@ components:
           items:
             $ref: "#/components/schemas/TransitGrantValidationError"
       required: [errors]
+
+    TransitOfficeTenantItem:
+      type: object
+      description: >
+        Tenant Organismo de Tránsito (join identity.tenants +
+        admin.transit_office_profiles, refactor adminOT).
+      properties:
+        id: { type: string, format: uuid }
+        legalName: { type: string }
+        taxId: { type: string }
+        code: { type: string, description: Código único del tenant (inmutable). }
+        tenantType:
+          type: string
+          enum: [RENTING]
+          description: >-
+            Siempre RENTING para tenants OT (decisión intencional — ver
+            RestrictTenantTypeCatalog. admin.transit_office_profiles es la fuente de
+            verdad de que un tenant "es" un OT, no tenantType).
+        estadoActivo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+        rowVersion: { type: integer, format: int64 }
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Oficina del catálogo vinculada (admin.transit_office_profiles.transit_office_id).
+        transitOfficeName: { type: string }
+        transitOfficeCode: { type: string }
+        operationMode:
+          type: string
+          enum: [dashboard, quipux]
+      required:
+        [id, legalName, taxId, code, tenantType, estadoActivo, fechaCreacion, rowVersion,
+         transitOfficeId, transitOfficeName, transitOfficeCode, operationMode]
+
+    TransitOfficeTenantPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitOfficeTenantItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateTransitOfficeRequest:
+      type: object
+      description: Alta de tenant OT (refactor adminOT).
+      properties:
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: >-
+            Oficina del catálogo catalogs.transit_offices a vincular. Debe existir,
+            estar activa y no tener ya un TransitOfficeProfile asociado.
+        legalName:
+          type: string
+          maxLength: 255
+          description: Razón social (legal_name).
+        taxId:
+          type: string
+          maxLength: 20
+          description: NIT (tax_id). Solo dígitos, puntos y guiones.
+        code:
+          type: string
+          maxLength: 32
+          description: Código único del tenant. Alfanumérico con guion y guion bajo.
+        operationMode:
+          type: string
+          enum: [dashboard, quipux]
+          default: dashboard
+      required: [transitOfficeId, legalName, taxId, code]
+
+    InviteOtUserRequest:
+      type: object
+      description: Invitación de usuario al tenant OT (self-service).
+      properties:
+        email: { type: string, format: email }
+        fullName: { type: string, nullable: true }
+      required: [email]
+
+    InviteOtUserResponse:
+      type: object
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailSent: { type: boolean }
+      required: [invitationId, email, emailSent]
+
+    OtUserItem:
+      type: object
+      description: Usuario (activo, sin rol o invitación pendiente) del tenant OT.
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, nullable: true }
+        roleCode: { type: string, nullable: true }
+        roleId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        createdAt: { type: string, format: date-time, nullable: true }
+        isSuspended: { type: boolean }
+      required: [id, fullName, email, status, isSuspended]
+
+    OtUserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtUserItem"
+      required: [data]
+
+    SuspendOtUserRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        endsAt: { type: string, format: date-time }
+      required: [reason, endsAt]
 
     AuditLogEntry:
       type: object

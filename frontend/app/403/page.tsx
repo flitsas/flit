@@ -11,8 +11,8 @@ export default function ForbiddenPage() {
         Acceso restringido
       </h1>
       <p className="max-w-md text-sm opacity-70">
-        No tienes permisos de Super Administrador para acceder a esta sección. Si crees que es un
-        error, contacta al administrador de la plataforma.
+        No tienes los permisos necesarios para acceder a esta sección. Si crees que es un error,
+        contacta al administrador de la plataforma.
       </p>
       <Link
         href="/"

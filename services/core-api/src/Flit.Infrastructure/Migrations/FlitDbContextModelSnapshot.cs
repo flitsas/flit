@@ -623,6 +623,10 @@ namespace Flit.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_transit_office_profiles_tenant_id");
 
+                    b.HasIndex("TransitOfficeId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_transit_office_profiles_transit_office_id");
+
                     b.ToTable("transit_office_profiles", "admin");
                 });
 

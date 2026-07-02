@@ -13,6 +13,12 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
+import {
+  sanitizeDocNumber,
+  validateDocNumber,
+  sanitizeName,
+  validateReadableName,
+} from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
   ActorRol,
@@ -112,7 +118,15 @@ export function validateActors(
   const byActor: ActorErrors[] = actors.map((a) => {
     const e: ActorErrors = {};
     if (!a.numeroDocumento.trim()) e.numeroDocumento = 'Número requerido';
+    else {
+      const docErr = validateDocNumber(a.numeroDocumento.trim(), a.tipoDocumento);
+      if (docErr) e.numeroDocumento = docErr;
+    }
     if (!a.nombreCompleto.trim()) e.nombreCompleto = 'Nombre requerido';
+    else {
+      const nameErr = validateReadableName(a.nombreCompleto.trim(), 'El nombre');
+      if (nameErr) e.nombreCompleto = nameErr;
+    }
     if (!a.email.trim()) e.email = 'Correo requerido';
     else if (!EMAIL_RE.test(a.email.trim())) e.email = 'Correo no válido';
     return e;
@@ -277,7 +291,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const validation = validateActors(actors, modalidad);
 
   const updateActor = (index: number, patch: Partial<ProcedureActor>) => {
-    setActors((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+    setActors((prev) =>
+      prev.map((a, i) => {
+        if (i !== index) return a;
+        const next = { ...a, ...patch };
+        // Saneo de caracteres por tipo de campo (Ajuste 3): número de documento según
+        // el tipo (pasaporte alfanumérico, resto solo dígitos) y nombre sin caracteres
+        // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
+        if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
+          next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        if (patch.nombreCompleto !== undefined)
+          next.nombreCompleto = sanitizeName(next.nombreCompleto);
+        return next;
+      }),
+    );
   };
 
   const setRuntFor = (index: number, value: RuntState) =>
