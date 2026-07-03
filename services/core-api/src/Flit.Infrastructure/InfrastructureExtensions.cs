@@ -272,6 +272,16 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
+
+        // Cadena de proveedores Kyverum-first con fallback a Verifik (HU #10478, Fase 3). Defaults en
+        // appsettings (sección Consultations:DefaultChains / FailoverTimeoutMs); si faltan, el propio
+        // ConsultationChainOptions embebe el orden del plan. Aún no lo consumen los handlers (Fase 5).
+        services.Configure<ConsultationChainOptions>(o =>
+            configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
+        services.AddScoped<IConsultationProviderChainResolver>(sp =>
+            new ConsultationProviderChainResolver(
+                sp.GetRequiredService<IConsultationProviderRegistry>(),
+                sp.GetRequiredService<IOptions<ConsultationChainOptions>>().Value));
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
