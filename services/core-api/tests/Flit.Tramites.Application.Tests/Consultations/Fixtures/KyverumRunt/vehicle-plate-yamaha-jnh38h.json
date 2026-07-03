@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "JNH38H",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Particular",
+      "clase": "MOTOCICLETA",
+      "marca": "YAMAHA",
+      "linea": "SZ15RR",
+      "modelo": "2026",
+      "color": "GRIS NEGRO",
+      "numSerie": null,
+      "numMotor": "G3K6E0042405",
+      "numChasis": "9FKRG2222T2042405",
+      "vin": "9FKRG2222T2042405",
+      "cilindraje": "149",
+      "tipoCarroceria": "SIN CARROCERIA",
+      "gravamenes": "NO",
+      "prendas": "NO",
+      "organismoTransito": "STRIA TTOyTTE MCPAL SABANETA",
+      "pasajerosSentados": "2",
+      "tipoCombustible": "GASOLINA"
+    },
+    "tipoDocPropietario": "C",
+    "datosTecnicos": {
+      "pasajerosSentados": "2"
+    },
+    "soat": [
+      {
+        "estado": "VIGENTE",
+        "fechaVencimSoat": "2027-01-23T00:00:00.000-05:00",
+        "razonSocialAsegur": "AXA COLPATRIA SEGUROS SA"
+      },
+      {
+        "estado": "NO VIGENTE",
+        "fechaVencimSoat": "2026-01-23T00:00:00.000-05:00",
+        "razonSocialAsegur": "LA PREVISORA S.A.COMPAÑIA DE SEGUROS"
+      }
+    ],
+    "rtm": [],
+    "garantias": [],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "solicitudes": [
+      {
+        "noSolicitud": "259542884",
+        "estado": "AUTORIZADA"
+      }
+    ]
+  },
+  "fromCache": false
+}

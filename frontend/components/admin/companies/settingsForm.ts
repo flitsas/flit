@@ -7,6 +7,60 @@ import type {
   TenantSettingsUpdate,
 } from "@/lib/api/types";
 
+// ── HU #10478: proveedores de consulta RUNT ─────────────────────────────────
+export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
+export const DEFAULT_VEHICLE_PROVIDER = "kyverum_runt";
+export const DEFAULT_CONDUCTOR_PROVIDER = "kyverum_runt_conductor";
+export const DEFAULT_FAILOVER_MS = 60_000;
+export const FAILOVER_MIN_MS = 500;
+export const FAILOVER_MAX_MS = 60000;
+
+/** Opción de proveedor para un selector (Intempo se muestra deshabilitado: aún no disponible). */
+export interface ConsultationProviderOption {
+  value: string;
+  label: string;
+  disabled: boolean;
+}
+
+/** Proveedores para consultas de vehículo (VIN y placa). Kyverum es el default. */
+export const CONSULTATION_VEHICLE_PROVIDERS: ConsultationProviderOption[] = [
+  { value: "kyverum_runt", label: "Kyverum RUNT", disabled: false },
+  { value: "verifik", label: "Verifik", disabled: false },
+  { value: "intempo", label: "Intempo (próximamente)", disabled: true },
+];
+
+/** Proveedores para consulta de conductor. Kyverum es el default. */
+export const CONSULTATION_CONDUCTOR_PROVIDERS: ConsultationProviderOption[] = [
+  { value: "kyverum_runt_conductor", label: "Kyverum RUNT", disabled: false },
+  { value: "verifik_conductor", label: "Verifik", disabled: false },
+  { value: "intempo", label: "Intempo (próximamente)", disabled: true },
+];
+
+/** Etiqueta legible de cada provider key (para el resumen de cambios y la UI). */
+export const CONSULTATION_PROVIDER_LABELS: Record<string, string> = {
+  kyverum_runt: "Kyverum RUNT",
+  verifik: "Verifik",
+  kyverum_runt_conductor: "Kyverum RUNT",
+  verifik_conductor: "Verifik",
+  intempo: "Intempo",
+};
+
+// El fallback se deriva del primario elegido: el "otro" proveedor real de la misma familia, para
+// que siempre exista contingencia (la cadena que consume el backend es [primary, ...fallback]).
+const VEHICLE_FALLBACK: Record<string, string[]> = {
+  kyverum_runt: ["verifik"],
+  verifik: ["kyverum_runt"],
+};
+const CONDUCTOR_FALLBACK: Record<string, string[]> = {
+  kyverum_runt_conductor: ["verifik_conductor"],
+  verifik_conductor: ["kyverum_runt_conductor"],
+};
+
+function fallbackFor(family: "vehicle" | "conductor", primary: string): string[] {
+  const table = family === "vehicle" ? VEHICLE_FALLBACK : CONDUCTOR_FALLBACK;
+  return table[primary] ?? [];
+}
+
 export interface SettingsForm {
   allowInitialRegistration: boolean;
   allowMiscNewVehicles: boolean;
@@ -15,10 +69,16 @@ export interface SettingsForm {
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
+  // HU #10478 — proveedor PRIMARIO por tipo de consulta RUNT (el fallback se deriva).
+  consultaVin: string;
+  consultaPlaca: string;
+  consultaConductor: string;
+  runtFailoverTimeoutMs: number;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
 export function formFromSettings(settings: TenantSettings): SettingsForm {
+  const cfg = settings.consultationProviderConfig ?? {};
   return {
     allowInitialRegistration: settings.switchesMatricula.allowInitialRegistration,
     allowMiscNewVehicles: settings.switchesMatricula.allowMiscNewVehicles,
@@ -27,6 +87,10 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     enrutamientoSMTP: settings.enrutamientoSMTP,
     notificationTarget: settings.notificationTarget,
     metodosRecaudo: [...settings.metodosRecaudo],
+    consultaVin: cfg.vehicle_vin?.primary ?? DEFAULT_VEHICLE_PROVIDER,
+    consultaPlaca: cfg.vehicle_plate?.primary ?? DEFAULT_VEHICLE_PROVIDER,
+    consultaConductor: cfg.conductor?.primary ?? DEFAULT_CONDUCTOR_PROVIDER,
+    runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
   };
 }
 
@@ -42,6 +106,12 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
     enrutamientoSMTP: form.enrutamientoSMTP,
     notificationTarget: form.notificationTarget,
     metodosRecaudo: [...form.metodosRecaudo],
+    runtFailoverTimeoutMs: form.runtFailoverTimeoutMs,
+    consultationProviderConfig: {
+      vehicle_vin: { primary: form.consultaVin, fallback: fallbackFor("vehicle", form.consultaVin) },
+      vehicle_plate: { primary: form.consultaPlaca, fallback: fallbackFor("vehicle", form.consultaPlaca) },
+      conductor: { primary: form.consultaConductor, fallback: fallbackFor("conductor", form.consultaConductor) },
+    },
   };
 }
 
@@ -127,9 +197,51 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       return { detail: parts.join(", "), tone: "neutral" };
     },
   },
+  {
+    key: "consultaVin",
+    module: CONSULTA_MODULE,
+    label: "Proveedor consulta por VIN",
+    describe: (i, c) => providerChange(i.consultaVin, c.consultaVin),
+  },
+  {
+    key: "consultaPlaca",
+    module: CONSULTA_MODULE,
+    label: "Proveedor consulta por placa",
+    describe: (i, c) => providerChange(i.consultaPlaca, c.consultaPlaca),
+  },
+  {
+    key: "consultaConductor",
+    module: CONSULTA_MODULE,
+    label: "Proveedor consulta de conductor",
+    describe: (i, c) => providerChange(i.consultaConductor, c.consultaConductor),
+  },
+  {
+    key: "runtFailoverTimeoutMs",
+    module: CONSULTA_MODULE,
+    label: "Timeout de failover (ms)",
+    describe: (i, c) => ({
+      detail: `${i.runtFailoverTimeoutMs} → ${c.runtFailoverTimeoutMs} ms`,
+      tone: "neutral",
+    }),
+  },
 ];
 
-const MODULE_ORDER = ["Matrícula Inicial", "Traspasos", "Configuración Empresa"];
+const providerLabel = (key: string) => CONSULTATION_PROVIDER_LABELS[key] ?? key;
+
+const providerChange = (
+  previous: string,
+  current: string,
+): Omit<ConfigChangeItem, "label"> => ({
+  detail: `${providerLabel(previous)} → ${providerLabel(current)}`,
+  tone: "neutral",
+});
+
+const MODULE_ORDER = [
+  "Matrícula Inicial",
+  "Traspasos",
+  "Configuración Empresa",
+  CONSULTA_MODULE,
+];
 
 function fieldEquals(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) && Array.isArray(b)) {

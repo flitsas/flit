@@ -50,6 +50,13 @@ describe("CompanyConfigTabs (AC2)", () => {
       enrutamientoSMTP: "FLIT_SMTP",
       notificationTarget: "COMPRADOR",
       metodosRecaudo: ["Pasarela FLIT"],
+      // HU #10478 — defaults Kyverum-first cuando la config no viene en settings.
+      runtFailoverTimeoutMs: 60000,
+      consultationProviderConfig: {
+        vehicle_vin: { primary: "kyverum_runt", fallback: ["verifik"] },
+        vehicle_plate: { primary: "kyverum_runt", fallback: ["verifik"] },
+        conductor: { primary: "kyverum_runt_conductor", fallback: ["verifik_conductor"] },
+      },
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.
@@ -81,6 +88,33 @@ describe("CompanyConfigTabs (AC2)", () => {
         switchesMatricula: expect.objectContaining({
           allowInitialRegistration: false,
           allowMiscNewVehicles: true,
+        }),
+      }),
+    );
+  });
+
+  it("HU #10478: cambia el proveedor de consulta por VIN y lo incluye en el PUT con su fallback", async () => {
+    const user = userEvent.setup();
+    const onSaveSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+
+    // La sección de proveedores vive en la pestaña Configuración Empresa.
+    await user.click(screen.getByRole("tab", { name: /configuración empresa/i }));
+    await user.selectOptions(screen.getByLabelText("Vehículo por VIN"), "verifik");
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+    const dialog = screen.getByRole("dialog");
+    // El resumen agrupa el cambio bajo el módulo de proveedores.
+    expect(within(dialog).getByText(/proveedores de consulta runt/i)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
+
+    expect(onSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        consultationProviderConfig: expect.objectContaining({
+          vehicle_vin: { primary: "verifik", fallback: ["kyverum_runt"] },
+          vehicle_plate: { primary: "kyverum_runt", fallback: ["verifik"] },
+          conductor: { primary: "kyverum_runt_conductor", fallback: ["verifik_conductor"] },
         }),
       }),
     );

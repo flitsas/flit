@@ -35,7 +35,10 @@ internal sealed class TenantOperationalPolicyConfiguration
 
         builder.Property(x => x.RuntProviderStrategy)
             .HasMaxLength(20).HasDefaultValue("verifik").IsRequired();
-        builder.Property(x => x.RuntFailoverTimeoutMs).HasDefaultValue(4000);
+        builder.Property(x => x.RuntFailoverTimeoutMs).HasDefaultValue(60_000);
+
+        builder.Property(x => x.ConsultationProviderConfig)
+            .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
 
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();

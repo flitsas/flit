@@ -512,6 +512,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("allow_misc_new_vehicles");
 
+                    b.Property<string>("ConsultationProviderConfig")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("consultation_provider_config")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -559,7 +566,7 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<int>("RuntFailoverTimeoutMs")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasDefaultValue(4000)
+                        .HasDefaultValue(60000)
                         .HasColumnName("runt_failover_timeout_ms");
 
                     b.Property<string>("RuntProviderStrategy")

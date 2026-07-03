@@ -3195,8 +3195,30 @@ components:
         metodosRecaudo:
           type: array
           items: { type: string }
+        runtFailoverTimeoutMs:
+          type: integer
+          description: Presupuesto (ms) del proveedor de consulta primario antes de caer al fallback (HU #10478).
+        consultationProviderConfig:
+          type: object
+          description: >-
+            Override por tenant de la cadena de proveedores de consulta RUNT (HU #10478). Objeto vacío
+            = usar los defaults globales. Claves: vehicle_vin, vehicle_plate, conductor.
+          additionalProperties:
+            $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
+
+    ConsultationProviderChoice:
+      type: object
+      description: Proveedor primario + orden de fallback para un tipo de consulta (HU #10478).
+      properties:
+        primary:
+          type: string
+          description: Proveedor primario. vehicle_*, kyverum_runt|verifik; conductor, kyverum_runt_conductor|verifik_conductor.
+        fallback:
+          type: array
+          items: { type: string }
+      required: [primary, fallback]
 
     TenantSettingsUpdate:
       type: object
@@ -3213,6 +3235,18 @@ components:
         metodosRecaudo:
           type: array
           items: { type: string }
+        runtFailoverTimeoutMs:
+          type: integer
+          minimum: 500
+          maximum: 60000
+          description: Opcional. Si se omite, se conserva el valor previo (HU #10478).
+        consultationProviderConfig:
+          type: object
+          description: >-
+            Opcional (HU #10478). Override por tenant de la cadena de proveedores de consulta. Si se
+            omite, se conserva el valor previo. Claves: vehicle_vin, vehicle_plate, conductor.
+          additionalProperties:
+            $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
 

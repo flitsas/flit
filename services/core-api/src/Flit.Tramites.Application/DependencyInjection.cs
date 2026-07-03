@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();
+        // HU #10478 — proveedor de consulta resuelto por tenant, para adaptar la UI del wizard.
+        services.AddScoped<UseCases.Consultations.GetConsultationConfigHandler>();
 
         // HU-2 (N03): puerto de historial del lifecycle — 1 fila de status_history + 1 evento por transición.
         services.AddScoped<Domain.Tramites.Estados.ITramiteTransitionRecorder, UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder>();
