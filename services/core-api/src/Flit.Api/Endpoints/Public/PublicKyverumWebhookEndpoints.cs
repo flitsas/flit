@@ -39,6 +39,10 @@ internal static class PublicKyverumWebhookEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación no encontrada."),
                 // AC3: firma inválida ⇒ 401 sin cambios en BD.
                 "firma_invalida" => Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Firma del webhook inválida."),
+                // Respaldo (firma no verificable): el proveedor no respondió la consulta de estado.
+                // 503/502 ⇒ Kyverum reintenta el webhook (y el worker de reconciliación lo cubre igual).
+                "reintentar" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No se pudo verificar el estado; reintentar."),
+                "no_verificable" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "No se pudo verificar el estado de la validación."),
                 _ => Results.Ok(new { ok = true }),
             };
         }).WithName("KyverumVerifyWebhook").AllowAnonymous().DisableAntiforgery();

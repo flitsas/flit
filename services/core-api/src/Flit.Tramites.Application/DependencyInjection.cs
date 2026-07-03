@@ -65,6 +65,10 @@ public static class DependencyInjection
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();
         services.AddScoped<KyverumWebhookHandler>();
+        // Punto único de aplicación del resultado (webhook + reconciliación) y reconciliación por consulta
+        // (fallback cuando el webhook se pierde): desatasca validaciones colgadas consultando a Kyverum.
+        services.AddScoped<Identity.IdentityValidationResultApplier>();
+        services.AddScoped<ReconciliarIdentidadHandler>();
 
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
         // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
@@ -78,14 +82,18 @@ public static class DependencyInjection
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).
         // MockFurDocumentGenerator se conserva para tests; solo se quitó el registro de DI.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
-        // HU #10458 — IIdentityCertificateGenerator se registra en Infrastructure
-        // (IdentityCertificatePdfGenerator — QuestPDF, PDF real). MockIdentityCertificateGenerator
-        // se conserva para tests; solo se quitó el registro de DI (mismo patrón que IFurDocumentGenerator).
+        // Certificado de identidad: el FUR embebe el PDF REAL de Kyverum (IKyverumCertificateClient,
+        // registrado en Infraestructura, HttpClient con cookie). IIdentityCertificateGenerator (#10458,
+        // QuestPDF) permanece registrado en Infraestructura; MockIdentityCertificateGenerator solo para tests.
         services.AddScoped<SolicitarFirmaHandler>();
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
+        // Descarga on-demand del certificado (PDF) de la validación de identidad desde Kyverum.
+        services.AddScoped<DescargarCertificadoIdentidadHandler>();
+        // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
+        services.AddScoped<GetIdentityAuditHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los

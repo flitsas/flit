@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -105,6 +106,111 @@ internal sealed class KyverumVerifyClient(
         }
     }
 
+    public async Task<KyverumVerifyStatus?> GetStatusAsync(string verificationId, string? parte, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(verificationId))
+            throw new KyverumVerifyException("Falta el id de la validación de Kyverum.", transient: false);
+
+        try
+        {
+            using var message = new HttpRequestMessage(
+                HttpMethod.Get, $"/v1/validations/{Uri.EscapeDataString(verificationId)}");
+            if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+                message.Headers.Authorization = new AuthenticationHeaderValue(_options.AuthScheme, _options.ApiKey);
+            message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using var response = await http.SendAsync(message, ct);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null; // Kyverum no conoce ese id.
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await SafeReadBodyAsync(response, ct);
+                var transient = (int)response.StatusCode >= 500;
+                KyverumLog.ProviderError(logger, (int)response.StatusCode, errorBody);
+                throw new KyverumVerifyException(
+                    transient
+                        ? $"Kyverum no disponible al consultar el estado ({(int)response.StatusCode})."
+                        : $"Kyverum rechazó la consulta de estado ({(int)response.StatusCode}).",
+                    transient);
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<KyverumStatusResponse>(JsonOptions, ct);
+            if (payload is null || string.IsNullOrWhiteSpace(payload.Status))
+                throw new KyverumVerifyException("Respuesta de estado inválida de Kyverum.", transient: false);
+
+            // Kyverum permite REINTENTOS dentro de una misma validación (p.ej. 3 intentos). El resultado
+            // TERMINAL vive en `result` (aprobado + closedAt); mientras `result` sea null la validación sigue
+            // ABIERTA aunque el ÚLTIMO intento (top-level `subjects`) haya sido rechazado. Por eso el estado
+            // efectivo se deriva del `result` (o expirado); si no cerró → en_proceso (no se terminaliza por un
+            // intento fallido). El score/validadoAt del veredicto vienen de `result.subjects`.
+            var subject = SelectStatusSubject(payload.Subjects, parte);
+            var resultSubject = SelectStatusSubject(payload.Result?.Subjects, parte);
+
+            // OJO: Kyverum reporta `result` (aprobado/closedAt) tras CADA intento, no solo al agotar los 3.
+            // Por eso un `result.aprobado=false` NO es terminal por sí solo → se mapea a `rechazado_intento` y
+            // el reconciliador CUENTA los intentos (dedup por validadoAt) para decidir si ya se agotaron.
+            string effectiveStatus;
+            if (payload.Result?.Aprobado is { } aprobado)
+                effectiveStatus = aprobado ? "aprobado" : "rechazado_intento";
+            else if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
+                effectiveStatus = "rechazado_intento";
+            else
+                effectiveStatus = payload.Status!; // en_proceso/enviado/aprobado/expirado (compat)
+
+            var score = resultSubject?.Score ?? subject?.Score;
+            var attemptAt = subject?.ValidadoAt ?? resultSubject?.ValidadoAt; // clave de dedup/conteo del intento
+            var motivo = subject?.Motivo;
+
+            // Trazabilidad SIN OCR/PII: estados/score/fecha (NUNCA datosExtraidos).
+            var sanitized = JsonSerializer.Serialize(new
+            {
+                status = effectiveStatus,
+                provider_status = payload.Status,
+                result_aprobado = payload.Result?.Aprobado,
+                subject_status = subject?.Status,
+                // Motivo del ÚLTIMO intento (para mostrar "reintentando: <motivo>" mientras sigue abierta).
+                subject_motivo = subject?.Motivo,
+                score,
+                validado_at = attemptAt, // = AttemptAt: clave de dedup/conteo del intento (consistente)
+                proveedor = "kyverum",
+            });
+
+            return new KyverumVerifyStatus(effectiveStatus, score, sanitized, attemptAt, motivo);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            throw new KyverumVerifyException("Timeout consultando el estado en Kyverum.", transient: true);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new KyverumVerifyException($"Error de red consultando el estado en Kyverum: {ex.Message}", transient: true);
+        }
+        catch (JsonException)
+        {
+            throw new KyverumVerifyException("No se pudo interpretar el estado de Kyverum.", transient: false);
+        }
+    }
+
+    /// <summary>Subject de la parte (match por rol, case-insensitive); si no, el primero del arreglo.</summary>
+    private static KyverumStatusSubject? SelectStatusSubject(IReadOnlyList<KyverumStatusSubject>? subjects, string? parte)
+    {
+        if (subjects is not { Count: > 0 })
+            return null;
+        if (!string.IsNullOrWhiteSpace(parte))
+        {
+            foreach (var s in subjects)
+                if (string.Equals(s.Rol, parte, StringComparison.OrdinalIgnoreCase))
+                    return s;
+        }
+        return subjects[0];
+    }
+
     /// <summary>
     /// URL de callback registrada en Kyverum, con nuestro id de correlación incrustado en el path.
     /// Devuelve null si no hay base configurada (Kyverum exige una URL pública; sin ella el create falla).
@@ -156,6 +262,29 @@ internal sealed class KyverumVerifyClient(
 
     private sealed record KyverumCaptureLink(
         [property: JsonPropertyName("captureUrl")] string? CaptureUrl);
+
+    // ── Contrato del GET /v1/validations/{id} (reconciliación) ────────────────
+    // `result` es no-null SOLO cuando la validación CERRÓ (aprobado/rechazado final, tras agotar reintentos
+    // o aprobar). Mientras es null, la validación sigue abierta (Kyverum permite reintentar). Los `subjects`
+    // top-level reflejan el ÚLTIMO intento (puede ser rechazado aunque la validación no haya cerrado).
+    private sealed record KyverumStatusResponse(
+        [property: JsonPropertyName("status")] string? Status,
+        [property: JsonPropertyName("result")] KyverumStatusResult? Result,
+        [property: JsonPropertyName("subjects")] IReadOnlyList<KyverumStatusSubject>? Subjects);
+
+    private sealed record KyverumStatusResult(
+        [property: JsonPropertyName("aprobado")] bool? Aprobado,
+        [property: JsonPropertyName("closedAt")] string? ClosedAt,
+        [property: JsonPropertyName("subjects")] IReadOnlyList<KyverumStatusSubject>? Subjects);
+
+    private sealed record KyverumStatusSubject(
+        [property: JsonPropertyName("rol")] string? Rol,
+        [property: JsonPropertyName("status")] string? Status,
+        [property: JsonPropertyName("score")] int? Score,
+        // Mensaje amigable de Kyverum del ÚLTIMO intento (p.ej. "El rostro no es completamente visible…").
+        // NO es PII (no trae datosExtraidos); es la guía que ve el cliente para reintentar mejor.
+        [property: JsonPropertyName("motivo")] string? Motivo,
+        [property: JsonPropertyName("validadoAt")] string? ValidadoAt);
 }
 
 /// <summary>Logging source-generated (CA1848) del cliente Kyverum.</summary>

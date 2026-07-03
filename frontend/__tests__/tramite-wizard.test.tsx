@@ -200,7 +200,9 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
     // El wizard server-driven se hidrata con el id de la URL...
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(5);
-    expect(mocks.getWizardState).toHaveBeenCalledWith('inst-99', expect.anything());
+    // El tenant se resuelve dentro de tramitesClient (tenant activo del `?t=` → JWT), no se fuerza
+    // desde el hook; por eso el 2º arg es undefined (antes se pasaba DEV_TENANT_ID hardcodeado).
+    expect(mocks.getWizardState).toHaveBeenCalledWith('inst-99', undefined);
     // ...y NO dispara un POST /instances (F5 reabre, no re-crea).
     expect(mocks.createInstance).not.toHaveBeenCalled();
   });

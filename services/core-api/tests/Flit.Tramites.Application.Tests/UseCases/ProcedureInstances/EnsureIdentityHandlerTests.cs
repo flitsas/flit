@@ -75,7 +75,7 @@ public sealed class EnsureIdentityHandlerTests
     // ── EnsureIdentityHandler ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Handle_PersonaConValidacionVigenteEnOtroTramite_ClonaYReusa()
+    public async Task Handle_PersonaConValidacionVigenteEnOtroTramite_ReferenciaSinClonar()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = MatriculaConComprador(); // sin validaciones locales
@@ -90,14 +90,10 @@ public sealed class EnsureIdentityHandlerTests
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
-        // Clonó una validación aprobada en este trámite y persistió.
-        _repo.Received(1).Add(Arg.Is<ProcedureInstanceBiometricValidation>(v =>
-            v.Status == BiometricEstados.Aprobado
-            && v.PartyRole == "comprador"
-            && v.DocumentNumber == Documento
-            && v.ValidatedAt == source.ValidatedAt   // hereda la fecha → mismo vencimiento
-            && v.Score == 95));
-        await _repo.Received(1).SaveChangesAsync(ct);
+        // Rediseño HU #10350: se REFERENCIA la identidad vigente de la persona (id origen), SIN clonar ni
+        // crear una fila por trámite. La identidad se valida una vez y sirve para N trámites hasta que venza.
+        result.ValidationId.Should().Be(source.Id);
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
     }
 
     [Fact]

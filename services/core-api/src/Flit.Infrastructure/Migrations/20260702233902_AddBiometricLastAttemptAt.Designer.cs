@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260702233902_AddBiometricLastAttemptAt")]
+    partial class AddBiometricLastAttemptAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,132 +24,6 @@ namespace Flit.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.ImprontaGenerationEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<DateTimeOffset>("FechaImpresa")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("fecha_impresa");
-
-                    b.Property<Guid>("FlitUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("flit_user_id");
-
-                    b.Property<string>("HashSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("hash_sha256");
-
-                    b.Property<string>("Linea")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("linea");
-
-                    b.Property<string>("Marca")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("marca");
-
-                    b.Property<string>("Modelo")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("modelo");
-
-                    b.Property<string>("NumChasis")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("num_chasis");
-
-                    b.Property<string>("NumMotor")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("num_motor");
-
-                    b.Property<string>("NumSerie")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("num_serie");
-
-                    b.Property<string>("Operador")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("operador");
-
-                    b.Property<string>("OrgCiudad")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("org_ciudad");
-
-                    b.Property<string>("OrgNit")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("org_nit");
-
-                    b.Property<string>("OrgNombre")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("org_nombre");
-
-                    b.Property<byte[]>("PdfContent")
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("pdf_content");
-
-                    b.Property<int>("PdfSizeBytes")
-                        .HasColumnType("integer")
-                        .HasColumnName("pdf_size_bytes");
-
-                    b.Property<string>("Placa")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("placa");
-
-                    b.Property<string>("Radicado")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("radicado");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_impronta_generations");
-
-                    b.HasIndex("FlitUserId")
-                        .HasDatabaseName("ix_impronta_generations_flit_user_id");
-
-                    b.HasIndex("Placa")
-                        .HasDatabaseName("ix_impronta_generations_placa");
-
-                    b.HasIndex("Radicado")
-                        .IsUnique()
-                        .HasDatabaseName("uq_impronta_generations_radicado");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_impronta_generations_tenant_id");
-
-                    b.ToTable("impronta_generations", "admin");
-                });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtApiCallLogEntity", b =>
                 {
@@ -748,10 +625,6 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId")
                         .IsUnique()
                         .HasDatabaseName("uq_transit_office_profiles_tenant_id");
-
-                    b.HasIndex("TransitOfficeId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_transit_office_profiles_transit_office_id");
 
                     b.ToTable("transit_office_profiles", "admin");
                 });

@@ -26,6 +26,9 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
         builder.Property(x => x.Attempts).HasColumnName("attempts").IsRequired().HasDefaultValue(0);
         builder.Property(x => x.MaxAttempts).HasColumnName("max_attempts").IsRequired().HasDefaultValue(5);
+        // validadoAt del último intento contado (dedup del conteo de reintentos Kyverum). Texto: es el string
+        // ISO que devuelve Kyverum; se compara exacto, sin parsear.
+        builder.Property(x => x.LastAttemptAt).HasColumnName("last_attempt_at").HasMaxLength(40);
         builder.Property(x => x.Score).HasColumnName("score");
         builder.Property(x => x.Detail).HasColumnName("detail").HasColumnType("jsonb");
         builder.Property(x => x.FacePhotoPath).HasColumnName("face_photo_path").HasMaxLength(1000);

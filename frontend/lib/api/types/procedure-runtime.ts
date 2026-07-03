@@ -443,6 +443,42 @@ export interface BiometricValidation {
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
   rejectionReason?: string | null;
+  // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
+  // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
+  ultimoIntentoMotivo?: string | null;
+}
+
+/**
+ * Resultado de reconciliar una validación con el proveedor (POST .../biometric/{id}/reconcile):
+ * consulta el estado real en Kyverum y lo aplica si ya es terminal. `updated` = hubo cambio.
+ */
+export interface ReconcileIdentityResult {
+  status: BiometricEstado;
+  updated: boolean;
+}
+
+/**
+ * Un evento de la bitácora (solo lectura) del ciclo de una validación de identidad: envío, llegada del
+ * webhook, si descifró el secreto, firma, resultado y reconciliaciones. Sin PII ni secretos. Espejo de
+ * IdentityAuditEventDto del backend. Diagnóstico de "qué pasó" sin entrar a la BD/pod (solo soporte).
+ */
+export interface IdentityAuditEvent {
+  occurredAt: string;
+  stage: string;
+  outcome: string;
+  httpStatus: number | null;
+  signaturePresent: boolean | null;
+  secretPresent: boolean | null;
+  decryptOk: boolean | null;
+  providerStatus: string | null;
+  errorType: string | null;
+  message: string | null;
+}
+
+/** Respuesta de GET .../biometric/{validationId}/audit (espejo de IdentityAuditResponse). */
+export interface IdentityAuditResponse {
+  validationId: string;
+  events: IdentityAuditEvent[];
 }
 
 /**

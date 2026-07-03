@@ -77,6 +77,14 @@ public sealed class SubmitGateTraspasoTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
+    // Set de partes con identidad aprobada, derivado de las validaciones biométricas de la instancia
+    // (HU #10350: el gate ahora recibe el set PER-PERSONA que el handler resuelve con el repo).
+    private static HashSet<string> Aprobadas(ProcedureInstance instance) =>
+        instance.BiometricValidations
+            .Where(b => b.Status == BiometricEstados.Aprobado && b.PartyRole is not null)
+            .Select(b => b.PartyRole!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     private static void AddFirma(ProcedureInstance instance, string parte) =>
         instance.Signatures.Add(new ProcedureInstanceSignature
         {
@@ -95,7 +103,8 @@ public sealed class SubmitGateTraspasoTests
     public void Gate_TraspasoCompleto_NoBloquea()
     {
         // AC1: todo completo → lista vacía (puede radicar).
-        SubmitGate.Evaluate(CompleteTraspaso()).Should().BeEmpty();
+        var instance = CompleteTraspaso();
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().BeEmpty();
     }
 
     [Fact]
@@ -105,7 +114,7 @@ public sealed class SubmitGateTraspasoTests
         var instance = CompleteTraspaso();
         instance.Signatures.Clear();
 
-        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.FirmaCompraventaRequerida);
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.FirmaCompraventaRequerida);
     }
 
     [Fact]
@@ -116,7 +125,7 @@ public sealed class SubmitGateTraspasoTests
         instance.BiometricValidations.Remove(
             instance.BiometricValidations.First(b => b.PartyRole == "vendedor"));
 
-        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.IdentidadRequerida);
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.IdentidadRequerida);
     }
 
     [Fact]
@@ -126,7 +135,7 @@ public sealed class SubmitGateTraspasoTests
         var instance = CompleteTraspaso();
         instance.FieldValues.Clear();
 
-        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.OrganismoRequerido);
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.OrganismoRequerido);
     }
 
     [Fact]
@@ -136,7 +145,7 @@ public sealed class SubmitGateTraspasoTests
         var instance = CompleteTraspaso();
         instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
 
-        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.FurRequerido);
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.FurRequerido);
     }
 
     [Fact]
@@ -152,7 +161,7 @@ public sealed class SubmitGateTraspasoTests
             // Quitar un documento obligatorio (compraventa) → debe seguir bloqueando pese al flag.
             instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "compraventa"));
 
-            SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.DocumentosIncompletos);
+            SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.DocumentosIncompletos);
         }
         finally
         {

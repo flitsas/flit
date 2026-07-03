@@ -15,11 +15,10 @@ internal sealed class RabbitMqIdentityValidationEventPublisher(
     FlitDbContext db,
     ILogger<RabbitMqIdentityValidationEventPublisher> logger) : IIdentityValidationEventPublisher
 {
-    public Task PublishAsync(IdentityValidationEvent evt, CancellationToken ct = default)
+    public async Task PublishAsync(IdentityValidationEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
-        IdentityValidationOutboxWriter.Enqueue(db, evt);
+        await IdentityValidationOutboxWriter.EnqueueAsync(db, evt, ct);
         IdentityValidationLog.RabbitMqStub(logger, evt.EventType, evt.ValidationId);
-        return Task.CompletedTask;
     }
 }

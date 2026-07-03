@@ -2389,6 +2389,200 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado:
+    get:
+      operationId: descargarCertificadoIdentidad
+      tags: [Tramites, Identidad]
+      summary: Descargar el certificado (PDF) de una validación de identidad (Kyverum)
+      description: >
+        Descarga el certificado oficial en PDF de una validación de identidad desde la API pública de
+        Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
+        create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
+        `validationId`, sirve para cualquier parte (comprador/vendedor).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF del certificado.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe (para el tenant/instancia) o no tiene certificado disponible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la descarga del certificado (error definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/audit:
+    get:
+      operationId: getIdentidadAudit
+      tags: [Tramites, Identidad]
+      summary: Bitácora del ciclo de una validación de identidad
+      description: >
+        Devuelve, en orden cronológico, la bitácora del ciclo de una validación: envío al proveedor, llegada
+        del webhook, si el secreto se pudo descifrar o no (diagnóstico del keyring), verificación de firma,
+        resultado aplicado y reconciliaciones. Para depurar "qué pasó" desde la API sin entrar a la BD ni a los
+        logs del pod. No incluye secretos ni PII.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bitácora de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [validationId, events]
+                properties:
+                  validationId:
+                    type: string
+                    format: uuid
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        occurredAt: { type: string, format: date-time }
+                        stage: { type: string, description: "send|send_response|send_error|webhook_received|webhook_not_verifiable|webhook_signature_invalid|webhook_applied|reconcile" }
+                        outcome: { type: string }
+                        httpStatus: { type: integer, nullable: true }
+                        signaturePresent: { type: boolean, nullable: true }
+                        secretPresent: { type: boolean, nullable: true }
+                        decryptOk: { type: boolean, nullable: true }
+                        providerStatus: { type: string, nullable: true }
+                        errorType: { type: string, nullable: true }
+                        message: { type: string, nullable: true }
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/reconcile:
+    post:
+      operationId: reconciliarIdentidad
+      tags: [Tramites, Identidad]
+      summary: Reconciliar una validación con Kyverum (fallback de webhook)
+      description: >
+        Consulta el estado real de una validación en Kyverum (`GET /v1/validations/{kyverumVerificationId}`)
+        y lo aplica si ya es terminal (aprobado/rechazado). Sirve como respaldo cuando el webhook no llegó
+        (p.ej. callback mal ruteado entre ambientes). Idempotente: si ya está terminal no hace nada. El
+        frontend puede invocarlo en la pantalla "Esperando validación" para desatascar en vivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado (posiblemente actualizado) de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updated]
+                properties:
+                  status:
+                    type: string
+                    description: Estado FLIT tras reconciliar (en_proceso|aprobado|rechazado|expirado).
+                  updated:
+                    type: boolean
+                    description: true si la consulta cambió el estado local.
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La validación no es del proveedor Kyverum.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la consulta de estado (definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/webhooks/kyverum-verify/{validationId}:
     post:
       operationId: kyverumVerifyWebhook

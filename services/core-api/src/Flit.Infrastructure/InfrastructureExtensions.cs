@@ -296,6 +296,16 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // Descarga del certificado de la validación (PDF) desde la API pública de Kyverum
+        // (GET /v1/validations/{id}/certificado). Reusa el MISMO Bearer API key que el create — sin cookie
+        // ni login admin (el panel /admin/api exige MFA y no aplica para integración server-to-server).
+        services.AddHttpClient<IKyverumCertificateClient, KyverumCertificateClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
         // El keyring se persiste en Postgres (tabla data_protection_keys vía FlitDbContext) y se
         // fija un ApplicationName estable: así todas las réplicas comparten las mismas llaves y
@@ -305,6 +315,9 @@ public static class InfrastructureExtensions
             .PersistKeysToDbContext<FlitDbContext>()
             .SetApplicationName("flit-core-api");
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
+        // scope, así queda registrada aunque el webhook termine en 500/401.
+        services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
 
         // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).
         var messaging = Cfg("Messaging:IdentityValidation", "MESSAGING_IDENTITY_VALIDATION") ?? "inprocess";
@@ -324,6 +337,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IIdentityValidationProvider, KyverumIdentityValidationProvider>();
         services.AddScoped<IIdentityValidationProviderResolver, IdentityValidationProviderResolver>();
         services.AddHostedService<IdentityValidationSendRetryProcessor>();
+        // Red de seguridad: reconcilia por consulta las validaciones en_proceso colgadas (webhook perdido).
+        services.AddHostedService<IdentityValidationReconcileProcessor>();
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)

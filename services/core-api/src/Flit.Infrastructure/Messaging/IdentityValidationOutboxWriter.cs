@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Tramites.Application.Identity.Events;
 using Flit.Tramites.Domain.Entities;
 using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Messaging;
 
@@ -14,7 +15,8 @@ internal static class IdentityValidationOutboxWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static IdentityValidationOutbox Enqueue(FlitDbContext db, IdentityValidationEvent evt)
+    public static async Task<IdentityValidationOutbox?> EnqueueAsync(
+        FlitDbContext db, IdentityValidationEvent evt, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -23,6 +25,26 @@ internal static class IdentityValidationOutboxWriter
         // selle published_at. Los 'requested' no tienen consumidor → se sellan al despachar (in-process).
         var pending = string.Equals(
             evt.EventType, IdentityValidationEventTypes.Completed, StringComparison.Ordinal);
+
+        // IDEMPOTENCIA a nivel outbox: a lo sumo un 'completed' por validación (índice único parcial
+        // uq_identity_validation_outbox_completed). Si ya existe uno —p. ej. una validación que se
+        // re-terminaliza tras reabrirse fuera de banda, o un reproceso— NO se encola otro: encolarlo
+        // violaría el índice (23505) y, al compartir el SaveChanges del caso de uso, abortaría TODA la
+        // unidad de trabajo (estado + intentos + evento), dejando la validación atascada en 500. Skippear
+        // aquí deja que el cambio de estado se persista limpio (el evento ya fue emitido una vez).
+        if (pending)
+        {
+            var yaEncolado =
+                db.ChangeTracker.Entries<IdentityValidationOutbox>().Any(e =>
+                    e.State is not EntityState.Deleted
+                    && e.Entity.ValidationId == evt.ValidationId
+                    && string.Equals(e.Entity.EventType, IdentityValidationEventTypes.Completed, StringComparison.Ordinal))
+                || await db.Set<IdentityValidationOutbox>().AnyAsync(
+                    x => x.ValidationId == evt.ValidationId
+                        && x.EventType == IdentityValidationEventTypes.Completed, ct);
+            if (yaEncolado)
+                return null;
+        }
 
         var outbox = new IdentityValidationOutbox
         {

@@ -62,14 +62,25 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             ? await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct)
             : EmptyNames;
 
+        // Identidad PER-PERSONA (documento) para los chips/progreso: se referencia la identidad vigente de
+        // la persona en N trámites sin clonar (HU #10350). Una sola consulta para TODOS los tenants del
+        // listado (WHERE tenant_id IN …) → sin N+1.
+        var now = DateTimeOffset.UtcNow;
+        IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+
         return instances
-            .Select(e => ToSummary(e, nombres.GetValueOrDefault(e.TenantId)))
+            .Select(e => ToSummary(
+                e,
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
+                nombres.GetValueOrDefault(e.TenantId)))
             .ToList();
     }
 
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
-    internal static InstanceSummaryDto ToSummary(ProcedureInstance e, string? companiaNombre = null)
+    internal static InstanceSummaryDto ToSummary(
+        ProcedureInstance e, IReadOnlySet<string> identidadAprobadaPartes, string? companiaNombre = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -81,7 +92,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
         // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
-        var state = GetWizardStateHandler.ComputeState(e);
+        var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes);
         var (pasoActual, totalPasos) = ComputeProgress(state, e.Status);
 
         return new InstanceSummaryDto(
@@ -102,7 +113,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.TenantId,
             string.IsNullOrWhiteSpace(companiaNombre) ? null : companiaNombre,
             e.DraftFinalizedAt,
-            DeriveIdentityStatus(e, modalidad),
+            DeriveIdentityStatus(e, modalidad, identidadAprobadaPartes),
             DeriveSignaturePending(e, modalidad),
             state.CanSubmit);
     }
@@ -118,11 +129,20 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// no hay ninguna validación iniciada. En matrícula la única parte (comprador) puede venir con
     /// <c>Parte</c> null o "comprador".
     /// </summary>
-    private static string? DeriveIdentityStatus(ProcedureInstance e, TramiteModalidadEntrada modalidad)
+    private static string? DeriveIdentityStatus(
+        ProcedureInstance e, TramiteModalidadEntrada modalidad, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var partes = modalidad == TramiteModalidadEntrada.Traspaso ? PartesTraspaso : PartesMatricula;
-        var esMatricula = modalidad != TramiteModalidadEntrada.Traspaso;
 
+        // Aprobado PER-PERSONA: TODAS las partes requeridas tienen identidad vigente aprobada (referenciada,
+        // aunque el trámite no tenga fila propia). Se evalúa ANTES de mirar filas locales, porque un trámite
+        // que referencia una identidad de otro trámite no tiene validaciones propias.
+        if (partes.All(identidadAprobadaPartes.Contains))
+            return BiometricEstados.Aprobado;
+
+        // Estados NO terminales/aprobados sí dependen de las validaciones PROPIAS del trámite (una captura en
+        // curso o rechazada vive en su instancia): en_proceso / rechazado / sin iniciar.
+        var esMatricula = modalidad != TramiteModalidadEntrada.Traspaso;
         bool Relevant(ProcedureInstanceBiometricValidation v) =>
             partes.Any(p => string.Equals(v.PartyRole, p, StringComparison.OrdinalIgnoreCase))
             || (esMatricula && v.PartyRole is null);
@@ -130,15 +150,6 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var relevant = e.BiometricValidations.Where(Relevant).ToList();
         if (relevant.Count == 0)
             return null;
-
-        // Aprobado para el chip = aprobado Y VIGENTE (≤30 días): una aprobación vencida deja de contar.
-        var now = DateTimeOffset.UtcNow;
-        bool Aprobada(string parte) => e.BiometricValidations.Any(v =>
-            (string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase) || (esMatricula && v.PartyRole is null))
-            && BiometricRules.EsAprobadaVigente(v, now));
-
-        if (partes.All(Aprobada))
-            return BiometricEstados.Aprobado;
 
         if (relevant.Any(v => v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso))
             return BiometricEstados.EnProceso;
