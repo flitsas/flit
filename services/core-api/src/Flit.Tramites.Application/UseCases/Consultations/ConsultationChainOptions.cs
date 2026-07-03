@@ -17,7 +17,7 @@ public sealed class ConsultationChainOptions
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Presupuesto (ms) para el proveedor primario antes de caer al fallback. Default 4000 (DDL).</summary>
-    public int FailoverTimeoutMs { get; set; } = 4000;
+    public int FailoverTimeoutMs { get; set; } = 60_000;
 
     private static readonly Dictionary<string, string[]> Fallback =
         new(StringComparer.OrdinalIgnoreCase)

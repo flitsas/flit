@@ -51,7 +51,7 @@ describe("CompanyConfigTabs (AC2)", () => {
       notificationTarget: "COMPRADOR",
       metodosRecaudo: ["Pasarela FLIT"],
       // HU #10478 — defaults Kyverum-first cuando la config no viene en settings.
-      runtFailoverTimeoutMs: 4000,
+      runtFailoverTimeoutMs: 60000,
       consultationProviderConfig: {
         vehicle_vin: { primary: "kyverum_runt", fallback: ["verifik"] },
         vehicle_plate: { primary: "kyverum_runt", fallback: ["verifik"] },

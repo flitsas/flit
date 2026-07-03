@@ -32,9 +32,11 @@ public sealed class TenantSettings
 
     /// <summary>
     /// Presupuesto (ms) del proveedor primario de consulta antes de caer al fallback
-    /// (<c>runt_failover_timeout_ms</c>, HU #10478). No <c>required</c>: default 4000 (DDL).
+    /// (<c>runt_failover_timeout_ms</c>, HU #10478). No <c>required</c>: default 60000 (DDL). El RUNT
+    /// en frío (vía Kyverum/Verifik) puede tardar decenas de segundos, así que el presupuesto es amplio
+    /// para no caer al fallback prematuramente.
     /// </summary>
-    public int RuntFailoverTimeoutMs { get; init; } = 4000;
+    public int RuntFailoverTimeoutMs { get; init; } = 60_000;
 
     /// <summary>
     /// Override por tenant de la cadena de proveedores de consulta RUNT
@@ -56,7 +58,7 @@ public sealed class TenantSettings
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
-        RuntFailoverTimeoutMs = 4000,
+        RuntFailoverTimeoutMs = 60_000,
         ConsultationProviderConfig = ConsultationProviderConfig.Empty,
     };
 }

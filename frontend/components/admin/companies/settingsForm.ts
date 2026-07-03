@@ -11,7 +11,7 @@ import type {
 export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
 export const DEFAULT_VEHICLE_PROVIDER = "kyverum_runt";
 export const DEFAULT_CONDUCTOR_PROVIDER = "kyverum_runt_conductor";
-export const DEFAULT_FAILOVER_MS = 4000;
+export const DEFAULT_FAILOVER_MS = 60_000;
 export const FAILOVER_MIN_MS = 500;
 export const FAILOVER_MAX_MS = 60000;
 
