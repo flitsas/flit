@@ -4,9 +4,7 @@
  * Contrato de `POST /api/v1/admin/improntas/generate` documentado en el diseño técnico
  * del Feature #10462 (integración Kyverum RUNT): el backend responde con el binario
  * `application/pdf` listo para descarga (mismo patrón que `exportExecutivePdf` en
- * `lib/api/analytics.ts`). El backend real de este endpoint se implementa en la HU
- * #10467 y aún no existe al momento de esta HU — el frontend consume el contrato ya
- * acordado para poder maquetar el formulario en paralelo.
+ * `lib/api/analytics.ts`).
  */
 export interface GenerarImprontaRequest {
   /** Placa del vehículo. Obligatoria. */
@@ -48,16 +46,8 @@ export interface GenerarImprontaRequest {
 
 /**
  * Metadata de trazabilidad de una generación exitosa (HU #10471, AC1). El endpoint
- * `POST /generate` responde con el binario `application/pdf` (no puede llevar JSON en
- * el body), así que el radicado/hash — si el backend los expone — viajan en los headers
- * de respuesta `X-Impronta-Radicado`/`X-Impronta-Hash` (ver `admin-improntas.ts`).
- *
- * Limitación conocida: al momento de esta HU, el endpoint real de la HU #10467 (Kyverum
- * RUNT) todavía no está implementado, por lo que este contrato de headers es una
- * propuesta del frontend, no un acuerdo confirmado con `architecture-agent`/backend. Si
- * el backend no envía esos headers (p. ej. por no exponerlos vía CORS
- * `Access-Control-Expose-Headers`, o por no implementarlos), ambos campos llegan en
- * `null` y el formulario muestra un mensaje de éxito genérico — no es un error.
+ * `POST /generate` responde con el binario `application/pdf`; el radicado/hash — si el
+ * backend los expone — viajan en headers `X-Impronta-Radicado`/`X-Impronta-Hash`.
  */
 export interface GenerarImprontaResult {
   radicado: string | null;
@@ -66,13 +56,51 @@ export interface GenerarImprontaResult {
 
 /**
  * Cuerpo de error esperado del backend ante 4xx/5xx del endpoint de generación
- * (notas técnicas del AC2 de la HU #10471): `code` distingue `VALIDATION_ERROR`
- * (422), `UNAUTHORIZED` (401) y `UPSTREAM_UNAVAILABLE` (502). `errors` es opcional y
- * solo se usa para enriquecer el mensaje de `VALIDATION_ERROR` con el detalle de
- * campo, si el backend lo entrega (mismo shape que `ValidationErrorResponse`).
+ * (HU #10471 AC2).
  */
 export interface ImprontaErrorBody {
   code?: string;
   message?: string;
   errors?: Array<{ field?: string; message: string }>;
+}
+
+/**
+ * Fila del historial de improntas generadas (HU #10470). Contrato de
+ * `GET /api/v1/admin/improntas` (HU #10468 backend).
+ */
+export interface ImprontaHistorialItem {
+  id: string;
+  radicado: string;
+  placa: string;
+  numMotor?: string | null;
+  numChasis?: string | null;
+  numSerie?: string | null;
+  marca?: string | null;
+  linea?: string | null;
+  modelo?: string | null;
+  orgNombre: string;
+  orgNit: string;
+  orgCiudad: string;
+  operador: string;
+  hash: string;
+  fechaImpresa: string;
+  flitUserName: string;
+  tenantId: string;
+  createdAt: string;
+}
+
+/** Filtros de `GET /api/v1/admin/improntas` — placa y rango de fecha (AC3). */
+export interface ImprontasHistorialParams {
+  placa?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ImprontasHistorialPagedResult {
+  data: ImprontaHistorialItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
 }

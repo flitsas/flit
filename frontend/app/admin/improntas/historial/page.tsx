@@ -3,13 +3,12 @@
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
-import { ImprontaFormPanel } from "@/components/admin/improntas/ImprontaFormPanel";
+import { ImprontaHistorialSection } from "@/components/admin/improntas/ImprontaHistorialSection";
 import { ImprontasTabs } from "@/components/admin/improntas/ImprontasTabs";
 
-// Landing del módulo "Generación de improntas" — formulario de captura (HU #10469 AC1).
-// La generación real y descarga fina de errores por tipo (validación/auth/upstream de
-// Kyverum) es alcance de la HU #10471; aquí el formulario ya queda listo para conectar.
-export default function AdminImprontasPage() {
+// Vista de historial del módulo "Generación de improntas" (HU #10470 AC1/AC2/AC3).
+// Lista las improntas generadas previamente, filtrable por placa y rango de fecha.
+export default function AdminImprontasHistorialPage() {
   const router = useRouter();
 
   return (
@@ -25,17 +24,17 @@ export default function AdminImprontasPage() {
       </button>
 
       <ModuleTitle
-        title="Generación de improntas"
-        subtitle="Genera el Certificado de Improntas Digitales del vehículo (Res. 17145/2023 Mintransporte) y descárgalo en tu equipo."
+        title="Historial de improntas"
+        subtitle="Consulta las improntas generadas previamente para tu tenant, filtrables por placa y rango de fecha."
       />
 
       <div
         className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
         style={{ borderColor: "#DFE5ED" }}
       >
-        <ImprontasTabs activeId="formulario" />
+        <ImprontasTabs activeId="historial" />
         <div className="mt-4">
-          <ImprontaFormPanel />
+          <ImprontaHistorialSection />
         </div>
       </div>
     </div>
