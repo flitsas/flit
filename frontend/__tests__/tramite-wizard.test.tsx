@@ -893,7 +893,7 @@ describe('TramiteWizard — paso comercial', () => {
 describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
   beforeEach(() => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'draft', fieldValues: [] });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'borrador', fieldValues: [] });
   });
 
   async function abrirPasoConsulta() {
