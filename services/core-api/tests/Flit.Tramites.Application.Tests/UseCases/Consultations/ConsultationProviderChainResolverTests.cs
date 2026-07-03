@@ -41,7 +41,7 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Healthy("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("verifik");
         result.Overall.Should().Be("green");
@@ -56,7 +56,7 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Healthy("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("kyverum_runt");
         kyverum.Calls.Should().Be(1);
@@ -71,7 +71,7 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Healthy("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("kyverum_runt");
         verifik.Calls.Should().Be(0);
@@ -84,7 +84,7 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Errored("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("verifik");
         result.Checks.Should().Contain(c => c.Status == "error");
@@ -98,7 +98,7 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Healthy("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("verifik");
         verifik.Calls.Should().Be(1);
@@ -110,7 +110,7 @@ public sealed class ConsultationProviderChainResolverTests
         // Cadena con keys reales pero sin ningún provider registrado en el registry → error sintético.
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]));
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: null, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride: null, Ct());
 
         result.Provider.Should().Be("chain");
         result.Checks.Should().Contain(c => c.Status == "error");
@@ -124,10 +124,53 @@ public sealed class ConsultationProviderChainResolverTests
         var verifik = new FakeProvider("verifik", Healthy("verifik"));
         var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
 
-        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, failoverTimeoutMs: 50, Ct());
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, new ConsultationTenantOverride(null, 50), Ct());
 
         result.Provider.Should().Be("verifik");
         verifik.Calls.Should().Be(1);
+    }
+
+    // ── Override por tenant (Fase 4) ────────────────────────────────────────────────────────
+    [Fact]
+    public async Task OverrideTenant_SustituyeLaCadenaGlobal()
+    {
+        var kyverum = new FakeProvider("kyverum_runt", Healthy("kyverum_runt"));
+        var verifik = new FakeProvider("verifik", Healthy("verifik"));
+        var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]), kyverum, verifik);
+
+        // El tenant invierte la cadena: Verifik primero.
+        var tenantOverride = new ConsultationTenantOverride(
+            new Dictionary<string, ConsultationChainSelection>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["vehicle_vin"] = new("verifik", ["kyverum_runt"]),
+            },
+            FailoverTimeoutMs: null);
+
+        resolver.ResolveChain(ConsultationKind.VehicleVin, tenantOverride)
+            .Should().Equal("verifik", "kyverum_runt");
+
+        var result = await resolver.ConsultAsync(ConsultationKind.VehicleVin, Ctx, tenantOverride, Ct());
+
+        result.Provider.Should().Be("verifik");
+        verifik.Calls.Should().Be(1);
+        kyverum.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public void OverrideSinCadenaParaEseTipo_CaeAlDefaultGlobal()
+    {
+        var resolver = Resolver(Chains(vin: ["kyverum_runt", "verifik"]));
+
+        // Override define solo conductor: vehicle_vin sigue el default global.
+        var tenantOverride = new ConsultationTenantOverride(
+            new Dictionary<string, ConsultationChainSelection>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["conductor"] = new("verifik_conductor", []),
+            },
+            FailoverTimeoutMs: null);
+
+        resolver.ResolveChain(ConsultationKind.VehicleVin, tenantOverride).Should().Equal("kyverum_runt", "verifik");
+        resolver.ResolveChain(ConsultationKind.Conductor, tenantOverride).Should().Equal("verifik_conductor");
     }
 
     // ── Fixtures de prueba ──────────────────────────────────────────────────────────────────

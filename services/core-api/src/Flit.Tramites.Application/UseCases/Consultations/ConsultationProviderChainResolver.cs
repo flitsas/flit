@@ -16,14 +16,26 @@ public sealed class ConsultationProviderChainResolver(
 
     private readonly ConsultationChainOptions _options = options;
 
-    public IReadOnlyList<string> ResolveChain(ConsultationKind kind) =>
-        _options.ChainFor(kind.ToConfigKey());
+    public IReadOnlyList<string> ResolveChain(ConsultationKind kind, ConsultationTenantOverride? tenantOverride = null)
+    {
+        var kindKey = kind.ToConfigKey();
+
+        // El override del tenant (si trae cadena para este tipo) gana a los defaults globales.
+        if (tenantOverride?.Chains is { } chains
+            && chains.TryGetValue(kindKey, out var selection)
+            && !string.IsNullOrWhiteSpace(selection.Primary))
+        {
+            return [selection.Primary, .. selection.Fallback];
+        }
+
+        return _options.ChainFor(kindKey);
+    }
 
     public async Task<ConsultationResult> ConsultAsync(
-        ConsultationKind kind, ConsultationContext ctx, int? failoverTimeoutMs, CancellationToken ct)
+        ConsultationKind kind, ConsultationContext ctx, ConsultationTenantOverride? tenantOverride, CancellationToken ct)
     {
-        var chain = ResolveChain(kind);
-        var timeout = failoverTimeoutMs ?? _options.FailoverTimeoutMs;
+        var chain = ResolveChain(kind, tenantOverride);
+        var timeout = tenantOverride?.FailoverTimeoutMs ?? _options.FailoverTimeoutMs;
 
         ConsultationResult? last = null;
 

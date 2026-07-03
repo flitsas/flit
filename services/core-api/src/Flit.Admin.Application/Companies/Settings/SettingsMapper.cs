@@ -14,5 +14,19 @@ internal static class SettingsMapper
         settings.SignatureVaultEnabled,
         SettingsWire.ToWire(settings.NotificationChannel),
         SettingsWire.ToWire(settings.NotificationTarget),
-        settings.PaymentMethods);
+        settings.PaymentMethods,
+        settings.RuntFailoverTimeoutMs,
+        ToChoices(settings.ConsultationProviderConfig));
+
+    private static Dictionary<string, ConsultationProviderChoice> ToChoices(
+        ConsultationProviderConfig config)
+    {
+        var result = new Dictionary<string, ConsultationProviderChoice>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (kind, selection) in config.ByKind)
+        {
+            result[kind] = new ConsultationProviderChoice(selection.Primary, selection.Fallback);
+        }
+
+        return result;
+    }
 }

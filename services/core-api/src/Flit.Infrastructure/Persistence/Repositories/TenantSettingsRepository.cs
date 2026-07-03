@@ -23,6 +23,8 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
 {
     private const string EntityName = "tenant_operational_policies";
 
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
     private readonly FlitDbContext _context;
 
     public TenantSettingsRepository(FlitDbContext context)
@@ -142,6 +144,8 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
+        policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
+        policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -154,6 +158,8 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
+        RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
+        ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
     };
 
     private static List<string> DeserializePaymentMethods(string json)
@@ -164,5 +170,31 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         }
 
         return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+    }
+
+    private static string SerializeConsultationConfig(ConsultationProviderConfig config) =>
+        JsonSerializer.Serialize(config.ByKind, WebJson);
+
+    private static ConsultationProviderConfig DeserializeConsultationConfig(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return ConsultationProviderConfig.Empty;
+        }
+
+        var raw = JsonSerializer.Deserialize<Dictionary<string, ConsultationProviderSelection>>(json, WebJson);
+        if (raw is null || raw.Count == 0)
+        {
+            return ConsultationProviderConfig.Empty;
+        }
+
+        // Normaliza fallback null → [] (un objeto sin la clave "fallback" deserializa a null).
+        var byKind = new Dictionary<string, ConsultationProviderSelection>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (kind, selection) in raw)
+        {
+            byKind[kind] = selection with { Fallback = selection.Fallback ?? [] };
+        }
+
+        return new ConsultationProviderConfig(byKind);
     }
 }

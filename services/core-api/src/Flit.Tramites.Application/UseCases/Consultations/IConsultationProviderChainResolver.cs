@@ -9,16 +9,17 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// </summary>
 public interface IConsultationProviderChainResolver
 {
-    /// <summary>Orden de provider keys configurado para el kind (defaults globales; override por tenant en Fase 4).</summary>
-    IReadOnlyList<string> ResolveChain(ConsultationKind kind);
+    /// <summary>
+    /// Orden de provider keys para el kind. Si <paramref name="tenantOverride"/> trae una cadena para
+    /// ese tipo, tiene prioridad; si no, se usan los defaults globales.
+    /// </summary>
+    IReadOnlyList<string> ResolveChain(ConsultationKind kind, ConsultationTenantOverride? tenantOverride = null);
 
     /// <summary>
     /// Ejecuta la cadena con fallback y devuelve el primer resultado verificable. Si todos fallan,
-    /// devuelve el último (con su check <c>error</c>). <paramref name="failoverTimeoutMs"/> acota la
-    /// espera del primario antes de caer al siguiente; si es null se usa el default de
-    /// <see cref="ConsultationChainOptions.FailoverTimeoutMs"/> (en Fase 5 el handler pasará el valor
-    /// del tenant <c>runt_failover_timeout_ms</c>).
+    /// devuelve el último (con su check <c>error</c>). <paramref name="tenantOverride"/> puede sustituir
+    /// la cadena por tipo y el presupuesto de failover; sus campos null caen a los defaults globales.
     /// </summary>
     Task<ConsultationResult> ConsultAsync(
-        ConsultationKind kind, ConsultationContext ctx, int? failoverTimeoutMs, CancellationToken ct);
+        ConsultationKind kind, ConsultationContext ctx, ConsultationTenantOverride? tenantOverride, CancellationToken ct);
 }
