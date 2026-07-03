@@ -9,12 +9,13 @@ using Xunit;
 namespace Flit.Admin.Tests.Improntas;
 
 /// <summary>
-/// Seguridad de <c>POST /api/v1/admin/improntas/generate</c> (HU #10467, AC2): sin token → 401;
-/// rol distinto de SuperAdmin → 403, sin generar ni persistir ningún registro de impronta (la
-/// autorización corta la petición antes de invocar el handler / Kyverum RUNT).
+/// Seguridad de endpoints admin improntas (Feature #10462): <c>GET /api/v1/admin/improntas</c>
+/// (HU #10468) y <c>POST /api/v1/admin/improntas/generate</c> (HU #10467). Sin token → 401;
+/// rol distinto de SuperAdmin → 403.
 /// </summary>
 public sealed class AdminImprontasAuthorizationTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private const string IndexUrl = "/api/v1/admin/improntas";
     private const string GenerateUrl = "/api/v1/admin/improntas/generate";
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -27,12 +28,43 @@ public sealed class AdminImprontasAuthorizationTests : IClassFixture<WebApplicat
     private static readonly object ValidBody = new
     {
         placa = "ABC123",
+        documento = "1234567890",
         numMotor = "MTR-123",
         orgNombre = "FLIT SAS",
         orgNit = "900000000-1",
         orgCiudad = "Bogotá",
         operador = "Operador X",
     };
+
+    [Fact]
+    public async Task AC2_Index_WithoutToken_Returns401()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync(IndexUrl, TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AC2_Index_WithNonSuperAdminRole_Returns403()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("Operador"));
+
+        var response = await client.GetAsync(IndexUrl, TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task AC2_Index_WithOtAdminRole_Returns403()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("ot_admin"));
+
+        var response = await client.GetAsync(IndexUrl, TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 
     [Fact]
     public async Task AC2_Generate_WithoutAuthorizationHeader_Returns401()

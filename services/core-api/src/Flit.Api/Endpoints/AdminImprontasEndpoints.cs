@@ -1,14 +1,15 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
+using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Api.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoints de generación de improntas vehiculares (HU #10467, Feature #10462) — integración
-/// Kyverum RUNT (HU #10465) + persistencia de historial (HU #10466). Acceso exclusivo SuperAdmin
-/// (AC2): solo hoy existe el paso de generación; el listado/historial (HU #10468) se agrega en el
-/// mismo grupo cuando se implemente.
+/// Endpoints de improntas vehiculares (Feature #10462): generación PDF (HU #10467, Kyverum RUNT
+/// HU #10465 + persistencia HU #10466) y listado paginado del historial (HU #10468). Acceso
+/// exclusivo SuperAdmin.
 /// </summary>
 public static class AdminImprontasEndpoints
 {
@@ -21,6 +22,17 @@ public static class AdminImprontasEndpoints
             .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithTags("Admin · Improntas");
 
+        group.MapGet("", ListImprontasAsync)
+            .WithName("AdminImprontasIndex")
+            .WithSummary("Lista el historial de improntas generadas (paginado)")
+            .WithDescription("Listado paginado y filtrable (placa, radicado, rango de fecha de creación) "
+                + "del historial de improntas generadas (admin.impronta_generations), ordenado por fecha "
+                + "de creación descendente. Vista global cross-tenant (sin RLS, ADR-0022): no re-expone el "
+                + "PDF, solo metadata. Requiere SuperAdmin.")
+            .Produces<ListImprontasResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         group.MapPost("/generate", GenerateAsync)
             .WithName("AdminImprontasGenerate")
             .WithSummary("Genera, persiste y entrega el PDF del Certificado de Improntas Digitales")
@@ -31,6 +43,31 @@ public static class AdminImprontasEndpoints
             .Produces(StatusCodes.Status502BadGateway);
 
         return app;
+    }
+
+    private static async Task<IResult> ListImprontasAsync(
+        [FromServices] ListImprontasHandler handler,
+        CancellationToken cancellationToken,
+        [FromQuery] string? placa = null,
+        [FromQuery] string? radicado = null,
+        [FromQuery] DateTimeOffset? createdFrom = null,
+        [FromQuery] DateTimeOffset? createdTo = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null)
+    {
+        var query = new ListImprontasQuery
+        {
+            Placa = placa,
+            Radicado = radicado,
+            CreatedFrom = createdFrom,
+            CreatedTo = createdTo,
+            Page = page,
+            PageSize = pageSize,
+        };
+
+        var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> GenerateAsync(

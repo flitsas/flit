@@ -32,6 +32,7 @@ using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
+using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Flit.Admin.Application.OtProfile;
@@ -107,6 +108,10 @@ public static class DependencyInjection
         services.AddScoped<ListTransitOfficeTenantsHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
+        // IImprontaRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<ListImprontasHandler>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<CreateDocumentTypeHandler>();
