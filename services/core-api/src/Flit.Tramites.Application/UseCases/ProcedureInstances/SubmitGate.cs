@@ -34,25 +34,27 @@ public static class SubmitGate
     /// Evalúa el gate de preparación (RF03). La instancia debe traer cargado el grafo del wizard
     /// (FieldValues, Actors, Attachments, BiometricValidations, Signatures, ChecklistEstado).
     /// </summary>
-    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance)
+    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? EvaluateTraspaso(instance)
-            : EvaluateMatricula(instance);
+            ? EvaluateTraspaso(instance, identidadAprobadaPartes)
+            : EvaluateMatricula(instance, identidadAprobadaPartes);
     }
 
-    private static List<string> EvaluateMatricula(ProcedureInstance instance)
+    private static List<string> EvaluateMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var errors = new List<string>(2);
 
         if (!DocumentosObligatoriosCompletos(instance))
             errors.Add(DocumentosIncompletos);
-        if (!BiometriaAprobada(instance, BiometricRules.ParteComprador))
+        // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador))
             errors.Add(IdentidadNoAprobada);
 
         return errors;
@@ -63,14 +65,15 @@ public static class SubmitGate
     /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
     /// incumplidos; lista vacía = puede prepararse/radicar.
     /// </summary>
-    private static List<string> EvaluateTraspaso(ProcedureInstance instance)
+    private static List<string> EvaluateTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var errors = new List<string>(5);
 
         if (!DocumentosObligatoriosCompletos(instance))
             errors.Add(DocumentosIncompletos);
-        if (!BiometriaAprobada(instance, BiometricRules.ParteComprador)
-            || !BiometriaAprobada(instance, BiometricRules.ParteVendedor))
+        // Identidad PER-PERSONA (documento de cada parte), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador)
+            || !identidadAprobadaPartes.Contains(BiometricRules.ParteVendedor))
             errors.Add(IdentidadNoAprobada);
         if (!FirmaCompraventaAmbas(instance))
             errors.Add(FirmaCompraventaRequerida);
@@ -93,22 +96,7 @@ public static class SubmitGate
         return computed?.Completo ?? true;
     }
 
-    // internal: reutilizado por el wizard y el lifecycle service (RF03) — misma regla de identidad.
-    internal static bool BiometriaAprobada(ProcedureInstance instance, string parte)
-    {
-        // HU #10350 — aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor actual; una aprobación
-        // vencida no prepara, y una validación de una persona anterior (documento distinto) tampoco cuenta
-        // (defensa en profundidad: el gate no se fía de que el ensure del frontend haya invalidado la previa).
-        var now = DateTimeOffset.UtcNow;
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        return instance.BiometricValidations.Any(v =>
-            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
-    }
-
-    internal static bool FurGenerado(ProcedureInstance instance) =>
+    private static bool FurGenerado(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
     // internal: reutilizado por FinalizeDraftGate (HU #10349).

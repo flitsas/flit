@@ -49,6 +49,34 @@ describe("downloadFile", () => {
     clickSpy.mockRestore();
   });
 
+  it("HU #10471 captura los headers pedidos en `captureHeaders` y los devuelve, sin romper la descarga", async () => {
+    const blob = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(blob, {
+        status: 200,
+        headers: { "X-Impronta-Radicado": "IMPR-A1B2C3D4", "X-Impronta-Hash": "9f1c...e0a2" },
+      }),
+    );
+    global.fetch = fetchMock as never;
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const result = await downloadFile("/api/v1/admin/improntas/generate", {
+      method: "POST",
+      body: { placa: "ABC123" },
+      fallbackFilename: "impronta.pdf",
+      captureHeaders: ["X-Impronta-Radicado", "X-Impronta-Hash", "X-Not-Present"],
+    });
+
+    expect(result).toEqual({
+      "X-Impronta-Radicado": "IMPR-A1B2C3D4",
+      "X-Impronta-Hash": "9f1c...e0a2",
+      "X-Not-Present": null,
+    });
+    expect(clickSpy).toHaveBeenCalledOnce();
+
+    clickSpy.mockRestore();
+  });
+
   it("lanza ApiError con el status del backend ante 4xx/5xx", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response('{"message":"boom"}', { status: 500 }),

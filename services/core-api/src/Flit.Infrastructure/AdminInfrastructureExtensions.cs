@@ -7,6 +7,7 @@ using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Admin.Domain.OtClientProcedures;
@@ -102,6 +103,9 @@ public static class AdminInfrastructureExtensions
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
+
+        // HU #10466 — historial de improntas generadas (ADR-0022).
+        services.AddScoped<IImprontaRepository, ImprontaRepository>();
 
         return services;
     }

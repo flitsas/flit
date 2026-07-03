@@ -18,6 +18,7 @@ import type {
   FinalizarPortalResult,
   GenerarFurResult,
   GenerarConsolidadoResult,
+  IdentityAuditResponse,
   InstanceSummary,
   InstancesResponse,
   TransitOfficeOption,
@@ -36,6 +37,7 @@ import type {
   ProcedureAttachment,
   ProcedureConfiguration,
   ProcedureInstanceDetail,
+  ReconcileIdentityResult,
   ProcedureInstanceSummary,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
@@ -334,7 +336,7 @@ export const tramitesClient = {
   // trámite permanece en `draft`; la firma se dispara async cuando el cliente valida su identidad.
   // Distinto de submit (que sí radica a tránsito y exige identidad + gates completos).
   // 409 si la instancia no es draft o faltan datos (actores/documentos/organismo).
-  finalizeDraft: (id: string, tenantId: string = DEV_TENANT_ID) =>
+  finalizeDraft: (id: string, tenantId?: string) =>
     request<ProcedureInstanceSummary>(
       `/api/v1/tramites/instances/${id}/finalize-draft`,
       {
@@ -669,7 +671,7 @@ export const tramitesClient = {
   ensureIdentity: (
     instanceId: string,
     parte: BiometricParte,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<EnsureIdentityResult>(
       `/api/v1/tramites/instances/${instanceId}/identity/ensure`,
@@ -787,6 +789,69 @@ export const tramitesClient = {
     );
     return res ?? { validations: [], provider: 'mock' };
   },
+
+  // GET descargar el certificado (PDF) de una validación de identidad desde Kyverum (keyed por
+  // validationId → sirve para comprador o vendedor). Mismo patrón blob que downloadAttachment. El
+  // mensaje de error usa el ProblemDetails del backend (p.ej. "No hay certificado disponible…") para
+  // que el consumidor lo muestre tal cual. 404 sin_certificado/not_found; 502/503 proveedor.
+  downloadBiometricCertificado: async (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
+    const res = await fetch(
+      apiUrl(
+        `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/certificado`,
+      ),
+      { headers: tenantHeader(tenantId) },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    const blob = await res.blob();
+    const mimetype = res.headers.get('content-type') ?? 'application/pdf';
+    const cd = res.headers.get('content-disposition') ?? '';
+    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+    const plain = /filename="?([^";]+)"?/i.exec(cd);
+    const raw = star?.[1] ?? plain?.[1] ?? '';
+    let filename = raw.trim();
+    try {
+      filename = raw ? decodeURIComponent(raw.trim()) : '';
+    } catch {
+      // raw no era URI-encoded; se usa tal cual.
+    }
+    return {
+      blob,
+      filename: filename || `certificado_identidad_${validationId}.pdf`,
+      mimetype,
+    };
+  },
+
+  // POST reconciliar una validación con el proveedor (fallback si el webhook no llegó): consulta el
+  // estado real en Kyverum y lo aplica si ya es terminal. Idempotente. Devuelve { status, updated }.
+  // El wizard lo usa para desatascar en vivo una validación colgada en `en_proceso`.
+  reconcileBiometric: (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<ReconcileIdentityResult> =>
+    request<ReconcileIdentityResult>(
+      `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/reconcile`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
+  // secreto, firma, resultado y reconciliaciones. Sin PII/secretos. Diagnóstico de soporte desde la UI.
+  getBiometricAudit: (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<IdentityAuditResponse> =>
+    request<IdentityAuditResponse>(
+      `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/audit`,
+      { headers: tenantHeader(tenantId) },
+    ),
 
   // ── Firma electrónica (Slice 7A) — lado gestor autenticado ──────────
   // POST solicitar firma de una parte de la compraventa. Solo traspaso

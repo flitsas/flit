@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -29,7 +30,8 @@ public sealed class IdentityValidationCompletedConsumerTests
     public IdentityValidationCompletedConsumerTests()
     {
         _firma = new SolicitarFirmaHandler(_repo, new MockSignatureProvider());
-        _fur = new GenerarFurHandler(_repo, new MockFurDocumentGenerator(), new MockIdentityCertificateGenerator(), new FakeStorage());
+        _fur = new GenerarFurHandler(
+            _repo, new MockFurDocumentGenerator(), Substitute.For<IKyverumCertificateClient>(), new FakeStorage(), NullLogger<GenerarFurHandler>.Instance);
         _sut = new IdentityValidationCompletedConsumer(_repo, _firma, _fur);
     }
 

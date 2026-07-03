@@ -35,12 +35,21 @@ tags:
     description: >
       Overrides de orden documental por OT/Cliente y matriz documental resuelta
       con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Admin · Improntas
+    description: >
+      Historial del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte, integración Kyverum RUNT — ADR-0022). Vista global cross-tenant
+      sin RLS, rol SuperAdmin.
   - name: Trámites · Documentos
     description: >
       Alta de trámite con snapshot documental inmutable y lectura de los documentos
       requeridos congelados al crear el trámite (cualquier JWT válido).
   - name: Trámites · Traspaso
     description: Radicación de traspasos vehiculares.
+  - name: Admin · Improntas
+    description: >
+      Generación del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte) vía Kyverum RUNT, con persistencia de trazabilidad (rol SuperAdmin).
 
 paths:
   /api/v1/auth/login:
@@ -709,6 +718,64 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: El tenant no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/improntas:
+    get:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasIndex
+      summary: Listado paginado del historial de improntas (HU #10468)
+      description: >
+        Retorna el listado paginado y filtrable (placa, radicado, rango de fecha de
+        creación) del historial de improntas generadas (admin.impronta_generations —
+        ADR-0022), ordenado por fecha de creación descendente. Vista global
+        cross-tenant (sin RLS): no expone el PDF, solo metadata. Requiere JWT con
+        rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la placa.
+        - name: radicado
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre el radicado.
+        - name: createdFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite inferior (inclusive) del rango de fecha de creación.
+        - name: createdTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite superior (inclusive) del rango de fecha de creación.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImprontaGenerationPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
           content:
             application/json:
               schema:
@@ -2322,6 +2389,200 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado:
+    get:
+      operationId: descargarCertificadoIdentidad
+      tags: [Tramites, Identidad]
+      summary: Descargar el certificado (PDF) de una validación de identidad (Kyverum)
+      description: >
+        Descarga el certificado oficial en PDF de una validación de identidad desde la API pública de
+        Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
+        create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
+        `validationId`, sirve para cualquier parte (comprador/vendedor).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF del certificado.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe (para el tenant/instancia) o no tiene certificado disponible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la descarga del certificado (error definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/audit:
+    get:
+      operationId: getIdentidadAudit
+      tags: [Tramites, Identidad]
+      summary: Bitácora del ciclo de una validación de identidad
+      description: >
+        Devuelve, en orden cronológico, la bitácora del ciclo de una validación: envío al proveedor, llegada
+        del webhook, si el secreto se pudo descifrar o no (diagnóstico del keyring), verificación de firma,
+        resultado aplicado y reconciliaciones. Para depurar "qué pasó" desde la API sin entrar a la BD ni a los
+        logs del pod. No incluye secretos ni PII.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bitácora de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [validationId, events]
+                properties:
+                  validationId:
+                    type: string
+                    format: uuid
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        occurredAt: { type: string, format: date-time }
+                        stage: { type: string, description: "send|send_response|send_error|webhook_received|webhook_not_verifiable|webhook_signature_invalid|webhook_applied|reconcile" }
+                        outcome: { type: string }
+                        httpStatus: { type: integer, nullable: true }
+                        signaturePresent: { type: boolean, nullable: true }
+                        secretPresent: { type: boolean, nullable: true }
+                        decryptOk: { type: boolean, nullable: true }
+                        providerStatus: { type: string, nullable: true }
+                        errorType: { type: string, nullable: true }
+                        message: { type: string, nullable: true }
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/reconcile:
+    post:
+      operationId: reconciliarIdentidad
+      tags: [Tramites, Identidad]
+      summary: Reconciliar una validación con Kyverum (fallback de webhook)
+      description: >
+        Consulta el estado real de una validación en Kyverum (`GET /v1/validations/{kyverumVerificationId}`)
+        y lo aplica si ya es terminal (aprobado/rechazado). Sirve como respaldo cuando el webhook no llegó
+        (p.ej. callback mal ruteado entre ambientes). Idempotente: si ya está terminal no hace nada. El
+        frontend puede invocarlo en la pantalla "Esperando validación" para desatascar en vivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado (posiblemente actualizado) de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updated]
+                properties:
+                  status:
+                    type: string
+                    description: Estado FLIT tras reconciliar (en_proceso|aprobado|rechazado|expirado).
+                  updated:
+                    type: boolean
+                    description: true si la consulta cambió el estado local.
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La validación no es del proveedor Kyverum.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la consulta de estado (definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/webhooks/kyverum-verify/{validationId}:
     post:
       operationId: kyverumVerifyWebhook
@@ -2618,6 +2879,61 @@ paths:
           description: No autenticado.
         "403":
           description: Tenant Admin solicitando otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/improntas/generate:
+    post:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasGenerate
+      summary: Genera, persiste y entrega el PDF del Certificado de Improntas Digitales (HU #10467)
+      description: >
+        Llama a Kyverum RUNT (HU #10465), decodifica el PDF del Data URI base64 devuelto, persiste
+        el registro de trazabilidad (HU #10466: radicado, hash, fechaImpresa, datos del vehículo,
+        organización, operador, tenant y usuario SuperAdmin que la generó) y responde con el binario
+        íntegro, listo para descarga (`impronta_{radicado}.pdf`). Requiere rol SuperAdmin (AC2).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerarImprontaRequest"
+      responses:
+        "200":
+          description: PDF del Certificado de Improntas Digitales.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: No autenticado, o Kyverum RUNT rechazó la autenticación (key inválida/scope insuficiente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Usuario autenticado sin rol SuperAdmin (AC2).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Falta placa/identificador de vehículo/organización/operador (validación local), o
+            Kyverum RUNT respondió VALIDATION_ERROR (AC3).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Kyverum RUNT no disponible temporalmente (UPSTREAM_UNAVAILABLE, AC3).
           content:
             application/json:
               schema:
@@ -3081,6 +3397,48 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TransitOfficeTenantItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    ImprontaGenerationItem:
+      type: object
+      description: >
+        Metadata de una generación de impronta (admin.impronta_generations — ADR-0022).
+        Deliberadamente NO incluye el PDF (pdf_content): el listado nunca arrastra el
+        binario del certificado, solo pdfSizeBytes como sustituto liviano.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        flitUserId: { type: string, format: uuid }
+        radicado: { type: string }
+        hashSha256: { type: string }
+        fechaImpresa: { type: string, format: date-time }
+        placa: { type: string }
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string }
+        orgCiudad: { type: string }
+        operador: { type: string }
+        pdfSizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required:
+        [id, tenantId, flitUserId, radicado, hashSha256, fechaImpresa, placa, orgNombre,
+         orgNit, orgCiudad, operador, pdfSizeBytes, createdAt]
+
+    ImprontaGenerationPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImprontaGenerationItem"
         totalCount: { type: integer, format: int64 }
         page: { type: integer }
         pageSize: { type: integer }
@@ -3869,3 +4227,30 @@ components:
         to: { type: string, format: date }
         tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin." }
       required: [from, to]
+
+    GenerarImprontaRequest:
+      type: object
+      description: >
+        Datos del vehículo y de la organización solicitante para generar el Certificado de
+        Improntas Digitales (Res. 17145/2023). Placa y documento son obligatorios; Kyverum RUNT
+        resuelve motor/chasis/serie internamente vía placa+documento cuando no se envían
+        (verificado contra el proveedor real). El certificado siempre imprime los tres bloques,
+        marcando "(SIN DATO)" los que no se resuelvan.
+      properties:
+        placa: { type: string }
+        documento:
+          type: string
+          description: >
+            Documento de identidad del propietario del vehículo. Requerido por Kyverum RUNT para
+            toda consulta por placa (no documentado originalmente en el contrato del proveedor).
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string, nullable: true }
+        orgCiudad: { type: string, nullable: true }
+        operador: { type: string }
+      required: [placa, documento, orgNombre, operador]

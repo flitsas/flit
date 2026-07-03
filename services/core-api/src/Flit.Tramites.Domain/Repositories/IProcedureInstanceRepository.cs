@@ -105,6 +105,14 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
+    /// de los tenants indicados, en UNA consulta. Para el listado de trámites: resuelve la identidad por PERSONA
+    /// sin N+1 (HU #10350 — referenciar la identidad vigente, no clonar por trámite). Set vacío si no hay ninguna.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
     /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.
     /// </summary>
@@ -117,6 +125,13 @@ public interface IProcedureInstanceRepository
     /// filtrar existencia (HU #10233, AC2/AC3).
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bitácora del ciclo de validación de identidad (envío/webhook/descifrado/reconciliación/errores) de una
+    /// validación, ordenada por <c>occurred_at</c>. Solo lectura (AsNoTracking).
+    /// </summary>
+    Task<IReadOnlyList<IdentityValidationAuditEvent>> ListIdentityAuditByValidationAsync(
+        Guid validationId, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con sus participantes del portal (Slice 7 Part B, vista del gestor).</summary>
     Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct = default);

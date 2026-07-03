@@ -62,7 +62,12 @@ public sealed class TramiteLifecycleService(
         // RF03 — gate borrador→preparado: identidad aprobada/vigente + documentos obligatorios.
         if (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
         {
-            var gateErrors = SubmitGate.Evaluate(instance);
+            // Identidad PER-PERSONA (documento del actor), referenciada de su validación vigente
+            // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
+            // en otro trámite del tenant, sin clonar.
+            var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+                repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
         }

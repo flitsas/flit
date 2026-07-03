@@ -6,6 +6,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -17,11 +18,14 @@ public sealed class KyverumWebhookHandlerTests
 
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly FakeWebhookSecretProtector _protector = new();
+    private readonly IKyverumVerifyClient _kyverum = Substitute.For<IKyverumVerifyClient>();
     private readonly IIdentityValidationEventPublisher _events = Substitute.For<IIdentityValidationEventPublisher>();
     private readonly KyverumWebhookHandler _handler;
 
     public KyverumWebhookHandlerTests() =>
-        _handler = new KyverumWebhookHandler(_repo, _protector, _events);
+        _handler = new KyverumWebhookHandler(
+            _repo, _protector, _kyverum, new IdentityValidationResultApplier(_events),
+            Substitute.For<IIdentityValidationAuditLog>(), NullLogger<KyverumWebhookHandler>.Instance);
 
     private ProcedureInstanceBiometricValidation Seed(string estado = BiometricEstados.EnProceso)
     {
@@ -87,17 +91,62 @@ public sealed class KyverumWebhookHandlerTests
     }
 
     [Fact]
-    public async Task Webhook_Rejected_SetsRejectedWithoutValidadoAt()
+    public async Task Webhook_RejectedAttempt_WithAttemptsRemaining_StaysEnProceso_IncrementsCount()
     {
         var ct = TestContext.Current.CancellationToken;
         var v = Seed();
+        v.MaxAttempts = 3;
+        v.Attempts = 0;
+        // Kyverum reporta un INTENTO rechazado (rechazado_intento), pero quedan reintentos. NO terminaliza:
+        // cuenta el intento y sigue en_proceso para que el cliente reintente en su móvil.
+        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{\"validado_at\":\"t1\"}", AttemptAt: "t1", Motivo: "rostro no visible"));
+        var body = Body(aprobado: false);
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        v.Attempts.Should().Be(1);
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Webhook_RejectedAttempt_WhenAttemptsExhausted_SetsRejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+        v.Attempts = 2; // ya se usaron 2; este es el 3º y último
+        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{\"validado_at\":\"t3\"}", AttemptAt: "t3", Motivo: "rostro no visible"));
         var body = Body(aprobado: false);
 
         var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
 
         error.Should().BeNull();
-        v.Status.Should().Be(BiometricEstados.Rechazado);
-        v.ValidatedAt.Should().BeNull();
+        v.Attempts.Should().Be(3);
+        v.Status.Should().Be(BiometricEstados.Rechazado); // intentos agotados → rechazo terminal
+    }
+
+    [Fact]
+    public async Task Webhook_RejectedAttempt_SameAttemptTwice_NotDoubleCounted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+        v.Attempts = 1;
+        v.LastAttemptAt = "t1"; // el intento t1 ya fue contado (columna dedicada de dedup)
+        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{}", AttemptAt: "t1", Motivo: "rostro no visible"));
+        var body = Body(aprobado: false);
+
+        var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
+
+        error.Should().BeNull();
+        v.Attempts.Should().Be(1); // mismo intento (t1) → NO re-cuenta (dedup)
+        v.Status.Should().Be(BiometricEstados.EnProceso);
     }
 
     [Fact]
@@ -151,5 +200,43 @@ public sealed class KyverumWebhookHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(Guid.NewGuid(), [], "sig"), ct);
         error.Should().Be("cuerpo_invalido");
+    }
+
+    [Fact]
+    public async Task Webhook_SecretUndecryptable_ReconcilesViaPollAndApproves()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(); // en_proceso, con kyverum_verification_id "kyv_123"
+        _protector.ThrowOnUnprotect = true; // keyring roto ⇒ no se puede descifrar el secreto
+        _kyverum.GetStatusAsync("kyv_123", "comprador", Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("aprobado", 90, "{}"));
+        var body = Body(aprobado: true);
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=whatever"), ct);
+
+        // NO 500: se reconcilia por consulta autenticada y se aplica el resultado real.
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.Score.Should().Be(90);
+        await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e =>
+            e.ValidationId == v.Id && e.Estado == BiometricEstados.Aprobado), ct);
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Webhook_SecretUndecryptable_ProviderTransient_ReturnsRetry()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        _protector.ThrowOnUnprotect = true;
+        _kyverum.GetStatusAsync("kyv_123", "comprador", Arg.Any<CancellationToken>())
+            .Returns<KyverumVerifyStatus?>(_ => throw new KyverumVerifyException("down", transient: true));
+        var body = Body(aprobado: true);
+
+        var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sig"), ct);
+
+        // Fallo transitorio del proveedor ⇒ pide reintento (503) para que Kyverum reintente el webhook.
+        error.Should().Be("reintentar");
     }
 }

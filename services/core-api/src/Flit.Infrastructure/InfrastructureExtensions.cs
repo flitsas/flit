@@ -1,8 +1,10 @@
+using Flit.Admin.Domain.Improntas;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Ocr;
@@ -83,6 +85,7 @@ public static class InfrastructureExtensions
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
+        AddImprontas(services, configuration);
         AddOcr(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -294,6 +297,16 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // Descarga del certificado de la validación (PDF) desde la API pública de Kyverum
+        // (GET /v1/validations/{id}/certificado). Reusa el MISMO Bearer API key que el create — sin cookie
+        // ni login admin (el panel /admin/api exige MFA y no aplica para integración server-to-server).
+        services.AddHttpClient<IKyverumCertificateClient, KyverumCertificateClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
         // El keyring se persiste en Postgres (tabla data_protection_keys vía FlitDbContext) y se
         // fija un ApplicationName estable: así todas las réplicas comparten las mismas llaves y
@@ -303,6 +316,9 @@ public static class InfrastructureExtensions
             .PersistKeysToDbContext<FlitDbContext>()
             .SetApplicationName("flit-core-api");
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
+        // scope, así queda registrada aunque el webhook termine en 500/401.
+        services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
 
         // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).
         var messaging = Cfg("Messaging:IdentityValidation", "MESSAGING_IDENTITY_VALIDATION") ?? "inprocess";
@@ -322,13 +338,44 @@ public static class InfrastructureExtensions
         services.AddScoped<IIdentityValidationProvider, KyverumIdentityValidationProvider>();
         services.AddScoped<IIdentityValidationProviderResolver, IdentityValidationProviderResolver>();
         services.AddHostedService<IdentityValidationSendRetryProcessor>();
+        // Red de seguridad: reconcilia por consulta las validaciones en_proceso colgadas (webhook perdido).
+        services.AddHostedService<IdentityValidationReconcileProcessor>();
 
-        // HU-3 (N03): implementación real del puerto de publicación — en integración reemplaza a
-        // NullTramiteTransitionPublisher. Encola en procedure_state_change_outbox (misma unidad de
-        // trabajo del lifecycle service); el worker despacha las filas pendientes hacia
-        // IProcedureStateChangeNotifier (webhooks OT) tras el commit.
+        // HU-3 (N03): puerto de publicación del lifecycle de estados. Encola en
+        // procedure_state_change_outbox (misma unidad de trabajo del lifecycle service); el worker
+        // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+    }
+
+    private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #10465 — Kyverum RUNT (improntas:generar). Mismo orden de precedencia que Kyverum Verify
+        // (AddIdentityValidation): env var CRUDA primero (override de deploy 12-factor), fallback a
+        // configuration (appsettings/user-secrets/`ImprontaRunt__*`). runt.kyverum.com es un dominio
+        // DISTINTO de verify.kyverum.com (mismo proveedor, otro producto/scope). La API key NUNCA se
+        // loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<ImprontaRuntOptions>(o =>
+        {
+            o.BaseUrl = Cfg("ImprontaRunt:BaseUrl", "KYVERUM_RUNT_BASE_URL") ?? "https://runt.kyverum.com";
+            o.ApiKey = Cfg("ImprontaRunt:ApiKey", "KYVERUM_RUNT_API_KEY") ?? "";
+            o.AuthScheme = Cfg("ImprontaRunt:AuthScheme", "KYVERUM_RUNT_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("ImprontaRunt:TimeoutSeconds", "KYVERUM_RUNT_TIMEOUT_SECONDS"), out var t)
+                ? t : 30;
+        });
+
+        services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)

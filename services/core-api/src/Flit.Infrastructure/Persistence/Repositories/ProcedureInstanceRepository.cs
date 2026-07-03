@@ -27,6 +27,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public async Task<IReadOnlyList<IdentityValidationAuditEvent>> ListIdentityAuditByValidationAsync(
+        Guid validationId, CancellationToken ct) =>
+        await db.IdentityValidationAudits
+            .AsNoTracking()
+            .Where(x => x.ValidationId == validationId)
+            .OrderBy(x => x.OccurredAt)
+            .ToListAsync(ct);
+
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.Attachments)
@@ -138,15 +146,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // Filtro grueso en SQL por timestamp (validado_at >= corte), con un día de margen para no
         // descartar candidatos cerca del límite; el corte fino por DÍA calendario se aplica en memoria
         // con BiometricRules.EsAprobadaVigente (semántica "día de aprobación = día 1; vence el día 31").
+        // Filtro grueso en SQL. `valid_until` es la fuente de verdad del vencimiento (editable en BD); cuando
+        // está, se filtra por él (> now). Si falta (registros viejos), se cae al corte por validated_at con un
+        // día de margen. El corte fino lo aplica BiometricRules.EsAprobadaVigente (misma prioridad valid_until).
         var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
                 && v.Status == BiometricEstados.Aprobado
-                && v.ValidatedAt != null
-                && v.ValidatedAt >= cutoff
                 && v.DocumentType == tipoDoc
                 && v.DocumentNumber == documento
+                && ((v.ValidUntil != null && v.ValidUntil > now)
+                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null)
             .OrderByDescending(v => v.ValidatedAt)
@@ -154,6 +165,36 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToListAsync(ct);
 
         return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
+    }
+
+    public async Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        if (tenantIds.Count == 0)
+            return keys;
+
+        // Mismo filtro grueso que FindVigenteApproved… (corte por timestamp con un día de margen); el corte
+        // fino por día calendario se aplica en memoria con EsAprobadaVigente. Una sola consulta para todos
+        // los tenants del listado (WHERE tenant_id IN (...)) → sin N+1.
+        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => tenantIds.Contains(v.TenantId)
+                && v.Status == BiometricEstados.Aprobado
+                && v.DocumentType != null
+                && v.DocumentNumber != null
+                && ((v.ValidUntil != null && v.ValidUntil > now)
+                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .ToListAsync(ct);
+
+        foreach (var v in candidates)
+            if (BiometricRules.EsAprobadaVigente(v, now))
+                keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
+
+        return keys;
     }
 
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(

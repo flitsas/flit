@@ -26,6 +26,8 @@ public sealed class SubmitProcedureInstanceHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
+        // TramiteLifecycleService — este orquestador solo encadena las transiciones.
         if (instance.Status == TramiteEstado.Borrador)
         {
             var preparado = await lifecycle.TransitionAsync(

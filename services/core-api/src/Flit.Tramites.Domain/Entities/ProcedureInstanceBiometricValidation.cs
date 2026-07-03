@@ -51,6 +51,14 @@ public sealed class ProcedureInstanceBiometricValidation
     public int Attempts { get; set; }
     public int MaxAttempts { get; set; } = BiometricRules.MaxIntentos;
 
+    /// <summary>
+    /// <c>validadoAt</c> del último intento YA CONTADO en <see cref="Attempts"/> (Kyverum). Clave de dedup
+    /// dedicada: cada intento fallido de Kyverum trae un <c>validadoAt</c> distinto y llega por webhook + poll +
+    /// reenvíos; se cuenta UNA sola vez comparando contra este valor. Se escribe SOLO al contar un intento
+    /// nuevo (nunca lo pisa un payload sin fecha), evitando el doble-conteo. Null hasta el primer intento fallido.
+    /// </summary>
+    public string? LastAttemptAt { get; set; }
+
     public int? Score { get; set; }
     public string? Detail { get; set; }
 
@@ -141,6 +149,14 @@ public static class BiometricVigenciaEstados
 public static class BiometricRules
 {
     public const int MaxIntentos = 5;
+
+    /// <summary>
+    /// Intentos que Kyverum permite dentro de UNA validación antes de cerrarla rechazada. Kyverum NO expone
+    /// este límite ni los "intentos restantes" en su API, así que se fija aquí (valor observado = 3): el
+    /// reconciliador cuenta los intentos fallidos y solo marca <c>rechazado</c> al alcanzar este tope.
+    /// </summary>
+    public const int KyverumMaxIntentos = 3;
+
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
 
@@ -181,6 +197,13 @@ public static class BiometricRules
         ArgumentNullException.ThrowIfNull(validation);
         if (validation.Status != BiometricEstados.Aprobado)
             return false;
+        // `valid_until` es la FUENTE DE VERDAD del vencimiento cuando está estampada: es editable en BD para
+        // VENCER o EXTENDER una identidad, y la reutilización/gates respetan ese valor (antes se ignoraba y se
+        // calculaba desde validated_at, por lo que editar valid_until no tenía efecto). Se estampa al aprobar
+        // (= medianoche Colombia de validated_at + VigenciaDias). Si falta (fixtures/registros viejos), se cae
+        // al cálculo por validated_at + VigenciaDias — mismo resultado que el valor estampado.
+        if (validation.ValidUntil is { } validUntil)
+            return now < validUntil;
         if (validation.ValidatedAt is not { } validadoAt)
             return true;
         // Día calendario en hora de Colombia (no UTC) para que coincida con el día del gestor.
@@ -188,6 +211,15 @@ public static class BiometricRules
         var diaAprobacion = validadoAt.ToOffset(ColombiaUtcOffset).Date;
         return hoy < diaAprobacion.AddDays(VigenciaDias);
     }
+
+    /// <summary>
+    /// Clave canónica de una IDENTIDAD por persona dentro de un tenant: <c>{tenant:N}|{TIPODOC}|{DOCUMENTO}</c>
+    /// (mayúsculas, sin espacios). La identidad se valida UNA vez por persona y se referencia en N trámites
+    /// hasta que venza (HU #10350, sin clonar); esta clave permite comparar aprobaciones vigentes por persona
+    /// entre la capa de aplicación (gates) y la de datos (consulta en lote) sin divergir de formato.
+    /// </summary>
+    public static string IdentidadKey(Guid tenantId, string? tipoDoc, string? documento) =>
+        $"{tenantId:N}|{(tipoDoc ?? string.Empty).Trim().ToUpperInvariant()}|{(documento ?? string.Empty).Trim().ToUpperInvariant()}";
 
     /// <summary>
     /// Fecha en que la validación deja de ser vigente: el DÍA calendario (Colombia) <c>ValidadoAt +
@@ -208,8 +240,10 @@ public static class BiometricRules
     public static DateTimeOffset FechaFinVigencia(DateTimeOffset validadoAt)
     {
         var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
-        // Mismo instante (medianoche Colombia) normalizado a UTC: Npgsql solo acepta
-        // offset 0 al escribir timestamptz (vigencia_hasta); un offset -05:00 revienta el INSERT.
+        // El instante (medianoche Colombia) se conserva, pero se DEVUELVE en UTC (offset 0): Npgsql solo
+        // acepta offset 0 al escribir en `timestamptz`; un offset -05:00 hacía fallar SaveChanges con
+        // ArgumentException y devolvía 500 al aprobar (webhook y reconcile). Los lectores de vigencia
+        // reconvierten con .ToOffset(ColombiaUtcOffset), así que el día calendario Colombia no cambia.
         return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset).ToUniversalTime();
     }
 

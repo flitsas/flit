@@ -62,7 +62,12 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        return (ComputeState(instance), null);
+        // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
+        // vigente de la persona en N trámites sin clonar (HU #10350).
+        var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+            repo, instance, DateTimeOffset.UtcNow, ct);
+
+        return (ComputeState(instance, identidadAprobada), null);
     }
 
     /// <summary>
@@ -71,21 +76,22 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     /// Signatures). Expuesto para reusar la MISMA lógica de gates por paso desde otros handlers (p.ej. el
     /// listado de trámites computa <c>PasoActual</c> contando los pasos en <c>complete</c>) sin duplicarla.
     /// </summary>
-    public static WizardStateDto ComputeState(ProcedureInstance instance)
+    public static WizardStateDto ComputeState(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance)
-            : BuildMatricula(instance);
+            ? BuildTraspaso(instance, identidadAprobadaPartes)
+            : BuildMatricula(instance, identidadAprobadaPartes);
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildMatricula(ProcedureInstance instance)
+    private static WizardStateDto BuildMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
@@ -95,8 +101,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var docsCompletos = DocumentosObligatoriosCompletos(instance);
         var riesgoAceptado = RiesgoAceptado(instance);
 
-        // Matrícula: la única parte (comprador) lleva la biométrica → Parte == "comprador".
-        var identidadAprobada = BiometriaAprobada(instance, "comprador");
+        // Matrícula: la única parte (comprador) lleva la biométrica. Aprobación PER-PERSONA (documento),
+        // no por instancia: se referencia la identidad vigente de la persona en N trámites (HU #10350).
+        var identidadAprobada = identidadAprobadaPartes.Contains("comprador");
 
         var ctx = new MatriculaGateContext
         {
@@ -203,7 +210,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
     // ---- Traspaso estándar (6 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildTraspaso(ProcedureInstance instance)
+    private static WizardStateDto BuildTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -230,10 +237,11 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             RuntComprador = runtComprador,
             SimitComprador = simitComprador,
             ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            // Biométrica real (slice 6): traspaso requiere ambas partes (comprador + vendedor).
+            // Biométrica real (slice 6): traspaso requiere ambas partes. Aprobación PER-PERSONA (documento),
+            // referenciada de la identidad vigente de cada persona (HU #10350), no por instancia.
             Biometria = new BiometriaSnapshot(
-                Vendedor: BiometriaAprobada(instance, "vendedor"),
-                Comprador: BiometriaAprobada(instance, "comprador")),
+                Vendedor: identidadAprobadaPartes.Contains("vendedor"),
+                Comprador: identidadAprobadaPartes.Contains("comprador")),
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
             RiesgoPreflightAceptado = riesgoAceptado,
@@ -383,26 +391,6 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
     private static Dictionary<string, string?> FieldValues(ProcedureInstance instance) =>
         instance.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Biométrica aprobada para una parte. Matrícula usa la parte explícita <c>"comprador"</c> (única
-    /// parte); traspaso usa <c>"comprador"</c>/<c>"vendedor"</c>. Aprobada = existe una validación de
-    /// esa parte en estado <c>aprobado</c>.
-    /// </summary>
-    private static bool BiometriaAprobada(ProcedureInstance instance, string? parte)
-    {
-        // HU #10350 — la validación cuenta como aprobada sólo si además está VIGENTE (≤30 días desde la
-        // aprobación) Y corresponde al DOCUMENTO del actor actual de la parte. El doc-match es defensa en
-        // profundidad: si el gestor cambió de persona y la invalidación de la validación previa no corrió
-        // (p.ej. el ensure del frontend falló), el gate NO la cuenta como identidad de la persona actual.
-        var now = DateTimeOffset.UtcNow;
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        return instance.BiometricValidations.Any(v =>
-            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
-    }
 
     /// <summary>
     /// Check preflight de la firma de la compraventa (paridad Johan <c>derivaFirmaCompraventaCheck</c>).

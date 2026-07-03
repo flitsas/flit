@@ -16,12 +16,11 @@ internal sealed class InProcessIdentityValidationEventDispatcher(
     FlitDbContext db,
     ILogger<InProcessIdentityValidationEventDispatcher> logger) : IIdentityValidationEventPublisher
 {
-    public Task PublishAsync(IdentityValidationEvent evt, CancellationToken ct = default)
+    public async Task PublishAsync(IdentityValidationEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
-        IdentityValidationOutboxWriter.Enqueue(db, evt);
+        await IdentityValidationOutboxWriter.EnqueueAsync(db, evt, ct);
         IdentityValidationLog.EventDispatched(logger, evt.EventType, evt.ValidationId);
-        return Task.CompletedTask;
     }
 }
 

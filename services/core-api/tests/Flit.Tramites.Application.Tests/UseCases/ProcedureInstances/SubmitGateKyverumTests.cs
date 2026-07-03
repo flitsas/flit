@@ -40,17 +40,23 @@ public sealed class SubmitGateKyverumTests
         return instance;
     }
 
+    // El gate ahora recibe el set de partes con identidad vigente aprobada PER-PERSONA (HU #10350): la
+    // resolución por documento/vigencia vive en IdentityApprovalResolver/FindVigenteApprovedByDocument, no en
+    // el gate. Aquí se prueba que el gate exige/omite identidad_no_aprobada según ese set.
+    private static HashSet<string> Aprobadas(params string[] partes) =>
+        new(partes, StringComparer.OrdinalIgnoreCase);
+
     [Fact]
-    public void Gate_KyverumApproved_DoesNotRequireIdentidad()
+    public void Gate_CompradorAprobado_DoesNotRequireIdentidad()
     {
-        var errors = SubmitGate.Evaluate(Matricula(BiometricEstados.Aprobado));
+        var errors = SubmitGate.Evaluate(Matricula(BiometricEstados.Aprobado), Aprobadas("comprador"));
         errors.Should().NotContain(SubmitGate.IdentidadNoAprobada);
     }
 
     [Fact]
-    public void Gate_KyverumInProgress_RequiresIdentidad()
+    public void Gate_CompradorSinIdentidad_RequiresIdentidad()
     {
-        var errors = SubmitGate.Evaluate(Matricula(BiometricEstados.EnProceso));
+        var errors = SubmitGate.Evaluate(Matricula(BiometricEstados.EnProceso), Aprobadas());
         errors.Should().Contain(SubmitGate.IdentidadNoAprobada);
     }
 }

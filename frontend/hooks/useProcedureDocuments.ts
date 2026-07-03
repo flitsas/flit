@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { DEV_TENANT_ID } from '@/lib/api/dev-constants';
 import type {
   ChecklistView,
   DocumentOcrResult,
@@ -132,7 +131,8 @@ export interface UseProcedureDocumentsOptions {
  */
 export function useProcedureDocuments(
   instanceId: string | null,
-  { modalidad = 'matricula_inicial', tenantId = DEV_TENANT_ID }: UseProcedureDocumentsOptions = {},
+  // Sin default hardcodeado de tenant: lo resuelve `tenantHeader` (tenant activo del `?t=` → JWT).
+  { modalidad = 'matricula_inicial', tenantId }: UseProcedureDocumentsOptions = {},
 ) {
   const [state, setState] = useState<ProcedureDocumentsState>(INITIAL_STATE);
 
