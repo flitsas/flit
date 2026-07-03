@@ -620,6 +620,7 @@ public static class DevelopmentAuthSeeder
             new() { Id = Guid.CreateVersion7(), Code = "validaciones", Name = "Validaciones",             SortOrder = 4, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "improntas",    Name = "Improntas",                SortOrder = 7, IsActive = true, CreatedAt = now },
         };
 
         db.SecurityModules.AddRange(modules);
@@ -637,6 +638,8 @@ public static class DevelopmentAuthSeeder
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["validaciones"], Slug = "validaciones.manage",   Name = "Gestionar validaciones",        HttpMethod = "PUT",  RoutePattern = "/api/v1/validaciones/{id}/approve",  IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["usuarios"],     Slug = "usuarios.manage",       Name = "Gestionar usuarios y permisos", HttpMethod = "GET",  RoutePattern = "/api/v1/security/users",             IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), ModuleId = mid["rbac"],         Slug = "rbac.manage",           Name = "Administrar RBAC",              HttpMethod = "GET",  RoutePattern = "/api/v1/superadmin/modules",         IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["improntas"],    Slug = "improntas.read",        Name = "Ver improntas",                 HttpMethod = "GET",  RoutePattern = "/api/v1/admin/improntas",            IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), ModuleId = mid["improntas"],    Slug = "improntas.generate",    Name = "Generar impronta",              HttpMethod = "POST", RoutePattern = "/api/v1/admin/improntas/generate",   IsActive = true, CreatedAt = now },
         };
 
         db.RbacActions.AddRange(actions);
@@ -693,7 +696,7 @@ public static class DevelopmentAuthSeeder
             .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
         if (empresaTenant is null) return;
 
-        // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac intencionalmente)
+        // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
         var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
 
         var modules = await db.SecurityModules
