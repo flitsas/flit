@@ -386,6 +386,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
+    // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
+    // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
+    public async Task<bool> TryCountKyverumAttemptAsync(
+        Guid validationId, string attemptKey, DateTimeOffset now, CancellationToken ct)
+    {
+        var affected = await db.ProcedureInstanceBiometricValidations
+            .Where(x => x.Id == validationId
+                        && x.Status == BiometricEstados.EnProceso
+                        && (x.LastAttemptAt == null || x.LastAttemptAt != attemptKey))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Attempts, x => x.Attempts + 1)
+                .SetProperty(x => x.LastAttemptAt, attemptKey)
+                .SetProperty(x => x.ReconcilePollCount, 0)
+                .SetProperty(x => x.UpdatedAt, now), ct);
+        return affected > 0;
+    }
+
+    public Task ReloadBiometricAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct) =>
+        db.Entry(validation).ReloadAsync(ct);
+
     public Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.Participants)

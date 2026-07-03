@@ -26,6 +26,13 @@ internal sealed class IdentityValidationReconcileProcessor(
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(20);
     /// <summary>No se sondea una validación tocada hace menos de esto (deja espacio al webhook y al poll del front).</summary>
     private static readonly TimeSpan Staleness = TimeSpan.FromSeconds(120);
+    /// <summary>
+    /// Presupuesto de sondeos por ventana de actividad: solo se reclaman validaciones con
+    /// <c>reconcile_poll_count &lt; MaxReconcilePolls</c>. Tras cada intento (o (re)envío) el presupuesto se
+    /// reinicia a 0; así, si el cliente hace un intento y se queda quieto, el worker sondea a lo sumo N veces
+    /// (~N·2 min) y luego calla en vez de pegarle a Kyverum cada 2 min durante horas.
+    /// </summary>
+    private const int MaxReconcilePolls = BiometricRules.KyverumMaxReconcilePolls;
     private const int BatchSize = 10;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -108,9 +115,14 @@ internal sealed class IdentityValidationReconcileProcessor(
                 Message: "Worker: falló la consulta de estado; se reintenta."), ct);
         }
 
-        // Estampa updated_at siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura.
+        // Estampa updated_at siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura,
+        // y consume una unidad del presupuesto de sondeo: al agotarlo el worker deja de reclamar esta validación
+        // hasta que una señal nueva (intento por webhook, (re)envío o reconcile manual) lo reinicie a 0.
         if (v.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado)
+        {
             v.UpdatedAt = now;
+            v.ReconcilePollCount += 1;
+        }
 
         try
         {
@@ -143,7 +155,10 @@ internal sealed class IdentityValidationReconcileProcessor(
                 TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
                 KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
                 ProviderStatus: status.Status,
-                Message: updated ? "Worker: estado sincronizado por consulta." : "Worker: aún pendiente."), ct);
+                Message: updated ? "Worker: estado sincronizado por consulta." : "Worker: aún pendiente.",
+                // Deja visible el validado_at que devolvió Kyverum + el presupuesto de sondeo restante:
+                // así se diagnostica de un vistazo el jitter de validado_at y el corte del worker.
+                Detail: $"validado_at={status.AttemptAt ?? "<null>"}; sondeo={v.ReconcilePollCount}/{MaxReconcilePolls}"), ct);
         }
         return true;
     }
@@ -171,6 +186,7 @@ internal sealed class IdentityValidationReconcileProcessor(
               AND provider = @provider
               AND kyverum_verification_id IS NOT NULL
               AND expires_at > now()
+              AND reconcile_poll_count < @maxPolls
               AND COALESCE(updated_at, created_at) < @cutoff
             ORDER BY created_at
             LIMIT 1
@@ -178,6 +194,7 @@ internal sealed class IdentityValidationReconcileProcessor(
             """;
         AddParam(cmd, "status", BiometricEstados.EnProceso);
         AddParam(cmd, "provider", BiometricProviders.Kyverum);
+        AddParam(cmd, "maxPolls", MaxReconcilePolls);
         AddParam(cmd, "cutoff", cutoff);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);

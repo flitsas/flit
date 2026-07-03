@@ -56,8 +56,14 @@ public sealed class ReconciliarIdentidadHandler(
         bool updated;
         try
         {
+            // Reconcile manual = señal de actividad del gestor: recarga el presupuesto de sondeo del worker
+            // (se persiste aunque Kyverum aún no resuelva, para que el worker vuelva a acompañar la espera).
+            var revived = v.ReconcilePollCount != 0;
+            if (revived)
+                v.ReconcilePollCount = 0;
+
             updated = await IdentityValidationReconciler.ApplyStatusAsync(applier, v, status, DateTimeOffset.UtcNow, ct);
-            if (updated)
+            if (updated || revived)
                 await repo.SaveChangesAsync(ct);
         }
         catch (Exception ex)
@@ -80,7 +86,8 @@ public sealed class ReconciliarIdentidadHandler(
             TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
             KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
             ProviderStatus: status.Status,
-            Message: updated ? "Reconciliación on-demand: estado sincronizado." : "Reconciliación on-demand: aún pendiente."), ct);
+            Message: updated ? "Reconciliación on-demand: estado sincronizado." : "Reconciliación on-demand: aún pendiente.",
+            Detail: $"validado_at={status.AttemptAt ?? "<null>"}"), ct);
 
         return (new ReconciliarIdentidadResult(v.Status, updated), null);
     }

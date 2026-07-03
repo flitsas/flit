@@ -52,12 +52,24 @@ public sealed class ProcedureInstanceBiometricValidation
     public int MaxAttempts { get; set; } = BiometricRules.MaxIntentos;
 
     /// <summary>
-    /// <c>validadoAt</c> del último intento YA CONTADO en <see cref="Attempts"/> (Kyverum). Clave de dedup
-    /// dedicada: cada intento fallido de Kyverum trae un <c>validadoAt</c> distinto y llega por webhook + poll +
-    /// reenvíos; se cuenta UNA sola vez comparando contra este valor. Se escribe SOLO al contar un intento
-    /// nuevo (nunca lo pisa un payload sin fecha), evitando el doble-conteo. Null hasta el primer intento fallido.
+    /// Clave del ÚLTIMO intento YA CONTADO en <see cref="Attempts"/> (Kyverum), tomada del CUERPO del webhook
+    /// (<c>data.closedAt</c> ?? <c>ts</c> ?? <c>requestId</c>). El conteo de intentos es AUTORITATIVO por webhook:
+    /// cada intento fallido dispara UN <c>validation.rejected</c> con una clave estable en su cuerpo inmutable,
+    /// mientras que un redelivery del MISMO evento repite la clave. Se cuenta una sola vez comparando exacto
+    /// (string) contra este valor; el worker/poll de reconciliación ya NO cuenta (evita el doble-conteo
+    /// webhook+poll que inflaba los intentos). Null hasta el primer intento fallido.
     /// </summary>
     public string? LastAttemptAt { get; set; }
+
+    /// <summary>
+    /// Cuántas veces el worker de reconciliación (<c>IdentityValidationReconcileProcessor</c>) ya sondeó a
+    /// Kyverum en la ventana de espera ACTUAL. El worker solo reclama validaciones con
+    /// <c>ReconcilePollCount &lt; <see cref="BiometricRules.KyverumMaxReconcilePolls"/></c> (3): así, si el
+    /// cliente hace un intento y se queda quieto, el worker sondea a lo sumo 3 veces (~6 min) y luego CALLA en
+    /// vez de pegarle a Kyverum cada 2 min durante horas. Se REINICIA a 0 cuando hay señal de actividad nueva:
+    /// un intento nuevo por webhook, el (re)envío de la validación, o un reconcile manual del gestor.
+    /// </summary>
+    public int ReconcilePollCount { get; set; }
 
     public int? Score { get; set; }
     public string? Detail { get; set; }
@@ -156,6 +168,15 @@ public static class BiometricRules
     /// reconciliador cuenta los intentos fallidos y solo marca <c>rechazado</c> al alcanzar este tope.
     /// </summary>
     public const int KyverumMaxIntentos = 3;
+
+    /// <summary>
+    /// Cuántas veces el worker de reconciliación sondea a Kyverum por VENTANA DE ACTIVIDAD (tras cada intento
+    /// o (re)envío) antes de callar. Acota el sondeo de respaldo: en vez de consultar cada 2 min durante toda
+    /// la vigencia del token (24 h), hace a lo sumo 3 consultas (~6 min) y espera una señal nueva (otro intento
+    /// por webhook o un reconcile manual) para volver a sondear. Ver
+    /// <see cref="ProcedureInstanceBiometricValidation.ReconcilePollCount"/>.
+    /// </summary>
+    public const int KyverumMaxReconcilePolls = 3;
 
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;

@@ -49,18 +49,37 @@ public sealed class KyverumWebhookHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetBiometricByIdAsync(v.Id, Arg.Any<CancellationToken>()).Returns(v);
+        // Simula el UPDATE atómico del conteo contra el `v` en memoria: cuenta (incrementa + sella la clave +
+        // reinicia el presupuesto de sondeo) solo si es un intento NUEVO y sigue en proceso; un redelivery del
+        // mismo intento (misma clave) devuelve false, igual que la guarda `last_attempt_at <> @key` en la BD.
+        _repo.TryCountKyverumAttemptAsync(v.Id, Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var key = call.ArgAt<string>(1);
+                if (v.Status != BiometricEstados.EnProceso
+                    || string.Equals(key, v.LastAttemptAt, StringComparison.Ordinal))
+                    return false;
+                v.Attempts += 1;
+                v.LastAttemptAt = key;
+                v.ReconcilePollCount = 0;
+                return true;
+            });
         return v;
     }
 
-    // Cuerpo del webhook según el contrato real (evento + data.aprobado + subjects[]).
-    private static byte[] Body(bool aprobado, int score = 88)
+    // `closedAt` del intento en el cuerpo: es la CLAVE de dedup del conteo (webhook autoritativo).
+    private const string AttemptClosedAt = "2026-06-23T15:30:00.000Z";
+
+    // Cuerpo del webhook según el contrato real (evento + data.aprobado + subjects[]). `closedAt` parametrizable
+    // para simular intentos distintos (clave de dedup) vs. redeliveries del mismo intento (misma clave).
+    private static byte[] Body(bool aprobado, int score = 88, string closedAt = AttemptClosedAt)
     {
         var evento = aprobado ? "validation.completed" : "validation.rejected";
         var status = aprobado ? "aprobado" : "rechazado";
         var json =
             "{\"evento\":\"" + evento + "\",\"requestId\":\"550e8400\",\"data\":{\"aprobado\":"
             + (aprobado ? "true" : "false")
-            + ",\"closedAt\":\"2026-06-23T15:30:00.000Z\",\"subjects\":[{\"id\":\"66824abc\",\"rol\":\"comprador\",\"documento\":\"123\",\"status\":\""
+            + ",\"closedAt\":\"" + closedAt + "\",\"subjects\":[{\"id\":\"66824abc\",\"rol\":\"comprador\",\"documento\":\"123\",\"status\":\""
             + status + "\",\"score\":" + score
             + ",\"datosExtraidos\":{\"nombres\":\"ANDRES FELIPE\",\"apellidos\":\"PEREZ GOMEZ\"}}]},\"deliveryId\":\"7c9e6679\",\"ts\":\"2026-06-23T15:30:01.000Z\"}";
         return Encoding.UTF8.GetBytes(json);
@@ -97,8 +116,10 @@ public sealed class KyverumWebhookHandlerTests
         var v = Seed();
         v.MaxAttempts = 3;
         v.Attempts = 0;
+        v.ReconcilePollCount = 2; // presupuesto de sondeo consumido; el intento nuevo debe reiniciarlo
         // Kyverum reporta un INTENTO rechazado (rechazado_intento), pero quedan reintentos. NO terminaliza:
-        // cuenta el intento y sigue en_proceso para que el cliente reintente en su móvil.
+        // el webhook cuenta el intento (por el cuerpo) y sigue en_proceso para que el cliente reintente en su móvil.
+        // La consulta de estado solo enriquece el motivo (ya no cuenta).
         _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
             .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{\"validado_at\":\"t1\"}", AttemptAt: "t1", Motivo: "rostro no visible"));
         var body = Body(aprobado: false);
@@ -109,6 +130,8 @@ public sealed class KyverumWebhookHandlerTests
         result.Should().Be("ok");
         v.Status.Should().Be(BiometricEstados.EnProceso);
         v.Attempts.Should().Be(1);
+        v.LastAttemptAt.Should().Be(AttemptClosedAt); // dedup por la clave del cuerpo
+        v.ReconcilePollCount.Should().Be(0); // intento nuevo → presupuesto de sondeo del worker reiniciado
         await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
     }
 
@@ -137,15 +160,38 @@ public sealed class KyverumWebhookHandlerTests
         var v = Seed();
         v.MaxAttempts = 3;
         v.Attempts = 1;
-        v.LastAttemptAt = "t1"; // el intento t1 ya fue contado (columna dedicada de dedup)
-        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
-            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{}", AttemptAt: "t1", Motivo: "rostro no visible"));
-        var body = Body(aprobado: false);
+        v.LastAttemptAt = AttemptClosedAt; // el intento (por su closedAt) ya fue contado
+        var body = Body(aprobado: false); // redelivery del MISMO evento (mismo closedAt)
 
-        var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
 
         error.Should().BeNull();
-        v.Attempts.Should().Be(1); // mismo intento (t1) → NO re-cuenta (dedup)
+        result.Should().Be("ok");
+        v.Attempts.Should().Be(1); // mismo intento (mismo closedAt) → NO re-cuenta (dedup por cuerpo)
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        // El redelivery se descarta ANTES de consultar el estado (no gasta llamada al proveedor).
+        await _kyverum.DidNotReceive().GetStatusAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Webhook_RejectedAttempt_DistinctAttempt_CountsAgain()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+        v.Attempts = 1;
+        v.LastAttemptAt = AttemptClosedAt; // primer intento ya contado
+        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{\"validado_at\":\"t2\"}", AttemptAt: "t2", Motivo: "rostro no visible"));
+        // Segundo intento REAL: closedAt distinto → clave distinta → se cuenta.
+        var body = Body(aprobado: false, closedAt: "2026-06-23T15:40:00.000Z");
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Attempts.Should().Be(2); // intento nuevo → cuenta
+        v.LastAttemptAt.Should().Be("2026-06-23T15:40:00.000Z");
         v.Status.Should().Be(BiometricEstados.EnProceso);
     }
 
