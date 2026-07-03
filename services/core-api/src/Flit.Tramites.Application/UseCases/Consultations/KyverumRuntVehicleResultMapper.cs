@@ -101,11 +101,16 @@ public static class KyverumRuntVehicleResultMapper
 
     private static List<HydratedField> MapHydratedFields(KyverumRuntVehicleData? data)
     {
+        var fields = new List<HydratedField>();
+
+        // Tipo de documento del propietario resuelto por el RUNT (dato canónico): siembra
+        // owner_document_type en código FLIT para el paso vendedor de traspaso (HU #10478). Va antes
+        // del guard de vehiculo null porque vive al nivel de data, no del vehículo.
+        Add(fields, "owner_document_type", MapOwnerDocType(data?.TipoDocPropietario));
+
         var v = data?.Vehiculo;
         if (v is null)
-            return [];
-
-        var fields = new List<HydratedField>();
+            return fields;
 
         Add(fields, "plate", v.Placa);
         Add(fields, "vin", v.Vin);
@@ -148,6 +153,19 @@ public static class KyverumRuntVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(value))
             fields.Add(new HydratedField(key, value, null));
     }
+
+    // Inverso de KyverumRuntDocType.Normalize: código RUNT del propietario → tipo de documento FLIT
+    // (ActorDocumentType: CC/CE/NIT/PAS/TI). 'Y' u otros sin equivalente FLIT ⇒ null (no se siembra).
+    private static string? MapOwnerDocType(string? tipoDocPropietario) =>
+        tipoDocPropietario?.Trim().ToUpperInvariant() switch
+        {
+            "C" => "CC",
+            "N" => "NIT",
+            "E" => "CE",
+            "T" => "TI",
+            "P" => "PAS",
+            _ => null,
+        };
 
     private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)
     {

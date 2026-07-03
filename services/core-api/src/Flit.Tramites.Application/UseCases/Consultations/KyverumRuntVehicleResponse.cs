@@ -28,6 +28,12 @@ public sealed class KyverumRuntVehicleData
     [JsonPropertyName("vehiculo")]
     public KyverumRuntVehiculo? Vehiculo { get; set; }
 
+    // Tipo de documento del propietario que RESUELVE el propio RUNT (C=CC, N=NIT, E=CE, T=TI, P=PAS…).
+    // Kyverum lo devuelve aunque no se envíe en la consulta por placa; lo usamos para sembrar el tipo
+    // del vendedor en traspaso (HU #10478) sin pedírselo al usuario.
+    [JsonPropertyName("tipoDocPropietario")]
+    public string? TipoDocPropietario { get; set; }
+
     [JsonPropertyName("datosTecnicos")]
     public KyverumRuntDatosTecnicos? DatosTecnicos { get; set; }
 

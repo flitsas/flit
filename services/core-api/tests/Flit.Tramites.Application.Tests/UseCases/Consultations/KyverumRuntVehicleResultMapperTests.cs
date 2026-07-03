@@ -52,6 +52,9 @@ public sealed class KyverumRuntVehicleResultMapperTests
         Field(result, "vehicle_fuel").Should().Be("ELECTRICO");
         Field(result, "vehicle_state").Should().Be("ACTIVO");
         Field(result, "soat_aseguradora").Should().Be("LA PREVISORA S.A.COMPAÑIA DE SEGUROS");
+
+        // tipoDocPropietario "C" del RUNT → siembra owner_document_type en código FLIT (CC).
+        Field(result, "owner_document_type").Should().Be("CC");
     }
 
     // ── Placa Yamaha JNH38H — traspaso, SOAT múltiple (1 VIGENTE + 1 NO VIGENTE), sin gravámenes ─
@@ -72,6 +75,9 @@ public sealed class KyverumRuntVehicleResultMapperTests
         // Hidrata la póliza VIGENTE (AXA), no la vencida (Previsora).
         Field(result, "soat_aseguradora").Should().Be("AXA COLPATRIA SEGUROS SA");
         Field(result, "soat_vencimiento").Should().Be("2027-01-23T00:00:00.000-05:00");
+
+        // tipoDocPropietario "C" → owner_document_type "CC" para sembrar el vendedor.
+        Field(result, "owner_document_type").Should().Be("CC");
     }
 
     // ── Robustez: nulls/listas vacías nunca lanzan ──────────────────────────────────────────
@@ -85,5 +91,43 @@ public sealed class KyverumRuntVehicleResultMapperTests
         Status(result, "soat").Should().Be("unknown");
         Status(result, "gravamenes").Should().Be("unknown");
         result.HydratedFields.Should().BeEmpty();
+    }
+
+    // ── tipoDocPropietario del RUNT → owner_document_type FLIT (siembra tipo del vendedor) ────────
+    [Theory]
+    [InlineData("C", "CC")]
+    [InlineData("N", "NIT")]   // empresa (p. ej. NIT Bancolombia)
+    [InlineData("E", "CE")]
+    [InlineData("T", "TI")]
+    [InlineData("P", "PAS")]
+    public void TipoDocPropietario_SeMapeaACodigoFlit(string runtCode, string flitCode)
+    {
+        var response = new KyverumRuntVehicleResponse
+        {
+            Ok = true,
+            Data = new KyverumRuntVehicleData { TipoDocPropietario = runtCode },
+        };
+
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Field(result, "owner_document_type").Should().Be(flitCode);
+    }
+
+    // 'Y' (código RUNT sin equivalente FLIT) o vacío ⇒ no se siembra owner_document_type.
+    [Theory]
+    [InlineData("Y")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TipoDocPropietario_SinEquivalenteFlit_NoSiembraTipo(string? runtCode)
+    {
+        var response = new KyverumRuntVehicleResponse
+        {
+            Ok = true,
+            Data = new KyverumRuntVehicleData { TipoDocPropietario = runtCode },
+        };
+
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Field(result, "owner_document_type").Should().BeNull();
     }
 }
