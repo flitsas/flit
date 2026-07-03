@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
-using Flit.Admin.Domain.Improntas;
 using Flit.Infrastructure.Improntas;
+using Flit.Modules.Improntas.Domain;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

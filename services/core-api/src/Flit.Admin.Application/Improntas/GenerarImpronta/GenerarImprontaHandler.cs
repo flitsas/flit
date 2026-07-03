@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Improntas;
+using Flit.Modules.Improntas.Domain;
 
 namespace Flit.Admin.Application.Improntas.GenerarImpronta;
 
@@ -8,9 +9,9 @@ namespace Flit.Admin.Application.Improntas.GenerarImpronta;
 /// Caso de uso de generación del Certificado de Improntas Digitales vehicular (Res. 17145/2023,
 /// Mintransporte), HU #10467.
 ///
-/// Flujo: (1) valida placa + al menos uno de numMotor/numChasis/numSerie + los campos de
-/// organización/operador (obligatorios de facto, ver plan de Feature #10462) — 422 sin tocar el
-/// proveedor externo ni persistir nada; (2) invoca <see cref="IImprontaExternalClient.GenerarAsync"/>
+/// Flujo: (1) valida placa + documento del propietario + los campos de organización/operador
+/// (obligatorios de facto, ver plan de Feature #10462) — 422 sin tocar el proveedor externo ni
+/// persistir nada; (2) invoca <see cref="IImprontaExternalClient.GenerarAsync"/>
 /// (HU #10465); (3) decodifica el Data URI base64 del PDF devuelto (recorta el prefijo
 /// <c>data:application/pdf;base64,</c>) a <c>byte[]</c>; (4) persiste el registro de trazabilidad vía
 /// <see cref="IImprontaRepository.SaveAsync"/> (HU #10466); (5) retorna los bytes + metadata para que
@@ -29,23 +30,6 @@ namespace Flit.Admin.Application.Improntas.GenerarImpronta;
 /// </summary>
 public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClient, IImprontaRepository repository)
 {
-    private const string PdfDataUriPrefix = "data:application/pdf;base64,";
-
-    /// <summary>
-    /// Prefijo estable del mensaje que <c>ImprontaRuntClient.BuildValidationMessage</c> arma para
-    /// <c>VALIDATION_ERROR</c> — único indicio disponible en esta capa para distinguirlo de
-    /// <c>UNAUTHORIZED</c>, ya que <see cref="ImprontaRuntException"/> no expone el código crudo.
-    /// </summary>
-    private const string ProviderValidationMessagePrefix = "Datos de la impronta inválidos:";
-
-    /// <summary>
-    /// Prefijo que <c>ImprontaRuntClient</c> arma cuando Kyverum responde 200 con <c>ok:false</c> (no
-    /// es un error HTTP, es un motivo de negocio — ej. "el RUNT no expone identificadores para este
-    /// vehículo"). Se clasifica igual que <see cref="ProviderValidationMessagePrefix"/> (422): no se
-    /// puede generar el certificado con los datos enviados, pero no es un fallo de autenticación.
-    /// </summary>
-    private const string ProviderUnavailableForRequestMessagePrefix = "Impronta no disponible:";
-
     public async Task<GenerarImprontaResult> HandleAsync(
         GenerarImprontaCommand command, CancellationToken cancellationToken = default)
     {
@@ -56,15 +40,7 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
 
         var placa = request.Placa?.Trim() ?? string.Empty;
         var documento = request.Documento?.Trim() ?? string.Empty;
-        var numMotor = NormalizeOptional(request.NumMotor);
-        var numChasis = NormalizeOptional(request.NumChasis);
-        var numSerie = NormalizeOptional(request.NumSerie);
-        var marca = NormalizeOptional(request.Marca);
-        var linea = NormalizeOptional(request.Linea);
-        var modelo = NormalizeOptional(request.Modelo);
         var orgNombre = request.OrgNombre?.Trim() ?? string.Empty;
-        var orgNit = NormalizeOptional(request.OrgNit);
-        var orgCiudad = NormalizeOptional(request.OrgCiudad);
         var operador = request.Operador?.Trim() ?? string.Empty;
 
         if (placa.Length == 0)
@@ -77,11 +53,6 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             errors.Add(new CompanyValidationError(
                 "documento", "El documento del propietario es obligatorio (requerido por Kyverum RUNT para consultas por placa)."));
         }
-
-        // numMotor/numChasis/numSerie y orgNit/orgCiudad NO son obligatorios: verificado contra el
-        // proveedor real (Kyverum genera la impronta sin ellos, resolviendo los identificadores del
-        // vehículo directamente desde el RUNT vía placa+documento). CONTRATO-API.md documentaba "al
-        // menos un identificador obligatorio", pero eso no se sostuvo en pruebas reales.
 
         if (orgNombre.Length == 0)
         {
@@ -105,16 +76,17 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
                 new ImprontaExternalRequest(
                     Placa: placa,
                     Documento: documento,
-                    NumMotor: numMotor,
-                    NumChasis: numChasis,
-                    NumSerie: numSerie,
-                    Marca: marca,
-                    Linea: linea,
-                    Modelo: modelo,
+                    NumMotor: null,
+                    NumChasis: null,
+                    NumSerie: null,
+                    Marca: null,
+                    Linea: null,
+                    Modelo: null,
                     OrgNombre: orgNombre,
-                    OrgNit: orgNit,
-                    OrgCiudad: orgCiudad,
-                    Operador: operador),
+                    OrgNit: null,
+                    OrgCiudad: null,
+                    Operador: operador,
+                    Vin: null),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (ImprontaRuntException ex)
@@ -122,7 +94,7 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             return MapProviderError(ex);
         }
 
-        var pdfBytes = DecodePdfDataUri(providerResult.PdfDataUri);
+        var pdfBytes = ImprontaPdfDecoder.Decode(providerResult.PdfDataUri);
 
         var generation = new ImprontaGeneration
         {
@@ -133,15 +105,15 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             HashSha256 = providerResult.Hash,
             FechaImpresa = ParseFechaImpresa(providerResult.FechaImpresa),
             Placa = placa,
-            NumMotor = numMotor,
-            NumChasis = numChasis,
-            NumSerie = numSerie,
-            Marca = marca,
-            Linea = linea,
-            Modelo = modelo,
+            NumMotor = null,
+            NumChasis = null,
+            NumSerie = null,
+            Marca = null,
+            Linea = null,
+            Modelo = null,
             OrgNombre = orgNombre,
-            OrgNit = orgNit ?? string.Empty,
-            OrgCiudad = orgCiudad ?? string.Empty,
+            OrgNit = string.Empty,
+            OrgCiudad = string.Empty,
             Operador = operador,
             PdfContent = pdfBytes,
             PdfSizeBytes = pdfBytes.Length,
@@ -153,24 +125,6 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
         return GenerarImprontaResult.Success(pdfBytes, providerResult.Radicado, providerResult.Hash, providerResult.FechaImpresa);
     }
 
-    private static string? NormalizeOptional(string? value)
-    {
-        var trimmed = value?.Trim();
-        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
-    }
-
-    /// <summary>
-    /// Decodifica el certificado a bytes recortando el prefijo <c>data:application/pdf;base64,</c> si
-    /// está presente (defensivo: si Kyverum alguna vez devolviera el base64 puro, también funciona).
-    /// </summary>
-    private static byte[] DecodePdfDataUri(string dataUri)
-    {
-        var base64 = dataUri.StartsWith(PdfDataUriPrefix, StringComparison.Ordinal)
-            ? dataUri[PdfDataUriPrefix.Length..]
-            : dataUri;
-        return Convert.FromBase64String(base64);
-    }
-
     /// <summary>Si el proveedor envía una fecha que no se puede parsear, se usa UtcNow como fallback defensivo.</summary>
     private static DateTimeOffset ParseFechaImpresa(string fechaImpresa) =>
         DateTimeOffset.TryParse(
@@ -178,16 +132,11 @@ public sealed class GenerarImprontaHandler(IImprontaExternalClient externalClien
             ? parsed
             : DateTimeOffset.UtcNow;
 
-    private static GenerarImprontaResult MapProviderError(ImprontaRuntException ex)
-    {
-        if (ex.IsTransient)
+    private static GenerarImprontaResult MapProviderError(ImprontaRuntException ex) =>
+        ImprontaProviderErrorClassifier.Classify(ex) switch
         {
-            return GenerarImprontaResult.ProviderUnavailable(ex.Message);
-        }
-
-        return ex.Message.StartsWith(ProviderValidationMessagePrefix, StringComparison.Ordinal)
-            || ex.Message.StartsWith(ProviderUnavailableForRequestMessagePrefix, StringComparison.Ordinal)
-            ? GenerarImprontaResult.ProviderValidation(ex.Message)
-            : GenerarImprontaResult.ProviderUnauthorized(ex.Message);
-    }
+            ImprontaProviderErrorKind.Unavailable => GenerarImprontaResult.ProviderUnavailable(ex.Message),
+            ImprontaProviderErrorKind.Validation => GenerarImprontaResult.ProviderValidation(ex.Message),
+            _ => GenerarImprontaResult.ProviderUnauthorized(ex.Message),
+        };
 }

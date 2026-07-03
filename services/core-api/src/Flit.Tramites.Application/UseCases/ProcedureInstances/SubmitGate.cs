@@ -29,6 +29,7 @@ public static class SubmitGate
     public const string FirmaCompraventaRequerida = "firma_compraventa_requerida";
     public const string FurRequerido = "fur_requerido";
     public const string OrganismoRequerido = "organismo_requerido";
+    public const string ImprontaRequerida = "impronta_requerida";
 
     /// <summary>
     /// Evalúa el gate de preparación (RF03). La instancia debe traer cargado el grafo del wizard
@@ -56,6 +57,8 @@ public static class SubmitGate
         // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
         if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador))
             errors.Add(IdentidadNoAprobada);
+        if (!ImprontaGenerada(instance))
+            errors.Add(ImprontaRequerida);
 
         return errors;
     }
@@ -81,6 +84,8 @@ public static class SubmitGate
             errors.Add(FurRequerido);
         if (!OrganismoSeleccionado(instance))
             errors.Add(OrganismoRequerido);
+        if (!ImprontaGenerada(instance))
+            errors.Add(ImprontaRequerida);
 
         return errors;
     }
@@ -116,4 +121,19 @@ public static class SubmitGate
 
         return Firmada(SignatureRules.ParteComprador) && Firmada(SignatureRules.ParteVendedor);
     }
+
+    /// <summary>
+    /// ¿La tipología del trámite tiene un ítem de checklist con <c>DocTipo == "impronta"</c>? Así una
+    /// tipología futura sin impronta en su checklist no queda bloqueada por este gate.
+    /// </summary>
+    private static bool RequiereImpronta(ProcedureInstance instance)
+    {
+        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var tip = TramiteTipologiaCatalog.Get(codigo);
+        return tip is not null && tip.Checklist.Any(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ImprontaGenerada(ProcedureInstance instance) =>
+        !RequiereImpronta(instance)
+        || instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase));
 }

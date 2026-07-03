@@ -229,6 +229,12 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve el <c>DisplayName</c> de un usuario contra <c>identity.users</c> (operador que radica
+    /// una generación de impronta desde el trámite). Null si el usuario no existe.
+    /// </summary>
+    Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct = default);
 }
 
 /// <summary>

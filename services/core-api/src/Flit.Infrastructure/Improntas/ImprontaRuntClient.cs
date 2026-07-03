@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Flit.Admin.Domain.Improntas;
+using Flit.Modules.Improntas.Domain;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -46,7 +46,8 @@ internal sealed class ImprontaRuntClient(
             OrgNombre: request.OrgNombre,
             OrgNit: request.OrgNit,
             OrgCiudad: request.OrgCiudad,
-            Operador: request.Operador);
+            Operador: request.Operador,
+            Vin: request.Vin);
 
         try
         {
@@ -174,7 +175,7 @@ internal sealed class ImprontaRuntClient(
 
     // ── Contrato Kyverum RUNT (CONTRATO-API.md — POST /v1/improntas:generar) ──────────────────
     private sealed record ImprontaRuntRequestBody(
-        [property: JsonPropertyName("placa")] string Placa,
+        [property: JsonPropertyName("placa"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Placa,
         [property: JsonPropertyName("documento")] string Documento,
         [property: JsonPropertyName("numMotor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NumMotor,
         [property: JsonPropertyName("numChasis"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NumChasis,
@@ -185,7 +186,8 @@ internal sealed class ImprontaRuntClient(
         [property: JsonPropertyName("orgNombre")] string OrgNombre,
         [property: JsonPropertyName("orgNit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OrgNit,
         [property: JsonPropertyName("orgCiudad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OrgCiudad,
-        [property: JsonPropertyName("operador")] string Operador);
+        [property: JsonPropertyName("operador")] string Operador,
+        [property: JsonPropertyName("vin"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Vin);
 
     private sealed record ImprontaRuntResponseBody(
         [property: JsonPropertyName("ok")] bool Ok,

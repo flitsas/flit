@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Tramites.Domain\Flit.Tramites.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

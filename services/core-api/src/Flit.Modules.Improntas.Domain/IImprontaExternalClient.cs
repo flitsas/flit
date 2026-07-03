@@ -1,4 +1,4 @@
-namespace Flit.Admin.Domain.Improntas;
+namespace Flit.Modules.Improntas.Domain;
 
 /// <summary>
 /// Datos del vehículo/organización necesarios para generar el Certificado de Improntas Digitales
@@ -6,7 +6,11 @@ namespace Flit.Admin.Domain.Improntas;
 /// <see cref="NumMotor"/>/<see cref="NumChasis"/>/<see cref="NumSerie"/> es obligatorio según el
 /// contrato del proveedor; esa validación se hace en la capa de aplicación (HU #10467), no aquí.
 /// </summary>
-/// <param name="Placa">Placa del vehículo.</param>
+/// <param name="Placa">
+/// Placa del vehículo. Opcional en la integración con Trámites: cuando el vehículo aún no tiene
+/// placa asignada (matrícula inicial), se omite del cuerpo enviado a Kyverum (no se envía vacía) y
+/// se usa <see cref="Vin"/> en su lugar.
+/// </param>
 /// <param name="Documento">
 /// Documento de identidad del propietario del vehículo. Requerido por Kyverum RUNT para toda
 /// consulta por placa (no documentado originalmente en CONTRATO-API.md — descubierto validando
@@ -31,8 +35,14 @@ namespace Flit.Admin.Domain.Improntas;
 /// <see cref="OrgNit"/>.
 /// </param>
 /// <param name="Operador">Operador que solicita la impronta (impreso en el certificado).</param>
+/// <param name="Vin">
+/// VIN del vehículo, usado en vez de <see cref="Placa"/> cuando el vehículo aún no tiene placa
+/// asignada (matrícula inicial, integración con el wizard de Trámites). Campo distinto de
+/// <see cref="NumSerie"/> — verificado contra el proveedor real que acepta un atributo <c>vin</c>
+/// propio. No se expone en el formulario administrativo de generación manual.
+/// </param>
 public sealed record ImprontaExternalRequest(
-    string Placa,
+    string? Placa,
     string Documento,
     string? NumMotor,
     string? NumChasis,
@@ -43,7 +53,8 @@ public sealed record ImprontaExternalRequest(
     string OrgNombre,
     string? OrgNit,
     string? OrgCiudad,
-    string Operador);
+    string Operador,
+    string? Vin = null);
 
 /// <summary>
 /// Resultado exitoso de Kyverum RUNT al generar una impronta. <see cref="PdfDataUri"/> viene tal cual
@@ -76,7 +87,9 @@ public sealed class ImprontaRuntException(string message, bool isTransient) : Ex
 /// <c>IKyverumVerifyClient</c> en <c>Flit.Tramites.Application.Identity</c>). La implementación vive
 /// en Infraestructura (<c>ImprontaRuntClient</c>, Typed HttpClient). Lanza
 /// <see cref="ImprontaRuntException"/> ante respuestas de error o fallos de comunicación con el
-/// proveedor.
+/// proveedor. Contrato compartido entre el módulo admin (generación manual) y el módulo de Trámites
+/// (generación integrada al wizard, paso FUR) — módulos aislados por Clean Architecture que no pueden
+/// referenciarse entre sí.
 /// </summary>
 public interface IImprontaExternalClient
 {

@@ -579,4 +579,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         return (items, total);
     }
+
+    public Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct) =>
+        db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
 }
