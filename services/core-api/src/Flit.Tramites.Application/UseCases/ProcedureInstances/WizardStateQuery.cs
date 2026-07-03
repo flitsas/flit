@@ -2,6 +2,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
@@ -15,14 +16,22 @@ public sealed record WizardStepDto(
     string Status,           // complete | incomplete | locked
     IReadOnlyList<string> Reasons);
 
-/// <summary>Estado server-driven del wizard, derivado de los gates del dominio.</summary>
+/// <summary>
+/// Estado server-driven del wizard, derivado de los gates del dominio.
+/// <para><c>Status</c> = estado de negocio actual (<see cref="TramiteEstado"/>) y
+/// <c>AllowedTransitions</c> = destinos permitidos por <see cref="TramiteStateMachine"/> (N 03):
+/// la UI solo muestra acciones de transición que la máquina permite — el backend manda. Los
+/// gates de cada transición se validan al ejecutarla (POST /transition), no aquí.</para>
+/// </summary>
 public sealed record WizardStateDto(
     string Modalidad,
     string? TipologiaCodigo,
     int TotalSteps,          // 5 matrícula | 6 traspaso
     IReadOnlyList<WizardStepDto> Steps,
     bool CanSubmit,
-    IReadOnlyList<string> Blockers);
+    IReadOnlyList<string> Blockers,
+    string Status,
+    IReadOnlyList<string> AllowedTransitions);
 
 /// <summary>
 /// Compone el estado del wizard server-driven. Carga el grafo persistido, lo mapea a los
@@ -182,11 +191,10 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             steps.Add(new WizardStepDto(p, StepKey(false, p), StepLabel(pasos, p), status, reasons));
         }
 
-        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado);
-        // Identidad (paso 4) refleja el estado real de la biométrica (slice 6) en su status/reasons,
-        // pero NO se cuenta como bloqueo duro del submit de este slice (paridad con Johan: la
-        // biométrica se valida en el flujo FUR, no veta el radicado de datos). El FUR/firma (paso 5,
-        // slice 7) sigue diferido. Si la identidad ya está aprobada, el paso queda complete sin reason.
+        // N 03 (RF03): canSubmit/blockers reflejan el gate borrador→preparado — identidad del
+        // comprador aprobada/vigente + documentos obligatorios. El FUR/firma (paso 5, slice 7)
+        // sigue diferido. El frontend nunca recalcula gates: solo pinta estos códigos.
+        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, identidadAprobada);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
 
         return new WizardStateDto(
@@ -195,7 +203,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             MatriculaGates.TotalPasos,
             steps,
             canSubmit,
-            blockers);
+            blockers,
+            instance.Status,
+            TramiteStateMachine.TransitionsFrom(instance.Status));
     }
 
     // ---- Traspaso estándar (6 pasos) ----------------------------------------
@@ -292,7 +302,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));
         }
 
-        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado);
+        // N 03 (RF03): mismo gate de preparación que matrícula — la identidad exigida es la del
+        // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
+        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
 
         return new WizardStateDto(
@@ -301,7 +313,9 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             TraspasoGates.TotalPasos,
             steps,
             canSubmit,
-            blockers);
+            blockers,
+            instance.Status,
+            TramiteStateMachine.TransitionsFrom(instance.Status));
     }
 
     // ---- Composición de canSubmit / blockers --------------------------------
@@ -334,23 +348,26 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     /// Blockers globales que vetan el submit. Preflight con error de proveedor (consulta no
     /// verificable) → <c>preflight_provider_error</c>: bloqueo DURO, NO se levanta aceptando el
     /// riesgo (la información es vital). Preflight red subsanable → <c>preflight_red</c> (se levanta
-    /// si el gestor aceptó el riesgo). + gating ESTRICTO de documentos obligatorios: faltan
-    /// obligatorios → <c>documentos_incompletos</c> (sin override). El blocker global es necesario
-    /// porque en traspaso el paso 6 (docs) es diferido y quedaría excluido del cómputo de pasos
-    /// no-diferidos de <see cref="CanSubmit"/>.
+    /// si el gestor aceptó el riesgo). + el gate borrador→preparado de N 03 (RF03): faltan
+    /// obligatorios → <c>documentos_incompletos</c>; identidad del comprador no aprobada/vigente →
+    /// <c>identidad_no_aprobada</c>. El blocker global es necesario porque en traspaso el paso 6
+    /// (docs) es diferido y quedaría excluido del cómputo de pasos no-diferidos de <see cref="CanSubmit"/>.
     /// </summary>
     private static List<string> BlockersFrom(
         PreflightSnapshot? preflight,
         bool documentosCompletos,
-        bool riesgoAceptado)
+        bool riesgoAceptado,
+        bool identidadAprobada)
     {
-        var blockers = new List<string>(3);
+        var blockers = new List<string>(4);
         if (preflight?.ProviderError == true)
             blockers.Add("preflight_provider_error");
         else if (preflight?.Overall == "red" && !riesgoAceptado)
             blockers.Add("preflight_red");
         if (!documentosCompletos)
-            blockers.Add("documentos_incompletos");
+            blockers.Add(TramiteEstadoErrores.DocumentosIncompletos);
+        if (!identidadAprobada)
+            blockers.Add(TramiteEstadoErrores.IdentidadNoAprobada);
         return blockers;
     }
 

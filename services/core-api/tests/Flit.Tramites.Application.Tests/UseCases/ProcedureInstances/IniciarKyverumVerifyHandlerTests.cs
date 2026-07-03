@@ -9,6 +9,7 @@ using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -24,7 +25,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _handler = new IniciarKyverumVerifyHandler(
             _repo, _kyverum, _protector, _events, Substitute.For<IIdentityValidationAuditLog>());
 
-    private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = ProcedureInstanceStatus.Draft) =>
+    private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
             Id = id,

@@ -4,6 +4,7 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -15,10 +16,12 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 {
     private readonly FlitDbContext _context;
+    private readonly ITramiteTransitionPublisher _transitionPublisher;
 
-    public OtClientProcedureRepository(FlitDbContext context)
+    public OtClientProcedureRepository(FlitDbContext context, ITramiteTransitionPublisher transitionPublisher)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -110,8 +113,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            ProcedureInstanceStatus.PendingOt,
-            ProcedureInstanceStatus.ApprovedOt,
+            TramiteEstado.Entregado,
+            TramiteEstado.Aprobado,
             approvedBy,
             reason: null,
             source,
@@ -127,8 +130,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            ProcedureInstanceStatus.PendingOt,
-            ProcedureInstanceStatus.RejectedOt,
+            TramiteEstado.Entregado,
+            TramiteEstado.Rechazado,
             rejectedBy,
             reason,
             source,
@@ -174,6 +177,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
+                // N 03 (ADR-0022): la decisión OT también obedece la máquina de estados única
+                // (entregado→aprobado|rechazado); un estado inesperado no transiciona.
+                if (!TramiteStateMachine.IsValidTransition(entity.Status, targetStatus))
+                {
+                    return null;
+                }
+
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
                     .ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
@@ -181,6 +191,22 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
+                // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
+                // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).
+                await _transitionPublisher.EnqueueAsync(
+                    new TramiteTransitionRecord(
+                        accessible.ClientTenantId,
+                        entity.Id,
+                        expectedStatus,
+                        targetStatus,
+                        reason,
+                        resolvedChangedBy,
+                        now),
+                    cancellationToken).ConfigureAwait(false);
+
+                // El historial se escribe aquí (no vía ITramiteTransitionRecorder) para conservar
+                // el metadata cross-tenant (ot_tenant_id/source) dentro de la transacción RLS del
+                // tenant cliente; la unificación con el recorder queda para la integración N 03.
                 _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
                 {
                     Id = Guid.NewGuid(),

@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -72,7 +73,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return await db.ProcedureInstances
             .Include(i => i.Actors)
             .Where(i => i.TenantId == tenantId
-                && i.Status == Flit.Tramites.Domain.Enums.ProcedureInstanceStatus.Draft
+                && i.Status == TramiteEstado.Borrador
                 && i.DraftFinalizedAt != null
                 && i.DeletedAt == null
                 && i.Actors.Any(a =>
@@ -527,4 +528,55 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task SaveChangesAsync(CancellationToken ct) =>
         db.SaveChangesAsync(ct);
+
+    // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
+    // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
+    // transicionó la instancia entre carga y commit, EF lanza DbUpdateConcurrencyException y
+    // aquí se traduce a false SIN efectos parciales (Application no referencia EF).
+    public async Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct)
+    {
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        var query = db.ProcedureInstanceStatusHistories.AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == id && h.TenantId == tenantId);
+
+        var total = await query.CountAsync(ct);
+
+        // Left join a identity.users vía subconsulta (se traduce a LEFT JOIN LATERAL y funciona
+        // igual con el provider InMemory de los tests). Desempate por Id para orden determinista
+        // cuando dos transiciones comparten changed_at (p. ej. borrador→preparado→entregado del submit).
+        var items = await query
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .Skip(skip)
+            .Take(take)
+            .Select(h => new ProcedureInstanceStatusHistoryEntry(
+                h.Id,
+                h.FromStatus,
+                h.ToStatus,
+                h.ChangedAt,
+                h.ChangedBy,
+                db.Users.Where(u => u.Id == h.ChangedBy).Select(u => u.DisplayName).FirstOrDefault(),
+                h.Reason))
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
 }

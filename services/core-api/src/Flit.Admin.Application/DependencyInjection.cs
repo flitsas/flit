@@ -31,6 +31,8 @@ using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.Improntas.GenerarImpronta;
+using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Flit.Admin.Application.OtProfile;
@@ -107,6 +109,10 @@ public static class DependencyInjection
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 
+        // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
+        // IImprontaRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<ListImprontasHandler>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<CreateDocumentTypeHandler>();
         services.AddScoped<ListDocumentTypesHandler>();
@@ -165,6 +171,11 @@ public static class DependencyInjection
         services.AddScoped<CreateOtDocumentTagHandler>();
         services.AddScoped<DeleteOtDocumentTagHandler>();
         services.AddScoped<ListOtDocumentTagsHandler>();
+
+        // HU #10467 — generación/persistencia/entrega del PDF de impronta (Kyverum RUNT).
+        // IImprontaExternalClient (HU #10465) e IImprontaRepository (HU #10466) se registran en
+        // Flit.Infrastructure (InfrastructureExtensions/AddAdminInfrastructure).
+        services.AddScoped<GenerarImprontaHandler>();
 
         return services;
     }

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   patchFieldValues: vi.fn(),
   runPreflight: vi.fn(),
   getPreflight: vi.fn(),
+  getConsultationConfig: vi.fn(),
   getCommercial: vi.fn(),
   putCommercial: vi.fn(),
   submitInstance: vi.fn(),
@@ -71,6 +72,8 @@ const MATRICULA_WIZARD: WizardState = {
   totalSteps: 5,
   canSubmit: false,
   blockers: ['documentos_incompletos'],
+  status: 'borrador',
+  allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
@@ -86,6 +89,8 @@ const TRASPASO_WIZARD: WizardState = {
   totalSteps: 6,
   canSubmit: false,
   blockers: ['preflight_red'],
+  status: 'borrador',
+  allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -104,6 +109,8 @@ const SUBMITTED_WIZARD: WizardState = {
   totalSteps: 5,
   canSubmit: true,
   blockers: [],
+  status: 'entregado',
+  allowedTransitions: ['aprobado', 'rechazado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -137,10 +144,16 @@ beforeEach(() => {
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
+  // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehicleVin: 'kyverum_runt',
+    vehiclePlate: 'kyverum_runt',
+    conductor: 'kyverum_runt_conductor',
+  });
   mocks.getCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.putCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1' });
-  mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: '2026-06-24T12:00:00Z' });
+  mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: '2026-06-24T12:00:00Z' });
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
@@ -247,7 +260,7 @@ describe('TramiteWizard — solo lectura (Track C)', () => {
     // El estado submitted activa el modo solo lectura.
     mocks.getInstance.mockResolvedValue({
       id: 'inst-sub',
-      status: 'submitted',
+      status: 'entregado',
       fieldValues: [],
     });
   });
@@ -395,6 +408,8 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     totalSteps: 5,
     canSubmit: true,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
       { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -406,7 +421,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
   it('AC1 — el paso de decisión es FUR (5); Identidad ofrece "Continuar", no "Finalizar"', async () => {
     mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     // Reanuda en Identidad (frontera). Ya NO es paso terminal → "Continuar" (no "Finalizar").
@@ -419,7 +434,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
   it('AC1 — "Finalizar" en el paso FUR llama finalize-draft (no submit), avisa y vuelve al listado', async () => {
     mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
     const onExit = vi.fn();
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
@@ -447,7 +462,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     // draftFinalizedAt presente ⇒ modo borrador finalizado (readOnly parcial).
     mocks.getInstance.mockResolvedValue({
       id: 'inst-1',
-      status: 'draft',
+      status: 'borrador',
       draftFinalizedAt: '2026-06-20T10:00:00Z',
       fieldValues: [],
       actors: [],
@@ -528,6 +543,12 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
 
   it('traspaso persiste placa + documento del propietario antes de preflight', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    // Proveedor de placa = Verifik: SÍ pide y envía el tipo de documento del propietario (HU #10478).
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
@@ -635,6 +656,8 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     totalSteps: 6,
     canSubmit: false,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
       { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -769,6 +792,8 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     totalSteps: 6,
     canSubmit: false,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
       {
@@ -860,5 +885,75 @@ describe('TramiteWizard — paso comercial', () => {
     const [instanceId, data] = mocks.putCommercial.mock.calls[0];
     expect(instanceId).toBe('inst-1');
     expect(data).toMatchObject({ valorVenta: 50_000_000, causal: 'COMPRAVENTA' });
+  });
+});
+
+// HU #10478 — el paso de consulta de traspaso adapta el formulario al proveedor del tenant: con
+// Kyverum RUNT no pide el tipo de documento del propietario (el RUNT lo resuelve); con Verifik sí.
+describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
+  beforeEach(() => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'borrador', fieldValues: [] });
+  });
+
+  async function abrirPasoConsulta() {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(consultaTab);
+    // Espera a que el form de placa (traspaso) se pinte.
+    await screen.findByLabelText('Placa');
+  }
+
+  it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
+    await abrirPasoConsulta();
+
+    expect(screen.getByLabelText('Placa')).toBeInTheDocument();
+    expect(screen.getByLabelText('Número documento propietario')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('con Verifik SÍ pide el tipo de documento del propietario', async () => {
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
+
+    await abrirPasoConsulta();
+
+    expect(
+      await screen.findByLabelText('Tipo documento propietario'),
+    ).toBeInTheDocument();
+  });
+
+  // Regresión: aunque el tipo esté OCULTO (Kyverum), el payload SIGUE enviando owner_document_type
+  // (default 'CC') — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown)
+  // y enmascaraba el fallo como pre-vuelo verde.
+  it('con Kyverum el payload igual incluye owner_document_type (para el fallback a Verifik)', async () => {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
+    // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
+    await user.click(await screen.findByRole('button', { name: /^Paso 1: Consulta/ }));
+    await screen.findByLabelText('Placa');
+
+    await user.type(screen.getByLabelText(/^Placa$/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'CC', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
   });
 });

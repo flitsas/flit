@@ -43,7 +43,7 @@ const procedure: OtClientProcedure = {
   procedureTypeId: "matricula_inicial-type-id",
   procedureTypeName: "Matrícula inicial",
   referenceNumber: "RAD-2026-001",
-  status: "pending_ot",
+  status: "entregado",
   createdAt: "2026-06-23T09:00:00Z",
 };
 
@@ -72,11 +72,11 @@ describe("ClientProceduresSection — HU #10220", () => {
     });
     vi.mocked(approveOtClientProcedure).mockResolvedValue({
       ...procedure,
-      status: "approved_ot",
+      status: "aprobado",
     });
     vi.mocked(rejectOtClientProcedure).mockResolvedValue({
       ...procedure,
-      status: "rejected_ot",
+      status: "rechazado",
     });
   });
 
@@ -115,12 +115,12 @@ describe("ClientProceduresSection — HU #10220", () => {
     );
   });
 
-  it("AC4 aplica filtro por estado pending_ot", async () => {
+  it("AC4 aplica filtro por estado entregado (pendiente OT, N 03)", async () => {
     const user = userEvent.setup();
     renderSection();
     await waitFor(() =>
       expect(fetchOtClientProcedures).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "pending_ot", pageSize: 20 }),
+        expect.objectContaining({ status: "entregado", pageSize: 20 }),
         expect.anything(),
       ),
     );
@@ -129,7 +129,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     await waitFor(() =>
       expect(fetchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: "pending_ot",
+          status: "entregado",
           procedureTypeId: "matricula_inicial-type-id",
         }),
         expect.anything(),

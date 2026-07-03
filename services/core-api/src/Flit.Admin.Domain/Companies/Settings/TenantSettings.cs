@@ -31,6 +31,20 @@ public sealed class TenantSettings
     public required IReadOnlyList<string> PaymentMethods { get; init; }
 
     /// <summary>
+    /// Presupuesto (ms) del proveedor primario de consulta antes de caer al fallback
+    /// (<c>runt_failover_timeout_ms</c>, HU #10478). No <c>required</c>: default 60000 (DDL). El RUNT
+    /// en frío (vía Kyverum/Verifik) puede tardar decenas de segundos, así que el presupuesto es amplio
+    /// para no caer al fallback prematuramente.
+    /// </summary>
+    public int RuntFailoverTimeoutMs { get; init; } = 60_000;
+
+    /// <summary>
+    /// Override por tenant de la cadena de proveedores de consulta RUNT
+    /// (<c>consultation_provider_config</c>, jsonb, HU #10478). Vacío = usar defaults globales.
+    /// </summary>
+    public ConsultationProviderConfig ConsultationProviderConfig { get; init; } = ConsultationProviderConfig.Empty;
+
+    /// <summary>
     /// Configuración por defecto cuando aún no existe fila para el tenant. La matrícula
     /// inicial nace APAGADA (default false): la compañía debe habilitarla explícitamente.
     /// </summary>
@@ -44,5 +58,7 @@ public sealed class TenantSettings
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
+        RuntFailoverTimeoutMs = 60_000,
+        ConsultationProviderConfig = ConsultationProviderConfig.Empty,
     };
 }

@@ -2,8 +2,9 @@
 // botón "Ayuda" (soporte universal) debe verse aunque RBAC filtre los demás módulos.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Shell } from "../Shell";
+import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { Shell } from "../Shell";
 
 // Shell usa usePathname para resaltar la ruta admin activa.
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
@@ -61,5 +62,22 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "RBAC Admin" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Shell — dock SuperAdmin (HU #10469)", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  });
+
+  it("muestra la entrada 'Improntas' cuando el usuario en sesión es SuperAdmin", () => {
+    setDevSuperAdminToken();
+    renderShell();
+    expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
+  });
+
+  it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {
+    renderShell();
+    expect(screen.queryByRole("button", { name: "Improntas" })).not.toBeInTheDocument();
   });
 });

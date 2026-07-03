@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -72,7 +73,7 @@ public sealed class BiometricaHandlerTests
     }
 
     private static ProcedureInstance Instance(
-        Guid id, Guid tenantId, string status = ProcedureInstanceStatus.Draft) =>
+        Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
             Id = id,

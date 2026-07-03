@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
@@ -16,7 +17,19 @@ public sealed class RuntPersonLookupHandlerTests
 
     public RuntPersonLookupHandlerTests()
     {
-        _sut = new RuntPersonLookupHandler(_repo, _registry);
+        // Chain resolver con defaults embebidos (conductor → [kyverum_runt_conductor, verifik_conductor])
+        // sobre el registry mockeado; sin override de tenant. kyverum_runt_conductor NO está registrado
+        // (Resolve → null explícito, si no NSubstitute auto-mockea un provider fantasma) → la cadena cae
+        // a verifik_conductor, que es lo que estos tests stubbean.
+        _registry.Resolve("kyverum_runt_conductor").Returns((IConsultationProvider?)null);
+        var resolver = new ConsultationProviderChainResolver(_registry, new ConsultationChainOptions());
+        _sut = new RuntPersonLookupHandler(_repo, resolver, new NullOverrideProvider());
+    }
+
+    private sealed class NullOverrideProvider : IConsultationTenantOverrideProvider
+    {
+        public Task<ConsultationTenantOverride?> GetAsync(Guid tenantId, CancellationToken ct) =>
+            Task.FromResult<ConsultationTenantOverride?>(null);
     }
 
     private sealed class FakeProvider(ConsultationResult result) : IConsultationProvider
@@ -38,7 +51,7 @@ public sealed class RuntPersonLookupHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -86,8 +99,11 @@ public sealed class RuntPersonLookupHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ProviderNotFound_WhenRegistryReturnsNull()
+    public async Task HandleAsync_NingunProviderDeLaCadenaRegistrado_DevuelveFoundFalseGraceful()
     {
+        // HU #10478: si ningún provider de la cadena (kyverum_runt_conductor, verifik_conductor) está
+        // registrado, el chain resolver degrada a un resultado con check error → el lookup no explota,
+        // devuelve Found=false (el frontend cae al ingreso manual).
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
@@ -96,8 +112,9 @@ public sealed class RuntPersonLookupHandlerTests
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
 
-        error.Should().Be("provider_not_found");
-        result.Should().BeNull();
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Found.Should().BeFalse();
     }
 
     [Fact]

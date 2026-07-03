@@ -179,9 +179,9 @@ export function TramiteWizard(props: Props) {
   //  • Borrador finalizado (`draft` + draftFinalizedAt): datos en solo lectura, pero el paso de
   //    Identidad sigue operable (el cliente valida async). Banner informativo; Radicar solo cuando
   //    el wizard reporte canSubmit + identidad aprobada.
-  //  • Solo visualización (Track C): el trámite ya salió de `draft` (enviado a tránsito, etc.).
-  const fullReadOnly = !!instanceStatus && instanceStatus !== 'draft';
-  const draftFinalized = instanceStatus === 'draft' && !!draftFinalizedAt;
+  //  • Solo visualización (Track C): el trámite ya salió de `borrador` (entregado, aprobado, etc.).
+  const fullReadOnly = !!instanceStatus && instanceStatus !== 'borrador';
+  const draftFinalized = instanceStatus === 'borrador' && !!draftFinalizedAt;
   // Captura de datos deshabilitada en ambos modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
   // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
@@ -935,6 +935,11 @@ function ConsultaStep({
   // field_values frescos de la instancia: rehidratan inputs y alimentan la
   // tarjeta "Datos del vehículo · RUNT" tras la consulta.
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  // HU #10478 — proveedor de consulta por placa resuelto para el tenant. Con Kyverum RUNT NO se pide
+  // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
+  // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
+  const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
+  const hideOwnerDocType = !isVin && platePrimaryProvider === 'kyverum_runt';
 
   // Carga (o recarga) la instancia y rehidrata inputs + field_values.
   const loadInstance = async () => {
@@ -962,6 +967,16 @@ function ConsultaStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
+  // HU #10478 — resuelve el proveedor de consulta por placa del tenant (solo traspaso) para decidir si
+  // se pide el tipo de documento del propietario. Silencioso ante fallo: deja el campo visible.
+  useEffect(() => {
+    if (isVin) return;
+    void tramitesClient
+      .getConsultationConfig()
+      .then((cfg) => setPlatePrimaryProvider(cfg.vehiclePlate))
+      .catch(() => {});
+  }, [isVin]);
+
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
       const value = vin.trim();
@@ -971,6 +986,12 @@ function ConsultaStep({
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
     if (!plateValue || !docNumber) return null;
+    // owner_document_type SIEMPRE viaja en el payload aunque el campo esté oculto (Kyverum): Kyverum
+    // lo ignora (resuelve el tipo por la placa), pero el FALLBACK a Verifik SÍ lo exige para consultar
+    // por placa (HU #10478). Por defecto 'CC'; tras un primer éxito de Kyverum, el preflight lo hidrata
+    // al tipo real (tipoDocPropietario), así el fallback posterior queda correcto. Ocultarlo de la UI
+    // no debe vaciar el dato o el fallback devolvería "requiere documento" (unknown) y enmascararía el
+    // fallo como pre-vuelo verde.
     return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
       {
@@ -1137,33 +1158,35 @@ function ConsultaStep({
                 placeholder="Ej. ABC123"
               />
             </div>
-            <div>
-              <label
-                htmlFor="consulta-owner-doc-type"
-                className="mb-1.5 block text-xs font-semibold"
-              >
-                Tipo documento propietario
-              </label>
-              <select
-                id="consulta-owner-doc-type"
-                value={ownerDocType}
-                onChange={(e) => {
-                  const next = e.target.value as ActorDocumentType;
-                  setOwnerDocType(next);
-                  // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
-                  setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
-                }}
-                disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
-              >
-                {DOC_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!hideOwnerDocType && (
+              <div>
+                <label
+                  htmlFor="consulta-owner-doc-type"
+                  className="mb-1.5 block text-xs font-semibold"
+                >
+                  Tipo documento propietario
+                </label>
+                <select
+                  id="consulta-owner-doc-type"
+                  value={ownerDocType}
+                  onChange={(e) => {
+                    const next = e.target.value as ActorDocumentType;
+                    setOwnerDocType(next);
+                    // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
+                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                  }}
+                  disabled={readOnly}
+                  className={`${inputClass} disabled:opacity-60`}
+                  style={{ borderColor: '#DFE5ED' }}
+                >
+                  {DOC_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label
                 htmlFor="consulta-owner-doc-number"

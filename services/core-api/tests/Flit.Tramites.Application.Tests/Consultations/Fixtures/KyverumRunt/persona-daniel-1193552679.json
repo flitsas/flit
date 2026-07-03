@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "persona": {
+    "nombres": "DANIEL ",
+    "apellidos": "AMADO GARCIA",
+    "tipoDocumento": "C",
+    "documento": "1193552679",
+    "estadoPersona": "ACTIVA",
+    "estadoConductor": "ACTIVO",
+    "tieneLicencias": true
+  },
+  "licencias": [
+    {
+      "numeroLicencia": "1193552679",
+      "estadoLicencia": "ACTIVA",
+      "detalleLicencia": [
+        {
+          "categoria": "A2",
+          "fechaVencimiento": "2032-07-23T00:00:00.000-05:00"
+        },
+        {
+          "categoria": "C1",
+          "fechaVencimiento": "2025-07-23T00:00:00.000-05:00"
+        },
+        {
+          "categoria": "B1",
+          "fechaVencimiento": "2032-07-23T00:00:00.000-05:00"
+        }
+      ]
+    }
+  ],
+  "multas": {
+    "tieneMultas": "SI",
+    "nroPazYSalvo": null
+  },
+  "solicitudes": [],
+  "certificadosAptitud": [],
+  "certificadosMedicos": [],
+  "fromCache": false
+}

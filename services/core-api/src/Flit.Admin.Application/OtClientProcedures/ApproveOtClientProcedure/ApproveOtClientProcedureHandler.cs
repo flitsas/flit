@@ -3,10 +3,11 @@ using Flit.Admin.Domain.OtProfile;
 
 namespace Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 
-/// <summary>Aprueba un trámite pending_ot de un cliente OT (HU #10217 AC2).</summary>
+/// <summary>Aprueba un trámite entregado de un cliente OT (HU #10217 AC2 · N 03: entregado→aprobado).</summary>
 public sealed class ApproveOtClientProcedureHandler
 {
-    private const string PendingOt = "pending_ot";
+    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
+    private const string EstadoEntregado = "entregado";
 
     private readonly IOtClientProcedureRepository _repository;
     private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
@@ -43,7 +44,7 @@ public sealed class ApproveOtClientProcedureHandler
             return ApproveOtClientProcedureResult.NotFound();
         }
 
-        if (!string.Equals(existing.Status, PendingOt, StringComparison.Ordinal))
+        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal))
         {
             return ApproveOtClientProcedureResult.InvalidState();
         }

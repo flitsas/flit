@@ -26,6 +26,7 @@ import {
   Lock,
   Briefcase,
   Landmark,
+  Fingerprint,
 } from "lucide-react";
 
 export type ModuleId =
@@ -171,6 +172,13 @@ export function Shell({
         icon: FolderCog,
         active: pathname.startsWith("/admin/documents"),
         onClick: () => window.location.assign("/admin/documents"),
+      },
+      {
+        key: "admin-improntas",
+        label: "Improntas",
+        icon: Fingerprint,
+        active: pathname.startsWith("/admin/improntas"),
+        onClick: () => window.location.assign("/admin/improntas"),
       },
       {
         key: "rbac",

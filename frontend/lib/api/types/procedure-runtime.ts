@@ -7,12 +7,15 @@ import type {
   ProcedureStep,
 } from './procedure-parametrization';
 
+// N 03 (ADR-0022) — estados de NEGOCIO del trámite, vocabulario único de la API.
+// Fuente de verdad de labels/estilos: lib/tramites/estados.ts.
 export type InstanceStatus =
-  | 'draft'
-  | 'submitted'
-  | 'in_review'
-  | 'completed'
-  | 'rejected';
+  | 'borrador'
+  | 'anulado'
+  | 'preparado'
+  | 'entregado'
+  | 'aprobado'
+  | 'rechazado';
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
@@ -163,6 +166,15 @@ export interface FieldValueInput {
 export type ActorRol = 'comprador' | 'vendedor';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
+
+// HU #10478 — proveedor primario de consulta resuelto para el tenant, por tipo. El wizard lo usa para
+// adaptar la UI (p. ej. en traspaso ocultar el tipo de documento del propietario cuando el proveedor de
+// placa es Kyverum RUNT, que lo resuelve solo y lo devuelve en la respuesta).
+export interface ConsultationProvidersConfig {
+  vehicleVin: string;
+  vehiclePlate: string;
+  conductor: string;
+}
 
 export interface ProcedureActor {
   rol: ActorRol;
@@ -370,6 +382,10 @@ export interface WizardState {
   canSubmit: boolean;
   /** Códigos de bloqueo de envío (mapeados a copy en la UI). */
   blockers: string[];
+  /** N 03 — estado de negocio actual del trámite (borrador|anulado|preparado|entregado|aprobado|rechazado). */
+  status: InstanceStatus | string;
+  /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
+  allowedTransitions: string[];
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -875,4 +891,25 @@ export interface PortalFirmaUrl {
 /** Resultado de finalizar la participación. */
 export interface FinalizarPortalResult {
   completedAt: string;
+}
+
+// ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────
+
+/** Fila del historial de transiciones (GET /instances/{id}/status-history). */
+export interface StatusHistoryItem {
+  id: string;
+  fromStatus: string | null;
+  toStatus: string;
+  changedAt: string;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  reason: string | null;
+}
+
+/** Página del historial: más reciente primero. */
+export interface StatusHistoryPage {
+  items: StatusHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

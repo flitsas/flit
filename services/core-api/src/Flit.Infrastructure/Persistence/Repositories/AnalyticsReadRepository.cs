@@ -1,4 +1,4 @@
-using System.Data.Common;
+﻿using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
 using Microsoft.EntityFrameworkCore;
@@ -65,40 +65,40 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 
     // ── Top Producers ────────────────────────────────────────────────────────────────────────────────
     // Fuente: procedure_instance_status_history — misma semántica que refresh_procedure_aggregates:
-    //   submitted = transición a 'submitted', approved = a 'approved_ot'/'completed',
-    //   rejected  = a 'rejected_ot'/'cancelled'.
+    //   submitted = transición a 'entregado', approved = a 'aprobado',
+    //   rejected  = a 'rechazado'/'anulado' (vocabulario N 03, ADR-0022).
 
-    // En vivo desde status_history (misma semántica que el extinto refresh: submitted; approved =
-    // approved_ot|completed; rejected = rejected_ot|cancelled). El HAVING preserva el contrato previo
+    // En vivo desde status_history (misma semántica que el extinto refresh, vocabulario N 03: submitted =
+    // entregado; approved = aprobado; rejected = rechazado|anulado). El HAVING preserva el contrato previo
     // (solo usuarios con al menos una radicación en el rango). Requiere changed_by poblado (HU #10431).
     private const string TopProducersSql = """
         SELECT h.changed_by AS user_id, u.display_name,
-               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
-               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
-               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+               count(*) FILTER (WHERE h.to_status = 'entregado')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status = 'aprobado')::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rechazado', 'anulado'))::int     AS rejected
         FROM tramites.procedure_instance_status_history h
         JOIN identity.users u ON u.id = h.changed_by
         WHERE h.tenant_id = @tenant
           AND h.changed_by IS NOT NULL
           AND h.changed_at::date BETWEEN @from AND @to
         GROUP BY h.changed_by, u.display_name
-        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
-        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
+        HAVING count(*) FILTER (WHERE h.to_status = 'entregado') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'entregado') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 
     private const string TopProducersGlobalSql = """
         SELECT h.changed_by AS user_id, u.display_name,
-               count(*) FILTER (WHERE h.to_status = 'submitted')::int                      AS submitted,
-               count(*) FILTER (WHERE h.to_status IN ('approved_ot', 'completed'))::int     AS approved,
-               count(*) FILTER (WHERE h.to_status IN ('rejected_ot', 'cancelled'))::int     AS rejected
+               count(*) FILTER (WHERE h.to_status = 'entregado')::int                      AS submitted,
+               count(*) FILTER (WHERE h.to_status = 'aprobado')::int     AS approved,
+               count(*) FILTER (WHERE h.to_status IN ('rechazado', 'anulado'))::int     AS rejected
         FROM tramites.procedure_instance_status_history h
         JOIN identity.users u ON u.id = h.changed_by
         WHERE h.changed_by IS NOT NULL
           AND h.changed_at::date BETWEEN @from AND @to
         GROUP BY h.changed_by, u.display_name
-        HAVING count(*) FILTER (WHERE h.to_status = 'submitted') > 0
-        ORDER BY count(*) FILTER (WHERE h.to_status = 'submitted') DESC, u.display_name ASC
+        HAVING count(*) FILTER (WHERE h.to_status = 'entregado') > 0
+        ORDER BY count(*) FILTER (WHERE h.to_status = 'entregado') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 

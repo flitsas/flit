@@ -10,4 +10,7 @@ public sealed record UpdateTenantSettingsRequest(
     bool BaulFirmasActivo,
     string? EnrutamientoSMTP,
     string? NotificationTarget,
-    IReadOnlyList<string>? MetodosRecaudo);
+    IReadOnlyList<string>? MetodosRecaudo,
+    // HU #10478 — opcionales: si llegan null se conserva el valor previo (update parcial).
+    int? RuntFailoverTimeoutMs = null,
+    IReadOnlyDictionary<string, ConsultationProviderChoice>? ConsultationProviderConfig = null);

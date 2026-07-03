@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -67,7 +68,7 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Submitted);
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
         _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
 
@@ -92,7 +93,7 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
 
         var request = new PatchFieldValuesRequest(
@@ -114,7 +115,7 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
         var resolvedFieldId = Guid.NewGuid();
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
         _repo.GetFormFieldIdByKeyAsync(instance.ProcedureTypeId, "plate", ct).Returns(resolvedFieldId);
@@ -138,7 +139,7 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
         _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
 
@@ -165,7 +166,7 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, ProcedureInstanceStatus.Draft);
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
         var existing = new ProcedureInstanceFieldValue
         {
             Id = Guid.NewGuid(),

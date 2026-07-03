@@ -11,14 +11,30 @@ export interface DownloadOptions {
   signal?: AbortSignal;
   /** Nombre usado si la respuesta no trae `Content-Disposition`. */
   fallbackFilename: string;
+  /**
+   * Nombres de headers de respuesta a capturar y devolver (HU #10471). Útil para
+   * endpoints de descarga binaria que además exponen metadata en headers custom
+   * (p. ej. `X-Impronta-Radicado`/`X-Impronta-Hash`), ya que el body de la respuesta
+   * es el binario y no puede llevar JSON. Si se omite, la función devuelve `void`
+   * como antes (comportamiento sin cambios para `exportAnalyticsExcel`/`exportExecutivePdf`).
+   */
+  captureHeaders?: readonly string[];
 }
 
 /**
  * Descarga un archivo de la API. Lanza `ApiError` con el status del backend ante
  * 4xx/5xx (AC3) para que el caller muestre el error sin bloquear la pantalla.
  */
-export async function downloadFile(path: string, options: DownloadOptions): Promise<void> {
-  const { method = "GET", query, body, signal, fallbackFilename } = options;
+export async function downloadFile(
+  path: string,
+  options: DownloadOptions & { captureHeaders: readonly string[] },
+): Promise<Record<string, string | null>>;
+export async function downloadFile(path: string, options: DownloadOptions): Promise<void>;
+export async function downloadFile(
+  path: string,
+  options: DownloadOptions,
+): Promise<void | Record<string, string | null>> {
+  const { method = "GET", query, body, signal, fallbackFilename, captureHeaders } = options;
   const base = API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(path, base);
 
@@ -56,6 +72,14 @@ export async function downloadFile(path: string, options: DownloadOptions): Prom
   const blob = await response.blob();
   const filename = parseFilename(response.headers.get("Content-Disposition")) ?? fallbackFilename;
   triggerBrowserDownload(blob, filename);
+
+  if (captureHeaders) {
+    const captured: Record<string, string | null> = {};
+    for (const name of captureHeaders) {
+      captured[name] = response.headers.get(name);
+    }
+    return captured;
+  }
 }
 
 /** Extrae el nombre de archivo de un header `Content-Disposition`, si existe. */
