@@ -167,6 +167,15 @@ export type ActorRol = 'comprador' | 'vendedor';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
+// HU #10478 — proveedor primario de consulta resuelto para el tenant, por tipo. El wizard lo usa para
+// adaptar la UI (p. ej. en traspaso ocultar el tipo de documento del propietario cuando el proveedor de
+// placa es Kyverum RUNT, que lo resuelve solo y lo devuelve en la respuesta).
+export interface ConsultationProvidersConfig {
+  vehicleVin: string;
+  vehiclePlate: string;
+  conductor: string;
+}
+
 export interface ProcedureActor {
   rol: ActorRol;
   tipoDocumento: ActorDocumentType;

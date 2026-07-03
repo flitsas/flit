@@ -10,6 +10,7 @@ import type {
   ChecklistView,
   CommercialData,
   CompletarBiometriaResult,
+  ConsultationProvidersConfig,
   ConsultationResult,
   CreateInstanceRequest,
   DocumentOcrResult,
@@ -388,6 +389,15 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(input),
       },
+    ),
+
+  // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
+  // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
+  // placa es Kyverum RUNT, que lo resuelve solo).
+  getConsultationConfig: (tenantId?: string) =>
+    request<ConsultationProvidersConfig>(
+      `/api/v1/tramites/consultation-config`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea

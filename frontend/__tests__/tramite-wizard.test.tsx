@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   patchFieldValues: vi.fn(),
   runPreflight: vi.fn(),
   getPreflight: vi.fn(),
+  getConsultationConfig: vi.fn(),
   getCommercial: vi.fn(),
   putCommercial: vi.fn(),
   submitInstance: vi.fn(),
@@ -143,6 +144,12 @@ beforeEach(() => {
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
+  // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehicleVin: 'kyverum_runt',
+    vehiclePlate: 'kyverum_runt',
+    conductor: 'kyverum_runt_conductor',
+  });
   mocks.getCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.putCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1' });
@@ -536,6 +543,12 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
 
   it('traspaso persiste placa + documento del propietario antes de preflight', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    // Proveedor de placa = Verifik: SÍ pide y envía el tipo de documento del propietario (HU #10478).
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
@@ -872,5 +885,47 @@ describe('TramiteWizard — paso comercial', () => {
     const [instanceId, data] = mocks.putCommercial.mock.calls[0];
     expect(instanceId).toBe('inst-1');
     expect(data).toMatchObject({ valorVenta: 50_000_000, causal: 'COMPRAVENTA' });
+  });
+});
+
+// HU #10478 — el paso de consulta de traspaso adapta el formulario al proveedor del tenant: con
+// Kyverum RUNT no pide el tipo de documento del propietario (el RUNT lo resuelve); con Verifik sí.
+describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
+  beforeEach(() => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'draft', fieldValues: [] });
+  });
+
+  async function abrirPasoConsulta() {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(consultaTab);
+    // Espera a que el form de placa (traspaso) se pinte.
+    await screen.findByLabelText('Placa');
+  }
+
+  it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
+    await abrirPasoConsulta();
+
+    expect(screen.getByLabelText('Placa')).toBeInTheDocument();
+    expect(screen.getByLabelText('Número documento propietario')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('con Verifik SÍ pide el tipo de documento del propietario', async () => {
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
+
+    await abrirPasoConsulta();
+
+    expect(
+      await screen.findByLabelText('Tipo documento propietario'),
+    ).toBeInTheDocument();
   });
 });
