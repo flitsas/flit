@@ -31,9 +31,9 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (nextPage: number) => {
-    setLoading(true);
-    setError(null);
+  // Sin setState síncrono: el primer setState ocurre tras el await, así el effect que dispara
+  // la carga inicial no provoca renders en cascada (regla react-hooks/set-state-in-effect).
+  const fetchPage = useCallback(async (nextPage: number) => {
     try {
       const res = await tramitesClient.getStatusHistory(instanceId, nextPage, PAGE_SIZE);
       setItems((prev) =>
@@ -41,6 +41,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
       );
       setTotal(res?.total ?? 0);
       setPage(nextPage);
+      setError(null);
     } catch {
       setError('No se pudo cargar el historial de estados.');
     } finally {
@@ -49,8 +50,16 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
   }, [instanceId]);
 
   useEffect(() => {
-    void load(1);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchPage(1);
+  }, [fetchPage]);
+
+  // El "Ver más" sí resetea loading de forma síncrona: es un handler de click, no un effect.
+  const loadMore = () => {
+    setLoading(true);
+    setError(null);
+    void fetchPage(page + 1);
+  };
 
   if (loading && items.length === 0) {
     return (
@@ -140,7 +149,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
       {items.length < total ? (
         <button
           type="button"
-          onClick={() => void load(page + 1)}
+          onClick={loadMore}
           disabled={loading}
           style={{
             marginTop: 12,
