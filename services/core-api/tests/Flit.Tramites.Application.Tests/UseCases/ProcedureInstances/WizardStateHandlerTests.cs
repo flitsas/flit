@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -26,7 +27,7 @@ public sealed class WizardStateHandlerTests
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -74,6 +75,29 @@ public sealed class WizardStateHandlerTests
     {
         instance.ChecklistEstado =
             "{\"contrato_compraventa\":true,\"impronta\":true,\"soat\":true,\"rtm\":true,\"paz_salvo\":true,\"cedulas\":true}";
+    }
+
+    /// <summary>
+    /// Identidad del comprador aprobada y vigente (N 03, RF03): el gate borrador→preparado y el
+    /// blocker <c>identidad_no_aprobada</c> del wizard exigen biométrica del documento del actor.
+    /// </summary>
+    private static void AprobarIdentidadComprador(ProcedureInstance instance, string doc = "123")
+    {
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado,
+            Name = "Persona",
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            Email = "p@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
     }
 
     private void Setup(ProcedureInstance instance) =>
@@ -302,6 +326,7 @@ public sealed class WizardStateHandlerTests
         instance.PreflightSnapshots.Add(Preflight("red"));
         instance.Actors.Add(Actor("comprador", "777"));
         CompletarDocsMatricula(instance);
+        AprobarIdentidadComprador(instance, "777"); // N 03: la identidad también gatea el submit
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
@@ -309,7 +334,7 @@ public sealed class WizardStateHandlerTests
         result!.Blockers.Should().NotContain("preflight_red");
         // Paso 2 completo: preflight rojo ya no bloquea y los docs obligatorios están.
         result.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
-        // Pasos 1-3 completos; 4-5 diferidos → submit habilitado.
+        // Pasos 1-3 completos; identidad aprobada; FUR diferido → submit habilitado.
         result.CanSubmit.Should().BeTrue();
     }
 
@@ -346,11 +371,12 @@ public sealed class WizardStateHandlerTests
         instance.PreflightSnapshots.Add(Preflight("green"));
         instance.Actors.Add(Actor("comprador", "777"));
         CompletarDocsMatricula(instance);
+        AprobarIdentidadComprador(instance, "777"); // N 03: la identidad también gatea el submit
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Pasos 1-3 completos (vin, documentos completos, comprador+runt); 4-5 diferidos → no cuentan.
+        // Pasos 1-3 completos (vin, documentos completos, comprador+runt); FUR diferido → no cuenta.
         result!.Steps.Single(s => s.Index == 1).Status.Should().Be("complete");
         result.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
         result.Steps.Single(s => s.Index == 3).Status.Should().Be("complete");

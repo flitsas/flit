@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -243,7 +244,7 @@ public sealed class EnsureIdentityHandlerTests
         Id = Guid.NewGuid(),
         TenantId = TenantId,
         ReferenceNumber = "TRM-2026-000100",
-        Status = ProcedureInstanceStatus.Draft,
+        Status = TramiteEstado.Borrador,
         ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
         CreatedAt = DateTimeOffset.UtcNow,
         Actors =

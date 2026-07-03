@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -33,7 +34,7 @@ public sealed class FirmaHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,

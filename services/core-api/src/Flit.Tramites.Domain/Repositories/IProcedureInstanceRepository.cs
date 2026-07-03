@@ -194,4 +194,35 @@ public interface IProcedureInstanceRepository
     Task<bool> UserExistsAsync(Guid userId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Persiste la unidad de trabajo protegiendo la concurrencia optimista de
+    /// <c>procedure_instances.row_version</c> (RNF01, N 03): si otro proceso transicionó la
+    /// instancia entre la carga y el commit, devuelve <c>false</c> SIN efectos parciales
+    /// (la capa Application no referencia EF, por eso el mapeo de
+    /// <c>DbUpdateConcurrencyException</c> vive en el repositorio). <c>true</c> = commit OK.
+    /// </summary>
+    Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Página del historial de transiciones de estado de la instancia (HU-2 N03, RF05), ordenada
+    /// por <c>changed_at</c> DESC, con el nombre del usuario resuelto contra <c>identity.users</c>
+    /// (null si el usuario no existe). Devuelve <c>null</c> si la instancia no existe o no
+    /// pertenece al tenant (→ 404); si existe pero no tiene historial, página vacía con Total 0.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre
+/// del usuario que ejecutó la transición ya resuelto (HU-2 N03).
+/// </summary>
+public sealed record ProcedureInstanceStatusHistoryEntry(
+    Guid Id,
+    string? FromStatus,
+    string ToStatus,
+    DateTimeOffset ChangedAt,
+    Guid? ChangedByUserId,
+    string? ChangedByName,
+    string? Reason);

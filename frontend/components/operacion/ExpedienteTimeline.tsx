@@ -1,31 +1,17 @@
 'use client';
 
-import type { InstanceStatus, StatusHistory } from '@/lib/api/types/procedure-runtime';
+import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 
 // Línea de tiempo del expediente. Adaptado del ExpedienteTimeline de Johan a la
 // capa de datos de FLIT: la cronología se construye desde el statusHistory[] que
 // ya devuelve getInstance (sin endpoint de eventos, QR ni PDF — fuera de alcance
-// hasta que exista el backend correspondiente).
+// hasta que exista el backend correspondiente). N 03 — labels/colores desde la
+// fuente única lib/tramites/estados.ts (6 estados de negocio).
 
 interface Props {
   statusHistory: StatusHistory[];
 }
-
-const ESTADO_LABEL: Record<InstanceStatus, string> = {
-  draft: 'Borrador creado',
-  submitted: 'Enviado a tránsito',
-  in_review: 'En revisión',
-  completed: 'Completada',
-  rejected: 'Devuelto con observación',
-};
-
-const ESTADO_COLOR: Record<InstanceStatus, string> = {
-  draft: '#557EFF',
-  submitted: '#00DBD5',
-  in_review: '#F9AC00',
-  completed: '#5B8A1F',
-  rejected: '#FF4E00',
-};
 
 function fmt(iso: string): string {
   try {
@@ -51,10 +37,10 @@ export default function ExpedienteTimeline({ statusHistory }: Props) {
             <li key={`${e.toStatus}-${e.changedAt}-${i}`} className="relative">
               <span
                 className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full"
-                style={{ background: ESTADO_COLOR[e.toStatus] ?? '#9AA5B1' }}
+                style={{ background: estadoChipStyle(e.toStatus).color }}
                 aria-hidden="true"
               />
-              <p className="text-xs font-semibold">{ESTADO_LABEL[e.toStatus] ?? e.toStatus}</p>
+              <p className="text-xs font-semibold">{estadoLabel(e.toStatus)}</p>
               <p className="text-[11px] opacity-60">{fmt(e.changedAt)}</p>
               {e.reason && <p className="mt-0.5 text-[11px] opacity-70">{e.reason}</p>}
             </li>

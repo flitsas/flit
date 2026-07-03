@@ -108,6 +108,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
 
+    // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
+    public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
+
     // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
     public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();
 

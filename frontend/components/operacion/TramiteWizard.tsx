@@ -179,9 +179,9 @@ export function TramiteWizard(props: Props) {
   //  • Borrador finalizado (`draft` + draftFinalizedAt): datos en solo lectura, pero el paso de
   //    Identidad sigue operable (el cliente valida async). Banner informativo; Radicar solo cuando
   //    el wizard reporte canSubmit + identidad aprobada.
-  //  • Solo visualización (Track C): el trámite ya salió de `draft` (enviado a tránsito, etc.).
-  const fullReadOnly = !!instanceStatus && instanceStatus !== 'draft';
-  const draftFinalized = instanceStatus === 'draft' && !!draftFinalizedAt;
+  //  • Solo visualización (Track C): el trámite ya salió de `borrador` (entregado, aprobado, etc.).
+  const fullReadOnly = !!instanceStatus && instanceStatus !== 'borrador';
+  const draftFinalized = instanceStatus === 'borrador' && !!draftFinalizedAt;
   // Captura de datos deshabilitada en ambos modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
   // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado

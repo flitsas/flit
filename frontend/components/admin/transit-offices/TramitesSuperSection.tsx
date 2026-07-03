@@ -61,7 +61,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     setListStatus("loading");
     try {
       const data = await fetchOtClientProcedures(
-        { status: "pending_ot", page: 1, pageSize: PAGE_SIZE },
+        { status: "entregado", page: 1, pageSize: PAGE_SIZE },
         signal,
         { transitOfficeId },
       );

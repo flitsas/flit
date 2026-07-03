@@ -1,7 +1,9 @@
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Services;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Tramites.Application;
@@ -33,6 +35,13 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
+
+        // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
+        // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher
+        // de outbox hacia webhooks OT (HU-3) se registra en Infraestructura
+        // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
+        services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
+        services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         services.AddScoped<UploadAttachmentHandler>();
@@ -47,6 +56,10 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();
+
+        // HU-2 (N03): puerto de historial del lifecycle — 1 fila de status_history + 1 evento por transición.
+        services.AddScoped<Domain.Tramites.Estados.ITramiteTransitionRecorder, UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder>();
+        services.AddScoped<UseCases.ProcedureInstances.Estados.GetStatusHistoryHandler>();
 
         // Biométrica (Slice 6, mock). El scorer es un MOCK determinista; se reemplazará por uno real
         // (proveedor biométrico) sin tocar handlers. Contract-first, igual que los consultation providers.

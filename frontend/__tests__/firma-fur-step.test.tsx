@@ -95,7 +95,7 @@ const FUR_DOC: ProcedureAttachment = {
 const INSTANCE_DETAIL = {
   id: INSTANCE,
   referenceNumber: 'REF-1',
-  status: 'draft' as const,
+  status: 'borrador' as const,
   procedureTypeId: 'pt-1',
   tenantId: 't-1',
   createdAt: '2026-06-19T00:00:00Z',
@@ -119,7 +119,7 @@ beforeEach(() => {
   mocks.listBiometric.mockResolvedValue([]);
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
-  mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'submitted' });
+  mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'entregado' });
   mocks.downloadAttachment.mockResolvedValue({
     blob: new Blob(['x'], { type: 'text/plain' }),
     filename: 'fur.txt',
@@ -313,7 +313,8 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
   it('muestra el resumen de la matrícula con el estado de la instancia', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const resumen = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
-    expect(within(resumen).getByText('Borrador (en preparación)')).toBeInTheDocument();
+    // N 03 — label desde la fuente única lib/tramites/estados.ts.
+    expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
   });
 
   it('en traspaso el resumen se rotula "Resumen del traspaso" (no matrícula)', async () => {

@@ -25,7 +25,7 @@ internal static class PreflightEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado draft."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado borrador."),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflight");

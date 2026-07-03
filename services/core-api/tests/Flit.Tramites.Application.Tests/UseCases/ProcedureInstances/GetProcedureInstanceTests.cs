@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -42,7 +43,7 @@ public sealed class GetProcedureInstanceTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             CreatedAt = DateTimeOffset.UtcNow,
             FieldValues =
             {
@@ -60,7 +61,7 @@ public sealed class GetProcedureInstanceTests
                 new ProcedureInstanceStatusHistory
                 {
                     Id = Guid.NewGuid(),
-                    ToStatus = ProcedureInstanceStatus.Draft,
+                    ToStatus = TramiteEstado.Borrador,
                     ChangedAt = DateTimeOffset.UtcNow
                 }
             }
@@ -74,6 +75,6 @@ public sealed class GetProcedureInstanceTests
         result.Should().NotBeNull();
         result!.ReferenceNumber.Should().Be("TRM-2026-000001");
         result.FieldValues.Should().ContainSingle(f => f.FieldKey == "plate");
-        result.StatusHistory.Should().ContainSingle(h => h.ToStatus == ProcedureInstanceStatus.Draft);
+        result.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Borrador);
     }
 }

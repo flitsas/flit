@@ -41,7 +41,7 @@ const sampleProcedure: OtClientProcedure = {
   clientTenantId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
   procedureTypeId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
   referenceNumber: "REF-001",
-  status: "pending_ot",
+  status: "entregado",
   createdAt: "2026-06-23T12:00:00Z",
 };
 

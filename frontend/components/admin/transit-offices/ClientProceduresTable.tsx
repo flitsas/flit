@@ -80,7 +80,7 @@ export function ClientProceduresTable({
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
                 style={{ borderColor: "#DFE5ED" }}
               >
-                {row.status === "pending_ot" && showApprovalActions && (
+                {row.status === "entregado" && showApprovalActions && (
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"

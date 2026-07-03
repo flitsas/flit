@@ -24,7 +24,8 @@ export function ClientProceduresSection() {
   const [rows, setRows] = useState<OtClientProcedure[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState("pending_ot");
+  // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
+  const [statusFilter, setStatusFilter] = useState("entregado");
   const [typeFilter, setTypeFilter] = useState("");
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
@@ -154,9 +155,9 @@ export function ClientProceduresSection() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="pending_ot">Pendiente OT</option>
-            <option value="approved_ot">Aprobado OT</option>
-            <option value="rejected_ot">Rechazado OT</option>
+            <option value="entregado">Pendiente OT</option>
+            <option value="aprobado">Aprobado OT</option>
+            <option value="rechazado">Rechazado OT</option>
             <option value="">Todos</option>
           </select>
         </label>

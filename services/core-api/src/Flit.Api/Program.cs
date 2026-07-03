@@ -210,6 +210,7 @@ app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
 app.MapTramitesWizardEndpoints();
+app.MapTramitesStatusHistoryEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();

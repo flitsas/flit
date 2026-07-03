@@ -26,6 +26,7 @@ using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -339,6 +340,12 @@ public static class InfrastructureExtensions
         services.AddHostedService<IdentityValidationSendRetryProcessor>();
         // Red de seguridad: reconcilia por consulta las validaciones en_proceso colgadas (webhook perdido).
         services.AddHostedService<IdentityValidationReconcileProcessor>();
+
+        // HU-3 (N03): puerto de publicación del lifecycle de estados. Encola en
+        // procedure_state_change_outbox (misma unidad de trabajo del lifecycle service); el worker
+        // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
+        services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
+        services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)

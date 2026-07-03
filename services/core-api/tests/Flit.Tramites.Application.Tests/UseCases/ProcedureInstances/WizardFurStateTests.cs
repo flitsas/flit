@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -30,7 +31,7 @@ public sealed class WizardFurStateTests
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,

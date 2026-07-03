@@ -71,6 +71,8 @@ const MATRICULA_WIZARD: WizardState = {
   totalSteps: 5,
   canSubmit: false,
   blockers: ['documentos_incompletos'],
+  status: 'borrador',
+  allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
@@ -86,6 +88,8 @@ const TRASPASO_WIZARD: WizardState = {
   totalSteps: 6,
   canSubmit: false,
   blockers: ['preflight_red'],
+  status: 'borrador',
+  allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -104,6 +108,8 @@ const SUBMITTED_WIZARD: WizardState = {
   totalSteps: 5,
   canSubmit: true,
   blockers: [],
+  status: 'entregado',
+  allowedTransitions: ['aprobado', 'rechazado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -140,7 +146,7 @@ beforeEach(() => {
   mocks.getCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.putCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1' });
-  mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: '2026-06-24T12:00:00Z' });
+  mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: '2026-06-24T12:00:00Z' });
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
@@ -247,7 +253,7 @@ describe('TramiteWizard — solo lectura (Track C)', () => {
     // El estado submitted activa el modo solo lectura.
     mocks.getInstance.mockResolvedValue({
       id: 'inst-sub',
-      status: 'submitted',
+      status: 'entregado',
       fieldValues: [],
     });
   });
@@ -395,6 +401,8 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     totalSteps: 5,
     canSubmit: true,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
       { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -406,7 +414,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
   it('AC1 — el paso de decisión es FUR (5); Identidad ofrece "Continuar", no "Finalizar"', async () => {
     mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     // Reanuda en Identidad (frontera). Ya NO es paso terminal → "Continuar" (no "Finalizar").
@@ -419,7 +427,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
   it('AC1 — "Finalizar" en el paso FUR llama finalize-draft (no submit), avisa y vuelve al listado', async () => {
     mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'draft', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
     const onExit = vi.fn();
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
@@ -447,7 +455,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     // draftFinalizedAt presente ⇒ modo borrador finalizado (readOnly parcial).
     mocks.getInstance.mockResolvedValue({
       id: 'inst-1',
-      status: 'draft',
+      status: 'borrador',
       draftFinalizedAt: '2026-06-20T10:00:00Z',
       fieldValues: [],
       actors: [],
@@ -635,6 +643,8 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     totalSteps: 6,
     canSubmit: false,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
       { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
@@ -769,6 +779,8 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     totalSteps: 6,
     canSubmit: false,
     blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
       {

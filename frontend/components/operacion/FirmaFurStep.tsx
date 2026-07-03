@@ -237,7 +237,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
 
       <MatriculaResumen
         modalidad={modalidad}
-        status={detail?.status ?? 'draft'}
+        status={detail?.status ?? 'borrador'}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)

@@ -45,6 +45,7 @@ import type {
   SignaturesResponse,
   SimularFirmaResult,
   SolicitarFirmaInput,
+  StatusHistoryPage,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
   StuckIdentityValidationsResponse,
@@ -961,6 +962,71 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
       },
     ),
+
+  // HU-2 (N03, RF05) — historial de transiciones de estado, paginado, más reciente primero.
+  getStatusHistory: (
+    instanceId: string,
+    page = 1,
+    pageSize = 20,
+    tenantId?: string,
+  ) =>
+    request<StatusHistoryPage>(
+      `/api/v1/tramites/instances/${instanceId}/status-history?page=${page}&pageSize=${pageSize}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // ── N 03 — transición de estado de negocio ──────────────────────
+  // POST /instances/{id}/transition. Errores: ProblemDetails con title = CÓDIGO
+  // (transicion_no_permitida, estado_final, identidad_no_aprobada, documentos_incompletos,
+  // motivo_requerido, conflicto_concurrencia 409, estado_desconocido) y detail = mensaje;
+  // aquí se mapea el código a copy UX (fallback: el detail del backend).
+  transitionInstance: async (
+    instanceId: string,
+    toStatus: string,
+    reason?: string,
+    tenantId?: string,
+  ): Promise<InstanceSummary> => {
+    const token = getToken();
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/transition`),
+      {
+        method: 'POST',
+        headers: {
+          ...JSON_HEADERS,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...tenantHeader(tenantId),
+        },
+        body: JSON.stringify({ toStatus, reason: reason ?? null }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      let code: string | undefined;
+      let detail: string | undefined;
+      try {
+        const problem = JSON.parse(body) as { title?: string; detail?: string };
+        code = problem.title;
+        detail = problem.detail;
+      } catch {
+        // cuerpo no-JSON (gateway) → mensaje genérico abajo.
+      }
+      throw new Error(
+        (code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body),
+      );
+    }
+    return (await res.json()) as InstanceSummary;
+  },
+};
+
+/** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */
+const TRANSITION_ERROR_COPY: Record<string, string> = {
+  transicion_no_permitida: 'La transición de estado solicitada no está permitida.',
+  estado_final: 'El trámite está en un estado final y no admite cambios.',
+  identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
+  documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
+  motivo_requerido: 'Debes indicar el motivo para esta transición.',
+  conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
+  estado_desconocido: 'El estado destino no es válido.',
 };
 
 /**

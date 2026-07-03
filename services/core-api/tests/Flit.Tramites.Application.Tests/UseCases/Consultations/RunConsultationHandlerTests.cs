@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
@@ -32,7 +33,7 @@ public sealed class RunConsultationHandlerTests
         }
     }
 
-    private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = ProcedureInstanceStatus.Draft) =>
+    private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
             Id = id,

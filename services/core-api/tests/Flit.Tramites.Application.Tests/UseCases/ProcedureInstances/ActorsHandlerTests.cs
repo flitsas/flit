@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -33,7 +34,7 @@ public sealed class ActorsHandlerTests
         Guid id,
         Guid tenantId,
         string modalidad = "matricula_inicial",
-        string status = ProcedureInstanceStatus.Draft,
+        string status = TramiteEstado.Borrador,
         string? tipologia = null) =>
         new()
         {

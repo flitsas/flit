@@ -5,6 +5,7 @@ import type {
   InstanceStatus,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { ESTADO_LABELS } from '@/lib/tramites/estados';
 
 /**
  * Barra de filtros del listado de trámites (Track A). Búsqueda client-side +
@@ -32,10 +33,15 @@ const MODALIDAD_CHIPS: { value: '' | WizardModalidad; label: string }[] = [
   { value: 'traspaso', label: 'Traspaso' },
 ];
 
+// N 03 (RF01) — filtros por los 6 estados de negocio (labels de lib/tramites/estados.ts).
 const ESTADO_CHIPS: { value: '' | InstanceStatus; label: string }[] = [
   { value: '', label: 'Todos' },
-  { value: 'draft', label: 'En preparación' },
-  { value: 'submitted', label: 'Enviado a tránsito' },
+  { value: 'borrador', label: ESTADO_LABELS.borrador },
+  { value: 'preparado', label: ESTADO_LABELS.preparado },
+  { value: 'entregado', label: ESTADO_LABELS.entregado },
+  { value: 'aprobado', label: ESTADO_LABELS.aprobado },
+  { value: 'rechazado', label: ESTADO_LABELS.rechazado },
+  { value: 'anulado', label: ESTADO_LABELS.anulado },
 ];
 
 /** Chip toggle outline/filled reutilizado por ambos filtros. */

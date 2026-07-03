@@ -162,9 +162,10 @@ public sealed class ProcessOtWebhookCallbackHandler
         var normalized = externalStatus.Trim().ToLowerInvariant();
         return normalized switch
         {
-            "approved" or "approved_ot" => await ApproveIfPendingAsync(
+            // N 03: vocabulario nuevo en español + tokens legacy de integraciones externas.
+            "aprobado" or "approved" or "approved_ot" => await ApproveIfPendingAsync(
                 otTenantId, procedureInstanceId, cancellationToken).ConfigureAwait(false),
-            "rejected" or "rejected_ot" => await RejectIfPendingAsync(
+            "rechazado" or "rejected" or "rejected_ot" => await RejectIfPendingAsync(
                 otTenantId, procedureInstanceId, "Rechazado vía integración Quipux", cancellationToken)
                 .ConfigureAwait(false),
             _ => false,
