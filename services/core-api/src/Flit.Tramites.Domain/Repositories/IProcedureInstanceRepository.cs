@@ -127,6 +127,23 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
+    /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
+    /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.
+    /// Dos entregas paralelas del MISMO webhook (misma clave) cuentan una sola vez: Postgres bloquea la fila
+    /// y la segunda ya no cumple la guarda. Devuelve <c>true</c> si contó (intento nuevo, aún en proceso);
+    /// <c>false</c> si fue un redelivery del mismo intento o la validación ya no está en proceso.
+    /// </summary>
+    Task<bool> TryCountKyverumAttemptAsync(
+        Guid validationId, string attemptKey, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recarga desde la BD los valores de una validación ya rastreada (tras un <c>UPDATE</c> atómico que no
+    /// pasó por el change tracker), para que el caller vea el conteo actualizado antes de terminalizar/enriquecer.
+    /// </summary>
+    Task ReloadBiometricAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct = default);
+
+    /// <summary>
     /// Bitácora del ciclo de validación de identidad (envío/webhook/descifrado/reconciliación/errores) de una
     /// validación, ordenada por <c>occurred_at</c>. Solo lectura (AsNoTracking).
     /// </summary>

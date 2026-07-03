@@ -10,9 +10,11 @@ namespace Flit.Tramites.Application.Identity;
 ///
 /// <para><b>Reintentos de Kyverum:</b> Kyverum permite N intentos dentro de UNA validación y reporta
 /// <c>result</c>/rechazado tras CADA intento fallido (aunque queden reintentos); la API NO expone "intentos
-/// restantes". Por eso un <c>rechazado_intento</c> NO es terminal: se CUENTA el intento —deduplicando por su
-/// <c>validadoAt</c> contra <see cref="ProcedureInstanceBiometricValidation.LastAttemptAt"/> (el mismo intento
-/// llega por webhook + poll + reenvíos)— y solo se marca <c>rechazado</c> al agotar (<c>Attempts &gt;= MaxAttempts</c>).</para>
+/// restantes". El conteo de intentos es AUTORITATIVO por webhook (<see cref="Flit.Tramites.Application.UseCases.ProcedureInstances.KyverumWebhookHandler"/>,
+/// un <c>validation.rejected</c> = un intento, deduplicado por el cuerpo). Este reconciliador —que corre por
+/// poll del worker y por respaldo— ya NO cuenta: eso evita el doble-conteo webhook+poll que inflaba los
+/// intentos. Ante <c>rechazado_intento</c> solo (1) TERMINALIZA en rechazado si el conteo del webhook ya agotó
+/// los intentos (<c>Attempts &gt;= MaxAttempts</c>), o (2) refresca el motivo del último intento; nunca incrementa.</para>
 /// </summary>
 public static class IdentityValidationReconciler
 {
@@ -39,24 +41,16 @@ public static class IdentityValidationReconciler
                 if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
                     return false;
 
-                // Cuenta el intento deduplicando por su validadoAt contra la columna dedicada LastAttemptAt
-                // (nunca la pisa un payload sin fecha): solo incrementa si es un intento NUEVO.
-                var esNuevoIntento = !string.IsNullOrEmpty(status.AttemptAt)
-                    && !string.Equals(status.AttemptAt, v.LastAttemptAt, StringComparison.Ordinal);
-                if (esNuevoIntento)
-                {
-                    v.Attempts += 1;
-                    v.LastAttemptAt = status.AttemptAt;
-                }
-
+                // El conteo lo lleva el webhook (autoritativo). Aquí NO se incrementa: si el webhook ya agotó los
+                // intentos, se terminaliza en rechazado; si aún quedan, solo se refresca el motivo del último intento.
                 if (v.Attempts >= v.MaxAttempts)
                     // Intentos AGOTADOS → rechazo TERMINAL (publica el evento y habilita "Reintentar").
                     return await applier.ApplyAsync(
                         v, new IdentityValidationTerminalResult(false, status.Status, status.RawPayloadSanitized, status.Score), now, ct);
 
-                // Aún quedan intentos → sigue EN_PROCESO (el cliente reintenta en su móvil). Solo si es un intento
-                // NUEVO se persiste (conteo + payload con el motivo); un poll idéntico no re-escribe nada.
-                if (esNuevoIntento)
+                // Aún quedan intentos → sigue EN_PROCESO (el cliente reintenta en su móvil). Se refresca el
+                // payload (motivo del último intento para la UI) solo si CAMBIÓ; un poll idéntico no re-escribe.
+                if (!string.Equals(v.ProviderPayload, status.RawPayloadSanitized, StringComparison.Ordinal))
                 {
                     v.ProviderStatus = status.Status;
                     v.ProviderPayload = status.RawPayloadSanitized;

@@ -21,7 +21,7 @@ si había secreto, si **descifró o no** el cifrado, firma, resultado, reconcili
 sin cruzar tablas ni ir a los logs del pod:
 ```sql
 select occurred_at, stage, outcome, http_status,
-       signature_present, secret_present, decrypt_ok, error_type, provider_status, message
+       signature_present, secret_present, decrypt_ok, error_type, provider_status, message, detail
 from tramites.identity_validation_audit
 where validation_id = '<validation-id>'          -- o kyverum_verification_id = '<kyv-id>'
 order by occurred_at;
@@ -31,6 +31,14 @@ Lectura típica del caso PDN (webhook que no descifra):
 - `stage=webhook_not_verifiable, outcome=decrypt_failed, decrypt_ok=false, error_type=CryptographicException`
   → **el cifrado no coincide** (keyring/ApplicationName). **Este es el diagnóstico**, sin mirar el pod.
 - `stage=reconcile, outcome=aprobado` → el respaldo por consulta lo resolvió.
+
+La columna **`detail`** (desde 2026-07-03) es clave para diagnosticar el **conteo de intentos** y el **sondeo**:
+- `stage=webhook_received` con `detail=attempt_key=<...>; conteo=1/3` → **un** intento real contado. El conteo es
+  autoritativo por webhook (un `validation.rejected` = un intento) y **atómico**: dos entregas paralelas del mismo
+  intento (mismo `attempt_key`) cuentan **una sola vez**. Si ves `ya contado (redelivery)` es un reenvío deduplicado.
+- `stage=reconcile` con `detail=validado_at=<...>; sondeo=2/3` → el `validado_at` que devolvió Kyverum en esa consulta
+  y cuánto queda del **presupuesto de sondeo** del worker. Si el `conteo` sube más de un intento por captura real,
+  compara los `attempt_key`/`validado_at`: deberían repetirse por intento, no cambiar en cada consulta.
 
 > La tabla se llena sola desde el build endurecido. La migración `20260702183303_IdentityValidationAudit`
 > se aplica **automáticamente al desplegar** (la app corre las migraciones pendientes al arrancar,
@@ -86,9 +94,15 @@ curl -X POST \
 - Respuestas: `404` no existe · `409` no es Kyverum · `502/503` proveedor no disponible.
 
 ### Opción B — Worker automático (sin intervención)
-`IdentityValidationReconcileProcessor` sondea cada ~30s las validaciones `en_proceso` de Kyverum sin tocar
-hace >60s y no expiradas, consulta a Kyverum y aplica. Basta con que el servicio esté desplegado y corriendo:
-la validación se destraba sola en el siguiente ciclo. No requiere acción manual.
+`IdentityValidationReconcileProcessor` sondea las validaciones `en_proceso` de Kyverum no tocadas hace >120s y
+no expiradas, consulta a Kyverum y aplica. Basta con que el servicio esté desplegado y corriendo: la validación
+se destraba sola en el siguiente ciclo. No requiere acción manual.
+
+> **Presupuesto de sondeo (desde 2026-07-03):** el worker consulta a Kyverum a lo sumo **3 veces por ventana de
+> actividad** (`reconcile_poll_count < 3`, ~6 min) y luego **calla** — ya no le pega a Kyverum cada 2 min durante
+> las 24 h del token. El presupuesto se **reinicia a 0** con una señal nueva: un intento por webhook, el (re)envío
+> de la validación, o un **reconcile manual** (Opción A). Si una validación quedó `en_proceso` y el worker ya no la
+> toca (agotó el presupuesto sin señal nueva), usa la Opción A para desatascarla —eso mismo recarga el presupuesto.
 
 ### Opción C — Reintento del webhook (si Kyverum lo permite)
 Con el webhook ya endurecido, un reintento desde el panel de Kyverum ahora se procesa (self-heal por consulta)
@@ -142,7 +156,11 @@ order by created_at;
 - **Webhook:** `POST /api/v1/webhooks/kyverum-verify/{validationId}` (público, firma HMAC; robusto: nunca 500,
   self-heal por consulta si no puede verificar la firma).
 - **Reconcile on-demand:** `POST /api/v1/tramites/instances/{id}/biometric/{validationId}/reconcile`.
-- **Worker:** `IdentityValidationReconcileProcessor` (Infrastructure/Messaging).
+- **Worker:** `IdentityValidationReconcileProcessor` (Infrastructure/Messaging) — presupuesto de 3 sondeos por
+  ventana (`reconcile_poll_count`).
+- **Conteo de intentos:** autoritativo por webhook y **atómico** (`IProcedureInstanceRepository.TryCountKyverumAttemptAsync`,
+  guarda `last_attempt_at <> @key` + row-lock). El reconciliador (`IdentityValidationReconciler`) ya **no** cuenta;
+  solo aprueba/expira/refresca-motivo/termina al agotar. Evita el doble-conteo webhook+poll.
 - **Consulta a Kyverum:** `GET /v1/validations/{id}` (Bearer `KYVERUM_API_KEY`) — estado; `.../certificado` — PDF.
 - **Config por ambiente:** `KYVERUM_WEBHOOK_CALLBACK_URL` (DEBE ser el host público del propio ambiente).
 - **Nota de contexto:** el keyring y el fix están descritos en la memoria del proyecto

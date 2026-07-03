@@ -338,18 +338,63 @@ public sealed class KyverumWebhookHandler(
             return (null, "cuerpo_invalido");
 
         // Kyverum emite `validation.rejected` en CADA intento fallido aunque queden reintentos: un rechazo del
-        // webhook NO es terminal. Solo se confía en el APROBADO (final). Ante rechazo se RECONCILIA contra el
-        // `result` authoritative de Kyverum (GET status): si aún no cerró, la validación queda `en_proceso` (el
-        // cliente reintenta en el móvil) y solo se marca rechazado cuando Kyverum cierra rechazado (intentos
-        // agotados). Evita el rechazo prematuro que dejaba la validación terminal y perdía la aprobación posterior.
+        // webhook NO es terminal por sí solo. El CONTEO de intentos es autoritativo aquí (un webhook = un intento),
+        // deduplicando por una clave estable del cuerpo inmutable para que un redelivery del MISMO evento no
+        // recuente; el worker/poll de reconciliación ya NO cuenta (así se elimina el doble-conteo webhook+poll que
+        // inflaba los intentos). Con intentos aún disponibles la validación queda `en_proceso` (el cliente reintenta
+        // en el móvil); solo se marca rechazado al agotar los intentos.
         if (!payload.Data.Aprobado)
         {
+            // Clave del intento tomada del cuerpo INMUTABLE (closedAt del intento ?? ts del evento ?? requestId):
+            // estable entre redeliveries del mismo evento y distinta entre intentos. Se recorta a la longitud
+            // de la columna. `attempt_key` se registra en la bitácora (Detail) para poder auditar el dedup.
+            var attemptKey = Truncate(FirstNonEmpty(payload.Data.ClosedAt, payload.Ts, payload.RequestId), 40);
+
+            if (attemptKey is null)
+            {
+                // Cuerpo sin ninguna clave para deduplicar (caso patológico): NO se cuenta por webhook, para no
+                // arriesgar un doble-conteo no deduplicable. Se reconcilia (sin contar) y el worker acompaña.
+                await audit.LogAsync(new IdentityValidationAuditEntry(
+                    IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Pending,
+                    TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                    KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                    SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
+                    Message: "Webhook de intento rechazado sin clave en el cuerpo: no se cuenta (se reconcilia).",
+                    Detail: "attempt_key=<null>"), ct);
+                return await ReconcileFromKyverumAsync(v, ct);
+            }
+
+            // Conteo ATÓMICO e idempotente: un único UPDATE con guarda `last_attempt_at <> @key`. Dos entregas
+            // paralelas del MISMO intento cuentan una sola vez (la fila se bloquea y la 2ª no cumple la guarda);
+            // esto blinda la ventana de doble-entrega del webhook que se observó en DEV.
+            var counted = await repo.TryCountKyverumAttemptAsync(v.Id, attemptKey, DateTimeOffset.UtcNow, ct);
+            if (!counted)
+            {
+                // Redelivery del mismo intento (o la validación ya no está en_proceso): no se recuenta.
+                await audit.LogAsync(new IdentityValidationAuditEntry(
+                    IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Pending,
+                    TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                    KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                    SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
+                    Message: "Webhook de intento rechazado ya contado (redelivery): no se recuenta.",
+                    Detail: $"attempt_key={attemptKey}"), ct);
+                return ("ok", null);
+            }
+
+            // El UPDATE atómico ya persistió el conteo + reinició el presupuesto de sondeo del worker. Se recarga
+            // la entidad rastreada para ver el nuevo conteo antes de enriquecer/terminalizar.
+            await repo.ReloadBiometricAsync(v, ct);
+
             await audit.LogAsync(new IdentityValidationAuditEntry(
                 IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Pending,
                 TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
                 KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
                 SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
-                Message: "Webhook de intento rechazado: NO terminal (Kyverum permite reintentos). Se reconcilia contra el resultado."), ct);
+                Message: $"Webhook de intento rechazado contado ({v.Attempts}/{v.MaxAttempts}). Se reconcilia contra el resultado.",
+                Detail: $"attempt_key={attemptKey}; conteo={v.Attempts}/{v.MaxAttempts}"), ct);
+
+            // Enriquece el motivo del último intento y, si el conteo YA agotó los intentos, terminaliza en
+            // rechazado. ApplyStatusAsync (vía ReconcileFromKyverumAsync) ya NO cuenta: decide con v.Attempts.
             return await ReconcileFromKyverumAsync(v, ct);
         }
 
@@ -418,9 +463,23 @@ public sealed class KyverumWebhookHandler(
             ProviderStatus: status.Status,
             Message: applied
                 ? $"Respaldo del webhook: sincronizado (estado: {v.Status}; intentos {v.Attempts}/{v.MaxAttempts})."
-                : "Respaldo del webhook: Kyverum aún no resuelve (sigue en proceso)."), ct);
+                : "Respaldo del webhook: Kyverum aún no resuelve (sigue en proceso).",
+            Detail: $"validado_at={status.AttemptAt ?? "<null>"}"), ct);
         return ("ok", null);
     }
+
+    /// <summary>Primer valor no vacío (recortado), o null si todos están vacíos.</summary>
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var v in values)
+            if (!string.IsNullOrWhiteSpace(v))
+                return v.Trim();
+        return null;
+    }
+
+    /// <summary>Recorta a <paramref name="max"/> caracteres (para respetar el largo de la columna). Null-safe.</summary>
+    private static string? Truncate(string? value, int max) =>
+        value is null || value.Length <= max ? value : value[..max];
 
     /// <summary>Sujeto de la parte (match por rol, case-insensitive); si no, el primero del arreglo.</summary>
     private static KyverumWebhookSubject? SelectSubject(IReadOnlyList<KyverumWebhookSubject>? subjects, string? parte)
