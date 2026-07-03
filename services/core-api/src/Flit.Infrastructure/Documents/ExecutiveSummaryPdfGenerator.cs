@@ -35,9 +35,10 @@ internal sealed class ExecutiveSummaryPdfGenerator : IExecutiveSummaryPdfGenerat
         var totalTramites = categories.Sum(c => c.Total);
         var categoriasActivas = categories.Count(c => c.Total > 0);
         var allStatus = categories.SelectMany(c => c.ByStatus).ToList();
-        var enviados = allStatus.Where(s => s.Status == "submitted").Sum(s => s.Count);
-        var aprobados = allStatus.Where(s => s.Status is "approved_ot" or "completed" or "approved").Sum(s => s.Count);
-        var rechazados = allStatus.Where(s => s.Status is "rejected_ot" or "cancelled" or "rejected").Sum(s => s.Count);
+        // Vocabulario de estados N 03 (ADR-0022): entregado/aprobado/rechazado/anulado.
+        var enviados = allStatus.Where(s => s.Status is "entregado" or "preparado").Sum(s => s.Count);
+        var aprobados = allStatus.Where(s => s.Status == "aprobado").Sum(s => s.Count);
+        var rechazados = allStatus.Where(s => s.Status is "rechazado" or "anulado").Sum(s => s.Count);
 
         return Document.Create(doc =>
         {
@@ -276,30 +277,26 @@ internal sealed class ExecutiveSummaryPdfGenerator : IExecutiveSummaryPdfGenerat
         _ => "#F9AC00",
     };
 
+    // Estados de negocio N 03 (ADR-0022). El fallback cubre datos previos a la migración.
     private static string StatusLabel(string status) => status switch
     {
-        "draft" => "Borrador",
-        "submitted" => "Radicado",
-        "in_review" => "En revisión",
-        "pending_ot" => "Pendiente OT",
-        "approved_ot" => "Aprobado OT",
-        "approved" => "Aprobado",
-        "completed" => "Completado",
-        "rejected_ot" => "Rechazado OT",
-        "rejected" => "Rechazado",
-        "cancelled" => "Cancelado",
+        "borrador" => "Borrador",
+        "preparado" => "Preparado",
+        "entregado" => "Entregado",
+        "aprobado" => "Aprobado",
+        "rechazado" => "Rechazado",
+        "anulado" => "Anulado",
         _ => status.Length == 0 ? "-" : char.ToUpperInvariant(status[0]) + status[1..].Replace('_', ' '),
     };
 
     private static string StatusColor(string status) => status switch
     {
-        "draft" => "#59677D",
-        "submitted" => "#557EFF",
-        "in_review" or "pending_ot" => "#F9AC00",
-        "approved_ot" or "approved" => "#8CC63F",
-        "completed" => "#00DBD5",
-        "rejected_ot" or "rejected" => "#FF4E00",
-        "cancelled" => "#E43D30",
+        "borrador" => "#59677D",
+        "preparado" => "#F9AC00",
+        "entregado" => "#557EFF",
+        "aprobado" => "#8CC63F",
+        "rechazado" => "#FF4E00",
+        "anulado" => "#E43D30",
         _ => "#9B8AFB",
     };
 }

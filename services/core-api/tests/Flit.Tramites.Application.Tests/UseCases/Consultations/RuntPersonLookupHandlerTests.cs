@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
@@ -38,7 +39,7 @@ public sealed class RuntPersonLookupHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

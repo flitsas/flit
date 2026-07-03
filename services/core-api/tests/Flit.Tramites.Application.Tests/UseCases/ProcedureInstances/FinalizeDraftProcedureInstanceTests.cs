@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -19,7 +20,24 @@ public sealed class FinalizeDraftProcedureInstanceTests
     public FinalizeDraftProcedureInstanceTests() =>
         _sut = new FinalizeDraftProcedureInstanceHandler(_repo);
 
-    private static ProcedureInstance Instance(Guid id, Guid tenant, string status = ProcedureInstanceStatus.Draft) =>
+    /// <summary>Submit N 03: orquestador del lifecycle service (puertos no-op, sin gates OT).</summary>
+    private SubmitProcedureInstanceHandler SubmitHandler(IProcedureTypeRepository typeRepo)
+    {
+        var grantGate = Substitute.For<ITransitOfficeGrantGate>();
+        grantGate
+            .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var lifecycle = new Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.TramiteLifecycleService(
+            _repo,
+            typeRepo,
+            grantGate,
+            NullOtRuleGate.Instance,
+            new NullTramiteTransitionRecorder(),
+            new NullTramiteTransitionPublisher());
+        return new SubmitProcedureInstanceHandler(lifecycle, _repo);
+    }
+
+    private static ProcedureInstance Instance(Guid id, Guid tenant, string status = TramiteEstado.Borrador) =>
         new()
         {
             Id = id,
@@ -96,9 +114,9 @@ public sealed class FinalizeDraftProcedureInstanceTests
 
         error.Should().BeNull();
         result.Should().NotBeNull();
-        result!.Status.Should().Be(ProcedureInstanceStatus.Draft);
+        result!.Status.Should().Be(TramiteEstado.Borrador);
         result.DraftFinalizedAt.Should().NotBeNull();
-        instance.Status.Should().Be(ProcedureInstanceStatus.Draft);
+        instance.Status.Should().Be(TramiteEstado.Borrador);
         instance.DraftFinalizedAt.Should().NotBeNull();
         // Bitácora draft_finalizado + persistencia.
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "draft_finalizado"));
@@ -123,7 +141,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct)
-            .Returns(Instance(id, tenant, ProcedureInstanceStatus.Submitted));
+            .Returns(Instance(id, tenant, TramiteEstado.Entregado));
 
         var (_, error) = await _sut.HandleAsync(id, tenant, ct);
 
@@ -226,16 +244,16 @@ public sealed class FinalizeDraftProcedureInstanceTests
             PublicationStatus = PublicationStatus.Published,
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
 
-        var submit = new SubmitProcedureInstanceHandler(
-            _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
-            NullTransitOfficeGrantGate.Instance);
+        var submit = SubmitHandler(typeRepo);
 
         var (_, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
-        error.Should().Be("identidad_requerida");
-        instance.Status.Should().Be(ProcedureInstanceStatus.Draft);
+        error.Should().Be(Flit.Tramites.Domain.Tramites.Estados.TramiteEstadoErrores.IdentidadNoAprobada);
+        instance.Status.Should().Be(TramiteEstado.Borrador);
     }
 
     [Fact]
@@ -273,16 +291,16 @@ public sealed class FinalizeDraftProcedureInstanceTests
             PublicationStatus = PublicationStatus.Published,
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
 
-        var submit = new SubmitProcedureInstanceHandler(
-            _repo, typeRepo, NullProcedureStateChangeNotifier.Instance, NullOtRuleGate.Instance,
-            NullTransitOfficeGrantGate.Instance);
+        var submit = SubmitHandler(typeRepo);
 
         var (result, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(ProcedureInstanceStatus.Submitted);
+        result!.Status.Should().Be(TramiteEstado.Entregado);
     }
 
     // ── AC3 — biométrica funciona sobre un borrador finalizado ────────────────────

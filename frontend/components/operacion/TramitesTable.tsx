@@ -6,6 +6,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import type {
   InstanceStatus,
   InstanceSummary,
@@ -21,41 +22,14 @@ import type {
  * Actualizar y cada vez que cambia `refreshKey`.
  */
 
+// N 03 (RF01) — chip de estado con los 6 estados de negocio en español; labels/colores
+// desde la fuente única lib/tramites/estados.ts (fallback titlecase para valores desconocidos).
 const estadoChip = (
   estado: InstanceStatus,
 ): { label: string; bg: string; color: string; border: string } => {
-  switch (estado) {
-    case 'draft':
-      // En preparación — tono ámbar/neutro.
-      return {
-        label: 'En preparación',
-        bg: 'rgba(245,158,11,0.12)',
-        color: '#b45309',
-        border: 'rgba(245,158,11,0.3)',
-      };
-    case 'submitted':
-      // Enviado a tránsito — tono azul (éxito de envío).
-      return {
-        label: 'Enviado a tránsito',
-        bg: 'rgba(85,126,255,0.12)',
-        color: '#557eff',
-        border: 'rgba(85,126,255,0.3)',
-      };
-    default:
-      // Cualquier otro estado: titlecase del código (in_review, completed, rejected…).
-      return {
-        label: titlecase(estado),
-        bg: 'rgba(100,116,139,0.12)',
-        color: '#475569',
-        border: 'rgba(100,116,139,0.3)',
-      };
-  }
+  const style = estadoChipStyle(estado);
+  return { label: estadoLabel(estado), bg: style.bg, color: style.color, border: style.border };
 };
-
-function titlecase(value: string): string {
-  const text = value.replace(/_/g, ' ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 type Chip = { label: string; bg: string; color: string; border: string };
 
@@ -67,7 +41,7 @@ type Chip = { label: string; bg: string; color: string; border: string };
  * la acción de la fila pase de "Continuar" a "Radicar". Null si no es un borrador finalizado (chip base).
  */
 function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | null {
-  if (item.estado !== 'draft' || !item.draftFinalizedAt) return null;
+  if (item.estado !== 'borrador' || !item.draftFinalizedAt) return null;
   const idv = item.identityValidationStatus;
 
   if (idv === 'rechazado') {
@@ -593,7 +567,7 @@ function TramiteRow({
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
   const chip = async?.chip ?? estadoChip(item.estado);
-  const isDraft = item.estado === 'draft';
+  const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
 
   return (

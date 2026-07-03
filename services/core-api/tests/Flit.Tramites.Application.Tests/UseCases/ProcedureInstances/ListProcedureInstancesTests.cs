@@ -1,4 +1,4 @@
-using Flit.Tramites.Application.UseCases.ProcedureInstances;
+﻿using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -46,7 +47,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
             FieldValues =
@@ -74,7 +75,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000002",
-            Status = ProcedureInstanceStatus.Submitted,
+            Status = TramiteEstado.Entregado,
             ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
             FieldValues =
@@ -95,7 +96,7 @@ public sealed class ListProcedureInstancesTests
 
         var m = result.Single(x => x.ReferenceNumber == "TRM-2026-000001");
         m.Modalidad.Should().Be("matricula_inicial");
-        m.Estado.Should().Be("draft");
+        m.Estado.Should().Be("borrador");
         m.Placa.Should().Be("ABC123");
         m.Vin.Should().Be("VIN123");
         m.VehiculoMarca.Should().Be("Toyota");
@@ -107,7 +108,7 @@ public sealed class ListProcedureInstancesTests
 
         var t = result.Single(x => x.ReferenceNumber == "TRM-2026-000002");
         t.Modalidad.Should().Be("traspaso");
-        t.Estado.Should().Be("submitted");
+        t.Estado.Should().Be("entregado");
         t.Placa.Should().Be("XYZ789");
         t.Vin.Should().BeNull();
         t.CompradorNombre.Should().BeNull();
@@ -129,7 +130,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000010",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             DraftFinalizedAt = finalizadoAt,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -167,7 +168,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000011",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             DraftFinalizedAt = DateTimeOffset.UtcNow.AddHours(-2),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -202,7 +203,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000012",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -229,7 +230,7 @@ public sealed class ListProcedureInstancesTests
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ReferenceNumber = reference,
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };

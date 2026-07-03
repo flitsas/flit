@@ -1,7 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
-using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Xunit;
 
@@ -25,7 +25,7 @@ public sealed class SubmitGateTraspasoTests
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000200",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = "traspaso",
             TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -116,7 +116,7 @@ public sealed class SubmitGateTraspasoTests
         instance.BiometricValidations.Remove(
             instance.BiometricValidations.First(b => b.PartyRole == "vendedor"));
 
-        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.IdentidadRequerida);
+        SubmitGate.Evaluate(instance).Should().Contain(SubmitGate.IdentidadNoAprobada);
     }
 
     [Fact]

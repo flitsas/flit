@@ -11,6 +11,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -94,7 +95,7 @@ public sealed class IdentityValidationCompletedConsumerTests
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = reference,
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = traspaso ? "traspaso" : "matricula_inicial",
             TipologiaCodigo = traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial,
             DraftFinalizedAt = DateTimeOffset.UtcNow,

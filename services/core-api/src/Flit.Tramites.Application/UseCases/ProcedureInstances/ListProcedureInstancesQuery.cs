@@ -2,6 +2,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -14,7 +15,7 @@ public sealed record InstanceSummaryDto(
     Guid Id,
     string ReferenceNumber,
     string Modalidad,            // "matricula_inicial" | "traspaso"
-    string Estado,               // ProcedureInstanceStatus: "draft" | "submitted" | ...
+    string Estado,               // TramiteEstado (N 03): "borrador" | "preparado" | "entregado" | ...
     string? Placa,
     string? Vin,
     string? VehiculoMarca,
@@ -179,7 +180,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     {
         var total = state.TotalSteps;
 
-        if (!string.Equals(status, ProcedureInstanceStatus.Draft, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
             return (total, total);
 
         // Frontera = primer paso no completo (mismo criterio que frontierIndex del frontend).

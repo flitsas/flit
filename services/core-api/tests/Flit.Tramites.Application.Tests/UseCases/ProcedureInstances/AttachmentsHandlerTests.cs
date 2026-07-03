@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -74,7 +75,7 @@ public sealed class AttachmentsHandlerTests
     private static ProcedureInstance Instance(
         Guid id, Guid tenantId,
         string modalidad = "matricula_inicial",
-        string status = ProcedureInstanceStatus.Draft,
+        string status = TramiteEstado.Borrador,
         string? tipologia = null,
         string checklistEstado = "{}") =>
         new()

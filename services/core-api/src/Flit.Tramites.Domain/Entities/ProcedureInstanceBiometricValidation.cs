@@ -208,7 +208,9 @@ public static class BiometricRules
     public static DateTimeOffset FechaFinVigencia(DateTimeOffset validadoAt)
     {
         var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
-        return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset);
+        // Mismo instante (medianoche Colombia) normalizado a UTC: Npgsql solo acepta
+        // offset 0 al escribir timestamptz (vigencia_hasta); un offset -05:00 revienta el INSERT.
+        return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset).ToUniversalTime();
     }
 
     /// <summary>

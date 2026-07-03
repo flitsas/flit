@@ -6,7 +6,7 @@ public sealed class ProcedureInstance
     public Guid TenantId { get; set; }
     public Guid ProcedureTypeId { get; set; }
     public string ReferenceNumber { get; set; } = string.Empty;
-    public string Status { get; set; } = Enums.ProcedureInstanceStatus.Draft;
+    public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
     // Rework trámites (Slice 1) — modalidad/tipología/checklist explícitos
     public string ModalidadEntrada { get; set; } = "matricula_inicial";

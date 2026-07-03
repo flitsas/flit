@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -55,7 +56,7 @@ public sealed class PreflightHandlerTests
 
     private static ProcedureInstance Instance(
         string modalidad,
-        string status = ProcedureInstanceStatus.Draft,
+        string status = TramiteEstado.Borrador,
         params ProcedureInstanceActor[] actors)
     {
         var instance = new ProcedureInstance

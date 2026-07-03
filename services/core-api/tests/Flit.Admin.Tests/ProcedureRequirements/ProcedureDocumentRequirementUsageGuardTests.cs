@@ -1,4 +1,4 @@
-using Flit.Admin.Domain.ProcedureSnapshots;
+﻿using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Services;
@@ -26,7 +26,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
     {
         var db = NewDbName();
         var requirementId = await SeedRequirementAsync(db, DocA);
-        await SeedSnapshotAsync(db, "draft", DocA);
+        await SeedSnapshotAsync(db, "borrador", DocA);
 
         await using var ctx = NewContext(db);
         var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId, TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
     {
         var db = NewDbName();
         var requirementId = await SeedRequirementAsync(db, DocA);
-        await SeedSnapshotAsync(db, "draft", DocB); // snapshot congeló otro documento
+        await SeedSnapshotAsync(db, "borrador", DocB); // snapshot congeló otro documento
 
         await using var ctx = NewContext(db);
         var inUse = await new ProcedureDocumentRequirementUsageGuard(ctx).IsInUseAsync(requirementId, TestContext.Current.CancellationToken);
@@ -48,8 +48,8 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
     }
 
     [Theory]
-    [InlineData("completed")]
-    [InlineData("cancelled")]
+    [InlineData("aprobado")]
+    [InlineData("anulado")]
     public async Task IsInUse_WhenOnlyInactiveProceduresUseDocument_ReturnsFalse(string status)
     {
         var db = NewDbName();
