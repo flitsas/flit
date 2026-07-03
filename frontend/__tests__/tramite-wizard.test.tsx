@@ -928,4 +928,32 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
       await screen.findByLabelText('Tipo documento propietario'),
     ).toBeInTheDocument();
   });
+
+  // Regresión: aunque el tipo esté OCULTO (Kyverum), el payload SIGUE enviando owner_document_type
+  // (default 'CC') — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown)
+  // y enmascaraba el fallo como pre-vuelo verde.
+  it('con Kyverum el payload igual incluye owner_document_type (para el fallback a Verifik)', async () => {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
+    // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
+    await user.click(await screen.findByRole('button', { name: /^Paso 1: Consulta/ }));
+    await screen.findByLabelText('Placa');
+
+    await user.type(screen.getByLabelText(/^Placa$/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'CC', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
+  });
 });

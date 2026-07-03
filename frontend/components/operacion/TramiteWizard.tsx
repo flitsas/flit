@@ -986,26 +986,27 @@ function ConsultaStep({
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
     if (!plateValue || !docNumber) return null;
-    const items: FieldValueInput[] = [
+    // owner_document_type SIEMPRE viaja en el payload aunque el campo esté oculto (Kyverum): Kyverum
+    // lo ignora (resuelve el tipo por la placa), pero el FALLBACK a Verifik SÍ lo exige para consultar
+    // por placa (HU #10478). Por defecto 'CC'; tras un primer éxito de Kyverum, el preflight lo hidrata
+    // al tipo real (tipoDocPropietario), así el fallback posterior queda correcto. Ocultarlo de la UI
+    // no debe vaciar el dato o el fallback devolvería "requiere documento" (unknown) y enmascararía el
+    // fallo como pre-vuelo verde.
+    return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
-    ];
-    // Con Kyverum RUNT no se pide el tipo: el RUNT lo resuelve por la placa y lo devuelve, y el
-    // preflight lo siembra en owner_document_type (HU #10478). Con Verifik sí se envía.
-    if (!hideOwnerDocType) {
-      items.push({
+      {
         formFieldId: null,
         fieldKey: 'owner_document_type',
         valueText: ownerDocType,
         valueJson: null,
-      });
-    }
-    items.push({
-      formFieldId: null,
-      fieldKey: 'owner_document_number',
-      valueText: docNumber,
-      valueJson: null,
-    });
-    return items;
+      },
+      {
+        formFieldId: null,
+        fieldKey: 'owner_document_number',
+        valueText: docNumber,
+        valueJson: null,
+      },
+    ];
   };
 
   const handleRun = async () => {
