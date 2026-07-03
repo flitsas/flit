@@ -5,6 +5,7 @@ using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Improntas;
+using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Ocr;
@@ -250,12 +251,25 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // Kyverum RUNT (HU #10478): cliente de consultas compartido, mismo config que improntas
+        // (ImprontaRuntOptions / KYVERUM_RUNT_*, configurado en AddImprontas). Los providers
+        // kyverum_runt / kyverum_runt_conductor lo consumen; convergen al mismo ConsultationResult
+        // que Verifik para ser intercambiables en la cadena de proveedores (Fase 3).
+        services.AddHttpClient<KyverumRuntApiClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Proveedores expuestos como IConsultationProvider para el registry.
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikSimitConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikRnmcConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikConductorConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
+        services.AddTransient<IConsultationProvider, KyverumRuntVehicleConsultationProvider>();
+        services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
     }

@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "QYQ132",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Particular",
+      "clase": "CAMIONETA",
+      "marca": "TESLA",
+      "linea": "MODEL Y",
+      "modelo": "2026",
+      "color": "GRIS GRAFITO",
+      "numSerie": null,
+      "numMotor": null,
+      "numChasis": "LRWYGCFJ5TC576828",
+      "vin": "LRWYGCFJ5TC576828",
+      "cilindraje": "0",
+      "tipoCarroceria": "SUV",
+      "gravamenes": "NO",
+      "prendas": "SI",
+      "organismoTransito": "STRIA DE TTOyTTE MEDELLIN",
+      "pesoBruto": "1921",
+      "numeroEjes": "2",
+      "tipoCombustible": "ELECTRICO",
+      "pasajerosSentados": "5"
+    },
+    "tipoDocPropietario": "C",
+    "datosTecnicos": {
+      "pesoBrutoVehicular": "1921",
+      "noEjes": "2",
+      "pasajerosSentados": "5"
+    },
+    "soat": [
+      {
+        "estado": "VIGENTE",
+        "fechaVencimSoat": "2027-06-12T00:00:00.000-05:00",
+        "razonSocialAsegur": "LA PREVISORA S.A.COMPAÑIA DE SEGUROS"
+      }
+    ],
+    "rtm": [],
+    "garantias": [
+      {
+        "tipoDocumentoAcreedor": "NIT",
+        "numeroDocumentoAcreedor": "890903938",
+        "acreedor": "BANCOLOMBIA S.A.",
+        "fechaInscripcion": "13/06/2026"
+      }
+    ],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "solicitudes": [
+      {
+        "noSolicitud": "295945563",
+        "estado": "AUTORIZADA"
+      }
+    ]
+  },
+  "fromCache": false
+}
