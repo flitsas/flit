@@ -31,6 +31,12 @@ public sealed class PreflightHandlerTests
             Task.FromResult<ConsultationTenantOverride?>(null);
     }
 
+    private sealed class FixedOverrideProvider(ConsultationTenantOverride? value) : IConsultationTenantOverrideProvider
+    {
+        public Task<ConsultationTenantOverride?> GetAsync(Guid tenantId, CancellationToken ct) =>
+            Task.FromResult(value);
+    }
+
     private sealed class ThrowingProvider(string key) : IConsultationProvider
     {
         public string Key => key;
@@ -94,14 +100,25 @@ public sealed class PreflightHandlerTests
             Email = "x@x.com",
         };
 
-    private RunPreflightHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers)
+    private RunPreflightHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers) =>
+        BuildHandler(null, providers);
+
+    private RunPreflightHandler HandlerWith(
+        ConsultationTenantOverride tenantOverride,
+        params (string key, IConsultationProvider provider)[] providers) =>
+        BuildHandler(tenantOverride, providers);
+
+    private RunPreflightHandler BuildHandler(
+        ConsultationTenantOverride? tenantOverride,
+        (string key, IConsultationProvider provider)[] providers)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
         var registry = new StaticRegistry(dict);
-        // Chain resolver con defaults embebidos (vehicle_* → [kyverum_runt, verifik]) y sin override de
-        // tenant: kyverum_runt no está registrado en estos tests → la cadena cae a verifik.
         var resolver = new ConsultationProviderChainResolver(registry, new ConsultationChainOptions());
-        return new RunPreflightHandler(_repo, registry, resolver, new NullOverrideProvider());
+        IConsultationTenantOverrideProvider overrideProvider = tenantOverride is null
+            ? new NullOverrideProvider()
+            : new FixedOverrideProvider(tenantOverride);
+        return new RunPreflightHandler(_repo, registry, resolver, overrideProvider);
     }
 
     // ── 404 / 409 ────────────────────────────────────────────────────────────
@@ -232,6 +249,29 @@ public sealed class PreflightHandlerTests
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // fallback al proveedor de contingencia.
         result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_OverrideTenantVerifikFirst_IgnoraDefaultKyverum()
+    {
+        // Glue AC3: config persistida en tenant → preflight respeta primary verifik aunque el default global sea Kyverum-first.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var tenantOverride = new ConsultationTenantOverride(
+            new Dictionary<string, ConsultationChainSelection>(StringComparer.OrdinalIgnoreCase)
+            {
+                [ConsultationKindKeys.VehicleVin] = new("verifik", ["kyverum_runt"]),
+            },
+            FailoverTimeoutMs: 6000);
+        var kyverum = new StubProvider("kyverum_runt", Result("green", Check("ok")));
+        var verifik = new StubProvider("verifik", Result("green", Check("ok")));
+        var handler = HandlerWith(tenantOverride, ("kyverum_runt", kyverum), ("verifik", verifik));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Be("verifik");
     }
 
     // ── Estado del vehículo: REGISTRADO no bloquea matrícula inicial ───────────
