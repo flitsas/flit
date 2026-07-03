@@ -282,6 +282,10 @@ public static class InfrastructureExtensions
             new ConsultationProviderChainResolver(
                 sp.GetRequiredService<IConsultationProviderRegistry>(),
                 sp.GetRequiredService<IOptions<ConsultationChainOptions>>().Value));
+
+        // Puente tenant → override de cadena/timeout (HU #10478, Fase 5). Lee
+        // admin.tenant_operational_policies vía ITenantSettingsRepository.
+        services.AddScoped<IConsultationTenantOverrideProvider, TenantConsultationOverrideProvider>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)

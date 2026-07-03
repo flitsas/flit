@@ -19,8 +19,16 @@ public sealed class PreflightHandlerTests
     private sealed class StubProvider(string key, ConsultationResult result) : IConsultationProvider
     {
         public string Key => key;
+        // Provider = Key para que el tracking de providersUsed (que usa result.Provider) case con la
+        // key registrada, igual que los providers reales (kyverum_runt/verifik).
         public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct) =>
-            Task.FromResult(result);
+            Task.FromResult(result with { Provider = key });
+    }
+
+    private sealed class NullOverrideProvider : IConsultationTenantOverrideProvider
+    {
+        public Task<ConsultationTenantOverride?> GetAsync(Guid tenantId, CancellationToken ct) =>
+            Task.FromResult<ConsultationTenantOverride?>(null);
     }
 
     private sealed class ThrowingProvider(string key) : IConsultationProvider
@@ -89,7 +97,11 @@ public sealed class PreflightHandlerTests
     private RunPreflightHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
-        return new RunPreflightHandler(_repo, new StaticRegistry(dict));
+        var registry = new StaticRegistry(dict);
+        // Chain resolver con defaults embebidos (vehicle_* → [kyverum_runt, verifik]) y sin override de
+        // tenant: kyverum_runt no está registrado en estos tests → la cadena cae a verifik.
+        var resolver = new ConsultationProviderChainResolver(registry, new ConsultationChainOptions());
+        return new RunPreflightHandler(_repo, registry, resolver, new NullOverrideProvider());
     }
 
     // ── 404 / 409 ────────────────────────────────────────────────────────────
@@ -184,6 +196,41 @@ public sealed class PreflightHandlerTests
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // SIMIT no corre en matrícula.
+        result.Overall.Should().Be("green");
+    }
+
+    // ── HU #10478: cadena Kyverum-first → Verifik ─────────────────────────────
+
+    [Fact]
+    public async Task Post_Matricula_KyverumFirst_UsaKyverumCuandoEstaRegistrado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("kyverum_runt", new StubProvider("kyverum_runt", Result("green", Check("ok")))),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Be("kyverum_runt"); // Kyverum-first: gana al fallback Verifik.
+    }
+
+    [Fact]
+    public async Task Post_Matricula_KyverumNoVerificable_CaeAVerifik()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("kyverum_runt", new StubProvider("kyverum_runt", Result("red", Check("error")))),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Be("verifik"); // fallback al proveedor de contingencia.
         result.Overall.Should().Be("green");
     }
 

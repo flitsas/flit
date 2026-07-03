@@ -26,7 +26,7 @@ internal sealed class KyverumRuntConductorConsultationProvider(KyverumRuntApiCli
         try
         {
             var response = await client.ConsultarPersonaAsync(
-                new KyverumRuntPersonaQuery(documentNumber, documentType), ct);
+                new KyverumRuntPersonaQuery(documentNumber, KyverumRuntDocType.Normalize(documentType)), ct);
             return KyverumRuntConductorResultMapper.Map(response);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

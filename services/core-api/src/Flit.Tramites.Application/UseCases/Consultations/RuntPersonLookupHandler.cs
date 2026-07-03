@@ -11,9 +11,10 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// </summary>
 public sealed class RuntPersonLookupHandler(
     IProcedureInstanceRepository repo,
-    IConsultationProviderRegistry registry)
+    IConsultationProviderChainResolver chainResolver,
+    IConsultationTenantOverrideProvider overrideProvider)
 {
-    private const string ProviderKey = "verifik_conductor";
+    private const string KyverumConductorProvider = "kyverum_runt_conductor";
 
     public async Task<(RuntPersonDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -29,10 +30,6 @@ public sealed class RuntPersonLookupHandler(
         if (instance is null)
             return (null, "instance_not_found");
 
-        var provider = registry.Resolve(ProviderKey);
-        if (provider is null)
-            return (null, "provider_not_found");
-
         var mappedDocType = MapDocumentType(documentType);
         if (mappedDocType is null)
             return (null, "unsupported_document_type");
@@ -43,8 +40,10 @@ public sealed class RuntPersonLookupHandler(
             ["document_number"] = documentNumber,
         };
 
+        // HU #10478: cadena Kyverum-first → Verifik (conductor) según config del tenant.
+        var tenantOverride = await overrideProvider.GetAsync(tenantId, ct);
         var ctx = new ConsultationContext(instanceId, tenantId, instance.ReferenceNumber, fieldValues);
-        var result = await provider.ConsultAsync(ctx, ct);
+        var result = await chainResolver.ConsultAsync(ConsultationKind.Conductor, ctx, tenantOverride, ct);
 
         var fullName = GetHydrated(result, "person_full_name");
         var found = !string.IsNullOrWhiteSpace(fullName);
@@ -63,7 +62,7 @@ public sealed class RuntPersonLookupHandler(
             DocumentType: documentType,
             DocumentNumber: documentNumber,
             LicenseStatus: found ? GetHydrated(result, "person_license_status") : null,
-            Mode: ResolveMode(),
+            Mode: ResolveMode(result.Provider),
             CitizenStatus: citizenStatus,
             HasPendingFines: hasPendingFines,
             NroPazYSalvo: nroPazYSalvo,
@@ -96,12 +95,15 @@ public sealed class RuntPersonLookupHandler(
             _ => documentType
         };
 
-    // El modo real|mock del provider verifik_conductor se controla con VERIFIK_CONDUCTOR_MODE
-    // (default "mock"; cualquier valor distinto de "real" se trata como mock — misma semántica
-    // que ConsultationProviderModeOptions.IsMock en Infrastructure, replicada aquí porque
-    // Application no referencia Infrastructure).
-    private static string ResolveMode()
+    // Modo real|mock que reporta el DTO (informativo para el wizard). Kyverum RUNT no tiene modo
+    // mock: si respondió, es "real". Para Verifik conductor se replica la semántica de
+    // ConsultationProviderModeOptions.IsMock (VERIFIK_CONDUCTOR_MODE, default "mock"), aquí porque
+    // Application no referencia Infrastructure.
+    private static string ResolveMode(string? answeringProvider)
     {
+        if (string.Equals(answeringProvider, KyverumConductorProvider, StringComparison.OrdinalIgnoreCase))
+            return "real";
+
         var mode = Environment.GetEnvironmentVariable("VERIFIK_CONDUCTOR_MODE") ?? "mock";
         return string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase) ? "real" : "mock";
     }

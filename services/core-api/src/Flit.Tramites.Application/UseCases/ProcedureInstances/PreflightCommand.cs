@@ -45,9 +45,10 @@ public sealed record PreflightSnapshotDto(
 /// </summary>
 public sealed class RunPreflightHandler(
     IProcedureInstanceRepository repo,
-    IConsultationProviderRegistry registry)
+    IConsultationProviderRegistry registry,
+    IConsultationProviderChainResolver chainResolver,
+    IConsultationTenantOverrideProvider overrideProvider)
 {
-    private const string ProviderVerifik = "verifik";
     private const string ProviderVerifikSimit = "verifik_simit";
     private const string ProviderVerifikRnmc = "verifik_rnmc";
     private const string ConsultationSource = "consultation";
@@ -78,12 +79,16 @@ public sealed class RunPreflightHandler(
         var providersUsed = new SortedSet<string>(StringComparer.Ordinal);
         IReadOnlyList<HydratedField> vehicleFields;
 
+        // HU #10478: la cadena de proveedores (Kyverum-first → Verifik) y el presupuesto de failover
+        // salen de la config del tenant; null ⇒ defaults globales.
+        var tenantOverride = await overrideProvider.GetAsync(tenantId, ct);
+
         if (modalidad == TramiteModalidadEntrada.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
             // antes de que exista el actor vendedor); de ahí lo toma el provider.
-            vehicleFields = await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
+            vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
             // SIMIT del comprador y del vendedor (comparendos).
             await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, ct);
             await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, ct);
@@ -93,7 +98,7 @@ public sealed class RunPreflightHandler(
         else
         {
             // Matrícula inicial: vehículo por VIN (primera matrícula, sin propietario previo).
-            vehicleFields = await RunVehiculoAsync(checks, providersUsed, vin, plate, fieldValues, ct);
+            vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
         }
 
         // Una sola consulta a Verifik alimenta AMBAS secciones: el proveedor del vehículo ya
@@ -180,34 +185,54 @@ public sealed class RunPreflightHandler(
         }
     }
 
+    /// <summary>
+    /// Corre la consulta de vehículo a través de la CADENA de proveedores (HU #10478): Kyverum RUNT
+    /// primero, Verifik como fallback, según la config del tenant. El provider concreto decide VIN vs
+    /// placa desde los field_values (VIN prioritario); <paramref name="kind"/> selecciona la cadena por
+    /// modalidad. Nunca propaga 500: cualquier excepción inesperada se traduce a un check <c>error</c>.
+    /// </summary>
     private async Task<IReadOnlyList<HydratedField>> RunVehiculoAsync(
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
+        ConsultationKind kind,
+        Guid instanceId,
+        Guid tenantId,
         string? vin,
         string? plate,
         Dictionary<string, string?> fieldValues,
+        ConsultationTenantOverride? tenantOverride,
         CancellationToken ct)
     {
-        var provider = registry.Resolve(ProviderVerifik);
-        if (provider is null)
-        {
-            checks.Add(new PreflightCheckDto("vehiculo", "Consulta de vehículo", "error", ProviderVerifik,
-                "No fue posible verificar la información del vehículo en el RUNT en este momento. Vuelve a intentarlo en unos minutos."));
-            return [];
-        }
-
-        providersUsed.Add(ProviderVerifik);
         var fv = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(vin)) fv["vin"] = vin;
         if (!string.IsNullOrWhiteSpace(plate)) fv["plate"] = plate;
         // Documento del propietario para la consulta por placa: lo lee el provider
-        // vehicle-by-plate (D-201-1) de los field_values, donde lo persiste el paso "consulta".
+        // vehicle-by-plate de los field_values, donde lo persiste el paso "consulta".
         var ownerDocType = Get(fieldValues, "owner_document_type");
         var ownerDocNumber = Get(fieldValues, "owner_document_number");
         if (!string.IsNullOrWhiteSpace(ownerDocType)) fv["owner_document_type"] = ownerDocType;
         if (!string.IsNullOrWhiteSpace(ownerDocNumber)) fv["owner_document_number"] = ownerDocNumber;
 
-        return await RunProviderAsync(checks, provider, fv, ct);
+        try
+        {
+            var ctx = new ConsultationContext(instanceId, tenantId, "vehiculo", fv);
+            var result = await chainResolver.ConsultAsync(kind, ctx, tenantOverride, ct);
+            providersUsed.Add(result.Provider);
+            foreach (var c in result.Checks)
+                checks.Add(new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message));
+
+            return result.HydratedFields;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            checks.Add(new PreflightCheckDto("vehiculo", "Consulta de vehículo", "error", "kyverum_runt",
+                "No fue posible verificar la información del vehículo en el RUNT en este momento. Vuelve a intentarlo en unos minutos."));
+            return [];
+        }
     }
 
     private async Task RunSimitAsync(

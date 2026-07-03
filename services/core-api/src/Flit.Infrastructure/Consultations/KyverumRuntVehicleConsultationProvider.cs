@@ -33,7 +33,8 @@ internal sealed class KyverumRuntVehicleConsultationProvider(KyverumRuntApiClien
             if (string.IsNullOrWhiteSpace(documentNumber))
                 return RequiresOwnerDocument();
 
-            query = new KyverumRuntVehicleQuery(Vin: null, Placa: plate, Documento: documentNumber, TipoDocumento: documentType);
+            query = new KyverumRuntVehicleQuery(
+                Vin: null, Placa: plate, Documento: documentNumber, TipoDocumento: KyverumRuntDocType.Normalize(documentType));
         }
         else
         {
