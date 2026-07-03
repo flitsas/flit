@@ -47,6 +47,8 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.WebhookSecretEncrypted).HasColumnName("webhook_secret_encrypted").HasMaxLength(2000);
         builder.Property(x => x.ProviderStatus).HasColumnName("provider_status").HasMaxLength(40);
         builder.Property(x => x.ProviderPayload).HasColumnName("provider_payload").HasColumnType("jsonb");
+        // HU #10488 — serie/hash del certificado biométrico (firmaSerie de Kyverum) que alimenta el sello del FUR.
+        builder.Property(x => x.CertificateHash).HasColumnName("certificate_hash").HasMaxLength(200);
 
         // HU #10350 — fecha de fin de vigencia: columna NORMAL que estampa el código al aprobar
         // (validado_at + 30 días, medianoche Colombia). Los "días restantes" NO se persisten: se calculan

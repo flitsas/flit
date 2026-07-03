@@ -33,7 +33,7 @@ public static class IdentityValidationReconciler
         {
             case "aprobado":
                 return await applier.ApplyAsync(
-                    v, new IdentityValidationTerminalResult(true, status.Status, status.RawPayloadSanitized, status.Score), now, ct);
+                    v, new IdentityValidationTerminalResult(true, status.Status, status.RawPayloadSanitized, status.Score, status.FirmaSerie), now, ct);
 
             case "rechazado_intento":
             {

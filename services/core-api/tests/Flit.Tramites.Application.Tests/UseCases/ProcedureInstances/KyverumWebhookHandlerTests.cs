@@ -70,6 +70,9 @@ public sealed class KyverumWebhookHandlerTests
     // `closedAt` del intento en el cuerpo: es la CLAVE de dedup del conteo (webhook autoritativo).
     private const string AttemptClosedAt = "2026-06-23T15:30:00.000Z";
 
+    // Serie/hash del certificado que reporta Kyverum en el subject aprobado (HU #10488).
+    private const string FirmaSerie = "FS-9A3F21C7";
+
     // Cuerpo del webhook según el contrato real (evento + data.aprobado + subjects[]). `closedAt` parametrizable
     // para simular intentos distintos (clave de dedup) vs. redeliveries del mismo intento (misma clave).
     private static byte[] Body(bool aprobado, int score = 88, string closedAt = AttemptClosedAt)
@@ -80,7 +83,7 @@ public sealed class KyverumWebhookHandlerTests
             "{\"evento\":\"" + evento + "\",\"requestId\":\"550e8400\",\"data\":{\"aprobado\":"
             + (aprobado ? "true" : "false")
             + ",\"closedAt\":\"" + closedAt + "\",\"subjects\":[{\"id\":\"66824abc\",\"rol\":\"comprador\",\"documento\":\"123\",\"status\":\""
-            + status + "\",\"score\":" + score
+            + status + "\",\"score\":" + score + ",\"firmaSerie\":\"" + FirmaSerie + "\""
             + ",\"datosExtraidos\":{\"nombres\":\"ANDRES FELIPE\",\"apellidos\":\"PEREZ GOMEZ\"}}]},\"deliveryId\":\"7c9e6679\",\"ts\":\"2026-06-23T15:30:01.000Z\"}";
         return Encoding.UTF8.GetBytes(json);
     }
@@ -107,6 +110,22 @@ public sealed class KyverumWebhookHandlerTests
         await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e =>
             e.ValidationId == v.Id && e.Estado == BiometricEstados.Aprobado), ct);
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Webhook_Approved_PersistsCertificateHashFromFirmaSerie()
+    {
+        // HU #10488 — la serie/hash del certificado (firmaSerie del subject aprobado) se persiste como
+        // CertificateHash para alimentar el sello de identidad del FUR.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        var body = Body(aprobado: true);
+
+        var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        error.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.CertificateHash.Should().Be(FirmaSerie);
     }
 
     [Fact]

@@ -62,7 +62,22 @@ public sealed class GenerarFurHandler(
         if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
             return (null, "organismo_requerido");
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada);
+        // HU #10488 — sello de identidad (texto) por parte para el espacio de firma del FUR. Solo cuando la
+        // identidad está validada (si no, el mapper pinta "NO FIRMADO"). Se resuelve la validación aprobada+
+        // vigente de cada parte (fila propia o identidad referenciada por documento, HU #10350).
+        var sellosIdentidad = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (identidadValidada)
+        {
+            var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+            foreach (var role in roles)
+            {
+                var val = await ResolveApprovedValidationAsync(instance, role, DateTimeOffset.UtcNow, ct);
+                if (val is not null)
+                    sellosIdentidad[role] = BuildIdentidadSello(val);
+            }
+        }
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -159,7 +174,7 @@ public sealed class GenerarFurHandler(
 
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
-        bool identidadValidada)
+        bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -209,7 +224,51 @@ public sealed class GenerarFurHandler(
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
             Observaciones: Get(fv, "fur_observations"),
-            IdentidadValidada: identidadValidada);
+            IdentidadValidada: identidadValidada,
+            SellosIdentidad: sellosIdentidad);
+    }
+
+    /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// Resuelve la validación biométrica APROBADA+VIGENTE de una parte para el sello del FUR: primero la fila
+    /// propia del trámite; si no, la identidad vigente REFERENCIADA por documento del actor (HU #10350, sin
+    /// clonar). Devuelve null si la parte no tiene identidad aprobada vigente.
+    /// </summary>
+    private async Task<ProcedureInstanceBiometricValidation?> ResolveApprovedValidationAsync(
+        ProcedureInstance instance, string role, DateTimeOffset now, CancellationToken ct)
+    {
+        var own = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
+            && BiometricRules.EsAprobadaVigente(v, now));
+        if (own is not null)
+            return own;
+
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            return await repo.FindVigenteApprovedByDocumentAsync(
+                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Sello de texto de la validación biométrica (HU #10488): documento, uuid de la validación, serie/hash del
+    /// certificado (firmaSerie) y fechas de aprobación/vencimiento (día calendario Colombia). Multilínea: el
+    /// overlay del FUR lo pinta línea a línea en el espacio de firma.
+    /// </summary>
+    private static string BuildIdentidadSello(ProcedureInstanceBiometricValidation v)
+    {
+        var doc = $"{v.DocumentType} {v.DocumentNumber}".Trim();
+        var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
+        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "-" : v.CertificateHash!;
+        var aprob = v.ValidatedAt is { } va
+            ? va.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
+        var vence = v.ValidUntil is { } vu
+            ? vu.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
+        return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
     }
 
     /// <summary>
