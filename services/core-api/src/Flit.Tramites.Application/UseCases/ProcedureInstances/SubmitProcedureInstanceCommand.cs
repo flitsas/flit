@@ -29,7 +29,11 @@ public sealed class SubmitProcedureInstanceHandler(
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
             return (null, "not_published");
 
-        var gateErrors = SubmitGate.Evaluate(instance);
+        // Identidad PER-PERSONA (documento del actor), referenciada de la validación vigente (HU #10350):
+        // el gate no exige fila propia del trámite; basta con que la persona tenga identidad vigente aprobada.
+        var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+            repo, instance, DateTimeOffset.UtcNow, ct);
+        var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
         if (gateErrors.Count > 0)
             return (null, gateErrors[0]);
 

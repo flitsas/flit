@@ -21,7 +21,8 @@ public sealed class IniciarKyverumVerifyHandlerTests
     private readonly IniciarKyverumVerifyHandler _handler;
 
     public IniciarKyverumVerifyHandlerTests() =>
-        _handler = new IniciarKyverumVerifyHandler(_repo, _kyverum, _protector, _events);
+        _handler = new IniciarKyverumVerifyHandler(
+            _repo, _kyverum, _protector, _events, Substitute.For<IIdentityValidationAuditLog>());
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = ProcedureInstanceStatus.Draft) =>
         new()

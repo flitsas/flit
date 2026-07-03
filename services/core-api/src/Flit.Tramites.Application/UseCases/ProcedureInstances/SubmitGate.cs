@@ -32,25 +32,27 @@ public static class SubmitGate
     /// Evalúa el gate de radicado. La instancia debe traer cargado el grafo del wizard
     /// (FieldValues, Actors, Attachments, BiometricValidations, Signatures, ChecklistEstado).
     /// </summary>
-    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance)
+    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? EvaluateTraspaso(instance)
-            : EvaluateMatricula(instance);
+            ? EvaluateTraspaso(instance, identidadAprobadaPartes)
+            : EvaluateMatricula(instance, identidadAprobadaPartes);
     }
 
-    private static List<string> EvaluateMatricula(ProcedureInstance instance)
+    private static List<string> EvaluateMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var errors = new List<string>(4);
 
         if (!DocumentosObligatoriosCompletos(instance))
             errors.Add(DocumentosIncompletos);
-        if (!BiometriaAprobada(instance, "comprador"))
+        // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains("comprador"))
             errors.Add(IdentidadRequerida);
 
         return errors;
@@ -61,13 +63,14 @@ public static class SubmitGate
     /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
     /// incumplidos; lista vacía = puede radicar.
     /// </summary>
-    private static List<string> EvaluateTraspaso(ProcedureInstance instance)
+    private static List<string> EvaluateTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
     {
         var errors = new List<string>(5);
 
         if (!DocumentosObligatoriosCompletos(instance))
             errors.Add(DocumentosIncompletos);
-        if (!BiometriaAprobada(instance, "comprador") || !BiometriaAprobada(instance, "vendedor"))
+        // Identidad PER-PERSONA (documento de cada parte), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains("comprador") || !identidadAprobadaPartes.Contains("vendedor"))
             errors.Add(IdentidadRequerida);
         if (!FirmaCompraventaAmbas(instance))
             errors.Add(FirmaCompraventaRequerida);
@@ -88,20 +91,6 @@ public static class SubmitGate
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
-    }
-
-    private static bool BiometriaAprobada(ProcedureInstance instance, string parte)
-    {
-        // HU #10350 — aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor actual; una aprobación
-        // vencida no radica, y una validación de una persona anterior (documento distinto) tampoco cuenta
-        // (defensa en profundidad: el gate no se fía de que el ensure del frontend haya invalidado la previa).
-        var now = DateTimeOffset.UtcNow;
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        return instance.BiometricValidations.Any(v =>
-            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }
 
     private static bool FurGenerado(ProcedureInstance instance) =>

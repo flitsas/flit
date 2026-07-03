@@ -44,6 +44,23 @@ public sealed class KyverumVerifyException(string message, bool transient) : Exc
 }
 
 /// <summary>
+/// Estado de una validación consultado a Kyverum (<c>GET /v1/validations/{id}</c>), usado por la
+/// reconciliación. <paramref name="Status"/> ya viene NORMALIZADO por el cliente al veredicto FLIT:
+/// <list type="bullet">
+///   <item><c>aprobado</c> — el <c>result</c> de Kyverum cerró aprobado.</item>
+///   <item><c>rechazado_intento</c> — un INTENTO falló (Kyverum reporta result/rechazado tras CADA intento,
+///   aunque queden reintentos). NO es terminal por sí solo: el reconciliador CUENTA los intentos (dedup por
+///   <paramref name="AttemptAt"/>) y solo terminaliza en <c>rechazado</c> al llegar al máximo.</item>
+///   <item><c>en_proceso</c>/<c>enviado</c>/<c>expirado</c> — tal cual.</item>
+/// </list>
+/// <paramref name="AttemptAt"/> = <c>validadoAt</c> del último intento (clave de dedup/conteo);
+/// <paramref name="Motivo"/> = mensaje amigable de Kyverum del intento; <paramref name="RawPayloadSanitized"/>
+/// = payload SANITIZADO (sin OCR/PII) para trazabilidad.
+/// </summary>
+public sealed record KyverumVerifyStatus(
+    string Status, int? Score, string RawPayloadSanitized, string? AttemptAt = null, string? Motivo = null);
+
+/// <summary>
 /// Contrato del cliente HTTP de Kyverum Verify (HU #10233). La implementación vive en Infraestructura
 /// (<c>KyverumVerifyClient</c>, typed HttpClient) — mismo patrón contract-first que los consultation
 /// providers. Lanza <see cref="KyverumVerifyException"/> ante 4xx/5xx/timeout (el handler los mapea a
@@ -52,4 +69,12 @@ public sealed class KyverumVerifyException(string message, bool transient) : Exc
 public interface IKyverumVerifyClient
 {
     Task<KyverumVerifyStartResult> StartVerificationAsync(KyverumVerifyStartRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Consulta el estado actual de una validación en Kyverum (<c>GET /v1/validations/{id}</c>). Reconciliación
+    /// cuando el webhook se pierde. Devuelve <c>null</c> si Kyverum no conoce el id (404). <paramref name="parte"/>
+    /// selecciona el subject correspondiente (o el primero). Lanza <see cref="KyverumVerifyException"/> ante
+    /// 5xx/timeout/red (transitorio) o respuesta inválida (definitivo).
+    /// </summary>
+    Task<KyverumVerifyStatus?> GetStatusAsync(string verificationId, string? parte, CancellationToken ct = default);
 }

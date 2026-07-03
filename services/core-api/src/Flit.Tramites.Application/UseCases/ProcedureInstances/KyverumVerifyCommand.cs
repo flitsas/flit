@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Tramites.Application.Identity;
@@ -5,6 +6,7 @@ using Flit.Tramites.Application.Identity.Events;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -39,7 +41,8 @@ public sealed class IniciarKyverumVerifyHandler(
     IProcedureInstanceRepository repo,
     IKyverumVerifyClient kyverum,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IIdentityValidationEventPublisher events,
+    IIdentityValidationAuditLog audit)
 {
     public async Task<(IniciarKyverumVerifyResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -84,6 +87,11 @@ public sealed class IniciarKyverumVerifyHandler(
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
         var validationId = Guid.NewGuid();
 
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.Send, IdentityValidationAuditOutcomes.Ok,
+            TenantId: tenantId, ProcedureInstanceId: id, ValidationId: validationId, PartyRole: parte,
+            Message: "Enviando validación a Kyverum (create)."), ct);
+
         // Llamada al proveedor. NUNCA propaga la API key ni el secreto en el mensaje de error (AC7).
         KyverumVerifyStartResult provider;
         try
@@ -94,6 +102,12 @@ public sealed class IniciarKyverumVerifyHandler(
         }
         catch (KyverumVerifyException ex)
         {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.SendError, IdentityValidationAuditOutcomes.Error,
+                TenantId: tenantId, ProcedureInstanceId: id, ValidationId: validationId, PartyRole: parte,
+                ErrorType: nameof(KyverumVerifyException), HttpStatus: ex.Transient ? 503 : 502,
+                Message: ex.Transient ? "Create falló (transitorio): se encola para reintento." : "Create rechazado (definitivo)."), ct);
+
             // Fallo DEFINITIVO (datos/4xx): no se reintenta.
             if (!ex.Transient)
                 return (null, "proveedor_error");
@@ -116,7 +130,7 @@ public sealed class IniciarKyverumVerifyHandler(
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = queuedAt.AddHours(BiometricRules.TokenTtlHoras),
                 Attempts = 1, // el primer intento (síncrono) ya falló
-                MaxAttempts = BiometricRules.MaxIntentos,
+                MaxAttempts = BiometricRules.KyverumMaxIntentos,
                 CreatedAt = queuedAt,
                 Provider = BiometricProviders.Kyverum,
             };
@@ -144,7 +158,7 @@ public sealed class IniciarKyverumVerifyHandler(
             TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
             ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
             Attempts = 0,
-            MaxAttempts = BiometricRules.MaxIntentos,
+            MaxAttempts = BiometricRules.KyverumMaxIntentos,
             CreatedAt = now,
             Provider = BiometricProviders.Kyverum,
             KyverumVerificationId = provider.VerificationId,
@@ -173,6 +187,13 @@ public sealed class IniciarKyverumVerifyHandler(
 
         await repo.SaveChangesAsync(ct);
 
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.SendResponse, IdentityValidationAuditOutcomes.Ok,
+            TenantId: tenantId, ProcedureInstanceId: id, ValidationId: validation.Id,
+            KyverumVerificationId: provider.VerificationId, PartyRole: parte,
+            SecretPresent: validation.WebhookSecretEncrypted is not null, ProviderStatus: provider.ProviderStatus,
+            Message: "Create OK: validación en_proceso, captura enviada."), ct);
+
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new IniciarKyverumVerifyResult(dto, provider.CaptureUrl), null);
     }
@@ -198,43 +219,115 @@ public sealed class IniciarKyverumVerifyHandler(
 
 /// <summary>
 /// Procesa el webhook de Kyverum (HU #10233, AC2/AC3). Resuelve la validación por NUESTRO id (que viaja
-/// en la URL del callback — el cuerpo no lo repite), descifra el secreto de ESA validación y verifica la
-/// firma HMAC-SHA256 (<c>x-kv-signature: sha256=&lt;hex&gt;</c>) sobre el cuerpo CRUDO: firma inválida ⇒
-/// <c>firma_invalida</c> (401) SIN tocar la BD. Idempotente: si la validación ya está en estado terminal
-/// (aprobado|rechazado) devuelve <c>ok</c> sin re-aplicar ni re-emitir evento. Mapea <c>data.aprobado</c>
-/// a aprobado|rechazado, persiste provider_status/payload SANITIZADO (sin OCR/PII) y emite
-/// <see cref="IdentityValidationCompleted"/> (outbox).
+/// en la URL del callback — el cuerpo no lo repite) y verifica la firma HMAC-SHA256
+/// (<c>x-kv-signature: sha256=&lt;hex&gt;</c>) sobre el cuerpo CRUDO. Con firma válida confía en el cuerpo y
+/// aplica el resultado. Firma presente y NO válida ⇒ <c>firma_invalida</c> (401) sin tocar la BD (AC3).
+/// <para><b>Robustez (keyring):</b> si el secreto NO se puede descifrar (<see cref="CryptographicException"/>
+/// del keyring de Data Protection) o está ausente, NUNCA devuelve 500 ni confía en el cuerpo: consulta el
+/// estado real a Kyverum (autenticado con API key) y aplica ese resultado. Así el webhook SIGUE funcionando
+/// y auto-cura la validación aunque el keyring esté roto entre réplicas/reinicios.</para>
+/// Idempotente: estados terminales devuelven <c>ok</c> sin re-aplicar. Persiste provider_status/payload
+/// SANITIZADO (sin OCR/PII) y emite <see cref="IdentityValidationCompleted"/> (outbox).
 /// </summary>
 public sealed class KyverumWebhookHandler(
     IProcedureInstanceRepository repo,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IKyverumVerifyClient kyverum,
+    IdentityValidationResultApplier applier,
+    IIdentityValidationAuditLog audit,
+    ILogger<KyverumWebhookHandler> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<(string? Result, string? Error)> HandleAsync(KyverumWebhookInput input, CancellationToken ct = default)
     {
+        var signaturePresent = !string.IsNullOrWhiteSpace(input.Signature);
+
         if (input.RawBody is null || input.RawBody.Length == 0)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, "cuerpo_invalido",
+                ValidationId: input.ValidationId, SignaturePresent: signaturePresent, HttpStatus: 400), ct);
             return (null, "cuerpo_invalido");
+        }
 
         // Correlación por NUESTRO id (de la URL). No se confía en el cuerpo para localizar la validación.
         var v = await repo.GetBiometricByIdAsync(input.ValidationId, ct);
         if (v is null)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.NotFound,
+                ValidationId: input.ValidationId, SignaturePresent: signaturePresent, HttpStatus: 404), ct);
             return (null, "not_found");
+        }
 
-        // Verificación de firma ANTES de confiar en el cuerpo. Firma inválida o secreto ausente ⇒ 401
-        // sin cambios en BD (AC3).
-        if (string.IsNullOrWhiteSpace(v.WebhookSecretEncrypted))
-            return (null, "firma_invalida");
+        var secretPresent = !string.IsNullOrWhiteSpace(v.WebhookSecretEncrypted);
 
-        var secret = secretProtector.Unprotect(v.WebhookSecretEncrypted);
+        // LLEGADA del webhook: queda registrada SIEMPRE (con firma/secreto presentes).
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Received,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SignaturePresent: signaturePresent, SecretPresent: secretPresent), ct);
+
+        // Descifrado del secreto (vía rápida HMAC). CryptographicException (keyring/ApplicationName) ⇒ NO 500.
+        string? secret = null;
+        string? decryptError = null;
+        if (secretPresent)
+        {
+            try
+            {
+                secret = secretProtector.Unprotect(v.WebhookSecretEncrypted!);
+            }
+            catch (CryptographicException ex)
+            {
+                decryptError = ex.GetType().Name;
+            }
+        }
+
+        if (secret is null)
+        {
+            // No verificable (secreto ausente o indescifrable) → auditar el diagnóstico y reconciliar por consulta.
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookNotVerifiable,
+                secretPresent ? IdentityValidationAuditOutcomes.DecryptFailed : IdentityValidationAuditOutcomes.SecretMissing,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SignaturePresent: signaturePresent, SecretPresent: secretPresent,
+                DecryptOk: secretPresent ? false : null, ErrorType: decryptError,
+                Message: secretPresent
+                    ? "El secreto no se pudo descifrar (keyring/ApplicationName no coincide); se reconcilia por consulta."
+                    : "La validación no tiene secreto de webhook; se reconcilia por consulta."), ct);
+            WebhookLog.SecretNotVerifiable(logger, v.Id);
+            return await ReconcileFromKyverumAsync(v, ct);
+        }
+
+        // Firma presente y verificable: si NO valida ⇒ 401 (seguridad, AC3).
         if (!KyverumWebhookVerifier.IsValid(input.RawBody, input.Signature, secret))
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookSignatureInvalid, IdentityValidationAuditOutcomes.SignatureInvalid,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SignaturePresent: signaturePresent, SecretPresent: true, DecryptOk: true, HttpStatus: 401), ct);
             return (null, "firma_invalida");
+        }
 
+        // Idempotencia: estados terminales no se re-procesan (AC2).
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            return ("ok", null);
+
+        return await ApplyFromBodyAsync(v, input.RawBody, ct);
+    }
+
+    /// <summary>Vía rápida: firma válida ⇒ confiar en el cuerpo del webhook y aplicar.</summary>
+    private async Task<(string? Result, string? Error)> ApplyFromBodyAsync(
+        ProcedureInstanceBiometricValidation v, byte[] rawBody, CancellationToken ct)
+    {
         KyverumWebhookPayload? payload;
         try
         {
-            payload = JsonSerializer.Deserialize<KyverumWebhookPayload>(input.RawBody, JsonOptions);
+            payload = JsonSerializer.Deserialize<KyverumWebhookPayload>(rawBody, JsonOptions);
         }
         catch (JsonException)
         {
@@ -244,39 +337,88 @@ public sealed class KyverumWebhookHandler(
         if (payload?.Data is null)
             return (null, "cuerpo_invalido");
 
-        // Idempotencia: estados terminales no se re-procesan (AC2).
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
-            return ("ok", null);
-
-        // El sujeto que corresponde a la parte de esta validación (o el primero).
-        var subject = SelectSubject(payload.Data.Subjects, v.PartyRole);
-        var estado = payload.Data.Aprobado ? BiometricEstados.Aprobado : BiometricEstados.Rechazado;
-
-        var now = DateTimeOffset.UtcNow;
-        if (estado == BiometricEstados.Aprobado)
-            v.Approve(now); // estado + validated_at + estampa valid_until + updated_at
-        else
+        // Kyverum emite `validation.rejected` en CADA intento fallido aunque queden reintentos: un rechazo del
+        // webhook NO es terminal. Solo se confía en el APROBADO (final). Ante rechazo se RECONCILIA contra el
+        // `result` authoritative de Kyverum (GET status): si aún no cerró, la validación queda `en_proceso` (el
+        // cliente reintenta en el móvil) y solo se marca rechazado cuando Kyverum cierra rechazado (intentos
+        // agotados). Evita el rechazo prematuro que dejaba la validación terminal y perdía la aprobación posterior.
+        if (!payload.Data.Aprobado)
         {
-            v.Status = estado;
-            v.UpdatedAt = now;
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Pending,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
+                Message: "Webhook de intento rechazado: NO terminal (Kyverum permite reintentos). Se reconcilia contra el resultado."), ct);
+            return await ReconcileFromKyverumAsync(v, ct);
         }
-        v.ProviderStatus = payload.Evento;
-        v.ProviderPayload = Sanitize(payload, subject);
-        v.Score = subject?.Score;
 
-        await events.PublishAsync(new IdentityValidationCompleted
-        {
-            TenantId = v.TenantId,
-            ProcedureInstanceId = v.ProcedureInstanceId,
-            ValidationId = v.Id,
-            Provider = BiometricProviders.Kyverum,
-            Parte = v.PartyRole,
-            Estado = estado,
-            ProviderStatus = payload.Evento,
-            Score = subject?.Score,
-        }, ct);
+        var subject = SelectSubject(payload.Data.Subjects, v.PartyRole);
+        await applier.ApplyAsync(
+            v,
+            new IdentityValidationTerminalResult(
+                true, payload.Evento, Sanitize(payload, subject), subject?.Score),
+            DateTimeOffset.UtcNow,
+            ct);
 
         await repo.SaveChangesAsync(ct);
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookApplied, v.Status,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
+            Message: "Resultado aplicado desde el webhook (firma válida, aprobado)."), ct);
+        return ("ok", null);
+    }
+
+    /// <summary>
+    /// Respaldo cuando no se puede verificar la firma: consulta el estado real a Kyverum (autenticado con el
+    /// API key, no depende del keyring) y lo aplica. Devuelve <c>reintentar</c> ante fallo transitorio del
+    /// proveedor (→ 503, Kyverum reintenta el webhook).
+    /// </summary>
+    private async Task<(string? Result, string? Error)> ReconcileFromKyverumAsync(
+        ProcedureInstanceBiometricValidation v, CancellationToken ct)
+    {
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            return ("ok", null);
+        if (string.IsNullOrWhiteSpace(v.KyverumVerificationId))
+            return ("ok", null); // sin id no hay cómo consultar; el worker/reintento lo cubrirá.
+
+        KyverumVerifyStatus? status;
+        try
+        {
+            status = await kyverum.GetStatusAsync(v.KyverumVerificationId, v.PartyRole, ct);
+        }
+        catch (KyverumVerifyException ex)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Reconcile, IdentityValidationAuditOutcomes.Error,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                ErrorType: nameof(KyverumVerifyException), HttpStatus: ex.Transient ? 503 : 502,
+                Message: "Falló la consulta de estado durante el respaldo del webhook."), ct);
+            return (null, ex.Transient ? "reintentar" : "no_verificable");
+        }
+
+        if (status is null)
+            return ("ok", null);
+
+        // El reconciliador cuenta los intentos (rechazado_intento) y persiste conteo/motivo o terminaliza al
+        // agotar; devuelve si cambió algo. Se guarda cuando cambió (aprobado/rechazado/en_proceso con intento).
+        var applied = await IdentityValidationReconciler.ApplyStatusAsync(applier, v, status, DateTimeOffset.UtcNow, ct);
+        if (applied)
+            await repo.SaveChangesAsync(ct);
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.Reconcile,
+            applied ? v.Status : IdentityValidationAuditOutcomes.Pending,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            ProviderStatus: status.Status,
+            Message: applied
+                ? $"Respaldo del webhook: sincronizado (estado: {v.Status}; intentos {v.Attempts}/{v.MaxAttempts})."
+                : "Respaldo del webhook: Kyverum aún no resuelve (sigue en proceso)."), ct);
         return ("ok", null);
     }
 
@@ -338,3 +480,11 @@ public sealed record KyverumWebhookSubject(
 public sealed record KyverumCoincidencias(
     [property: JsonPropertyName("documento")] bool Documento,
     [property: JsonPropertyName("nombre")] bool Nombre);
+
+/// <summary>Logging source-generated (CA1848) del webhook. NUNCA incluye el secreto ni PII.</summary>
+internal static partial class WebhookLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Webhook Kyverum {ValidationId}: firma no verificable (secreto ausente o keyring no puede descifrar); se reconcilia por consulta autenticada.")]
+    public static partial void SecretNotVerifiable(ILogger logger, Guid validationId);
+}

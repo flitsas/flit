@@ -390,7 +390,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -422,7 +422,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -454,7 +454,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -484,7 +484,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 

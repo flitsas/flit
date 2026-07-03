@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260702183303_IdentityValidationAudit")]
+    partial class IdentityValidationAudit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -622,10 +625,6 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId")
                         .IsUnique()
                         .HasDatabaseName("uq_transit_office_profiles_tenant_id");
-
-                    b.HasIndex("TransitOfficeId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_transit_office_profiles_transit_office_id");
 
                     b.ToTable("transit_office_profiles", "admin");
                 });
@@ -2700,11 +2699,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("kyverum_verification_id");
-
-                    b.Property<string>("LastAttemptAt")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("last_attempt_at");
 
                     b.Property<int>("MaxAttempts")
                         .ValueGeneratedOnAdd()

@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -15,20 +17,23 @@ public sealed record GenerarFurResult(IReadOnlyList<FurDocumentDto> Documents);
 
 /// <summary>
 /// Genera el FUR (y, en traspaso, el contrato de compraventa) con los datos reales de la instancia.
-/// <para><b>Validación de identidad</b> (HU #10463): ya NO bloquea la generación. Si la biométrica de
-/// las partes requeridas (traspaso: comprador + vendedor; matrícula: comprador) no está aprobada+vigente,
-/// el FUR se genera con el sello "NO FIRMADO" en el espacio de firma y NO se emite el certificado de
-/// identidad. La RADICACIÓN sí sigue exigiendo identidad (SubmitGate/#10459).</para>
-/// El documento se genera vía el generador MOCK (sin librería PDF) y se persiste como ADJUNTO
+/// <para><b>Validación de identidad</b> (HU #10463): ya NO bloquea la generación. Se resuelve la identidad
+/// vigente PER-PERSONA (documento del actor, HU #10350) de las partes requeridas (traspaso: comprador +
+/// vendedor; matrícula: comprador); si no está aprobada+vigente, el FUR se genera con el sello "NO FIRMADO"
+/// en el espacio de firma y NO se emite el certificado de identidad. La RADICACIÓN sí sigue exigiendo
+/// identidad (SubmitGate/#10459).</para>
+/// El FUR/compraventa se generan vía <c>IFurDocumentGenerator</c> y se persisten como ADJUNTO
 /// (<c>IAttachmentStorage</c> + fila en procedure_instance_attachments, tipo 'fur' / 'compraventa').
-/// Idempotente: re-generar reemplaza los adjuntos FUR/compraventa previos. Registra un evento
-/// <c>fur_generado</c> en la bitácora de la instancia.
+/// El <b>certificado de identidad</b> es el PDF REAL de Kyverum, descargado <i>best-effort</i>: si la
+/// descarga falla se registra un warning y se OMITE (no bloquea el FUR ni emite mock).
+/// Idempotente: re-generar reemplaza los adjuntos previos. Registra un evento <c>fur_generado</c>.
 /// </summary>
 public sealed class GenerarFurHandler(
     IProcedureInstanceRepository repo,
     IFurDocumentGenerator generator,
-    IIdentityCertificateGenerator identityGenerator,
-    IAttachmentStorage storage)
+    IKyverumCertificateClient certClient,
+    IAttachmentStorage storage,
+    ILogger<GenerarFurHandler> logger)
 {
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -43,10 +48,12 @@ public sealed class GenerarFurHandler(
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
 
         // HU #10463 — la validación de identidad ya NO bloquea la GENERACIÓN del FUR/consolidado.
-        // Si no hay biométrica aprobada+vigente de las partes requeridas, el FUR se genera con el
-        // sello "NO FIRMADO" en el espacio de firma y NO se emite el certificado de identidad (evita
-        // declarar "APROBADO" en falso). La RADICACIÓN sigue exigiendo identidad (SubmitGate/#10459).
-        var identidadValidada = BiometriaGateOk(instance, esTraspaso);
+        // Gating PER-PERSONA (HU #10350): se referencia la identidad vigente de la persona (documento del
+        // actor), no una fila propia del trámite. Si falta, el FUR se genera con el sello "NO FIRMADO" y sin
+        // certificado (no se declara "APROBADO" en falso). La RADICACIÓN sí sigue exigiendo identidad (#10459).
+        var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+            repo, instance, DateTimeOffset.UtcNow, ct);
+        var identidadValidada = BiometriaGateOk(identidadAprobada, esTraspaso);
 
         var fv = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
@@ -60,18 +67,22 @@ public sealed class GenerarFurHandler(
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
 
-        // FUR siempre. Certificado de identidad SOLO si hay biométrica aprobada+vigente (HU #10463:
-        // sin validación no se emite, para no declarar "APROBADO" en falso). Compraventa solo en traspaso.
+        // FUR siempre. Compraventa solo en traspaso.
         var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
-        if (identidadValidada)
-            generated.Add(identityGenerator.GenerateIdentityCertificate(AssembleIdentityData(instance)));
         if (esTraspaso)
             generated.Add(generator.GenerateCompraventa(data));
 
-        // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
-        // consolidado no debe incluir un certificado de identidad obsoleto (AC5).
-        if (!identidadValidada)
+        if (identidadValidada)
         {
+            // Certificado de identidad: PDF REAL de Kyverum (best-effort). Si falla, warning + omitir (sin mock).
+            var certificado = await TryDownloadIdentityCertificateAsync(instance, ct);
+            if (certificado is not null)
+                generated.Add(certificado);
+        }
+        else
+        {
+            // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
+            // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5).
             foreach (var prev in instance.Attachments
                          .Where(a => string.Equals(a.Tipo, "certificado_identidad", StringComparison.OrdinalIgnoreCase))
                          .ToList())
@@ -137,29 +148,14 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// Gating biométrica: traspaso requiere comprador + vendedor aprobados; matrícula requiere la
-    /// parte única (comprador) aprobada.
+    /// Gating biométrica PER-PERSONA (documento del actor): traspaso requiere comprador + vendedor con
+    /// identidad vigente aprobada; matrícula requiere el comprador. Se referencia la validación vigente de
+    /// la persona (HU #10350), no una fila propia del trámite; el set lo resuelve el handler con el repo.
     /// </summary>
-    private static bool BiometriaGateOk(ProcedureInstance instance, bool esTraspaso)
-    {
-        // HU #10350 — la biométrica debe estar aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor
-        // actual para generar el FUR (defensa en profundidad: no se cuenta la identidad de una persona
-        // anterior si el gestor cambió el documento y la invalidación previa no corrió).
-        var now = DateTimeOffset.UtcNow;
-        bool Aprobada(string? parte)
-        {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            return instance.BiometricValidations.Any(v =>
-                string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                && BiometricRules.EsAprobadaVigente(v, now)
-                && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
-        }
-
-        return esTraspaso
-            ? Aprobada("comprador") && Aprobada("vendedor")
-            : Aprobada("comprador");
-    }
+    private static bool BiometriaGateOk(IReadOnlySet<string> identidadAprobadaPartes, bool esTraspaso) =>
+        esTraspaso
+            ? identidadAprobadaPartes.Contains("comprador") && identidadAprobadaPartes.Contains("vendedor")
+            : identidadAprobadaPartes.Contains("comprador");
 
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
@@ -217,30 +213,57 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// Datos del certificado de identidad: comprador (de actores) + resultado de la biométrica del
-    /// comprador. Score real si existe; el resultado refleja el estado aprobado de la validación.
+    /// Descarga best-effort el certificado (PDF) de la validación de identidad del COMPRADOR desde Kyverum.
+    /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
+    /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
     /// </summary>
-    private static IdentityCertificateData AssembleIdentityData(ProcedureInstance instance)
+    private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
+        ProcedureInstance instance, CancellationToken ct)
     {
-        var comprador = instance.Actors.FirstOrDefault(x =>
-            string.Equals(x.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
+        static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
+            v.Status == BiometricEstados.Aprobado
+            && string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
 
         var bio = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, "comprador", StringComparison.OrdinalIgnoreCase)
-            && v.Status == BiometricEstados.Aprobado);
+            string.Equals(v.PartyRole, "comprador", StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
 
-        var nombre = comprador?.FullName ?? bio?.Name ?? "-";
-        var documento = comprador?.DocumentNumber ?? bio?.DocumentNumber ?? "-";
-        // La biométrica del comprador ya está aprobada (gate previo) → score real o 95 por defecto.
-        var score = bio?.Score ?? 95;
+        // Sin fila propia (identidad REFERENCIADA de otro trámite de la persona): se busca la validación
+        // vigente del comprador por documento para tomar su certificado Kyverum (HU #10350, sin clonar).
+        if (bio is null)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
+            if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            {
+                var source = await repo.FindVigenteApprovedByDocumentAsync(
+                    instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), DateTimeOffset.UtcNow, ct);
+                if (source is not null && EsKyverumConId(source))
+                    bio = source;
+            }
+        }
 
-        return new IdentityCertificateData(
-            ProcedureInstanceId: instance.Id,
-            ReferenceNumber: instance.ReferenceNumber,
-            CompradorNombre: nombre,
-            CompradorDocumento: documento,
-            Score: score,
-            Resultado: "APROBADO");
+        if (bio is null)
+            return null; // provider mock o sin id de Kyverum: no hay certificado externo que descargar.
+
+        try
+        {
+            var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct);
+            if (cert is null)
+            {
+                GenerarFurLog.CertificadoNoDisponible(logger, bio.Id, instance.Id);
+                return null;
+            }
+
+            var safeRef = instance.ReferenceNumber.Replace('/', '-');
+            return new GeneratedDocument(
+                "certificado_identidad", $"certificado_identidad_{safeRef}.pdf", cert.ContentType, cert.Content);
+        }
+        catch (KyverumCertificateException ex)
+        {
+            GenerarFurLog.CertificadoDescargaFallo(logger, ex, instance.Id);
+            return null;
+        }
     }
 
     private static void AddParte(List<DocumentParte> partes, ProcedureInstance instance, string rol)
@@ -289,4 +312,16 @@ public sealed class GenerarFurHandler(
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
+}
+
+/// <summary>Logging source-generated (CA1848) de la generación del FUR. No incluye PII ni secretos.</summary>
+internal static partial class GenerarFurLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Kyverum no tiene certificado para la validación {ValidationId} (instancia {InstanceId}); se omite del expediente.")]
+    public static partial void CertificadoNoDisponible(ILogger logger, Guid validationId, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
+    public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
 }
