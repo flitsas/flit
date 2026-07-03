@@ -37,7 +37,10 @@ public sealed class IdentityValidationResultApplier(IIdentityValidationEventPubl
         {
             v.Approve(now); // estado + validated_at + estampa valid_until + updated_at
             // Estampa la serie/hash del certificado (firmaSerie) al aprobar; no la sobreescribe con null si el
-            // origen (p.ej. reconciliación por GET) no la trae — el webhook aprobado es la fuente primaria.
+            // origen no la trae. Gana quien alcanza el estado terminal primero: normalmente el webhook (que sí
+            // trae firmaSerie); si aprueba antes la reconciliación por GET (webhook perdido) y Kyverum no expone
+            // firmaSerie ahí, el hash queda null y el sello del FUR muestra la serie ausente — degradación
+            // acotada al caso "el webhook nunca llegó".
             if (!string.IsNullOrWhiteSpace(result.CertificateHash))
                 v.CertificateHash = result.CertificateHash;
         }

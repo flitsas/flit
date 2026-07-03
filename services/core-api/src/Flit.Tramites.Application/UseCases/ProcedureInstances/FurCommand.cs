@@ -239,14 +239,21 @@ public sealed class GenerarFurHandler(
     private async Task<ProcedureInstanceBiometricValidation?> ResolveApprovedValidationAsync(
         ProcedureInstance instance, string role, DateTimeOffset now, CancellationToken ct)
     {
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+
+        // Fila propia aprobada+vigente del rol Y del documento del actor actual. El filtro por documento es
+        // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
+        // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
+        // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now));
+            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
         if (own is not null)
             return own;
 
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        // Identidad vigente REFERENCIADA por documento del actor (HU #10350, sin clonar).
         if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
             return await repo.FindVigenteApprovedByDocumentAsync(
                 instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
