@@ -95,6 +95,18 @@ export interface SwitchesMatricula {
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
 export type NotificationTarget = "COMPRADOR" | "RADICADOR" | "NINGUNO";
 
+/** Proveedor primario + orden de fallback para un tipo de consulta RUNT (HU #10478). */
+export interface ConsultationProviderChoice {
+  primary: string;
+  fallback: string[];
+}
+
+/**
+ * Override por tenant de la cadena de proveedores de consulta RUNT (HU #10478). Claves:
+ * `vehicle_vin`, `vehicle_plate`, `conductor`. Objeto vacío = usar los defaults globales.
+ */
+export type ConsultationProviderConfig = Record<string, ConsultationProviderChoice>;
+
 export interface TenantSettings {
   tenantId: string;
   switchesMatricula: SwitchesMatricula;
@@ -102,6 +114,9 @@ export interface TenantSettings {
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
+  // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
+  runtFailoverTimeoutMs?: number;
+  consultationProviderConfig?: ConsultationProviderConfig;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -111,6 +126,9 @@ export interface TenantSettingsUpdate {
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
+  // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
+  runtFailoverTimeoutMs?: number;
+  consultationProviderConfig?: ConsultationProviderConfig;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────

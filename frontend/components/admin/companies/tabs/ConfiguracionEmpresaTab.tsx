@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
+import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import {
   METODOS_RECAUDO,
   NOTIFICATION_TARGET_LABELS,
@@ -134,6 +135,8 @@ export function ConfiguracionEmpresaTab({
           </p>
         )}
       </fieldset>
+
+      <ConsultaProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
 
       {otSlot && (
         <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
