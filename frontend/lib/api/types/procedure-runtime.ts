@@ -747,6 +747,20 @@ export interface GenerarFurResult {
   documents: FurDocument[];
 }
 
+// ── Impronta integrada al trámite (paso FUR) ─────────────────────────
+// POST /api/v1/tramites/instances/{id}/attachments/generate-impronta -> GenerarImprontaAttachmentResult (201)
+// Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y lo
+// adjunta como documento tipo 'impronta' (mismo flujo que una subida manual).
+
+/** Respuesta de POST /instances/{id}/attachments/generate-impronta. */
+export interface GenerarImprontaAttachmentResult {
+  attachmentId: string;
+  filename: string;
+  sha256: string;
+  radicado: string;
+  hash: string;
+}
+
 // ── Expediente consolidado (matrícula inicial) ───────────────────────
 // POST /api/v1/tramites/instances/{id}/consolidado -> { document } (201)
 // Fusiona FUR + certificado de identidad + adjuntos del trámite en un PDF único.

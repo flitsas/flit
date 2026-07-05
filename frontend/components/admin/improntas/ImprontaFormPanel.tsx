@@ -18,12 +18,6 @@ interface SessionDefaults {
 /**
  * Datos de organización/operador tomados del JWT en sesión (mismo mecanismo que
  * `usePermissions`/`Shell.useCurrentUser`: `getToken()` + `decodeJwtPayload()`).
- *
- * Limitación conocida (documentada en el handoff de la HU #10469): el JWT solo trae
- * `tenant_name` y `email`/`display_name`; no existe hoy un endpoint que devuelva NIT
- * ni ciudad de la empresa/tenant activa, así que `orgNit` y `orgCiudad` arrancan
- * vacíos y editables — no se dejan de pre-cargar, simplemente no hay fuente aún. Tampoco son
- * obligatorios (verificado contra el proveedor real: Kyverum genera la impronta sin ellos).
  */
 function useSessionDefaults(): SessionDefaults {
   return useMemo(() => {
@@ -50,15 +44,7 @@ export function ImprontaFormPanel() {
 
   const [placa, setPlaca] = useState("");
   const [documento, setDocumento] = useState("");
-  const [numMotor, setNumMotor] = useState("");
-  const [numChasis, setNumChasis] = useState("");
-  const [numSerie, setNumSerie] = useState("");
-  const [marca, setMarca] = useState("");
-  const [linea, setLinea] = useState("");
-  const [modelo, setModelo] = useState("");
   const [orgNombre, setOrgNombre] = useState(defaults.orgNombre);
-  const [orgNit, setOrgNit] = useState("");
-  const [orgCiudad, setOrgCiudad] = useState("");
   const [operador, setOperador] = useState(defaults.operador);
 
   const [attempted, setAttempted] = useState(false);
@@ -68,9 +54,6 @@ export function ImprontaFormPanel() {
 
   const placaMissing = placa.trim().length === 0;
   const documentoMissing = documento.trim().length === 0;
-  // numMotor/numChasis/numSerie y orgNit/orgCiudad ya NO son obligatorios: verificado contra el
-  // proveedor real (Kyverum RUNT resuelve los identificadores del vehículo internamente vía
-  // placa+documento, y genera la impronta sin orgNit/orgCiudad).
   const orgNombreMissing = orgNombre.trim().length === 0;
   const operadorMissing = operador.trim().length === 0;
 
@@ -100,15 +83,7 @@ export function ImprontaFormPanel() {
     const body: GenerarImprontaRequest = {
       placa: placa.trim().toUpperCase(),
       documento: documento.trim(),
-      numMotor: numMotor.trim() || undefined,
-      numChasis: numChasis.trim() || undefined,
-      numSerie: numSerie.trim() || undefined,
-      marca: marca.trim() || undefined,
-      linea: linea.trim() || undefined,
-      modelo: modelo.trim() || undefined,
       orgNombre: orgNombre.trim(),
-      orgNit: orgNit.trim() || undefined,
-      orgCiudad: orgCiudad.trim() || undefined,
       operador: operador.trim(),
     };
 
@@ -168,70 +143,6 @@ export function ImprontaFormPanel() {
             El documento del propietario es obligatorio.
           </p>
         )}
-
-        <p className="text-[11px] opacity-70">
-          El número de motor, chasis o serie es opcional: Kyverum RUNT los resuelve
-          automáticamente a partir de la placa y el documento cuando no se diligencian.
-        </p>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-motor">
-            Número de motor
-            <input
-              id="impronta-num-motor"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={numMotor}
-              onChange={(e) => setNumMotor(e.target.value)}
-            />
-          </label>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-chasis">
-            Número de chasis
-            <input
-              id="impronta-num-chasis"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={numChasis}
-              onChange={(e) => setNumChasis(e.target.value)}
-            />
-          </label>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-num-serie">
-            Número de serie (VIN)
-            <input
-              id="impronta-num-serie"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={numSerie}
-              onChange={(e) => setNumSerie(e.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-marca">
-            Marca
-            <input
-              id="impronta-marca"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={marca}
-              onChange={(e) => setMarca(e.target.value)}
-            />
-          </label>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-linea">
-            Línea
-            <input
-              id="impronta-linea"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={linea}
-              onChange={(e) => setLinea(e.target.value)}
-            />
-          </label>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-modelo">
-            Modelo
-            <input
-              id="impronta-modelo"
-              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-              value={modelo}
-              onChange={(e) => setModelo(e.target.value)}
-            />
-          </label>
-        </div>
       </fieldset>
 
       <fieldset className={IMPRONTA_SECTION_CLS}>
@@ -243,47 +154,23 @@ export function ImprontaFormPanel() {
           certificado debe emitirse a nombre de otra organización u operador.
         </p>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-nombre">
-              Nombre de la organización <span aria-hidden="true">*</span>
-              <input
-                id="impronta-org-nombre"
-                className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-                value={orgNombre}
-                onChange={(e) => setOrgNombre(e.target.value)}
-                aria-required="true"
-                aria-invalid={attempted && orgNombre.trim().length === 0}
-              />
-            </label>
-            {attempted && orgNombre.trim().length === 0 && (
-              <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
-                El nombre de la organización es obligatorio.
-              </p>
-            )}
-          </div>
-          <div>
-            <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-nit">
-              NIT
-              <input
-                id="impronta-org-nit"
-                className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-                value={orgNit}
-                onChange={(e) => setOrgNit(e.target.value)}
-              />
-            </label>
-          </div>
-          <div>
-            <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-ciudad">
-              Ciudad
-              <input
-                id="impronta-org-ciudad"
-                className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
-                value={orgCiudad}
-                onChange={(e) => setOrgCiudad(e.target.value)}
-              />
-            </label>
-          </div>
+        <div>
+          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-nombre">
+            Nombre de la organización <span aria-hidden="true">*</span>
+            <input
+              id="impronta-org-nombre"
+              className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
+              value={orgNombre}
+              onChange={(e) => setOrgNombre(e.target.value)}
+              aria-required="true"
+              aria-invalid={attempted && orgNombre.trim().length === 0}
+            />
+          </label>
+          {attempted && orgNombre.trim().length === 0 && (
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+              El nombre de la organización es obligatorio.
+            </p>
+          )}
         </div>
 
         <div>

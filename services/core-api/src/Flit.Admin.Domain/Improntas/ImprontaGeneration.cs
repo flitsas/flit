@@ -54,13 +54,4 @@ public sealed class ImprontaGeneration
     public int PdfSizeBytes { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
-
-    /// <summary>
-    /// Valida el invariante de negocio "al menos un identificador de vehículo" (respaldado también por el
-    /// CHECK <c>ck_impronta_generations_identificador_vehiculo</c> en BD como segunda línea de defensa).
-    /// </summary>
-    public bool TieneIdentificadorVehiculo() =>
-        !string.IsNullOrWhiteSpace(NumMotor)
-        || !string.IsNullOrWhiteSpace(NumChasis)
-        || !string.IsNullOrWhiteSpace(NumSerie);
 }

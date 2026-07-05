@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
+        services.AddScoped<GenerarImprontaAttachmentHandler>();
         services.AddScoped<GetChecklistHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();

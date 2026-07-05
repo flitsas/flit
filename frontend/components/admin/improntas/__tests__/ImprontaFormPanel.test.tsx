@@ -32,8 +32,6 @@ vi.mock("@/lib/api/admin-improntas", async () => {
 
 import { generarImpronta } from "@/lib/api/admin-improntas";
 
-// placa + documento son los únicos campos obligatorios (verificado contra el proveedor real:
-// numMotor/numChasis/numSerie y NIT/ciudad ya NO bloquean el envío, HU #10469 fix).
 async function fillValidFormAndSubmit(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^Placa/i), "abc123");
   await user.type(screen.getByLabelText(/Documento del propietario/i), "1040326572");
@@ -64,7 +62,7 @@ describe("ImprontaFormPanel — HU #10469", () => {
     expect(generarImpronta).not.toHaveBeenCalled();
   });
 
-  it("NO bloquea el envío si motor/chasis/serie y NIT/ciudad están vacíos (opcionales tras verificar contra el proveedor real)", async () => {
+  it("envía la solicitud con los 4 campos vigentes (placa, documento, orgNombre, operador) y muestra el estado de éxito", async () => {
     vi.mocked(generarImpronta).mockResolvedValue({ radicado: null, hash: null });
     const user = userEvent.setup();
     render(<ImprontaFormPanel />);
@@ -72,45 +70,12 @@ describe("ImprontaFormPanel — HU #10469", () => {
     await fillValidFormAndSubmit(user);
 
     await waitFor(() => expect(generarImpronta).toHaveBeenCalledTimes(1));
-    expect(generarImpronta).toHaveBeenCalledWith(
-      expect.objectContaining({
-        placa: "ABC123",
-        documento: "1040326572",
-        numMotor: undefined,
-        numChasis: undefined,
-        numSerie: undefined,
-        orgNit: undefined,
-        orgCiudad: undefined,
-        operador: "Ana Operadora",
-      }),
-    );
-    expect(await screen.findByTestId("impronta-success")).toBeInTheDocument();
-  });
-
-  it("envía la solicitud completa (con motor, NIT y ciudad) y muestra el estado de éxito", async () => {
-    vi.mocked(generarImpronta).mockResolvedValue({ radicado: null, hash: null });
-    const user = userEvent.setup();
-    render(<ImprontaFormPanel />);
-
-    await user.type(screen.getByLabelText(/^Placa/i), "abc123");
-    await user.type(screen.getByLabelText(/Documento del propietario/i), "1040326572");
-    await user.type(screen.getByLabelText(/Número de motor/i), "MTR-1");
-    await user.type(screen.getByLabelText(/^NIT/i), "900123456-7");
-    await user.type(screen.getByLabelText(/^Ciudad/i), "Bogotá D.C.");
-
-    await user.click(screen.getByRole("button", { name: /Generar impronta/i }));
-
-    await waitFor(() => expect(generarImpronta).toHaveBeenCalledTimes(1));
-    expect(generarImpronta).toHaveBeenCalledWith(
-      expect.objectContaining({
-        placa: "ABC123",
-        documento: "1040326572",
-        numMotor: "MTR-1",
-        orgNit: "900123456-7",
-        orgCiudad: "Bogotá D.C.",
-        operador: "Ana Operadora",
-      }),
-    );
+    expect(generarImpronta).toHaveBeenCalledWith({
+      placa: "ABC123",
+      documento: "1040326572",
+      orgNombre: "Renting Demo S.A.S.",
+      operador: "Ana Operadora",
+    });
     expect(await screen.findByTestId("impronta-success")).toBeInTheDocument();
   });
 });

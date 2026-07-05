@@ -149,6 +149,17 @@ public sealed class SubmitGateTraspasoTests
     }
 
     [Fact]
+    public void Gate_TodoSatisfechoSalvoImpronta_Bloquea()
+    {
+        // Integración impronta↔trámites: aunque el checklist ya no la exige (Obligatorio: false),
+        // el gate de radicación SIGUE exigiendo el adjunto tipo "impronta" (cargado o generado).
+        var instance = CompleteTraspaso();
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
+
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.ImprontaRequerida);
+    }
+
+    [Fact]
     public void Gate_ConFlagDemoActivo_SigueExigiendoDocumentos()
     {
         // AC3: TRAMITES_DEMO_RELAX_DOCS=true ya NO afloja el gate documental (flag retirado).

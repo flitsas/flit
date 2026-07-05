@@ -2,6 +2,7 @@ using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Domain.Improntas;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Modules.Improntas.Domain;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -18,6 +19,9 @@ namespace Flit.Admin.Tests.Improntas;
 /// AC1 usa el fixture real <c>Improntas_12.pdf</c> (raíz del repo, Res. 17145/2023) codificado a
 /// base64 para simular la respuesta de Kyverum y verificar que el handler decodifica exactamente
 /// los mismos bytes desde el Data URI, sin corrupción del binario.
+///
+/// El formulario/API se simplificó a 4 campos (Placa, Documento, OrgNombre, Operador) — los demás
+/// (numMotor/numChasis/numSerie/marca/linea/modelo/orgNit/orgCiudad) se eliminaron del contrato.
 /// </summary>
 public sealed class GenerarImprontaHandlerTests
 {
@@ -58,6 +62,9 @@ public sealed class GenerarImprontaHandlerTests
         result.Hash.Should().Be(new string('a', 64));
         client.LastRequest.Should().NotBeNull();
         client.LastRequest!.Placa.Should().Be("ABC123");
+        client.LastRequest!.NumMotor.Should().BeNull();
+        client.LastRequest!.OrgNit.Should().BeNull();
+        client.LastRequest!.Vin.Should().BeNull();
 
         await using var verify = NewContext(db);
         var persisted = await verify.ImprontaGenerations.SingleAsync(
@@ -71,35 +78,8 @@ public sealed class GenerarImprontaHandlerTests
     }
 
     [Fact]
-    public async Task AC1_SoloNumSerieDiligenciado_PasaLaValidacionYGeneraLaImpronta()
-    {
-        var db = NewDbName();
-        var dataUri = "data:application/pdf;base64," + Convert.ToBase64String(FixturePdfBytes);
-        var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
-            dataUri, new string('b', 64), "IMPR-AC1TEST2", "2026-07-02T10:05:00Z"));
-
-        await using var act = NewContext(db);
-        var handler = new GenerarImprontaHandler(client, new ImprontaRepository(act));
-
-        var result = await handler.HandleAsync(new GenerarImprontaCommand
-        {
-            TenantId = TenantId,
-            FlitUserId = FlitUserId,
-            Request = ValidRequest() with { NumMotor = null, NumChasis = null, NumSerie = "5HTSN3527D7T91789" },
-        }, TestContext.Current.CancellationToken);
-
-        result.Status.Should().Be(GenerarImprontaStatus.Success);
-        client.LastRequest!.NumMotor.Should().BeNull();
-        client.LastRequest.NumChasis.Should().BeNull();
-        client.LastRequest.NumSerie.Should().Be("5HTSN3527D7T91789");
-    }
-
-    [Fact]
     public async Task ValidacionLocal_PlacaVacia_Retorna422SinLlamarAlProveedorNiPersistir()
     {
-        // numMotor/numChasis/numSerie y orgNit/orgCiudad ya NO son obligatorios (verificado contra
-        // el proveedor real: Kyverum resuelve los identificadores del vehículo vía placa+documento
-        // sin necesitarlos) — este caso solo prueba que placa vacía sigue bloqueando localmente.
         var db = NewDbName();
         var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
             "data:application/pdf;base64,AAAA", "hash", "IMPR-NOPE", "2026-07-02T10:00:00Z"));
@@ -111,7 +91,7 @@ public sealed class GenerarImprontaHandlerTests
         {
             TenantId = TenantId,
             FlitUserId = FlitUserId,
-            Request = ValidRequest() with { Placa = "", NumMotor = null, NumChasis = null, NumSerie = null },
+            Request = ValidRequest() with { Placa = "" },
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(GenerarImprontaStatus.ValidationFailed);
@@ -121,33 +101,7 @@ public sealed class GenerarImprontaHandlerTests
     }
 
     [Fact]
-    public async Task ValidacionLocal_SinIdentificadorNiOrgNitNiOrgCiudad_NoBloqueaLocalmente()
-    {
-        // Regla relajada: al no ser obligatorios, la solicitud debe pasar la validación local y
-        // llegar al proveedor externo (aunque el proveedor real pueda rechazarla por su cuenta).
-        var db = NewDbName();
-        var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
-            "data:application/pdf;base64,AAAA", "hash-sin-extras", "IMPR-SINEXTRAS", "2026-07-02T10:00:00Z"));
-
-        await using var act = NewContext(db);
-        var handler = new GenerarImprontaHandler(client, new ImprontaRepository(act));
-
-        var result = await handler.HandleAsync(new GenerarImprontaCommand
-        {
-            TenantId = TenantId,
-            FlitUserId = FlitUserId,
-            Request = ValidRequest() with { NumMotor = null, NumChasis = null, NumSerie = null, OrgNit = null, OrgCiudad = null },
-        }, TestContext.Current.CancellationToken);
-
-        result.Status.Should().Be(GenerarImprontaStatus.Success);
-        client.LastRequest.Should().NotBeNull();
-        client.LastRequest!.NumMotor.Should().BeNull();
-        client.LastRequest!.OrgNit.Should().BeNull();
-        client.LastRequest!.OrgCiudad.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task ValidacionLocal_SoloIdentificadorSinPlaca_Retorna422ConSoloElErrorDePlaca()
+    public async Task ValidacionLocal_DocumentoVacio_Retorna422ConSoloElErrorDeDocumento()
     {
         var db = NewDbName();
         var client = FakeImprontaExternalClient.Success(new ImprontaExternalResult(
@@ -160,11 +114,11 @@ public sealed class GenerarImprontaHandlerTests
         {
             TenantId = TenantId,
             FlitUserId = FlitUserId,
-            Request = ValidRequest() with { Placa = "   " },
+            Request = ValidRequest() with { Documento = "   " },
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(GenerarImprontaStatus.ValidationFailed);
-        result.Errors.Should().ContainSingle().Which.Field.Should().Be("placa");
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("documento");
     }
 
     // ── AC3 — Escenario de borde ────────────────────────────────────────────────────────
@@ -196,7 +150,7 @@ public sealed class GenerarImprontaHandlerTests
         var db = NewDbName();
         var client = FakeImprontaExternalClient.Failure(
             new ImprontaRuntException(
-                "Datos de la impronta inválidos: Cuerpo inválido (numMotor: Se requiere al menos uno)",
+                "Datos de la impronta inválidos: Cuerpo inválido (documento: formato inválido)",
                 isTransient: false));
 
         await using var act = NewContext(db);
@@ -211,7 +165,7 @@ public sealed class GenerarImprontaHandlerTests
 
         result.Status.Should().Be(GenerarImprontaStatus.ProviderValidationFailed);
         result.ProviderErrorCode.Should().Be("validation_error");
-        result.ProviderMessage.Should().Contain("numMotor");
+        result.ProviderMessage.Should().Contain("documento");
         (await act.ImprontaGenerations.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
@@ -244,15 +198,7 @@ public sealed class GenerarImprontaHandlerTests
     private static GenerarImprontaRequest ValidRequest() => new(
         Placa: "ABC123",
         Documento: "1040326572",
-        NumMotor: "MTR-123",
-        NumChasis: null,
-        NumSerie: null,
-        Marca: "Chevrolet",
-        Linea: "Spark",
-        Modelo: "2024",
         OrgNombre: "FLIT SAS",
-        OrgNit: "900000000-1",
-        OrgCiudad: "Bogotá",
         Operador: "Operador X");
 
     private static string NewDbName() => $"flit-generar-impronta-{Guid.NewGuid()}";

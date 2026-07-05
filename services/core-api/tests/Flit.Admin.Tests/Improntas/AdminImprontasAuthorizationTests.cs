@@ -29,10 +29,7 @@ public sealed class AdminImprontasAuthorizationTests : IClassFixture<WebApplicat
     {
         placa = "ABC123",
         documento = "1234567890",
-        numMotor = "MTR-123",
         orgNombre = "FLIT SAS",
-        orgNit = "900000000-1",
-        orgCiudad = "Bogotá",
         operador = "Operador X",
     };
 

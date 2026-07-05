@@ -15,31 +15,8 @@ export interface GenerarImprontaRequest {
    * descubierto validando contra el proveedor real).
    */
   documento: string;
-  /**
-   * Número de motor. Opcional — verificado contra el proveedor real: Kyverum resuelve los
-   * identificadores del vehículo directamente desde el RUNT vía placa+documento cuando no se
-   * envían.
-   */
-  numMotor?: string;
-  /** Número de chasis. Opcional, mismo hallazgo que numMotor. */
-  numChasis?: string;
-  /** Número de serie/VIN. Opcional, mismo hallazgo que numMotor. */
-  numSerie?: string;
-  /** Marca del vehículo. Opcional. */
-  marca?: string;
-  /** Línea del vehículo. Opcional. */
-  linea?: string;
-  /** Modelo (año) del vehículo. Opcional. */
-  modelo?: string;
   /** Nombre de la organización solicitante. Pre-cargado desde el tenant en sesión. */
   orgNombre: string;
-  /**
-   * NIT de la organización solicitante. Opcional — verificado contra el proveedor real: Kyverum
-   * genera la impronta sin este dato. Pre-cargado desde el tenant en sesión si está disponible.
-   */
-  orgNit?: string;
-  /** Ciudad de la organización solicitante. Opcional, mismo hallazgo que orgNit. */
-  orgCiudad?: string;
   /** Operador que radica la solicitud. Pre-cargado desde el usuario en sesión. */
   operador: string;
 }

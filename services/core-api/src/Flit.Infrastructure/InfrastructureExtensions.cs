@@ -1,4 +1,3 @@
-using Flit.Admin.Domain.Improntas;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
@@ -16,6 +15,7 @@ using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Ocr;
+using Flit.Modules.Improntas.Domain;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;

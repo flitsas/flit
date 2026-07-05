@@ -19,6 +19,7 @@ import type {
   FinalizarPortalResult,
   GenerarFurResult,
   GenerarConsolidadoResult,
+  GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
   InstanceSummary,
   InstancesResponse,
@@ -924,6 +925,20 @@ export const tramitesClient = {
   generarConsolidado: (instanceId: string, tenantId?: string) =>
     request<GenerarConsolidadoResult>(
       `/api/v1/tramites/instances/${instanceId}/consolidado`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // POST generar impronta (Kyverum RUNT) con los datos del trámite y adjuntarla. Idempotente por
+  // NO-regeneración: 409 impronta_ya_existe si ya hay un adjunto tipo 'impronta' (manual o generado).
+  // Otros errores: organismo_requerido | identificador_vehiculo_requerido |
+  // documento_propietario_requerido | operador_no_resuelto | provider_validation |
+  // provider_unauthorized | provider_unavailable.
+  generarImpronta: (instanceId: string, tenantId?: string) =>
+    request<GenerarImprontaAttachmentResult>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/generate-impronta`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
