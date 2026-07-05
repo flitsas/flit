@@ -403,7 +403,7 @@ public sealed class KyverumWebhookHandler(
         await applier.ApplyAsync(
             v,
             new IdentityValidationTerminalResult(
-                true, payload.Evento, Sanitize(payload, subject), subject?.Score),
+                true, payload.Evento, Sanitize(payload, subject), subject?.Score, subject?.FirmaSerie),
             DateTimeOffset.UtcNow,
             ct);
 

@@ -247,6 +247,71 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["vehicle_buyer_signature"].Text.Should().NotBe("NO FIRMADO");
     }
 
+    // ── HU #10488 — sello de la validación biométrica (firma como texto) en el espacio de firma ──
+
+    [Fact]
+    public void FurFieldMapper_Matricula_PaintsIdentitySealInOwnerSignature()
+    {
+        // AC3: matrícula → el propietario es el "comprador"; el sello de identidad se pinta en su firma.
+        var data = FullData() with
+        {
+            SellosIdentidad = new Dictionary<string, string> { ["comprador"] = "SELLO-IDENTIDAD-COMPRADOR" },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("SELLO-IDENTIDAD-COMPRADOR");
+    }
+
+    [Fact]
+    public void FurFieldMapper_Traspaso_PaintsIdentitySealForSellerAndBuyer()
+    {
+        // AC3: traspaso → vendedor en la firma del propietario y comprador en la del comprador.
+        var data = TraspasoData() with
+        {
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "SELLO-VENDEDOR",
+                ["comprador"] = "SELLO-COMPRADOR",
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("SELLO-VENDEDOR");
+        values["vehicle_buyer_signature"].Text.Should().Be("SELLO-COMPRADOR");
+    }
+
+    [Fact]
+    public void FurFieldMapper_IdentitySeal_OverriddenByNoFirmado_WhenIdentityNotValidated()
+    {
+        // AC4: aunque haya sello de identidad, sin identidad validada el override "NO FIRMADO" tiene la última palabra.
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = false,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "SELLO-VENDEDOR",
+                ["comprador"] = "SELLO-COMPRADOR",
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().Be("NO FIRMADO");
+    }
+
+    [Fact]
+    public void FurFieldMapper_WithoutIdentitySeal_FallsBackToSellosFirma()
+    {
+        // Compat: sin sello de identidad, el espacio de firma cae al sello previo de firma electrónica.
+        var data = FullData() with
+        {
+            SellosFirma = ["comprador/compraventa: abc123 (2026-07-03T00:00:00.0000000+00:00)"],
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Contain("comprador/compraventa");
+    }
+
     // ── HU #10256 fix — resolutor de fuentes embebido (raíz del HTTP 500 en runtime alpine) ──
 
     [Fact]

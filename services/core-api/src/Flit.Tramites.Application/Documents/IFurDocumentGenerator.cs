@@ -59,7 +59,11 @@ public sealed record FurDocumentData(
     IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
     // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
     // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).
-    bool IdentidadValidada = true)
+    bool IdentidadValidada = true,
+    // HU #10488 — sello de la validación biométrica por parte ("comprador"/"vendedor"): texto con
+    // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
+    // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
+    IReadOnlyDictionary<string, string>? SellosIdentidad = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

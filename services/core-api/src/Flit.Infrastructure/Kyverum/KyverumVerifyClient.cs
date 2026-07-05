@@ -162,6 +162,9 @@ internal sealed class KyverumVerifyClient(
             var score = resultSubject?.Score ?? subject?.Score;
             var attemptAt = subject?.ValidadoAt ?? resultSubject?.ValidadoAt; // clave de dedup/conteo del intento
             var motivo = subject?.Motivo;
+            // Serie/hash del certificado (HU #10488): prioriza el subject del veredicto (result) sobre el
+            // del último intento. Kyverum puede no exponerlo en el GET → null (el webhook es la fuente primaria).
+            var firmaSerie = resultSubject?.FirmaSerie ?? subject?.FirmaSerie;
 
             // Trazabilidad SIN OCR/PII: estados/score/fecha (NUNCA datosExtraidos).
             var sanitized = JsonSerializer.Serialize(new
@@ -174,10 +177,11 @@ internal sealed class KyverumVerifyClient(
                 subject_motivo = subject?.Motivo,
                 score,
                 validado_at = attemptAt, // = AttemptAt: clave de dedup/conteo del intento (consistente)
+                firma_serie = firmaSerie,
                 proveedor = "kyverum",
             });
 
-            return new KyverumVerifyStatus(effectiveStatus, score, sanitized, attemptAt, motivo);
+            return new KyverumVerifyStatus(effectiveStatus, score, sanitized, attemptAt, motivo, firmaSerie);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -284,7 +288,9 @@ internal sealed class KyverumVerifyClient(
         // Mensaje amigable de Kyverum del ÚLTIMO intento (p.ej. "El rostro no es completamente visible…").
         // NO es PII (no trae datosExtraidos); es la guía que ve el cliente para reintentar mejor.
         [property: JsonPropertyName("motivo")] string? Motivo,
-        [property: JsonPropertyName("validadoAt")] string? ValidadoAt);
+        [property: JsonPropertyName("validadoAt")] string? ValidadoAt,
+        // Serie/hash del certificado del subject aprobado (HU #10488). Puede no venir en el GET.
+        [property: JsonPropertyName("firmaSerie")] string? FirmaSerie = null);
 }
 
 /// <summary>Logging source-generated (CA1848) del cliente Kyverum.</summary>

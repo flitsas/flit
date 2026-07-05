@@ -57,7 +57,10 @@ public static class FurFieldMapper
             "vehicle_owner_signature",
             data,
             propietario?.Rol,
-            SellosTexto(data.SellosFirma, esTraspaso ? "vendedor" : "comprador", "propietario"));
+            IdentidadOrSello(
+                data,
+                esTraspaso ? "vendedor" : "comprador",
+                esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
         MarkTramite(dict, esTraspaso, data);
         MarkClase(dict, data.Vehiculo.Clase);
@@ -75,7 +78,7 @@ public static class FurFieldMapper
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, SellosTexto(data.SellosFirma, "comprador"));
+            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, IdentidadOrSello(data, "comprador", ["comprador"]));
             MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
         }
         else
@@ -261,6 +264,22 @@ public static class FurFieldMapper
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Texto del espacio de firma (HU #10488): prioriza el sello de la validación biométrica de la parte
+    /// (<see cref="FurDocumentData.SellosIdentidad"/>, por rol) y, si no hay, cae al sello previo de firma
+    /// electrónica (<see cref="FurDocumentData.SellosFirma"/>). El override "NO FIRMADO" (sin identidad
+    /// validada) se aplica después en <see cref="Map"/> y tiene la última palabra.
+    /// </summary>
+    private static string IdentidadOrSello(FurDocumentData data, string role, string[] fallbackPartes)
+    {
+        if (data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(role, out var sello)
+            && !string.IsNullOrWhiteSpace(sello))
+            return sello;
+
+        return SellosTexto(data.SellosFirma, fallbackPartes);
     }
 
     private static string SellosTexto(IReadOnlyList<string> sellos, params string[] partes)

@@ -48,6 +48,14 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>Payload del proveedor SANITIZADO (sin PII cruda ni secretos), en jsonb. Trazabilidad.</summary>
     public string? ProviderPayload { get; set; }
 
+    /// <summary>
+    /// Serie/hash del certificado de la validación biométrica que reporta Kyverum (<c>firmaSerie</c> del
+    /// subject aprobado, HU #10488). Es el identificador verificable del certificado de identidad emitido por
+    /// el proveedor externo; se estampa UNA vez al aprobar (webhook o, si Kyverum lo expone en el GET,
+    /// reconciliación) y alimenta el sello de firma del FUR. Null en mock o mientras no haya aprobación.
+    /// </summary>
+    public string? CertificateHash { get; set; }
+
     public int Attempts { get; set; }
     public int MaxAttempts { get; set; } = BiometricRules.MaxIntentos;
 
