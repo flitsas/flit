@@ -31,8 +31,7 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
         string email,
         Guid tenantId,
         string tenantName,
-        Guid roleId,
-        string roleCode,
+        IReadOnlyList<UserRoleSnapshot> roles,
         IReadOnlyList<string> permissionSlugs)
     {
         var credentials = new SigningCredentials(keyMaterial.SigningKey, SecurityAlgorithms.RsaSha256);
@@ -45,13 +44,25 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new(JwtRegisteredClaimNames.Email, email),
             new("tenant_id", tenantId.ToString()),
             new("tenant_name", tenantName),
-            new("role_id", roleId.ToString()),
-            new("role_code", roleCode),
+        };
+
+        // HU #10506 — multi-rol: un claim POR CADA rol activo (no uno solo), para que
+        // RequireRole/IsInRole (que evalúan contra CUALQUIER claim que matchee el tipo
+        // configurado) sigan funcionando sin cambios en las policies existentes.
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim("role_id", role.Id.ToString()));
+            claims.Add(new Claim("role_code", role.Code));
             // "role" es el RoleClaimType que exige la policy SuperAdmin del módulo Admin
             // (HU #10189). Se emite además de "role_code" para que los tokens de login
             // sean válidos para RequireRole sin acoplar ambos módulos.
-            new("role", roleCode),
-        };
+            claims.Add(new Claim("role", role.Code));
+        }
+
+        // Claim de conveniencia con el array explícito de roles (mismo cuidado que
+        // "permissions": un solo elemento no debe colapsar a string plano — ver más abajo).
+        var rolesJson = JsonSerializer.Serialize(roles.Select(r => new { id = r.Id, code = r.Code }));
+        claims.Add(new Claim("roles", rolesJson, JsonClaimValueTypes.JsonArray));
 
         // Un solo Claim("permissions", ...) por slug colapsa a un string plano (no array) en el
         // JSON del token cuando permissionSlugs tiene exactamente un elemento — el serializador de

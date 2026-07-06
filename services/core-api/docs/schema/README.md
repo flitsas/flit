@@ -19,6 +19,7 @@ DDL ejecutable por Historia de Usuario de migración. Orden de aplicación:
 | 10 | `ddl/10-HU10153-analytics.sql` | [#10153](https://dev.azure.com/FlitDevOps/_workitems/edit/10153) | #10139 Dashboard |
 | 11 | `ddl/11-schema-conformance-patch.sql` | — | PK `pk_*`, RLS, triggers, PII |
 | 12 | `ddl/12-HU10505-catalogo-global-roles.sql` | [#10505](https://dev.azure.com/FlitDevOps/_workitems/edit/10505) | #10504 Roles y Permisos — catálogo global de roles por tipo de entidad (COMPANY \| TRANSIT_OFFICE); elimina `tenant_id`/RLS de `security.roles`/`security.role_permissions` |
+| 13 | `ddl/13-HU10506-multi-rol-usuario.sql` | [#10506](https://dev.azure.com/FlitDevOps/_workitems/edit/10506) | #10504 Roles y Permisos — soporte multi-rol por usuario: reemplaza `uq_ura_active_user_tenant` por `uq_ura_active_user_tenant_role` (N roles activos por usuario/tenant, modelo aditivo); agrega `security.invitation_roles` (N roles por invitación) |
 
 **ADR:** [ADR-0018](../adr/ADR-0018-modelo-datos-fase1-evolution.md) (Propuesto) · [ADR-0023](../adr/ADR-0023-catalogo-global-roles.md) (Propuesto, excepción A4/A20 para `security.roles`).
 
@@ -46,6 +47,7 @@ Migraciones aplicadas en orden:
 | 20260617310100 | `FixAuditLogsPk` | — (inline SQL) |
 | … | (migraciones intermedias no listadas aquí — ver carpeta `Migrations/` para el historial completo) | — |
 | 20260706223157 | `HU10505_GlobalRoleCatalog` | 12 |
+| 20260706231344 | `HU10506_MultiRoleUserAssignment` | 13 |
 
 ```bash
 pnpm migrate:core-api   # aplica todas las migraciones pendientes

@@ -32,8 +32,7 @@ public sealed class LoginHandlerTests
                 Status = "active",
                 PasswordHash = "hash",
                 TenantId = tenantId,
-                RoleId = roleId,
-                RoleCode = "demo_admin",
+                ActiveRoles = [new UserRoleSnapshot(roleId, "demo_admin")],
                 PermissionSlugs = ["auth.me.read"],
             });
         _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
@@ -42,8 +41,7 @@ public sealed class LoginHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
-                Arg.Any<Guid>(),
-                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
                 Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
@@ -65,8 +63,7 @@ public sealed class LoginHandlerTests
                 Status = "active",
                 PasswordHash = "hash",
                 TenantId = Guid.NewGuid(),
-                RoleId = Guid.NewGuid(),
-                RoleCode = "demo_admin",
+                ActiveRoles = [new UserRoleSnapshot(Guid.NewGuid(), "demo_admin")],
             });
         _passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
 

@@ -110,3 +110,15 @@ public sealed class UserAlreadyExistsException : Exception
     {
     }
 }
+
+/// <summary>
+/// Invitación sin ningún rol seleccionado (HU #10506 AC5). Seleccionar al menos un rol al
+/// invitar es OBLIGATORIO — ya no se permite "sin rol asignado" como en HU #10175.
+/// </summary>
+public sealed class NoRolesSelectedException : Exception
+{
+    public NoRolesSelectedException()
+        : base("At least one role must be selected to invite a user.")
+    {
+    }
+}
