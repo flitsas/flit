@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2 } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
 import type { ConfigChangeGroup, ConfigChangeItem } from "./settingsForm";
 
 const TONE_COLORS: Record<ConfigChangeItem["tone"], string> = {
@@ -38,21 +39,19 @@ export function SaveConfigDialog({
   const saving = phase === "saving";
 
   return (
-    <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="save-config-title"
+    <Modal
+      open
+      onClose={phase === "success" ? onClose : onCancel}
+      busy={saving}
+      size="sm"
+      zClassName="z-[95]"
+      icon={phase === "success" ? CheckCircle2 : undefined}
+      iconBg="#00DBD5"
+      title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
+      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]">
         {phase === "success" ? (
           <>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: "#00DBD5" }} />
-              <h2 id="save-config-title" className="text-lg font-semibold" style={{ color: "#162744" }}>
-                Cambios guardados
-              </h2>
-            </div>
             <p className="mt-2 text-sm opacity-80">
               {hasChanges
                 ? "Se guardaron los siguientes cambios de configuración:"
@@ -72,9 +71,6 @@ export function SaveConfigDialog({
           </>
         ) : (
           <>
-            <h2 id="save-config-title" className="text-lg font-semibold" style={{ color: "#162744" }}>
-              Confirmar guardado
-            </h2>
             <p className="mt-2 text-sm opacity-80">
               {hasChanges
                 ? "Vas a guardar los siguientes cambios de configuración. ¿Confirmas?"
@@ -107,8 +103,7 @@ export function SaveConfigDialog({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Landmark, Loader2, X } from "lucide-react";
+import { Landmark, Loader2 } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
@@ -164,42 +165,15 @@ export function CreateTransitOfficeTenantDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-transit-office-tenant-title"
+    <Modal
+      open={open}
+      onClose={handleClose}
+      busy={submitting}
+      icon={Landmark}
+      title="Dar de alta Organismo de Tránsito"
+      titleClassName="text-base font-bold text-[#557EFF]"
     >
-      <div
-        className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-xl"
-              style={{ background: "#557EFF" }}
-            >
-              <Landmark className="h-4.5 w-4.5 text-white" />
-            </span>
-            <h2
-              id="create-transit-office-tenant-title"
-              className="text-base font-bold"
-              style={{ color: "#557EFF" }}
-            >
-              Dar de alta Organismo de Tránsito
-            </h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={handleClose}
-            className="text-slate-400 hover:text-slate-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-3.5">
+      <div className="space-y-3.5">
           <Field label="Oficina del catálogo" htmlFor="cot-office" error={errors.transitOfficeId}>
             {officesLoading ? (
               <p className="text-xs opacity-60">Cargando oficinas disponibles…</p>
@@ -292,8 +266,7 @@ export function CreateTransitOfficeTenantDialog({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

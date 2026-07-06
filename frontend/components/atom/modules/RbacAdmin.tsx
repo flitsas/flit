@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, X } from "lucide-react";
+import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark } from "lucide-react";
 import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
+import { Modal } from "@/components/atom/Modal";
 import {
   fetchTransitOfficeTenants,
   type TransitOfficeTenantItem,
@@ -516,12 +517,7 @@ function CreateRoleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
-        <div className="flex items-start justify-between mb-4">
-          <h3 className="text-lg font-bold">Nuevo rol</h3>
-          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
-        </div>
+    <Modal open onClose={onClose} busy={busy} size="sm" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
@@ -540,8 +536,7 @@ function CreateRoleModal({
             {busy ? "Creando…" : "Crear rol"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -581,16 +576,7 @@ function CreateModuleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border"
-      >
-        <div className="flex items-start justify-between mb-4">
-          <h3 className="text-lg font-bold">Nuevo módulo</h3>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo módulo" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="mod-code" className="text-xs font-semibold block mb-1">
@@ -667,8 +653,7 @@ function CreateModuleModal({
             {loading ? "Creando…" : "Crear módulo"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -725,12 +710,7 @@ function ModuleGrantsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
-        <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold">Empresas con acceso</h3>
-          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
-        </div>
+    <Modal open onClose={onClose} size="sm" title="Empresas con acceso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <p className="text-xs opacity-60 mb-4">
           Módulo: <strong>{module.name}</strong> ({module.code})
         </p>
@@ -772,8 +752,7 @@ function ModuleGrantsModal({
         >
           Listo
         </button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -818,16 +797,7 @@ function CreatePermissionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border"
-      >
-        <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold">Nuevo permiso</h3>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo permiso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <p className="text-xs opacity-60 mb-4">
           Módulo: <strong>{module.name}</strong> ({module.code})
         </p>
@@ -905,7 +875,6 @@ function CreatePermissionModal({
             {loading ? "Creando…" : "Crear permiso"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
