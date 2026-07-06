@@ -87,7 +87,8 @@ describe("WebhooksSection — HU #10219", () => {
   it("AC3 editar webhook llama PATCH sin recargar página", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByText("Editar");
+    // HU #10495: "Editar" pasó a icono con aria-label "Editar webhook {evento}".
+    await screen.findByRole("button", { name: /Editar/i });
     await user.click(screen.getByRole("button", { name: /Editar/i }));
     const urlInput = screen.getByLabelText(/URL destino/i);
     await user.clear(urlInput);

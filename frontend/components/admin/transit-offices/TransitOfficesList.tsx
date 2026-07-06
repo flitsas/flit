@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { RowActions } from "@/components/atom/RowActions";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
 import { matchesOtOfficeSearch, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
@@ -103,14 +104,16 @@ export function TransitOfficesList() {
                   <td className="px-4 py-3 font-medium">{office.name}</td>
                   <td className="px-4 py-3 text-xs opacity-80">{office.departmentCode}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => router.push(otHubModulePath(office.id, "tramites"))}
-                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-                      style={{ background: "#557EFF" }}
-                    >
-                      Administrar
-                    </button>
+                    <RowActions
+                      actions={[
+                        {
+                          icon: SlidersHorizontal,
+                          label: `Administrar ${office.name}`,
+                          onClick: () => router.push(otHubModulePath(office.id, "tramites")),
+                          tone: "primary",
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}

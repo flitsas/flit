@@ -1,7 +1,9 @@
 "use client";
 
+import { Check, X } from "lucide-react";
 import { OtStatusBadge } from "./OtStatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
+import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 
@@ -79,24 +81,22 @@ export function ClientProceduresTable({
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
               >
                 {row.status === "entregado" && showApprovalActions && (
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                      style={{ background: "#557EFF" }}
-                      onClick={() => onApprove(row)}
-                    >
-                      Aprobar
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                      style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                      onClick={() => onReject(row)}
-                    >
-                      Rechazar
-                    </button>
-                  </div>
+                  <RowActions
+                    actions={[
+                      {
+                        icon: Check,
+                        label: `Aprobar trámite ${row.referenceNumber}`,
+                        onClick: () => onApprove(row),
+                        tone: "primary",
+                      },
+                      {
+                        icon: X,
+                        label: `Rechazar trámite ${row.referenceNumber}`,
+                        onClick: () => onReject(row),
+                        tone: "danger",
+                      },
+                    ]}
+                  />
                 )}
               </td>
             </tr>

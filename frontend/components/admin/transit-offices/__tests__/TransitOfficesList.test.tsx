@@ -61,7 +61,8 @@ describe("TransitOfficesList — HU #10236", () => {
     const user = userEvent.setup();
     render(<TransitOfficesList />);
     await screen.findByText("Secretaría de Movilidad Bogotá");
-    const buttons = screen.getAllByRole("button", { name: "Administrar" });
+    // HU #10495: la acción "Administrar" pasó a icono con aria-label "Administrar {nombre}".
+    const buttons = screen.getAllByRole("button", { name: /Administrar/ });
     await user.click(buttons[0]!);
     expect(mockPush).toHaveBeenCalledWith(
       "/admin/transit-offices/aaaaaaaa-0001-4000-8000-000000000001/tramites",

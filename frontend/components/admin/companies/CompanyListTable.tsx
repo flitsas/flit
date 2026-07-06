@@ -1,10 +1,12 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Lock, Pencil, Settings2 } from "lucide-react";
+import { Lock, Pencil, Settings2 } from "lucide-react";
 import { isB2BTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { RowActions } from "@/components/atom/RowActions";
+import { Pagination } from "@/components/atom/Pagination";
 
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
 // Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
@@ -32,10 +34,6 @@ export function CompanyListTable({
   onEdit,
   onToggleStatus,
 }: CompanyListTableProps) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalCount);
-
   return (
     <div className="flex flex-1 flex-col">
       <table className="w-full border-separate border-spacing-y-2 text-xs">
@@ -82,36 +80,35 @@ export function CompanyListTable({
                 {formatDate(c.fechaCreacion)}
               </td>
               <td className="border-y border-r px-4 py-3 text-right rounded-r-xl">
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => editable && onEdit(c)}
-                    disabled={!editable}
-                    aria-disabled={!editable}
-                    aria-label={`Editar ${c.razonSocial}`}
-                    title={
-                      editable
-                        ? undefined
-                        : "Compañía de tipo de sistema: no editable desde esta consola"
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                    style={{ borderColor: "#557EFF", color: "#557EFF" }}
-                  >
-                    {editable ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />} Editar
-                  </button>
+                <div className="flex items-center justify-end gap-1">
+                  <RowActions
+                    actions={[
+                      {
+                        icon: editable ? Pencil : Lock,
+                        label: `Editar ${c.razonSocial}`,
+                        onClick: () => editable && onEdit(c),
+                        tone: "primary",
+                        disabled: !editable,
+                        disabledTitle:
+                          "Compañía de tipo de sistema: no editable desde esta consola",
+                      },
+                    ]}
+                  />
                   <SwitchToggle
                     checked={c.estadoActivo}
                     onChange={() => onToggleStatus(c)}
                     label={`${c.estadoActivo ? "Desactivar" : "Activar"} ${c.razonSocial}`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => onConfigure(c.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                    style={{ background: "#557EFF" }}
-                  >
-                    <Settings2 className="h-3 w-3" /> Configurar
-                  </button>
+                  <RowActions
+                    actions={[
+                      {
+                        icon: Settings2,
+                        label: `Configurar ${c.razonSocial}`,
+                        onClick: () => onConfigure(c.id),
+                        tone: "primary",
+                      },
+                    ]}
+                  />
                 </div>
               </td>
             </tr>
@@ -120,34 +117,13 @@ export function CompanyListTable({
         </tbody>
       </table>
 
-      <div className="mt-auto flex items-center justify-between pt-3 text-[11px]">
-        <p className="opacity-60">
-          Mostrando {from}–{to} de {totalCount}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Página anterior"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-          </button>
-          <span className="font-semibold" style={{ color: "#557EFF" }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            aria-label="Página siguiente"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          >
-            Siguiente <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        className="mt-auto"
+      />
     </div>
   );
 }

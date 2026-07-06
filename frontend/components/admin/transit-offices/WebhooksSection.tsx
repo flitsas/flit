@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { RowActions } from "@/components/atom/RowActions";
 import { useToast } from "@/components/admin/Toast";
 import {
   createOtWebhook,
@@ -185,17 +187,19 @@ export function WebhooksSection() {
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 text-right"
                     >
-                      <button
-                        type="button"
-                        className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                        style={{ background: "#557EFF" }}
-                        onClick={() => {
-                          setEditing(w);
-                          setFormOpen(true);
-                        }}
-                      >
-                        Editar
-                      </button>
+                      <RowActions
+                        actions={[
+                          {
+                            icon: Pencil,
+                            label: `Editar webhook ${w.eventType}`,
+                            onClick: () => {
+                              setEditing(w);
+                              setFormOpen(true);
+                            },
+                            tone: "primary",
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
