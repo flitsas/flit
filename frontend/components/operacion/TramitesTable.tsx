@@ -7,6 +7,7 @@ import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import type {
   InstanceStatus,
   InstanceSummary,
@@ -627,18 +628,7 @@ function TramiteRow({
           </span>
         </span>
         <span className="block">
-          <span
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
-            style={{
-              background: chip.bg,
-              color: chip.color,
-              borderColor: chip.border,
-            }}
-            role="status"
-            aria-label={`Estado: ${chip.label}`}
-          >
-            {chip.label}
-          </span>
+          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
         </span>
         <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
           {item.organismoTransito ?? '—'}

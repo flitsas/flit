@@ -5,6 +5,7 @@ import { Plus, Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
@@ -17,10 +18,15 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-const STATUS_BADGE: Record<TenantUser["status"], { color: string; label: string }> = {
-  active: { color: "#00DBD5", label: "Activo" },
-  inactive: { color: "#FF4E00", label: "Inactivo" },
-  pending: { color: "#F9AC00", label: "Pendiente" },
+// Chips tintados (HU #10494 · decisión D1). Mismo vocabulario (Activo/Inactivo/Pendiente),
+// convención tintada: fondo translúcido + texto de color legible + borde.
+const STATUS_BADGE: Record<
+  TenantUser["status"],
+  { label: string; bg: string; color: string; border: string }
+> = {
+  active: { label: "Activo", bg: "rgba(0,219,213,0.15)", color: "#0f766e", border: "rgba(0,219,213,0.35)" },
+  inactive: { label: "Inactivo", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" },
+  pending: { label: "Pendiente", bg: "rgba(245,158,11,0.14)", color: "#b45309", border: "rgba(245,158,11,0.35)" },
 };
 
 export function Usuarios() {
@@ -180,9 +186,7 @@ export function Usuarios() {
                       )}
                     </div>
                     <div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: badge.color }}>
-                        {badge.label}
-                      </span>
+                      <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
                     </div>
                     <div className="opacity-70">{u.createdAt ?? "—"}</div>
                     <div className="flex justify-end">

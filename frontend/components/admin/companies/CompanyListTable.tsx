@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Lock, Pencil, Settings2 } from "lucide-react
 import { isB2BTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
 // Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
@@ -71,12 +72,11 @@ export function CompanyListTable({
                 {c.razonSocial}
               </td>
               <td className="border-y px-4 py-3">
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                  style={{ background: c.estadoActivo ? "#00DBD5" : "#FF4E00" }}
-                >
-                  {c.estadoActivo ? "Activa" : "Inactiva"}
-                </span>
+                {c.estadoActivo ? (
+                  <StatusBadge label="Activa" bg="rgba(0,219,213,0.15)" color="#0f766e" border="rgba(0,219,213,0.35)" />
+                ) : (
+                  <StatusBadge label="Inactiva" bg="rgba(255,78,0,0.10)" color="#c2410c" border="rgba(255,78,0,0.3)" />
+                )}
               </td>
               <td className="border-y px-4 py-3 opacity-70">
                 {formatDate(c.fechaCreacion)}
