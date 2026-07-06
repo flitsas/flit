@@ -25,13 +25,16 @@ public sealed record KyverumVerifyStartRequest(
 /// HMAC con el que Kyverum firmará el webhook de esta verificación: viaja en CLARO solo en memoria y el
 /// handler lo cifra (Data Protection) antes de persistirlo. <paramref name="RawPayloadSanitized"/> es el
 /// cuerpo del proveedor ya SANITIZADO (sin secretos ni PII cruda) para trazabilidad.
+/// <paramref name="ExpiresAt"/> es el vencimiento REAL del enlace de captura reportado por Kyverum
+/// (<c>expiresAt</c>): es null si el proveedor no lo envía y el handler cae al TTL local por defecto.
 /// </summary>
 public sealed record KyverumVerifyStartResult(
     string VerificationId,
     string CaptureUrl,
     string WebhookSecret,
     string ProviderStatus,
-    string RawPayloadSanitized);
+    string RawPayloadSanitized,
+    DateTimeOffset? ExpiresAt = null);
 
 /// <summary>
 /// Error del proveedor Kyverum al iniciar una verificación. <see cref="Transient"/> distingue fallos
