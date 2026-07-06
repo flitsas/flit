@@ -19,10 +19,22 @@ public sealed class UserAuthSnapshot
 
     /// <summary>
     /// Roles ACTIVOS del usuario en <see cref="TenantId"/> (HU #10506: soporte multi-rol).
-    /// Puede estar vacía si el usuario no tiene ninguna asignación activa — el bloqueo de login
-    /// por "todos los roles inactivos" es HU #10507, fuera de alcance aquí.
+    /// Solo incluye asignaciones cuyo <c>Role.IsActive == true</c> y <c>Role.DeletedAt == null</c>.
+    /// Puede estar vacía si el usuario no tiene ninguna asignación activa, o si tuvo asignaciones
+    /// pero todos sus roles fueron desactivados (HU #10507: bloqueo de login, ver
+    /// <see cref="TotalAssignedRolesCount"/> para distinguir ambos casos).
     /// </summary>
     public IReadOnlyList<UserRoleSnapshot> ActiveRoles { get; init; } = [];
+
+    /// <summary>
+    /// Cantidad TOTAL de asignaciones de rol que el usuario tuvo alguna vez activas
+    /// (<c>UserRoleAssignment.DeletedAt == null</c>), SIN filtrar por si el <c>Role</c> referenciado
+    /// sigue activo en el catálogo global. Distinto de <see cref="ActiveRoles"/>.Count (HU #10507):
+    /// si este valor es 0, el usuario nunca tuvo rol asignado y el login debe proceder con
+    /// normalidad (AC3); si es mayor a 0 pero <see cref="ActiveRoles"/> está vacía, todos los roles
+    /// del usuario fueron desactivados y el login debe bloquearse (AC2).
+    /// </summary>
+    public int TotalAssignedRolesCount { get; init; }
 
     public IReadOnlyList<string> PermissionSlugs { get; init; } = [];
 

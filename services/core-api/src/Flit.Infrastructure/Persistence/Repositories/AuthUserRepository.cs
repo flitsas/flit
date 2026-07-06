@@ -38,8 +38,17 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             select new { a.TenantId, a.RoleId, RoleCode = r.Code }
         ).ToListAsync(cancellationToken);
 
+        // HU #10507: conteo TOTAL de asignaciones que el usuario tuvo alguna vez activas
+        // (UserRoleAssignment.DeletedAt == null), SIN filtrar por si el Role referenciado sigue
+        // activo. La diferencia con assignments.Count distingue "nunca tuvo rol" (AC3) de
+        // "tuvo roles, pero todos fueron desactivados" (AC2).
+        var totalAssignedRolesCount = await db.UserRoleAssignments
+            .AsNoTracking()
+            .CountAsync(a => a.UserId == user.Id && a.DeletedAt == null, cancellationToken);
+
         // Users without an active role assignment can still log in if they have a home tenant
-        // (HU #10507 se encarga de bloquear este caso; aquí no se toca ese comportamiento).
+        // (HU #10507 bloquea el caso de "todos los roles inactivos" en el LoginHandler; aquí solo
+        // se resuelve el tenant para poder construir el snapshot).
         var tenantId = assignments.Count > 0 ? assignments[0].TenantId : user.HomeTenantId;
         if (tenantId is null)
             return null;
@@ -88,6 +97,7 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             TenantId = tenantId.Value,
             TenantName = tenantName,
             ActiveRoles = activeRoles,
+            TotalAssignedRolesCount = totalAssignedRolesCount,
             PermissionSlugs = permissionSlugs,
             IsTemporarilySuspended = isSuspended,
         };
