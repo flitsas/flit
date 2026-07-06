@@ -16,17 +16,17 @@ export interface ClientProceduresTableProps {
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
-  /** Genera/regenera el expediente consolidado (omitir = acción oculta, p. ej. QX read-only). */
+  /** Genera/regenera el expediente consolidado (omitir = accion oculta, p. ej. QX read-only). */
   onGenerarConsolidado?: (row: OtClientProcedure) => void;
-  /** Descarga el PDF del consolidado más reciente. */
+  /** Descarga el PDF del consolidado mas reciente. */
   onVerConsolidado?: (row: OtClientProcedure) => void;
-  /** Adjunta la Licencia de Tránsito a un trámite ya aprobado (solo OT admin). */
+  /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
-  /** Id de la fila con acción de consolidado en curso (deshabilita sus botones). */
+  /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
 }
 
-/** Tabla paginada trámites clientes OT ��� patrón CompanyListTable (HU #10220). */
+/** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
 export function ClientProceduresTable({
   rows,
   totalCount,
@@ -50,7 +50,7 @@ export function ClientProceduresTable({
               Radicado
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-              Tipo trámite
+              Tipo tramite
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
               Empresa cliente
@@ -59,7 +59,7 @@ export function ClientProceduresTable({
               Estado
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-              Fecha radicación
+              Fecha radicacion
             </th>
             <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
               Acciones
@@ -69,9 +69,7 @@ export function ClientProceduresTable({
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
-              <td
-                className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-              >
+              <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 {row.referenceNumber}
               </td>
               <td className="border-y px-4 py-3">
@@ -89,22 +87,20 @@ export function ClientProceduresTable({
               <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
               </td>
-              <td
-                className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-              >
+              <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
                   {row.status === "entregado" && showApprovalActions && (
                     <RowActions
                       actions={[
                         {
                           icon: Check,
-                          label: `Aprobar tr?mite ${row.referenceNumber}`,
+                          label: `Aprobar tramite ${row.referenceNumber}`,
                           onClick: () => onApprove(row),
                           tone: "primary",
                         },
                         {
                           icon: X,
-                          label: `Rechazar tr?mite ${row.referenceNumber}`,
+                          label: `Rechazar tramite ${row.referenceNumber}`,
                           onClick: () => onReject(row),
                           tone: "danger",
                         },
