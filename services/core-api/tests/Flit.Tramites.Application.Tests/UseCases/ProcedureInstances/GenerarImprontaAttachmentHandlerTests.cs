@@ -174,6 +174,35 @@ public sealed class GenerarImprontaAttachmentHandlerTests
     }
 
     [Fact]
+    public async Task Generar_MatriculaInicial_ConPlacaYVin_IgnoraPlacaYUsaVin()
+    {
+        // El RUNT puede devolver una placa ya asignada al consultar el VIN de matrícula inicial
+        // (el organismo de tránsito la conoce de antemano), pero el radicador solo tiene certeza
+        // del VIN grabado en el vehículo. Verificado contra el proveedor real: enviar placa+documento
+        // sin relación entre sí devuelve ok:false; enviar vin+documento resuelve correctamente. Por
+        // eso matrícula inicial NUNCA debe enviar placa, aunque el campo esté poblado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var requestedBy = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        WithOrganismoNombre(instance, "SDM Bogotá");
+        WithPlaca(instance, "QYQ132");
+        WithVin(instance, "1HGCM82633A004352");
+        instance.Actors.Add(Actor(tenant, id, "comprador", "123456789"));
+        SetupRepoGraphs(instance);
+        _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns("Ana Operadora");
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, requestedBy, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        _client.LastRequest!.Placa.Should().BeNull();
+        _client.LastRequest!.Vin.Should().Be("1HGCM82633A004352");
+    }
+
+    [Fact]
     public async Task Generar_Traspaso_ConPlaca_UsaDocumentoDelVendedorNoDelComprador()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -292,7 +321,7 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
         WithOrganismo(instance);
         WithOrganismoNombre(instance, "SDM Bogotá");
-        WithPlaca(instance, "abc123");
+        WithVin(instance, "1HGCM82633A004352");
         instance.Actors.Add(Actor(tenant, id, "comprador", "123"));
         SetupRepoGraphs(instance);
         _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns((string?)null);
@@ -328,7 +357,7 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
         WithOrganismo(instance);
         WithOrganismoNombre(instance, "SDM Bogotá");
-        WithPlaca(instance, "abc123");
+        WithVin(instance, "1HGCM82633A004352");
         instance.Actors.Add(Actor(tenant, id, "comprador", "123"));
         SetupRepoGraphs(instance);
         _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns("Ana Operadora");
@@ -350,7 +379,7 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
         WithOrganismo(instance);
         WithOrganismoNombre(instance, "SDM Bogotá");
-        WithPlaca(instance, "abc123");
+        WithVin(instance, "1HGCM82633A004352");
         instance.Actors.Add(Actor(tenant, id, "comprador", "123"));
         SetupRepoGraphs(instance);
         _repo.GetUserDisplayNameAsync(requestedBy, ct).Returns("Ana Operadora");

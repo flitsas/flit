@@ -27,9 +27,11 @@ public static class ImprontaProviderErrorClassifier
 
     /// <summary>
     /// Prefijo que <c>ImprontaRuntClient</c> arma cuando Kyverum responde 200 con <c>ok:false</c> (no es
-    /// un error HTTP, es un motivo de negocio — ej. "el RUNT no expone identificadores para este
-    /// vehículo"). Se clasifica igual que <see cref="ValidationMessagePrefix"/>: no se puede generar el
-    /// certificado con los datos enviados, pero no es un fallo de autenticación.
+    /// un error HTTP, es un motivo de negocio). Verificado contra el proveedor real: cuando el request
+    /// envía placa+documento y no corresponden al propietario activo del vehículo en el RUNT, la
+    /// respuesta es <c>ok:false</c> de forma consistente y reproducible (no intermitente) — es un
+    /// rechazo de datos, no una falla de disponibilidad, así que se clasifica igual que
+    /// <see cref="ValidationMessagePrefix"/> y no como <see cref="ImprontaProviderErrorKind.Unavailable"/>.
     /// </summary>
     private const string UnavailableForRequestMessagePrefix = "Impronta no disponible:";
 

@@ -67,14 +67,23 @@ internal sealed class ImprontaRuntClient(
             var payload = await response.Content.ReadFromJsonAsync<ImprontaRuntResponseBody>(JsonOptions, ct);
 
             // 200 OK con ok:false (no es un error HTTP): Kyverum no pudo generar la impronta por una
-            // razón de negocio (ej. el RUNT no expone identificadores para este vehículo) — distinto de
-            // una respuesta malformada. Se usa un prefijo propio para que la capa de aplicación (HU
-            // #10467) lo clasifique como 422, no como 401 genérico.
+            // razón de negocio (ej. placa+documento no coinciden con el propietario activo del
+            // vehículo en el RUNT) — distinto de una respuesta malformada. Verificado contra el
+            // proveedor real: para el MISMO documento, enviar placa+documento cuando no corresponden
+            // da ok:false de forma consistente (reproducible, no intermitente), mientras que enviar
+            // solo vin+documento (sin placa) sí resuelve — confirma que es un rechazo de datos, no un
+            // problema de disponibilidad del proveedor. Se mantiene no transitorio (no reintentable
+            // automáticamente): reintentar con los mismos datos no cambia el resultado.
             if (payload is { Ok: false })
             {
                 var providerMessage = string.IsNullOrWhiteSpace(payload.Message)
                     ? "Kyverum RUNT no pudo generar la impronta para los datos enviados."
                     : payload.Message;
+
+                // El mensaje de negocio se loguea aquí porque es la única capa que lo ve: más arriba
+                // solo se propaga el mensaje ya traducido de la excepción (ver ImprontaRuntException),
+                // y antes de este log no quedaba ningún rastro diagnosticable del motivo real.
+                ImprontaRuntLog.BusinessRejection(logger, providerMessage);
                 throw new ImprontaRuntException($"Impronta no disponible: {providerMessage}", isTransient: false);
             }
 
@@ -219,4 +228,8 @@ internal static partial class ImprontaRuntLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Kyverum RUNT respondió error HTTP {StatusCode} código {ErrorCode}: {ErrorMessage}")]
     public static partial void ProviderError(ILogger logger, int statusCode, string errorCode, string errorMessage);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Kyverum RUNT respondió 200 con ok:false (rechazo de negocio de los datos enviados): {ProviderMessage}")]
+    public static partial void BusinessRejection(ILogger logger, string providerMessage);
 }

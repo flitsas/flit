@@ -185,6 +185,10 @@ public sealed class ImprontaRuntClientTests
     {
         // 200 OK con ok:false (no documentado en CONTRATO-API.md, descubierto contra el proveedor
         // real): Kyverum no pudo generar la impronta por un motivo de negocio, no es un error HTTP.
+        // Verificado contra el proveedor real: para el mismo documento, enviar placa+documento que no
+        // corresponden al propietario activo da ok:false de forma consistente y reproducible (no
+        // intermitente) — es un rechazo de datos, no un problema de disponibilidad, por eso no es
+        // transitorio.
         var ct = TestContext.Current.CancellationToken;
         var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK, """
             {"ok":false,"message":"El RUNT no expone identificadores (motor/chasis/serie) para este vehículo — no hay nada que improntar.","fromCache":true}
