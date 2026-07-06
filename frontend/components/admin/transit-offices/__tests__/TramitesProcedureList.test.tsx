@@ -8,7 +8,9 @@ function makeProcedure(overrides: Partial<OtClientProcedure> = {}): OtClientProc
   return {
     id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
     clientTenantId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    clientTenantName: "Flota Andina S.A.S.",
     procedureTypeId: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+    procedureTypeName: "Matrícula inicial",
     referenceNumber: "REF-001",
     status: "entregado",
     createdAt: "2026-06-23T12:00:00Z",
@@ -17,6 +19,21 @@ function makeProcedure(overrides: Partial<OtClientProcedure> = {}): OtClientProc
 }
 
 describe("TramitesProcedureList", () => {
+  it("muestra radicado, tipo de trámite, empresa cliente y estado legible", () => {
+    render(
+      <TramitesProcedureList
+        procedures={[makeProcedure()]}
+        showApprovalActions={false}
+      />,
+    );
+
+    expect(screen.getByText("REF-001")).toBeInTheDocument();
+    expect(screen.getByText(/Matrícula inicial/)).toBeInTheDocument();
+    expect(screen.getByText(/Flota Andina S\.A\.S\./)).toBeInTheDocument();
+    // formatOtProcedureStatus("entregado") === "Pendiente OT"
+    expect(screen.getByText("Pendiente OT")).toBeInTheDocument();
+  });
+
   it("muestra Aprobar/Rechazar cuando el trámite está entregado y hay permisos", () => {
     render(
       <TramitesProcedureList
