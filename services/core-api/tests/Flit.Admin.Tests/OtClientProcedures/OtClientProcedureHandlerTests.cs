@@ -294,6 +294,51 @@ public sealed class OtClientProcedureHandlerTests
         hasHistory.Should().BeFalse();
     }
 
+    [Fact] // Consolidado/LT OT — el acceso puntual soporta el override de organismo del SuperAdmin.
+    public async Task GetById_ConOverrideDeOrganismo_ResuelveSinPerfilOtDelTenant()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var superAdminTenant = Guid.NewGuid(); // sin TransitOfficeProfile
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+
+        // Sin override, un tenant sin perfil OT no ve nada (el bug que ocultaba los entregados).
+        var sinOverride = await repo.GetByIdAsync(
+            superAdminTenant, procedureId, TestContext.Current.CancellationToken);
+        sinOverride.Should().BeNull();
+
+        // Con override del organismo, el SuperAdmin accede al trámite del cliente.
+        var conOverride = await repo.GetByIdAsync(
+            superAdminTenant, procedureId, TransitOffice, TestContext.Current.CancellationToken);
+        conOverride.Should().NotBeNull();
+        conOverride!.ClientTenantId.Should().Be(ClientTenant);
+        conOverride.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    [Fact] // El executor de scope cliente ejecuta la acción (passthrough en InMemory, RLS en Postgres).
+    public async Task ExecuteInClientTenantScope_EjecutaLaAccion()
+    {
+        var db = NewDbName();
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+
+        var ran = await repo.ExecuteInClientTenantScopeAsync(
+            ClientTenant,
+            () => Task.FromResult(42),
+            TestContext.Current.CancellationToken);
+
+        ran.Should().Be(42);
+    }
+
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)
     {
         ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile

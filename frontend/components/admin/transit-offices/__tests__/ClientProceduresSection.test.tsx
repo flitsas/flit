@@ -1,6 +1,6 @@
 // HU #10220 — Vista tenant admin: aprobar/rechazar trámites de clientes.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProceduresSection } from "../ClientProceduresSection";
@@ -11,6 +11,9 @@ vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
+  generarOtConsolidado: vi.fn(),
+  descargarOtConsolidado: vi.fn(),
+  adjuntarOtLicenciaTransito: vi.fn(),
 }));
 
 // N 03 fix — rol simulable: SuperAdmin supervisa la cola pero no decide (approve/reject
@@ -38,9 +41,12 @@ vi.mock("@/lib/api/tramites-client", () => ({
 }));
 
 import {
+  adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
+  descargarOtConsolidado,
   fetchOtClientProcedures,
   fetchOtProfile,
+  generarOtConsolidado,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 
@@ -167,7 +173,76 @@ describe("ClientProceduresSection — HU #10220", () => {
     mockSuperAdmin = true;
     renderSection("aaaaaaaa-0001-4000-8000-000000000001");
     expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Aprobar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Rechazar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Aprobar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Rechazar$/i })).not.toBeInTheDocument();
+  });
+
+  it("consolidado — generar y ver invocan la API con el trámite", async () => {
+    vi.mocked(generarOtConsolidado).mockResolvedValue({
+      document: { attachmentId: "att-1", tipo: "consolidado", filename: "c.pdf", sha256: "x" },
+    });
+    vi.mocked(descargarOtConsolidado).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Generar consolidado/i }));
+    await waitFor(() => expect(generarOtConsolidado).toHaveBeenCalledWith("proc-1", undefined));
+    await user.click(screen.getByRole("button", { name: /Ver consolidado/i }));
+    await waitFor(() =>
+      expect(descargarOtConsolidado).toHaveBeenCalledWith("proc-1", "RAD-2026-001", undefined),
+    );
+  });
+
+  it("aprobar con LT seleccionada adjunta la licencia ANTES de aprobar", async () => {
+    vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({
+      id: "att-lt",
+      tipo: "licencia_transito",
+      filename: "lt.pdf",
+      mimetype: "application/pdf",
+      sizeBytes: 10,
+      sha256: "x",
+      source: "ot",
+      uploadedAt: "2026-07-06T10:00:00Z",
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /^Aprobar$/i }));
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
+    await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+    await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1"));
+    expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined);
+    // La LT se adjuntó antes que la aprobación.
+    const ltOrder = vi.mocked(adjuntarOtLicenciaTransito).mock.invocationCallOrder[0];
+    const approveOrder = vi.mocked(approveOtClientProcedure).mock.invocationCallOrder[0];
+    expect(ltOrder).toBeLessThan(approveOrder);
+  });
+
+  it("fila aprobada ofrece 'Adjuntar LT' para el OT admin", async () => {
+    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+      data: [{ ...procedure, status: "aprobado" }],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({
+      id: "att-lt",
+      tipo: "licencia_transito",
+      filename: "lt.pdf",
+      mimetype: "application/pdf",
+      sizeBytes: 10,
+      sha256: "x",
+      source: "ot",
+      uploadedAt: "2026-07-06T10:00:00Z",
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Adjuntar LT/i }));
+    const dialog = screen.getByRole("dialog", { name: /Adjuntar Licencia de Tránsito/i });
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(within(dialog).getByLabelText(/Archivo de la Licencia de Tránsito/i), file);
+    await user.click(within(dialog).getByRole("button", { name: /^Adjuntar LT$/i }));
+    await waitFor(() =>
+      expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined),
+    );
   });
 });
