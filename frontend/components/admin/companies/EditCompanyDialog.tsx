@@ -157,7 +157,7 @@ export function EditCompanyDialog({
         }
       }}
     >
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "#557EFF" }}>
@@ -207,7 +207,7 @@ export function EditCompanyDialog({
               readOnly
               disabled
               className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs opacity-60 outline-none"
-              style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.35)" }}
+              style={{ background: "rgba(223,229,237,0.35)" }}
             />
           </Field>
 
@@ -251,7 +251,6 @@ export function EditCompanyDialog({
               onClick={handleClose}
               disabled={submitting}
               className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED" }}
             >
               Cancelar
             </button>

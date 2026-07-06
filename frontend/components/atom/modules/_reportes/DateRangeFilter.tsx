@@ -28,7 +28,6 @@ export function DateRangeFilter({ value, onChange, disabled }: DateRangeFilterPr
           id="reportes-fecha-desde"
           type="date"
           className={inputClass}
-          style={{ borderColor: "#DFE5ED" }}
           value={value.from}
           max={value.to || undefined}
           disabled={disabled}
@@ -43,7 +42,6 @@ export function DateRangeFilter({ value, onChange, disabled }: DateRangeFilterPr
           id="reportes-fecha-hasta"
           type="date"
           className={inputClass}
-          style={{ borderColor: "#DFE5ED" }}
           value={value.to}
           min={value.from || undefined}
           disabled={disabled}

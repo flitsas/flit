@@ -118,7 +118,6 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
             <div
               key={index}
               className="grid grid-cols-1 gap-2 rounded-xl border p-3"
-              style={{ borderColor: "#DFE5ED" }}
             >
               <select
                 aria-label={`Campo condición ${index + 1}`}

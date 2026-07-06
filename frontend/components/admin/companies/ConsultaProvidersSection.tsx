@@ -25,7 +25,7 @@ export function ConsultaProvidersSection({
   const timeoutError = fieldErrors?.runtFailoverTimeoutMs;
 
   return (
-    <fieldset className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <fieldset className="rounded-2xl border p-4">
       <legend className="px-1 text-xs font-semibold">Proveedores de consulta RUNT</legend>
       <p className="mb-3 max-w-md text-[11px] opacity-60">
         Proveedor que resuelve cada consulta al RUNT. Kyverum es el predeterminado; si no responde, la

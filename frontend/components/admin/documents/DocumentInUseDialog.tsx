@@ -30,7 +30,6 @@ export function DocumentInUseDialog({
     >
       <div
         className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <div className="mb-3 flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -67,7 +66,6 @@ export function DocumentInUseDialog({
               <li
                 key={p.codigo}
                 className="flex items-center justify-between rounded-xl border px-3 py-2"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <span className="text-xs font-semibold">{p.nombre}</span>
                 <span className="font-mono text-[10px] opacity-60">{p.codigo}</span>

@@ -10,7 +10,7 @@ export function Step6Bindings() {
 
       <div
         className="rounded-2xl p-6 border flex flex-col items-center gap-3"
-        style={{ borderColor: '#DFE5ED', borderStyle: 'dashed' }}
+        style={{ borderStyle: 'dashed' }}
       >
         <span
           className="px-3 py-1 rounded-full text-[10px] font-bold text-white"

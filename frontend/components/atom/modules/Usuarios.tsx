@@ -114,7 +114,7 @@ export function Usuarios() {
 
       {tab === "usuarios" && (
         <>
-          <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-white dark:bg-[#0B0F14] max-w-md shrink-0" style={{ borderColor: "#DFE5ED" }}>
+          <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-white dark:bg-[#0B0F14] max-w-md shrink-0">
             <Search className="h-4 w-4 opacity-60" />
             <input placeholder="Buscar por nombre o correo..." className="flex-1 bg-transparent outline-none text-xs" />
           </div>
@@ -156,8 +156,7 @@ export function Usuarios() {
                     className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
                       gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
-                      borderColor: "#DFE5ED",
-                    }}
+                      }}
                   >
                     <div>
                       <p className="font-semibold">{u.fullName}</p>
@@ -239,7 +238,7 @@ export function Usuarios() {
               </div>
               <div className="flex-1 overflow-y-auto space-y-2 pt-2">
                 {roles.map((r) => (
-                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" style={{ borderColor: "#DFE5ED" }}>
+                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
                     <div className="col-span-2 font-mono opacity-80">{r.code}</div>
                     <div className="col-span-4 font-semibold">{r.name}</div>
                     <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
@@ -302,7 +301,7 @@ function RoleDropdown({
         onChange={handleChange}
         disabled={busy || rolesLoading || roles.length === 0}
         className="text-[11px] rounded-lg border px-2 py-1 bg-transparent outline-none"
-        style={{ borderColor: "#DFE5ED", minWidth: 100 }}
+        style={{ minWidth: 100 }}
       >
         <option value="" disabled>
           {busy ? "Asignando…" : (currentRoleName ?? "Sin rol ▾")}
@@ -350,7 +349,7 @@ function SuspendModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
+      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold">Bloquear usuario</h3>
@@ -370,7 +369,6 @@ function SuspendModal({
               placeholder="Ej. Incumplimiento de políticas de uso"
               rows={3}
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00] resize-none"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           <div>
@@ -382,7 +380,6 @@ function SuspendModal({
               onChange={(e) => setEndsAt(e.target.value)}
               min={new Date().toISOString().slice(0, 16)}
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           {error && (
@@ -393,7 +390,6 @@ function SuspendModal({
               type="button"
               onClick={onClose}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold border transition"
-              style={{ borderColor: "#DFE5ED" }}
             >
               Cancelar
             </button>
@@ -490,7 +486,7 @@ function InviteModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
+      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold">Invitar usuario</h3>
@@ -510,7 +506,7 @@ function InviteModal({
                 </p>
               )}
             </div>
-            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
+            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]">
               <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
               <div className="flex items-center gap-2 text-xs">
                 {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
@@ -535,7 +531,6 @@ function InviteModal({
                   onChange={(e) => { setSelectedTenantId(e.target.value); setSelectedRoleId(""); }}
                   disabled={tenantsLoading}
                   className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                  style={{ borderColor: "#DFE5ED" }}
                 >
                   <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
                   {companies.length > 0 && (
@@ -565,7 +560,6 @@ function InviteModal({
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Juan Pérez"
                 className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                style={{ borderColor: "#DFE5ED" }}
               />
             </div>
             <div>
@@ -578,7 +572,6 @@ function InviteModal({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="correo@empresa.com"
                 className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                style={{ borderColor: "#DFE5ED" }}
               />
             </div>
             {isSuperAdmin ? (
@@ -599,7 +592,6 @@ function InviteModal({
                   value={selectedRoleId}
                   onChange={(e) => setSelectedRoleId(e.target.value)}
                   className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                  style={{ borderColor: "#DFE5ED" }}
                 >
                   <option value="">Sin rol asignado</option>
                   {roles.map((r) => (
@@ -611,7 +603,7 @@ function InviteModal({
             {error && (
               <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
             )}
-            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]" style={{ borderColor: "#DFE5ED" }}>
+            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]">
               <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
               <div className="flex items-center gap-2 text-xs">
                 {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (

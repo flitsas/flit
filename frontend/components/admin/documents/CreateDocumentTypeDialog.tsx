@@ -127,7 +127,7 @@ export function CreateDocumentTypeDialog({
       aria-modal="true"
       aria-labelledby="dt-dialog-title"
     >
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "#557EFF" }}>
@@ -188,7 +188,6 @@ export function CreateDocumentTypeDialog({
               onClick={handleClose}
               disabled={submitting}
               className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED" }}
             >
               Cancelar
             </button>

@@ -62,7 +62,6 @@ export function TransitOfficesList() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre o código…"
           className="w-full rounded-xl border py-2 pl-9 pr-3 text-sm"
-          style={{ borderColor: "#DFE5ED" }}
         />
       </label>
 
@@ -76,10 +75,10 @@ export function TransitOfficesList() {
         }
         errorMessage="No se pudo cargar el catálogo de organismos de tránsito."
       >
-        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
+        <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <thead>
-              <tr className="border-b text-xs font-semibold uppercase tracking-wide opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <tr className="border-b text-xs font-semibold uppercase tracking-wide opacity-70">
                 <th className="px-4 py-3" scope="col">
                   Código
                 </th>
@@ -99,7 +98,6 @@ export function TransitOfficesList() {
                 <tr
                   key={office.id}
                   className="border-b last:border-b-0 hover:bg-slate-50/80"
-                  style={{ borderColor: "#DFE5ED" }}
                 >
                   <td className="px-4 py-3 font-mono text-xs">{office.code}</td>
                   <td className="px-4 py-3 font-medium">{office.name}</td>

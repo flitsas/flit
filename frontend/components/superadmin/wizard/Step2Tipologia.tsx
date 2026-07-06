@@ -16,7 +16,6 @@ export function Step2Tipologia() {
             rows={3}
             placeholder="Descripción opcional del flujo..."
             className="w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] resize-none"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
 
@@ -29,7 +28,6 @@ export function Step2Tipologia() {
             type="text"
             defaultValue="1.0"
             className="w-32 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
 

@@ -500,7 +500,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "#F9AC00" },
                   { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "#FF4E00" },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl border p-2.5" style={{ borderColor: "#DFE5ED" }}>
+                  <div key={k.label} className="rounded-xl border p-2.5">
                     <p className="text-[10px] opacity-70 font-medium">{k.label}</p>
                     <p className="text-lg font-bold mt-0.5" style={{ color: k.color }}>
                       {k.value}

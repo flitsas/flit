@@ -266,7 +266,6 @@ function SummaryCard({ label, value, color }: { label: string; value: number; co
   return (
     <div
       className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col justify-between min-h-[88px]"
-      style={{ borderColor: "#DFE5ED" }}
     >
       <p className="text-[11px] opacity-70 font-medium">{label}</p>
       <p className="text-2xl font-bold mt-1" style={{ color }}>

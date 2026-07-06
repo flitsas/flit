@@ -45,7 +45,6 @@ export function OperacionView({ onStartTramite }: OperacionViewProps) {
     <div className="flex flex-col gap-4">
       <section
         className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-        style={{ borderColor: '#DFE5ED' }}
       >
         <h2 className="text-sm font-bold mb-1">Iniciar nuevo trámite</h2>
         <p className="text-[11px] opacity-60 mb-4">
@@ -65,7 +64,6 @@ export function OperacionView({ onStartTramite }: OperacionViewProps) {
                   type="button"
                   onClick={() => onStartTramite(m.id)}
                   className="w-full h-full flex flex-col gap-3 px-4 py-4 rounded-xl border text-left transition hover:border-[#557EFF]"
-                  style={{ borderColor: '#DFE5ED' }}
                   aria-label={`Iniciar ${m.label}`}
                 >
                   <span

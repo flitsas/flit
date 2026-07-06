@@ -64,7 +64,6 @@ export function CompanyStatusDialog({ company, onClose, onConfirmed }: CompanySt
             onClick={onClose}
             disabled={busy}
             className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-            style={{ borderColor: "#DFE5ED" }}
           >
             Cancelar
           </button>

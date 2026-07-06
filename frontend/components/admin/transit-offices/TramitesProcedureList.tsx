@@ -22,7 +22,6 @@ export function TramitesProcedureList({
         <li
           key={procedure.id}
           className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <div>
             <p className="text-sm font-semibold">{procedure.referenceNumber}</p>
@@ -43,7 +42,7 @@ export function TramitesProcedureList({
               <button
                 type="button"
                 className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                style={{ borderColor: "#DFE5ED", color: "#FF4E00" }}
+                style={{ color: "#FF4E00" }}
                 onClick={() => onReject?.(procedure.id)}
               >
                 Rechazar

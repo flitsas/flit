@@ -60,7 +60,6 @@ export default function MatriculaResumen({
     <section
       aria-label={resumenTitulo}
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">

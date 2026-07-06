@@ -63,7 +63,7 @@ function FilterChip({
       style={
         active
           ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.10)', color: '#557EFF' }
-          : { borderColor: '#DFE5ED', color: '#162744' }
+          : { color: '#162744' }
       }
     >
       {children}
@@ -95,7 +95,6 @@ export function TramitesListToolbar({
   return (
     <div
       className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
     >
       {/* Búsqueda + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -111,7 +110,6 @@ export function TramitesListToolbar({
             placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
             aria-label="Buscar trámites"
             className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
         <button
@@ -160,7 +158,7 @@ export function TramitesListToolbar({
       </div>
 
       {/* Contador + limpiar filtros */}
-      <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3" style={{ borderColor: '#DFE5ED' }}>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
         <p className="text-[11px] opacity-60" role="status" aria-live="polite">
           {counterLabel}
           {hasActiveFilters && filteredCount !== totalCount && (

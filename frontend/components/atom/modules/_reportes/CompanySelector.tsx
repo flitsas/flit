@@ -26,7 +26,6 @@ export function CompanySelector({ companies, value, onChange, disabled, defaultL
       <select
         id="reportes-compania"
         className="h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white"
-        style={{ borderColor: "#DFE5ED" }}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}

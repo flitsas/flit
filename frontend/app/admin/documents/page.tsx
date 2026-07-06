@@ -172,7 +172,7 @@ function DocumentsCatalog() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" style={{ borderColor: "#DFE5ED" }}>
+      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}

@@ -139,7 +139,7 @@ function UsuariosList() {
       >
         <div
           className="rounded-xl border overflow-hidden"
-          style={{ borderColor: "#DFE5ED", background: "#FFFFFF" }}
+          style={{ background: "#FFFFFF" }}
         >
           <table className="w-full text-sm">
             <thead>
@@ -274,7 +274,6 @@ function RoleSelector({
         title={disabled ? "No puedes cambiar tu propio rol" : undefined}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition"
         style={{
-          borderColor: "#DFE5ED",
           color: disabled ? "#9CA3AF" : "#162744",
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.6 : 1,
@@ -373,7 +372,6 @@ function InviteDialog({
                 required
                 disabled={tenantsLoading}
                 className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
                 {companies.length > 0 && (
@@ -400,7 +398,6 @@ function InviteDialog({
               required
               placeholder="Ej. Laura García"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <Field label="Correo electrónico">
@@ -411,7 +408,6 @@ function InviteDialog({
               required
               placeholder="laura@empresa.com"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           {isSuperAdmin ? (
@@ -430,7 +426,6 @@ function InviteDialog({
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <option value="">Sin rol asignado</option>
                 {roles.map((r) => (
@@ -444,7 +439,7 @@ function InviteDialog({
               type="button"
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>
@@ -502,7 +497,6 @@ function SuspendDialog({
               rows={3}
               placeholder="Ej. Incumplimiento de políticas"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400 resize-none"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <Field label="Bloqueado hasta *">
@@ -513,7 +507,6 @@ function SuspendDialog({
               min={new Date().toISOString().slice(0, 16)}
               required
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <div className="flex gap-3 pt-2">
@@ -521,7 +514,7 @@ function SuspendDialog({
               type="button"
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>

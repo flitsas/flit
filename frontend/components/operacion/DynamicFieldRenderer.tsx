@@ -77,7 +77,6 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
             aria-describedby={describedBy}
             onChange={(e) => onChange(e.target.value)}
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           >
             <option value="" disabled>
               Selecciona una opción
@@ -120,7 +119,6 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
             aria-describedby={describedBy}
             onChange={(e) => onChange(e.target.value)}
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         );
       case 'date':
@@ -134,7 +132,6 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
             aria-describedby={describedBy}
             onChange={(e) => onChange(e.target.value)}
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         );
       case 'text':
@@ -149,7 +146,6 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
             aria-describedby={describedBy}
             onChange={(e) => onChange(e.target.value)}
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         );
     }

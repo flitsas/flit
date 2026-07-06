@@ -55,7 +55,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
   };
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-2xl border p-4">
       <div className="mb-3 flex items-center gap-2">
         <ScopeBadge scope={scope} />
         <h3 className="text-xs font-semibold">Nuevo override de orden</h3>

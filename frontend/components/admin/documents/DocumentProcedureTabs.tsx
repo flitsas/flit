@@ -49,7 +49,7 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" style={{ borderColor: "#DFE5ED" }} role="tablist">
+      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;

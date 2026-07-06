@@ -402,7 +402,6 @@ export function Validaciones() {
       {isEmpty && (
         <div
           className="flex-1 min-h-0 grid place-items-center rounded-2xl border"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="text-center max-w-md px-6 py-10">
             <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
@@ -603,7 +602,6 @@ function PaginationBar({
   return (
     <div
       className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0"
-      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="flex items-center gap-3 text-[11px]">
         <label className="flex items-center gap-1.5">
@@ -614,7 +612,6 @@ function PaginationBar({
             disabled={disabled}
             aria-label="Filas por página"
             className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
-            style={{ borderColor: '#DFE5ED' }}
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -634,7 +631,6 @@ function PaginationBar({
           disabled={disabled || page <= 1}
           aria-label="Página anterior"
           className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -647,7 +643,6 @@ function PaginationBar({
           disabled={disabled || page >= totalPages}
           aria-label="Página siguiente"
           className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -678,7 +673,6 @@ function StatsCards({
           <div
             key={k.l}
             className="rounded-2xl px-4 py-2.5 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <div>
               <p className="text-[11px] opacity-70 font-medium">{k.l}</p>
@@ -787,7 +781,7 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
         href={`/tramites/${r.instanceId}`}
         aria-label={ariaLabel}
         className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#DFE5ED', gridTemplateColumns: GRID_COLS }}
+        style={{ gridTemplateColumns: GRID_COLS }}
       >
         <div className="min-w-0">
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>

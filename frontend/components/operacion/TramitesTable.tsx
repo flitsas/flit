@@ -267,7 +267,6 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
   return (
     <section
       className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
     >
       {heading}
 
@@ -297,7 +296,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
               value={compania}
               onChange={(e) => handleCompaniaChange(e.target.value)}
               className="rounded-xl border px-3 py-1.5 text-xs"
-              style={{ borderColor: '#DFE5ED', color: '#162744' }}
+              style={{ color: '#162744' }}
             >
               <option value="">Todas</option>
               {companias.map((c) => (
@@ -515,7 +514,6 @@ function Pagination({
   return (
     <nav
       className="mt-3 flex items-center justify-between gap-3 border-t pt-3"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label="Paginación de trámites"
     >
       <p className="text-[11px] opacity-60" role="status" aria-live="polite">
@@ -527,7 +525,7 @@ function Pagination({
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ borderColor: '#DFE5ED', color: '#162744' }}
+          style={{ color: '#162744' }}
           aria-label="Página anterior"
         >
           Anterior

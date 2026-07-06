@@ -109,17 +109,17 @@ export function RulesSection() {
           <tbody>
             {rules.map((rule) => (
               <tr key={rule.id} className="bg-white dark:bg-[#0B0F14]">
-                <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-l-xl border-y border-l px-4 py-3">
                   {rule.name}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3">
                   {rule.logic}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3">
                   {formatOtRuleAction(rule.action.type)}
                   {rule.action.queue_name ? ` (${rule.action.queue_name})` : ""}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3">
                   <OtStatusBadge
                     label={rule.isEnabled ? "Activa" : "Inactiva"}
                     tone={rule.isEnabled ? "success" : "neutral"}
@@ -127,7 +127,6 @@ export function RulesSection() {
                 </td>
                 <td
                   className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                  style={{ borderColor: "#DFE5ED" }}
                 >
                   <label className="inline-flex cursor-pointer items-center gap-2">
                     <span className="sr-only">Activa / Inactiva — {rule.name}</span>

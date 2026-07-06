@@ -206,7 +206,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       {operationalFlags.length > 0 && (
         <div
           className="rounded-2xl border bg-white p-4"
-          style={{ borderColor: "#DFE5ED" }}
           aria-labelledby={`${tabsId}-flags-heading`}
         >
           <h3 id={`${tabsId}-flags-heading`} className="mb-3 text-xs font-bold">
@@ -272,7 +271,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         aria-labelledby={`${tabsId}-tab-dashboard`}
         hidden={activePanel !== "dashboard"}
         className="rounded-2xl border bg-white p-4"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <UiStateBoundary
           status={listStatus}
@@ -294,7 +292,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         aria-labelledby={`${tabsId}-tab-quipux`}
         hidden={activePanel !== "quipux"}
         className="rounded-2xl border bg-white p-4"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <UiStateBoundary
           status={listStatus}

@@ -51,7 +51,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
   const noActivity = totals.submitted === 0;
 
   return (
-    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col" style={{ borderColor: "#DFE5ED" }}>
+    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h2 className="text-sm font-bold flex items-center gap-2">
           <Users className="h-4 w-4" style={{ color: "#557EFF" }} /> Top 5 productividad
@@ -121,7 +121,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
 
 function Indicator({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="rounded-xl border p-3" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-xl border p-3">
       <p className="text-[10px] opacity-70 font-medium">{label}</p>
       <p className="text-xl font-bold mt-0.5" style={{ color }}>
         {value}

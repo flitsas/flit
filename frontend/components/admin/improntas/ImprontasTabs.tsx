@@ -15,7 +15,6 @@ export function ImprontasTabs({ activeId }: { activeId: ImprontasTabId }) {
   return (
     <div
       className="flex items-center gap-1 overflow-x-auto border-b"
-      style={{ borderColor: "#DFE5ED" }}
       role="tablist"
       aria-label="Secciones del módulo de improntas"
     >

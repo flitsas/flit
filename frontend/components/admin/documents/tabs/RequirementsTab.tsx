@@ -144,7 +144,7 @@ export function RequirementsTab({ procedureTypeId }: { procedureTypeId: string }
   const associatedIds = items.map((i) => i.documentTypeId);
 
   const adder = (
-    <div className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-end" style={{ borderColor: "#DFE5ED" }}>
+    <div className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-end">
       <div className="flex-1">
         <DocumentTypeSelect
           id="req-add-doc"

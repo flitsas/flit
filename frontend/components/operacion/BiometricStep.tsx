@@ -220,7 +220,6 @@ function BiometricSkeleton({ partes }: { partes: BiometricParte[] }) {
         <div
           key={parte}
           className="rounded-xl border p-4"
-          style={{ borderColor: '#DFE5ED' }}
           aria-hidden="true"
         >
           <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
@@ -252,7 +251,6 @@ function ParteCard({
   return (
     <fieldset
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
     >
       <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
@@ -452,7 +450,7 @@ function KyverumPendingView({
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="rounded-xl border bg-white p-2" style={{ borderColor: '#DFE5ED' }}>
+        <div className="rounded-xl border bg-white p-2">
           <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
@@ -545,7 +543,7 @@ function ReconcileAction({
   };
 
   return (
-    <div className="space-y-1.5 border-t pt-3" style={{ borderColor: '#DFE5ED' }}>
+    <div className="space-y-1.5 border-t pt-3">
       <p className="text-[11px] opacity-60">
         ¿La captura ya se completó y sigue en espera? Consulta el estado directamente al proveedor.
       </p>
@@ -763,7 +761,7 @@ function IdentityAuditPanel({
   };
 
   return (
-    <div className="mt-3 border-t pt-3" style={{ borderColor: '#DFE5ED' }}>
+    <div className="mt-3 border-t pt-3">
       <button
         type="button"
         onClick={toggle}

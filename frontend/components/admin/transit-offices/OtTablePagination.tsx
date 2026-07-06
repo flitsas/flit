@@ -32,7 +32,6 @@ export function OtTablePagination({
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
           className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <ChevronLeft className="h-3.5 w-3.5" /> Anterior
         </button>
@@ -45,7 +44,6 @@ export function OtTablePagination({
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
           className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          style={{ borderColor: "#DFE5ED" }}
         >
           Siguiente <ChevronRight className="h-3.5 w-3.5" />
         </button>

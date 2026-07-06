@@ -62,7 +62,7 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           disabled={disabled || busy !== null}
           aria-busy={busy === "excel"}
           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
-          style={{ borderColor: "#DFE5ED", color: "#162744" }}
+          style={{ color: "#162744" }}
         >
           {busy === "excel" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

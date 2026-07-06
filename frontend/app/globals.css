@@ -72,7 +72,10 @@
   --accent-foreground: oklch(0.208 0.042 265.755);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
+  /* Borde de marca #DFE5ED (== --color-flit-gray): token semántico unificado para todos los
+     contenedores. En dark pasa a white/10 (ver .dark). HU#10492 — evita el override inline
+     borderColor:#DFE5ED que dejaba "líneas claras" en modo oscuro. */
+  --border: oklch(0.9197 0.0127 255.51);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.704 0.04 256.788);
   --chart-1: oklch(0.646 0.222 41.116);

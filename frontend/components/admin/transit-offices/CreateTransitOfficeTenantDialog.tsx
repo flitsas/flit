@@ -172,7 +172,6 @@ export function CreateTransitOfficeTenantDialog({
     >
       <div
         className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -278,7 +277,6 @@ export function CreateTransitOfficeTenantDialog({
               onClick={handleClose}
               disabled={submitting}
               className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED" }}
             >
               Cancelar
             </button>

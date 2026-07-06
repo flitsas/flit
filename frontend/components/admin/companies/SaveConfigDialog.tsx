@@ -92,7 +92,6 @@ export function SaveConfigDialog({
                 onClick={onCancel}
                 disabled={saving}
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 Cancelar
               </button>
@@ -115,7 +114,7 @@ export function SaveConfigDialog({
 
 function ChangeList({ changes }: { changes: ConfigChangeGroup[] }) {
   return (
-    <div className="mt-3 space-y-2.5 rounded-xl border p-3 text-xs" style={{ borderColor: "#DFE5ED" }}>
+    <div className="mt-3 space-y-2.5 rounded-xl border p-3 text-xs">
       {changes.map((group) => (
         <div key={group.module}>
           <p className="font-semibold" style={{ color: "#557EFF" }}>

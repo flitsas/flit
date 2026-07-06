@@ -113,7 +113,6 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
         <aside
           className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border shrink-0 md:h-fit"
-          style={{ borderColor: '#DFE5ED' }}
           aria-label="Pasos del asistente"
         >
           <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
@@ -146,7 +145,6 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
 
         <section
           className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
-          style={{ borderColor: '#DFE5ED' }}
           aria-label={`Paso ${step + 1}: ${WIZARD_STEPS[step]}`}
         >
           {error && (
@@ -204,7 +202,6 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
 
           <div
             className="flex items-center justify-between mt-6 pt-4 border-t"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <button
               onClick={handleBack}

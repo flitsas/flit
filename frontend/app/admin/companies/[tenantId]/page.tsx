@@ -86,7 +86,7 @@ function CompanyDetail() {
         subtitle="Edita las políticas operativas y revisa el historial de cambios."
       />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" style={{ borderColor: "#DFE5ED" }}>
+      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}

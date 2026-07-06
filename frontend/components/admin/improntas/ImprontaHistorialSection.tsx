@@ -91,7 +91,6 @@ export function ImprontaHistorialSection() {
     <div className="flex flex-1 flex-col gap-4">
       <form
         className={IMPRONTA_FILTER_FORM_CLS}
-        style={{ borderColor: "#DFE5ED" }}
         onSubmit={(e) => {
           e.preventDefault();
           applyFilters();

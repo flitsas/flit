@@ -57,28 +57,26 @@ export function ClientProceduresTable({
             <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
               <td
                 className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {row.referenceNumber}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 {row.procedureTypeName ?? row.procedureTypeId}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 {row.clientTenantName ?? row.clientTenantId}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 <OtStatusBadge
                   label={formatOtProcedureStatus(row.status)}
                   tone={procedureStatusTone(row.status)}
                 />
               </td>
-              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
               </td>
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {row.status === "entregado" && showApprovalActions && (
                   <div className="flex items-center justify-end gap-2">

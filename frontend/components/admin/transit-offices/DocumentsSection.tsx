@@ -246,7 +246,6 @@ export function DocumentsSection() {
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
             className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-xl"
-            style={{ borderColor: "#DFE5ED" }}
           >
             <h3 id="delete-tag-title" className="text-sm font-bold" style={{ color: "#162744" }}>
               Eliminar etiqueta
@@ -260,7 +259,6 @@ export function DocumentsSection() {
               <button
                 type="button"
                 className="rounded-xl border px-4 py-2 text-xs font-semibold"
-                style={{ borderColor: "#DFE5ED" }}
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
               >

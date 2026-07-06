@@ -140,7 +140,6 @@ function RolesList() {
             <div
               key={role.id}
               className="flex items-center justify-between rounded-xl border px-5 py-4 bg-white transition hover:border-blue-300"
-              style={{ borderColor: "#DFE5ED" }}
             >
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full grid place-items-center" style={{ background: "rgba(85,126,255,0.10)" }}>
@@ -170,7 +169,7 @@ function RolesList() {
                 <button
                   onClick={() => setPermOpen(role)}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium border transition hover:border-blue-400"
-                  style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                  style={{ color: "#557EFF" }}
                 >
                   Permisos
                 </button>
@@ -178,7 +177,6 @@ function RolesList() {
                   <button
                     onClick={() => handleDelete(role)}
                     className="p-1.5 rounded-lg border transition hover:border-red-300 hover:bg-red-50"
-                    style={{ borderColor: "#DFE5ED" }}
                     aria-label="Eliminar rol"
                   >
                     <Trash2 className="h-3.5 w-3.5" style={{ color: "#FF4E00" }} />
@@ -240,7 +238,6 @@ function CreateRoleDialog({
               required
               placeholder="Ej. Supervisor de trámites"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <Field label="Código único">
@@ -250,7 +247,6 @@ function CreateRoleDialog({
               required
               placeholder="SUPERVISOR_TRAMITES"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400 font-mono"
-              style={{ borderColor: "#DFE5ED" }}
             />
             <p className="text-[10px] mt-1" style={{ color: "#9CA3AF" }}>Solo letras mayúsculas, números y guion bajo.</p>
           </Field>
@@ -261,7 +257,6 @@ function CreateRoleDialog({
               rows={2}
               placeholder="Describe brevemente el propósito del rol"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400 resize-none"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <div className="flex gap-3 pt-2">
@@ -269,7 +264,7 @@ function CreateRoleDialog({
               type="button"
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>
@@ -389,7 +384,7 @@ function PermissionsDialog({
           <button
             onClick={onClose}
             className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-            style={{ borderColor: "#DFE5ED", color: "#162744" }}
+            style={{ color: "#162744" }}
           >
             Cancelar
           </button>
