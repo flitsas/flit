@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide-react";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
@@ -93,7 +93,7 @@ export function Usuarios() {
         action={
           tab === "usuarios" ? (
             <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
-              <Plus className="h-4 w-4" /> Invitar usuario
+              Invitar usuario
             </button>
           ) : undefined
         }

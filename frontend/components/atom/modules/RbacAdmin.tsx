@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark } from "lucide-react";
 import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
 import { Modal } from "@/components/atom/Modal";
 import {
@@ -117,7 +117,7 @@ export function RbacAdmin() {
                 className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
                 style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
               >
-                <Plus className="h-4 w-4" /> Nuevo módulo
+                Nuevo módulo
               </button>
             ) : undefined
           }
@@ -420,7 +420,7 @@ function RolesTab() {
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
             style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
           >
-            <Plus className="h-4 w-4" /> Nuevo rol
+            Nuevo rol
           </button>
         )}
       </div>

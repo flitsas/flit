@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripVertical, ChevronUp, ChevronDown, Trash2, Plus } from 'lucide-react';
+import { GripVertical, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import type { ProcedureStep } from '@/lib/api/types/procedure-parametrization';
 
 interface Step4Props {
@@ -92,7 +92,6 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           style={{ background: '#557EFF' }}
           aria-label="Agregar nuevo paso"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Agregar
         </button>
       </div>

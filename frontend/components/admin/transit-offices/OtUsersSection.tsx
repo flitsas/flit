@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, Plus, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -109,7 +109,6 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
           Invitar usuario
         </button>
       </div>
@@ -124,7 +123,6 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
             style={{ background: "#557EFF" }}
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
             Invitar usuario
           </button>
         }

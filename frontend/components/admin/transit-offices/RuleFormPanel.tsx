@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import type { CreateOtRuleRequest, OtRule, OtRuleCondition } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -180,7 +180,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
             style={{ color: "#557EFF" }}
             onClick={() => setConditions((prev) => [...prev, emptyCondition()])}
           >
-            <Plus className="h-3.5 w-3.5" /> Agregar condición
+            Agregar condición
           </button>
           {conditionError && (
             <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
