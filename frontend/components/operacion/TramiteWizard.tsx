@@ -511,12 +511,14 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4 items-start">
+      {/* AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista de
+          pasos cuando excede el alto disponible; ambos contenedores quedan a la par abajo. */}
+      <div className="grid grid-cols-12 gap-4 items-start md:items-stretch">
         {/* Sidebar de pasos server-driven. */}
         <aside
-          className="col-span-12 md:col-span-3 md:sticky md:top-4 md:self-start rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border"
+          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-0 md:max-h-[calc(100vh-120px)]"
         >
-          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
+          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3 shrink-0">
             Asistente de seguimiento
           </p>
           {steps.length === 0 ? (
@@ -524,7 +526,7 @@ export function TramiteWizard(props: Props) {
               {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
             </p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="space-y-3 flex-1 min-h-0 overflow-y-auto">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
                 const clickable = canNavigateToStep(steps, i, navViewOnly);
