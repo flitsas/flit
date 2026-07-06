@@ -60,9 +60,40 @@ internal static class SecurityRolesEndpoints
             }
         }).WithName("SetRolePermissions");
 
-        // Nota (HU #10505): SetRoleActiveHandler queda listo en la capa de aplicación (registrado
-        // en DI) pero SIN endpoint HTTP todavía — la gobernanza SuperAdmin de activar/desactivar
-        // roles del catálogo global es HU #10508, fuera de alcance de esta HU.
+        // HU #10508 AC1 — PATCH /roles/{id}/activate y /roles/{id}/deactivate → gobernanza
+        // SuperAdmin sobre el ciclo de vida del rol del catálogo global (paralelo a
+        // SecurityModulesEndpoints.ActivateModule/DeactivateModule).
+        group.MapMethods("/roles/{id:guid}/activate", ["PATCH"], async (
+            Guid id,
+            SetRoleActiveHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                await handler.HandleAsync(id, isActive: true, ct);
+                return Results.Ok();
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        }).WithName("ActivateRole");
+
+        group.MapMethods("/roles/{id:guid}/deactivate", ["PATCH"], async (
+            Guid id,
+            SetRoleActiveHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                await handler.HandleAsync(id, isActive: false, ct);
+                return Results.Ok();
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        }).WithName("DeactivateRole");
 
         // AC3, AC4, AC5 — DELETE /roles/{id}
         group.MapDelete("/roles/{id:guid}", async (

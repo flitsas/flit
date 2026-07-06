@@ -53,7 +53,6 @@ public static class SecurityApplicationExtensions
 
         // Fase 2 — Endpoints AdminCompañía
         services.AddScoped<ListAccessibleModulesHandler>();
-        services.AddScoped<SetTenantRolePermissionsHandler>();
 
         return services;
     }

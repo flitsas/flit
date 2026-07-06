@@ -19,8 +19,9 @@ namespace Flit.Api.Middleware;
 /// </list>
 /// El tenant resuelto (o <c>null</c> = todos, solo superadmin) y <c>isSuperAdmin</c> quedan en
 /// <see cref="HttpContext.Items"/> para el create (que toma el tenant del body) y otros consumidores.
-/// NO aplica a la parametrización (<c>/api/v1/tramites/procedure-types</c>, etc.), que usa otro
-/// modelo de auth (stub <c>X-Flit-SuperAdmin</c>), ni al portal público (<c>/api/v1/public/*</c>).
+/// NO aplica a la parametrización (<c>/api/v1/tramites/procedure-types</c>, etc.), que usa la
+/// policy <c>SuperAdmin</c> unificada por rol JWT (HU #10508), ni al portal público
+/// (<c>/api/v1/public/*</c>).
 /// </summary>
 public sealed class TenantEnforcementMiddleware(RequestDelegate next)
 {

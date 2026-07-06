@@ -4,23 +4,19 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
-using Flit.Modules.Security.Application.Roles;
 using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
-using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using IRoleRepository = Flit.Modules.Security.Domain.Roles.IRoleRepository;
 using AuthRoleNotFoundException = Flit.Modules.Security.Domain.Auth.RoleNotFoundException;
-using RolesRoleNotFoundException = Flit.Modules.Security.Domain.Roles.RoleNotFoundException;
 
 namespace Flit.Api.Endpoints;
 
 public static class SecurityEndpoints
 {
-    private static readonly string[] ReservedRoleCodes = ["SuperAdmin", "AdminCompany"];
     public static IEndpointRouteBuilder MapSecurityEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/security").RequireAuthorization();
@@ -176,109 +172,12 @@ public static class SecurityEndpoints
             return Results.Ok(roles);
         });
 
-        // POST /security/roles — AdminCompany crea rol custom (Fase 2). Endpoint restringido a
-        // AdminCompanyPolicy, así que el catálogo global de destino es siempre COMPANY (HU #10505).
-        group.MapPost("/roles", async (
-            [FromBody] CreateRoleRequest request,
-            ClaimsPrincipal caller,
-            CreateRoleHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out _))
-                return Results.Unauthorized();
-
-            if (ReservedRoleCodes.Contains(request.Code, StringComparer.OrdinalIgnoreCase))
-                return Results.Json(
-                    new ErrorResponse("RESERVED_ROLE_CODE", "El código de rol está reservado por el sistema."),
-                    statusCode: StatusCodes.Status400BadRequest);
-
-            try
-            {
-                var id = await handler.HandleAsync(
-                    new CreateRoleCommand("COMPANY", request.Code, request.Name, request.Description),
-                    ct);
-                return Results.Created($"/api/v1/security/roles/{id}", new { id });
-            }
-            catch (RoleCodeDuplicateException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_CODE_DUPLICATE", "Ya existe un rol con ese código en el catálogo."));
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("CreateTenantRole");
-
-        // PUT /security/roles/{id}/permissions — AdminCompany asigna permisos (subset del propio rol)
-        group.MapPut("/roles/{id:guid}/permissions", async (
-            Guid id,
-            [FromBody] SetRolePermissionsRequest request,
-            ClaimsPrincipal caller,
-            SetTenantRolePermissionsHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
-                return Results.Unauthorized();
-
-            var callerPermissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
-
-            try
-            {
-                var detail = await handler.HandleAsync(
-                    new SetTenantRolePermissionsCommand(id, tenantId, callerPermissions, request.PermissionIds),
-                    ct);
-                return Results.Ok(detail);
-            }
-            catch (RolesRoleNotFoundException)
-            {
-                return Results.NotFound();
-            }
-            catch (InsufficientPermissionsForDelegationException)
-            {
-                return Results.Json(
-                    new ErrorResponse("INSUFFICIENT_PERMISSIONS", "No puede asignar permisos que no posee."),
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("SetTenantRolePermissions");
-
-        // DELETE /security/roles/{id} — AdminCompany elimina rol no-sistema de su tenant
-        group.MapDelete("/roles/{id:guid}", async (
-            Guid id,
-            ClaimsPrincipal caller,
-            IRoleRepository roleRepository,
-            DeleteRoleHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out _))
-                return Results.Unauthorized();
-
-            // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así
-            // que ya no se valida "el rol pertenece a mi tenant" — solo su existencia. La
-            // gobernanza fina de quién puede borrar qué rol global es HU #10508.
-            var role = await roleRepository.GetByIdAsync(id, ct);
-            if (role is null)
-                return Results.NotFound();
-
-            try
-            {
-                await handler.HandleAsync(id, ct);
-                return Results.NoContent();
-            }
-            catch (RolesRoleNotFoundException)
-            {
-                return Results.NotFound();
-            }
-            catch (RoleSystemLockedException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_SYSTEM_LOCKED", "Los roles de sistema no pueden eliminarse."));
-            }
-            catch (RoleHasActiveUsersException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_HAS_ACTIVE_USERS", "El rol tiene usuarios activos asignados."));
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("DeleteTenantRole");
+        // HU #10508 AC2: la gobernanza de roles (crear/editar/eliminar) es EXCLUSIVA de
+        // SuperAdmin vía /api/v1/superadmin/roles* (ver SecurityRolesEndpoints). AdminCompany y
+        // OtAdmin conservan únicamente el GET de arriba (solo lectura, para poder asignar roles
+        // existentes a sus usuarios). Antes de esta HU existían aquí POST/PUT-permissions/DELETE
+        // restringidos a AdminCompanyPolicy — se eliminaron junto con
+        // SetTenantRolePermissionsHandler e InsufficientPermissionsForDelegationException.
 
         // HU #10506 AC1/AC2 — PUT /users/{userId}/role — asigna un rol ADICIONAL (ya no
         // reemplaza los demás roles activos del usuario, a diferencia de HU #10164).
@@ -627,10 +526,6 @@ public static class SecurityEndpoints
     }
 
     private sealed record AssignRoleRequest(Guid RoleId);
-
-    private sealed record CreateRoleRequest(string Code, string Name, string? Description);
-
-    private sealed record SetRolePermissionsRequest(List<Guid> PermissionIds);
 
     private sealed record SuspendUserRequest(string Reason, DateTimeOffset EndsAt);
 
