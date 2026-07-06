@@ -29,7 +29,7 @@ export default function AdminImprontasLayout({ children }: { children: ReactNode
 
   return (
     <Shell active="dashboard" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
-      <div className="h-full w-full overflow-y-auto pb-24">{children}</div>
+      <div className="app-bg min-h-screen w-full">{children}</div>
     </Shell>
   );
 }

@@ -116,7 +116,7 @@ export function BiometricCapture({ token }: Props) {
 
   if (load.kind === 'loading') {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }}>
+      <div className={CARD}>
         <p className="text-sm opacity-70 text-center">Cargando validación…</p>
       </div>
     );
@@ -124,7 +124,7 @@ export function BiometricCapture({ token }: Props) {
 
   if (load.kind === 'error') {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="alert">
+      <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Validación biométrica</h1>
         <p className="text-sm" style={{ color: '#FF4E00' }}>
           {load.message}
@@ -138,7 +138,7 @@ export function BiometricCapture({ token }: Props) {
   // Estados terminales: no hay captura posible.
   if (view.estado === 'aprobado') {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="status">
+      <div className={CARD} role="status">
         <div
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
           style={{ background: 'rgba(140,198,63,0.15)' }}
@@ -155,7 +155,7 @@ export function BiometricCapture({ token }: Props) {
 
   if (view.estado === 'expirado' || view.expired) {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="alert">
+      <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Enlace expirado</h1>
         <p className="text-sm opacity-70">
           El enlace de validación biométrica expiró. Solicita uno nuevo a tu gestor.
@@ -168,7 +168,7 @@ export function BiometricCapture({ token }: Props) {
   const sinIntentos = intentosRestantes === 0;
 
   return (
-    <div className={CARD} style={{ borderColor: '#DFE5ED' }}>
+    <div className={CARD}>
       <h1 className="text-lg font-bold">Validación biométrica</h1>
       <p className="text-sm opacity-70 mt-1">
         Hola {view.nombre}, sube tu selfie y tu cédula (frente y reverso) para
@@ -208,12 +208,10 @@ export function BiometricCapture({ token }: Props) {
                   src={previews[slot.key]}
                   alt={`Vista previa ${slot.label}`}
                   className="h-12 w-12 rounded-lg object-cover border"
-                  style={{ borderColor: '#DFE5ED' }}
                 />
               ) : (
                 <span
                   className="h-12 w-12 rounded-lg grid place-items-center border"
-                  style={{ borderColor: '#DFE5ED' }}
                   aria-hidden="true"
                 >
                   <Upload className="h-4 w-4 opacity-40" />

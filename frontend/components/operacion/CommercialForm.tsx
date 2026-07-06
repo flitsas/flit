@@ -133,7 +133,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     <form
       onSubmit={handleSubmit}
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label="Datos comerciales del trámite"
       noValidate
     >
@@ -199,7 +198,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               }}
               placeholder="0"
               className={`${INPUT_BASE} pl-7 font-mono`}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
         </div>
@@ -219,7 +217,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               }))
             }
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           >
             <option value="">Selecciona una causal…</option>
             {CAUSAL_OPTIONS.map((o) => (
@@ -244,7 +241,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               setData((d) => ({ ...d, tasaImpuesto: numberOrNull(e.target.value) }))
             }
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
 
@@ -261,7 +257,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               setData((d) => ({ ...d, derechos: numberOrNull(e.target.value) }))
             }
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
 
@@ -277,7 +272,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               setData((d) => ({ ...d, metodoPago: e.target.value || null }))
             }
             className={INPUT_BASE}
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
       </div>

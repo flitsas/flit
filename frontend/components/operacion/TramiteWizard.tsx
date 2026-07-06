@@ -548,13 +548,14 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4 items-start">
+      {/* AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista de
+          pasos cuando excede el alto disponible; ambos contenedores quedan a la par abajo. */}
+      <div className="grid grid-cols-12 gap-4 items-start md:items-stretch">
         {/* Sidebar de pasos server-driven. */}
         <aside
-          className="col-span-12 md:col-span-3 md:sticky md:top-4 md:self-start rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border"
-          style={{ borderColor: '#DFE5ED' }}
+          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-0 md:max-h-[calc(100vh-120px)]"
         >
-          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
+          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3 shrink-0">
             Asistente de seguimiento
           </p>
           {steps.length === 0 ? (
@@ -562,7 +563,7 @@ export function TramiteWizard(props: Props) {
               {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
             </p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="space-y-3 flex-1 min-h-0 overflow-y-auto">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
                 const clickable = canNavigateToStep(steps, i, navViewOnly);
@@ -607,7 +608,6 @@ export function TramiteWizard(props: Props) {
         {/* Cuerpo del paso activo. */}
         <section
           className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
-          style={{ borderColor: '#DFE5ED' }}
         >
           {!activeStep ? (
             <p className="text-xs opacity-60">
@@ -661,7 +661,6 @@ export function TramiteWizard(props: Props) {
 
           <div
             className="flex items-center justify-between mt-6 pt-4 border-t"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
@@ -810,12 +809,10 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   return (
     <div
       className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 border-b px-4 py-3"
-        style={{ borderColor: '#DFE5ED' }}
       >
         <div className="flex items-center gap-2">
           <span
@@ -878,7 +875,7 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
       {details.length > 0 && (
         <div
           className="grid gap-px border-t sm:grid-cols-2"
-          style={{ borderColor: '#DFE5ED', background: '#DFE5ED' }}
+          style={{ background: '#DFE5ED' }}
         >
           {details.map((d) => {
             const Icon = d.icon;
@@ -902,7 +899,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
       {hasSoatRtm && (
         <div
           className="border-t px-4 py-3"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
             Documentos del vehículo
@@ -911,7 +907,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
             {(soatVencimiento || soatAseguradora) && (
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
                 <div className="min-w-0">
@@ -930,7 +925,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
             {rtmVencimiento && (
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
                 <div className="min-w-0">
@@ -1168,7 +1162,6 @@ function ConsultaStep({
       {isVin ? (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
@@ -1181,7 +1174,6 @@ function ConsultaStep({
               }}
               disabled={readOnly}
               className={`${inputClass} sm:flex-1 disabled:opacity-60`}
-              style={{ borderColor: '#DFE5ED' }}
               placeholder="Número VIN…"
               aria-label="Número VIN"
             />
@@ -1191,7 +1183,6 @@ function ConsultaStep({
       ) : (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="grid max-w-xl gap-4 sm:grid-cols-2">
             <div>
@@ -1205,7 +1196,6 @@ function ConsultaStep({
                 onChange={(e) => setPlate(sanitizePlate(e.target.value))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. ABC123"
               />
             </div>
@@ -1228,7 +1218,6 @@ function ConsultaStep({
                   }}
                   disabled={readOnly}
                   className={`${inputClass} disabled:opacity-60`}
-                  style={{ borderColor: '#DFE5ED' }}
                 >
                   {DOC_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -1252,7 +1241,6 @@ function ConsultaStep({
                 onChange={(e) => setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. 1020304050"
               />
             </div>

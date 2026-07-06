@@ -78,7 +78,6 @@ export function PreflightPanel({
   return (
     <div
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
-      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
@@ -127,7 +126,6 @@ export function PreflightPanel({
               <li
                 key={c.key}
                 className="flex items-start gap-2.5 rounded-xl border p-2.5"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <span
                   className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"

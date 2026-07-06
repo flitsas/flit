@@ -24,7 +24,7 @@ export function TraspasosTab({ form, onChange, whitelistSlot }: TraspasosTabProp
         onChange={(v) => onChange({ onlyOwnVehicles: v })}
       />
       {whitelistSlot && (
-        <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+        <div className="rounded-2xl border p-4">
           {whitelistSlot}
         </div>
       )}

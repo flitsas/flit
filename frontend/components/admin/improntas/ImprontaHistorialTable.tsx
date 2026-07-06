@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ImprontaHistorialItem } from "@/lib/api/types-improntas";
 import { formatImprontaHistorialDate } from "./improntas-nav";
+import { Pagination } from "@/components/atom/Pagination";
 
 export interface ImprontaHistorialTableProps {
   rows: ImprontaHistorialItem[];
@@ -26,10 +26,6 @@ export function ImprontaHistorialTable({
   pageSize,
   onPageChange,
 }: ImprontaHistorialTableProps) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalCount);
-
   return (
     <div className="flex flex-1 flex-col">
       <table className="w-full border-separate border-spacing-y-2 text-xs">
@@ -57,22 +53,20 @@ export function ImprontaHistorialTable({
             <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
               <td
                 className="rounded-l-xl border-y border-l px-4 py-3 font-mono font-semibold"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {row.radicado}
               </td>
-              <td className="border-y px-4 py-3 font-medium uppercase" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 font-medium uppercase">
                 {row.placa}
               </td>
-              <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 opacity-80">
                 {formatImprontaHistorialDate(row.fechaImpresa)}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 {row.operador}
               </td>
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 opacity-80"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {row.flitUserName}
               </td>
@@ -81,36 +75,13 @@ export function ImprontaHistorialTable({
         </tbody>
       </table>
 
-      <div className="mt-auto flex items-center justify-between pt-3 text-[11px]">
-        <p className="opacity-60">
-          Mostrando {from}–{to} de {totalCount}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Página anterior"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-            style={{ borderColor: "#DFE5ED" }}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-          </button>
-          <span className="font-semibold" style={{ color: "#557EFF" }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            aria-label="Página siguiente"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-            style={{ borderColor: "#DFE5ED" }}
-          >
-            Siguiente <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        className="mt-auto"
+      />
     </div>
   );
 }

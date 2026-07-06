@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, Loader2, X } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiError, ApiValidationError, TENANT_TYPE_LABELS } from "@/lib/api/types";
 import type { CompanyListItem, TenantType, UpdateCompanyRequest } from "@/lib/api/types";
@@ -144,35 +145,15 @@ export function EditCompanyDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="edit-company-title"
-      onKeyDown={(e) => {
-        // Cerrar con Escape (accesibilidad: salida por teclado sin usar el ratón).
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          handleClose();
-        }
-      }}
+    <Modal
+      open={open}
+      onClose={handleClose}
+      busy={submitting}
+      icon={Building2}
+      title="Editar compañía"
+      titleClassName="text-base font-bold text-[#557EFF]"
     >
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
-        <div className="mb-4 flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "#557EFF" }}>
-              <Building2 className="h-4.5 w-4.5 text-white" />
-            </span>
-            <h2 id="edit-company-title" className="text-base font-bold" style={{ color: "#557EFF" }}>
-              Editar compañía
-            </h2>
-          </div>
-          <button type="button" aria-label="Cerrar" onClick={handleClose} className="text-slate-400 hover:text-slate-700">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-3.5">
+      <div className="space-y-3.5">
           <Field label="Razón Social" htmlFor="ec-razon" error={errors.razonSocial}>
             <input
               ref={firstFieldRef}
@@ -207,7 +188,7 @@ export function EditCompanyDialog({
               readOnly
               disabled
               className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs opacity-60 outline-none"
-              style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.35)" }}
+              style={{ background: "rgba(223,229,237,0.35)" }}
             />
           </Field>
 
@@ -251,7 +232,6 @@ export function EditCompanyDialog({
               onClick={handleClose}
               disabled={submitting}
               className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED" }}
             >
               Cancelar
             </button>
@@ -267,8 +247,7 @@ export function EditCompanyDialog({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

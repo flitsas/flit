@@ -245,7 +245,6 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
           value={transitOfficeId}
           onChange={(e) => setTransitOfficeId(e.target.value)}
           className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <option value="">Selecciona un Organismo de Tránsito…</option>
           {offices.map((o) => (
@@ -288,7 +287,7 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
             </UiStateBoundary>
           </section>
 
-          <section className="flex flex-col gap-3 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+          <section className="flex flex-col gap-3 border-t pt-4">
             <div>
               <h3 className="text-xs font-semibold">Obligatoriedad por OT</h3>
               <p className="text-[11px] opacity-60">
@@ -307,7 +306,7 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
           </section>
         </>
       ) : (
-        <p className="rounded-2xl border p-6 text-center text-xs opacity-60" style={{ borderColor: "#DFE5ED" }}>
+        <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
           Selecciona un Organismo de Tránsito para definir su orden documental y la
           obligatoriedad por OT.
         </p>

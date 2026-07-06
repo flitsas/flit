@@ -29,7 +29,7 @@ export default function ExpedienteTimeline({ statusHistory: rawHistory }: Props)
     (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
   );
   return (
-    <section aria-label="Línea de tiempo del expediente" className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+    <section aria-label="Línea de tiempo del expediente" className="rounded-xl border p-4">
       <div className="mb-3">
         <h4 className="text-sm font-bold">Expediente</h4>
         <p className="text-xs opacity-70">Trazabilidad cronológica del trámite.</p>
@@ -38,7 +38,7 @@ export default function ExpedienteTimeline({ statusHistory: rawHistory }: Props)
       {statusHistory.length === 0 ? (
         <p className="text-xs opacity-60">Sin eventos registrados todavía.</p>
       ) : (
-        <ol className="relative space-y-3 border-l pl-4" style={{ borderColor: '#DFE5ED' }}>
+        <ol className="relative space-y-3 border-l pl-4">
           {statusHistory.map((e, i) => (
             <li key={`${e.toStatus}-${e.changedAt}-${i}`} className="relative">
               <span

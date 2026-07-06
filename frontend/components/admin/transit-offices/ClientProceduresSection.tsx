@@ -213,7 +213,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       )}
       <form
         className={OT_FILTER_FORM_CLS}
-        style={{ borderColor: "#DFE5ED" }}
         onSubmit={(e) => {
           e.preventDefault();
           applyFilters();
@@ -326,7 +325,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
                 onClick={() => setApproveTarget(null)}
                 disabled={acting}
               >
@@ -370,7 +368,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
                 onClick={() => setRejectTarget(null)}
                 disabled={acting}
               >

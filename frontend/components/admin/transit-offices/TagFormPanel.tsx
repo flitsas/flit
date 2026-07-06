@@ -89,7 +89,6 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
               value={color}
               onChange={(e) => setColor(e.target.value.toUpperCase())}
               className="h-9 w-12 cursor-pointer rounded border"
-              style={{ borderColor: "#DFE5ED" }}
             />
             <input
               className={OT_INPUT_CLS}

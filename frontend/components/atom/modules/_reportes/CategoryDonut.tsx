@@ -29,7 +29,6 @@ export function CategoryDonut({ metrics, onSelect, activeKey }: CategoryDonutPro
   return (
     <section
       className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-[240px]"
-      style={{ borderColor: "#DFE5ED" }}
       aria-labelledby={`donut-${metrics.category}-title`}
     >
       <div className="flex items-center justify-between shrink-0">

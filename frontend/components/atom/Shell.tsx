@@ -326,7 +326,9 @@ export function Shell({
 
       {/* Main */}
       <main className="flex-1 min-h-0 overflow-hidden relative">
-        <div className="absolute inset-0 overflow-hidden">{children}</div>
+        {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
+            padding inferior libera el dock flotante para que nada quede oculto tras él. */}
+        <div className="absolute inset-0 overflow-y-auto pb-28">{children}</div>
 
         {/* Bottom dock */}
         <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40">

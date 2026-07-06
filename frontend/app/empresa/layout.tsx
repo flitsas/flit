@@ -23,7 +23,6 @@ export default function EmpresaLayout({ children }: { children: ReactNode }) {
     >
       <header
         className="shrink-0 flex items-center justify-between px-6 py-3 border-b bg-white"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <div className="flex items-center gap-4">
           <img src={logoDark} alt="FLIT 2.0" className="h-9 w-auto" />
@@ -43,7 +42,7 @@ export default function EmpresaLayout({ children }: { children: ReactNode }) {
       <div className="flex flex-1 min-h-0">
         <nav
           className="w-56 shrink-0 border-r py-4 px-3 flex flex-col gap-1"
-          style={{ background: "#FFFFFF", borderColor: "#DFE5ED" }}
+          style={{ background: "#FFFFFF" }}
         >
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");

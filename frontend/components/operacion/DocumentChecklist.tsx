@@ -422,7 +422,6 @@ export function DocumentChecklist({
   return (
     <section
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label="Documentos del trámite"
     >
       <div className="mb-3 flex items-center justify-between gap-3">

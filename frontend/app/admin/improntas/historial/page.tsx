@@ -12,7 +12,7 @@ export default function AdminImprontasHistorialPage() {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-full flex-col gap-4 px-6 pt-6 pb-24">
+    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -30,7 +30,6 @@ export default function AdminImprontasHistorialPage() {
 
       <div
         className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <ImprontasTabs activeId="historial" />
         <div className="mt-4">

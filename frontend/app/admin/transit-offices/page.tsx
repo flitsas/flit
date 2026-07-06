@@ -58,7 +58,7 @@ function AdminTransitOfficesPageInner() {
   // (o se decide el rol) se muestra un estado de carga neutro.
   if (role === "checking" || role === "ot_admin") {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-3 px-6 pt-6 pb-24" role="status" aria-busy="true" aria-live="polite">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 pt-6 pb-10" role="status" aria-busy="true" aria-live="polite">
         <span className="sr-only">Cargando…</span>
         <div
           className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
@@ -70,7 +70,7 @@ function AdminTransitOfficesPageInner() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-4 px-6 pt-6 pb-24">
+    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -99,7 +99,6 @@ function AdminTransitOfficesPageInner() {
 
       <div
         className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <TransitOfficesList key={listVersion} />
       </div>

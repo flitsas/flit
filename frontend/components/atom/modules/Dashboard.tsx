@@ -319,7 +319,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const s = slides[slide];
 
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 overflow-hidden flex flex-col gap-4">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       {/* Fila superior: Banner + KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
         {/* Banner carousel */}
@@ -440,8 +440,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       </div>
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0">
-        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
           <UiStateBoundary
             status={overviewStatus}
             errorMessage={errorMessage}
@@ -450,12 +450,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col min-h-0">
+            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
               <h2 className="text-sm font-bold mb-3">Distribución General de Trámites</h2>
               {globalFunnel.length === 0 ? (
                 <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
               ) : (
-                <ul className="space-y-2 flex-1 overflow-y-auto">
+                <ul className="space-y-2">
                   {globalFunnel.map((f, i) => {
                     const color = STATUS_COLORS[f.status] ?? "#557EFF";
                     return (
@@ -491,7 +491,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col min-h-0">
+            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
               <h2 className="text-sm font-bold mb-3">Validaciones Biométricas</h2>
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -500,7 +500,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "#F9AC00" },
                   { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "#FF4E00" },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl border p-2.5" style={{ borderColor: "#DFE5ED" }}>
+                  <div key={k.label} className="rounded-xl border p-2.5">
                     <p className="text-[10px] opacity-70 font-medium">{k.label}</p>
                     <p className="text-lg font-bold mt-0.5" style={{ color: k.color }}>
                       {k.value}
@@ -530,9 +530,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           emptyMessage="No hay datos de tendencia en los últimos 6 meses."
           skeletonRows={3}
         >
-          <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col min-h-0 h-full">
+          <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
             <h2 className="text-sm font-bold mb-3">Seguimiento operativo</h2>
-            <div className="flex-1 min-h-0 -mx-2">
+            <div className="h-[280px] -mx-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                   <CartesianGrid

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, Plus, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -109,7 +109,6 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
           Invitar usuario
         </button>
       </div>
@@ -124,7 +123,6 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
             style={{ background: "#557EFF" }}
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
             Invitar usuario
           </button>
         }
@@ -133,7 +131,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       >
         <div
           className="rounded-xl border overflow-hidden"
-          style={{ borderColor: "#DFE5ED", background: "#FFFFFF" }}
+          style={{ background: "#FFFFFF" }}
         >
           <table className="w-full text-sm">
             <thead>
@@ -294,7 +292,6 @@ function OtInviteUserDialog({
               required
               placeholder="Ej. Laura García"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </OtField>
           <OtField label="Correo electrónico" htmlFor="ot-invite-email">
@@ -306,7 +303,6 @@ function OtInviteUserDialog({
               required
               placeholder="laura@transito.gov.co"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </OtField>
           <div className="flex gap-3 pt-2">
@@ -315,7 +311,7 @@ function OtInviteUserDialog({
               onClick={onClose}
               disabled={busy}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>
@@ -382,7 +378,6 @@ function OtSuspendUserDialog({
               rows={3}
               placeholder="Ej. Incumplimiento de políticas"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400 resize-none"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </OtField>
           <OtField label="Suspendido hasta *" htmlFor="ot-suspend-ends-at">
@@ -394,7 +389,6 @@ function OtSuspendUserDialog({
               min={new Date().toISOString().slice(0, 16)}
               required
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </OtField>
           <div className="flex gap-3 pt-2">
@@ -403,7 +397,7 @@ function OtSuspendUserDialog({
               onClick={onClose}
               disabled={busy}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>

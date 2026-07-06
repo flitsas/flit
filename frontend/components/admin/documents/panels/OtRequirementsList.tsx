@@ -33,7 +33,7 @@ export function OtRequirementsList({
 }: OtRequirementsListProps) {
   if (documents.length === 0) {
     return (
-      <p className="rounded-2xl border p-6 text-center text-xs opacity-60" style={{ borderColor: "#DFE5ED" }}>
+      <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
         Agrega documentos en «Orden de los documentos» para definir su obligatoriedad por OT.
       </p>
     );
@@ -47,7 +47,6 @@ export function OtRequirementsList({
           <li
             key={d.id}
             className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
-            style={{ borderColor: "#DFE5ED" }}
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold">{d.nombre}</p>
@@ -59,7 +58,6 @@ export function OtRequirementsList({
               disabled={busy}
               onChange={(e) => onChange(d.id, e.target.value as DocumentRequirementSelection)}
               className="rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED" }}
             >
               {SELECTION_ORDER.map((value) => (
                 <option key={value} value={value}>

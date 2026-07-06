@@ -149,7 +149,6 @@ export function ClienteOverridesTab({ procedureTypeId }: { procedureTypeId: stri
           value={clienteId}
           onChange={(e) => setClienteId(e.target.value)}
           className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <option value="">Selecciona un Cliente…</option>
           {companies.map((c) => (
@@ -184,7 +183,7 @@ export function ClienteOverridesTab({ procedureTypeId }: { procedureTypeId: stri
           </UiStateBoundary>
         </>
       ) : (
-        <p className="rounded-2xl border p-6 text-center text-xs opacity-60" style={{ borderColor: "#DFE5ED" }}>
+        <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
           Selecciona un Cliente para ver y definir sus overrides de orden.
         </p>
       )}

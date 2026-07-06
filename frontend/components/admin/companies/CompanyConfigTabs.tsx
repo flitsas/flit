@@ -97,7 +97,7 @@ export function CompanyConfigTabs({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" style={{ borderColor: "#DFE5ED" }} role="tablist">
+      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -147,7 +147,6 @@ export function CompanyConfigTabs({
       {currentTab?.isConfig && (
         <div
           className="sticky bottom-0 flex items-center justify-end gap-3 border-t bg-white/90 py-3 backdrop-blur dark:bg-[#0B0F14]/90"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <button
             type="button"

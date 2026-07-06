@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { RowActions } from "@/components/atom/RowActions";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
 import { matchesOtOfficeSearch, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
@@ -62,7 +63,6 @@ export function TransitOfficesList() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre o código…"
           className="w-full rounded-xl border py-2 pl-9 pr-3 text-sm"
-          style={{ borderColor: "#DFE5ED" }}
         />
       </label>
 
@@ -76,10 +76,10 @@ export function TransitOfficesList() {
         }
         errorMessage="No se pudo cargar el catálogo de organismos de tránsito."
       >
-        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
+        <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <thead>
-              <tr className="border-b text-xs font-semibold uppercase tracking-wide opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <tr className="border-b text-xs font-semibold uppercase tracking-wide opacity-70">
                 <th className="px-4 py-3" scope="col">
                   Código
                 </th>
@@ -99,20 +99,21 @@ export function TransitOfficesList() {
                 <tr
                   key={office.id}
                   className="border-b last:border-b-0 hover:bg-slate-50/80"
-                  style={{ borderColor: "#DFE5ED" }}
                 >
                   <td className="px-4 py-3 font-mono text-xs">{office.code}</td>
                   <td className="px-4 py-3 font-medium">{office.name}</td>
                   <td className="px-4 py-3 text-xs opacity-80">{office.departmentCode}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => router.push(otHubModulePath(office.id, "tramites"))}
-                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-                      style={{ background: "#557EFF" }}
-                    >
-                      Administrar
-                    </button>
+                    <RowActions
+                      actions={[
+                        {
+                          icon: SlidersHorizontal,
+                          label: `Administrar ${office.name}`,
+                          onClick: () => router.push(otHubModulePath(office.id, "tramites")),
+                          tone: "primary",
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}

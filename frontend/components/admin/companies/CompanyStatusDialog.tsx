@@ -3,6 +3,7 @@
 // Modal de confirmación para activar/desactivar una compañía (#10118). Al confirmar
 // llama a PUT /companies/{tenantId}/status; en error muestra el mensaje y NO cierra.
 import { useState } from "react";
+import { Modal } from "@/components/atom/Modal";
 import { setCompanyStatus } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 
@@ -33,17 +34,15 @@ export function CompanyStatusDialog({ company, onClose, onConfirmed }: CompanySt
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="company-status-title"
+    <Modal
+      open
+      onClose={onClose}
+      busy={busy}
+      size="sm"
+      zClassName="z-[90]"
+      title={deactivating ? "Desactivar compañía" : "Activar compañía"}
+      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]">
-        <h2 id="company-status-title" className="text-lg font-semibold" style={{ color: "#162744" }}>
-          {deactivating ? "Desactivar compañía" : "Activar compañía"}
-        </h2>
-
         <p className="mt-2 text-sm opacity-80">
           ¿Confirmas {deactivating ? "desactivar" : "activar"} la compañía{" "}
           <strong>{company.razonSocial}</strong>?
@@ -64,7 +63,6 @@ export function CompanyStatusDialog({ company, onClose, onConfirmed }: CompanySt
             onClick={onClose}
             disabled={busy}
             className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-            style={{ borderColor: "#DFE5ED" }}
           >
             Cancelar
           </button>
@@ -78,7 +76,6 @@ export function CompanyStatusDialog({ company, onClose, onConfirmed }: CompanySt
             {busy ? "Procesando…" : deactivating ? "Desactivar" : "Activar"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

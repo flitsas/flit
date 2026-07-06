@@ -1,7 +1,9 @@
 "use client";
 
+import { Check, X } from "lucide-react";
 import { OtStatusBadge } from "./OtStatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
+import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 
@@ -24,7 +26,7 @@ export interface ClientProceduresTableProps {
   consolidadoActingId?: string | null;
 }
 
-/** Tabla paginada trÃ¡mites clientes OT â€” patrÃ³n CompanyListTable (HU #10220). */
+/** Tabla paginada trÃ¡mites clientes OT âÿÿ patrÃ³n CompanyListTable (HU #10220). */
 export function ClientProceduresTable({
   rows,
   totalCount,
@@ -69,49 +71,45 @@ export function ClientProceduresTable({
             <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
               <td
                 className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {row.referenceNumber}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 {row.procedureTypeName ?? row.procedureTypeId}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 {row.clientTenantName ?? row.clientTenantId}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3">
                 <OtStatusBadge
                   label={formatOtProcedureStatus(row.status)}
                   tone={procedureStatusTone(row.status)}
                 />
               </td>
-              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
               </td>
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <div className="flex items-center justify-end gap-2">
                   {row.status === "entregado" && showApprovalActions && (
-                    <>
-                      <button
-                        type="button"
-                        className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                        style={{ background: "#557EFF" }}
-                        onClick={() => onApprove(row)}
-                      >
-                        Aprobar
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                        onClick={() => onReject(row)}
-                      >
-                        Rechazar
-                      </button>
-                    </>
+                    <RowActions
+                      actions={[
+                        {
+                          icon: Check,
+                          label: `Aprobar tr?mite ${row.referenceNumber}`,
+                          onClick: () => onApprove(row),
+                          tone: "primary",
+                        },
+                        {
+                          icon: X,
+                          label: `Rechazar tr?mite ${row.referenceNumber}`,
+                          onClick: () => onReject(row),
+                          tone: "danger",
+                        },
+                      ]}
+                    />
                   )}
                   {row.status === "aprobado" && onAdjuntarLt && (
                     <button

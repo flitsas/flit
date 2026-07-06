@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { ModuleTitle } from './ModuleTitle';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
   ValidacionesFilterToolbar,
   EMPTY_VALIDACIONES_FILTERS,
@@ -46,14 +47,14 @@ import type {
  * gestor pulse "Actualizar" (que sigue disponible). Pausa cuando la pestaña no está visible.
  */
 
-const ESTADO_META: Record<BiometricEstado, { label: string; color: string; bg: string }> = {
-  enviado: { label: 'Enviado', color: '#557EFF', bg: 'rgba(85,126,255,0.12)' },
-  en_proceso: { label: 'En proceso', color: '#B26A00', bg: 'rgba(249,172,0,0.16)' },
-  aprobado: { label: 'Aprobado', color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' },
-  rechazado: { label: 'Rechazado', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' },
-  expirado: { label: 'Expirado', color: '#6B7280', bg: 'rgba(154,165,177,0.18)' },
-  pendiente_envio: { label: 'Pendiente de envío', color: '#557EFF', bg: 'rgba(85,126,255,0.12)' },
-  error_envio: { label: 'Error de envío', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' },
+const ESTADO_META: Record<BiometricEstado, { label: string; color: string; bg: string; border: string }> = {
+  enviado: { label: 'Enviado', color: '#557EFF', bg: 'rgba(85,126,255,0.12)', border: 'rgba(85,126,255,0.3)' },
+  en_proceso: { label: 'En proceso', color: '#B26A00', bg: 'rgba(249,172,0,0.16)', border: 'rgba(249,172,0,0.35)' },
+  aprobado: { label: 'Aprobado', color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)', border: 'rgba(140,198,63,0.4)' },
+  rechazado: { label: 'Rechazado', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)', border: 'rgba(255,78,0,0.3)' },
+  expirado: { label: 'Expirado', color: '#6B7280', bg: 'rgba(154,165,177,0.18)', border: 'rgba(154,165,177,0.35)' },
+  pendiente_envio: { label: 'Pendiente de envío', color: '#557EFF', bg: 'rgba(85,126,255,0.12)', border: 'rgba(85,126,255,0.3)' },
+  error_envio: { label: 'Error de envío', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)', border: 'rgba(255,78,0,0.3)' },
 };
 
 const MODALIDAD_LABEL: Record<string, string> = {
@@ -344,7 +345,7 @@ export function Validaciones() {
   const filtersActive = hasActiveValidacionesFilters(applied);
 
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="Validaciones de Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
@@ -402,7 +403,6 @@ export function Validaciones() {
       {isEmpty && (
         <div
           className="flex-1 min-h-0 grid place-items-center rounded-2xl border"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="text-center max-w-md px-6 py-10">
             <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
@@ -603,7 +603,6 @@ function PaginationBar({
   return (
     <div
       className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0"
-      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="flex items-center gap-3 text-[11px]">
         <label className="flex items-center gap-1.5">
@@ -614,7 +613,6 @@ function PaginationBar({
             disabled={disabled}
             aria-label="Filas por página"
             className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
-            style={{ borderColor: '#DFE5ED' }}
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -634,7 +632,6 @@ function PaginationBar({
           disabled={disabled || page <= 1}
           aria-label="Página anterior"
           className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -647,7 +644,6 @@ function PaginationBar({
           disabled={disabled || page >= totalPages}
           aria-label="Página siguiente"
           className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -678,7 +674,6 @@ function StatsCards({
           <div
             key={k.l}
             className="rounded-2xl px-4 py-2.5 bg-white dark:bg-[#0B0F14] border flex items-center justify-between"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <div>
               <p className="text-[11px] opacity-70 font-medium">{k.l}</p>
@@ -787,7 +782,7 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
         href={`/tramites/${r.instanceId}`}
         aria-label={ariaLabel}
         className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#DFE5ED', gridTemplateColumns: GRID_COLS }}
+        style={{ gridTemplateColumns: GRID_COLS }}
       >
         <div className="min-w-0">
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
@@ -807,12 +802,7 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
           {maskDoc(r.documentType, r.documentNumber)}
         </div>
         <div className="min-w-0">
-          <span
-            className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold"
-            style={{ background: meta.bg, color: meta.color }}
-          >
-            {meta.label}
-          </span>
+          <StatusBadge label={meta.label} bg={meta.bg} color={meta.color} border={meta.border} ariaLabel={`Estado: ${meta.label}`} />
           {r.status === 'rechazado' && r.rejectionReason && (
             <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
               {r.rejectionReason}

@@ -100,7 +100,6 @@ function CopyLink({ link, label }: { link: string; label: string }) {
         value={link}
         aria-label={label}
         className={INPUT_BASE}
-        style={{ borderColor: '#DFE5ED' }}
       />
       <button
         type="button"
@@ -455,7 +454,6 @@ function OrganismoModal({
     >
       <div
         className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
-        style={{ borderColor: '#DFE5ED' }}
       >
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -496,7 +494,6 @@ function OrganismoModal({
             placeholder="Buscar por nombre o código…"
             aria-label="Buscar organismo de tránsito"
             className={`${INPUT_BASE} pl-9`}
-            style={{ borderColor: '#DFE5ED' }}
             autoFocus
           />
         </div>
@@ -515,7 +512,6 @@ function OrganismoModal({
                 onClick={() => void persist(o)}
                 disabled={saving}
                 className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <p className="text-xs font-semibold">{o.name}</p>
                 <p className="text-[11px] opacity-70">{o.code}</p>
@@ -694,7 +690,6 @@ function FirmaParteCard({
   return (
     <fieldset
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label={`Firma ${PARTE_LABEL[parte]}`}
     >
       <legend className="px-1 text-xs font-bold flex items-center gap-2">
@@ -850,7 +845,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
       <form
         onSubmit={handleInvite}
         className="rounded-xl border p-4 space-y-3"
-        style={{ borderColor: '#DFE5ED' }}
         noValidate
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -863,7 +857,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={rol}
               onChange={(e) => setRol(e.target.value as ParticipantRol)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             >
               {ROL_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -882,7 +875,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
           <div>
@@ -895,7 +887,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
           <div>
@@ -908,7 +899,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
         </div>
@@ -997,7 +987,7 @@ function ParticipantRow({
   };
 
   return (
-    <li className="rounded-xl border p-3" style={{ borderColor: '#DFE5ED' }}>
+    <li className="rounded-xl border p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold capitalize">
@@ -1363,7 +1353,7 @@ function FurSection({
       )}
 
       {(modalidad === 'matricula_inicial' || modalidad === 'traspaso') && (
-        <div className="space-y-3 pt-2 border-t" style={{ borderColor: '#DFE5ED' }}>
+        <div className="space-y-3 pt-2 border-t">
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">

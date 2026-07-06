@@ -90,7 +90,6 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
 
       <div
         className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 dark:bg-[#0B0F14]"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <Search className="h-4 w-4 opacity-60" />
         <label htmlFor="ot-search" className="sr-only">
@@ -106,7 +105,7 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
       </div>
 
       {filtered.length === 0 ? (
-        <p className="rounded-xl border p-4 text-center text-xs opacity-60" style={{ borderColor: "#DFE5ED" }}>
+        <p className="rounded-xl border p-4 text-center text-xs opacity-60">
           Ningún organismo coincide con la búsqueda.
         </p>
       ) : (
@@ -117,7 +116,6 @@ export function OTMatrix({ offices, grantedIds, onToggle, onError }: OTMatrixPro
               <li
                 key={office.id}
                 className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-xs dark:bg-[#0B0F14]"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <label htmlFor={`ot-${office.id}`} className="flex flex-1 cursor-pointer items-center gap-3">
                   <input
