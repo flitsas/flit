@@ -5,9 +5,11 @@ import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 
 // Línea de tiempo del expediente. Adaptado del ExpedienteTimeline de Johan a la
 // capa de datos de FLIT: la cronología se construye desde el statusHistory[] que
-// ya devuelve getInstance (sin endpoint de eventos, QR ni PDF — fuera de alcance
-// hasta que exista el backend correspondiente). N 03 — labels/colores desde la
-// fuente única lib/tramites/estados.ts (6 estados de negocio).
+// ya devuelve getInstance (el historial real N 03 de procedure_instance_status_history).
+// Labels/colores desde la fuente única lib/tramites/estados.ts (6 estados de negocio).
+// El backend ya entrega el historial ordenado (fecha/hora + Id); aquí se re-ordena
+// ASCENDENTE de forma defensiva para que la trazabilidad siempre se lea del estado
+// inicial al actual aunque el caller pase los datos desordenados.
 
 interface Props {
   statusHistory: StatusHistory[];
@@ -21,7 +23,11 @@ function fmt(iso: string): string {
   }
 }
 
-export default function ExpedienteTimeline({ statusHistory }: Props) {
+export default function ExpedienteTimeline({ statusHistory: rawHistory }: Props) {
+  // Sort estable: conserva el desempate por Id que ya aplicó el backend en empates de fecha.
+  const statusHistory = [...rawHistory].sort(
+    (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
+  );
   return (
     <section aria-label="Línea de tiempo del expediente" className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
       <div className="mb-3">
@@ -40,7 +46,12 @@ export default function ExpedienteTimeline({ statusHistory }: Props) {
                 style={{ background: estadoChipStyle(e.toStatus).color }}
                 aria-hidden="true"
               />
-              <p className="text-xs font-semibold">{estadoLabel(e.toStatus)}</p>
+              <p className="text-xs font-semibold">
+                {estadoLabel(e.toStatus)}
+                {e.fromStatus ? (
+                  <span className="ml-1 font-normal opacity-50">desde {estadoLabel(e.fromStatus)}</span>
+                ) : null}
+              </p>
               <p className="text-[11px] opacity-60">{fmt(e.changedAt)}</p>
               {e.reason && <p className="mt-0.5 text-[11px] opacity-70">{e.reason}</p>}
             </li>

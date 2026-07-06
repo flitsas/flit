@@ -96,8 +96,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid otTenantId,
         Guid procedureInstanceId,
         CancellationToken cancellationToken = default) =>
+        GetByIdAsync(otTenantId, procedureInstanceId, transitOfficeIdOverride: null, cancellationToken);
+
+    public Task<OtClientProcedure?> GetByIdAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
         ExecuteOtScopedAsync(
             otTenantId,
+            transitOfficeIdOverride,
             transitOfficeId => FindAccessibleProcedureAsync(
                 transitOfficeId,
                 procedureInstanceId,
@@ -398,10 +406,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return await action().ConfigureAwait(false);
     }
 
-    private async Task<T> ExecuteInClientTenantScopeAsync<T>(
+    public async Task<T> ExecuteInClientTenantScopeAsync<T>(
         Guid clientTenantId,
         Func<Task<T>> action,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         if (_context.Database.IsRelational())
         {

@@ -13,6 +13,8 @@ internal static class TraspasoConsolidadoOrdering
     private static readonly string[] Precedence =
     [
         "fur",
+        // Licencia de Tránsito emitida por el OT al decidir el trámite (misma posición que en matrícula).
+        "licencia_transito",
         "certificado_identidad",
         "compraventa",
         "factura",

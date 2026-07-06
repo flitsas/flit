@@ -10,6 +10,12 @@ export interface TramitesProcedureListProps {
   showApprovalActions: boolean;
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  /** Genera/regenera el expediente consolidado del trámite (omitir = oculto). */
+  onGenerarConsolidado?: (procedure: OtClientProcedure) => void;
+  /** Descarga el PDF del consolidado más reciente (omitir = oculto). */
+  onVerConsolidado?: (procedure: OtClientProcedure) => void;
+  /** Id del trámite con acción de consolidado en curso. */
+  consolidadoActingId?: string | null;
 }
 
 /** Lista de trámites con acciones condicionales al modo (HU #10218 AC3/AC4). */
@@ -18,11 +24,15 @@ export function TramitesProcedureList({
   showApprovalActions,
   onApprove,
   onReject,
+  onGenerarConsolidado,
+  onVerConsolidado,
+  consolidadoActingId = null,
 }: TramitesProcedureListProps) {
   return (
     <ul className="space-y-3" aria-label="Lista de trámites">
       {procedures.map((procedure) => {
         const canAct = showApprovalActions && procedure.status === "entregado";
+        const hasConsolidadoActions = Boolean(onGenerarConsolidado || onVerConsolidado);
         return (
           <li
             key={procedure.id}
@@ -70,26 +80,55 @@ export function TramitesProcedureList({
               </dl>
             </div>
 
-            {canAct && (
-              <div className="flex shrink-0 gap-2 border-t pt-3 sm:border-t-0 sm:pt-0" style={{ borderColor: "#DFE5ED" }}>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#FFF4EC]"
-                  style={{ borderColor: "#FFD9C7", color: "#FF4E00" }}
-                  onClick={() => onReject?.(procedure.id)}
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                  Rechazar
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:brightness-95"
-                  style={{ background: "#557EFF" }}
-                  onClick={() => onApprove?.(procedure.id)}
-                >
-                  <Check className="h-4 w-4" aria-hidden="true" />
-                  Aprobar
-                </button>
+            {(canAct || hasConsolidadoActions) && (
+              <div
+                className="flex flex-wrap shrink-0 gap-2 border-t pt-3 sm:border-t-0 sm:pt-0"
+                style={{ borderColor: "#DFE5ED" }}
+              >
+                {canAct && (
+                  <>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#FFF4EC]"
+                      style={{ borderColor: "#FFD9C7", color: "#FF4E00" }}
+                      onClick={() => onReject?.(procedure.id)}
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                      Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:brightness-95"
+                      style={{ background: "#557EFF" }}
+                      onClick={() => onApprove?.(procedure.id)}
+                    >
+                      <Check className="h-4 w-4" aria-hidden="true" />
+                      Aprobar
+                    </button>
+                  </>
+                )}
+                {onGenerarConsolidado && (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                    style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                    disabled={consolidadoActingId === procedure.id}
+                    onClick={() => onGenerarConsolidado(procedure)}
+                  >
+                    Generar consolidado
+                  </button>
+                )}
+                {onVerConsolidado && (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                    style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                    disabled={consolidadoActingId === procedure.id}
+                    onClick={() => onVerConsolidado(procedure)}
+                  >
+                    Ver consolidado
+                  </button>
+                )}
               </div>
             )}
           </li>
