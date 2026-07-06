@@ -18,8 +18,9 @@ DDL ejecutable por Historia de Usuario de migración. Orden de aplicación:
 | 9 | `ddl/09-HU10152-ot-admin.sql` | [#10152](https://dev.azure.com/FlitDevOps/_workitems/edit/10152) | #10133 OT |
 | 10 | `ddl/10-HU10153-analytics.sql` | [#10153](https://dev.azure.com/FlitDevOps/_workitems/edit/10153) | #10139 Dashboard |
 | 11 | `ddl/11-schema-conformance-patch.sql` | — | PK `pk_*`, RLS, triggers, PII |
+| 12 | `ddl/12-HU10505-catalogo-global-roles.sql` | [#10505](https://dev.azure.com/FlitDevOps/_workitems/edit/10505) | #10504 Roles y Permisos — catálogo global de roles por tipo de entidad (COMPANY \| TRANSIT_OFFICE); elimina `tenant_id`/RLS de `security.roles`/`security.role_permissions` |
 
-**ADR:** [ADR-0018](../adr/ADR-0018-modelo-datos-fase1-evolution.md) (Propuesto).
+**ADR:** [ADR-0018](../adr/ADR-0018-modelo-datos-fase1-evolution.md) (Propuesto) · [ADR-0023](../adr/ADR-0023-catalogo-global-roles.md) (Propuesto, excepción A4/A20 para `security.roles`).
 
 ## EF Core
 
@@ -43,6 +44,8 @@ Migraciones aplicadas en orden:
 | 20260617230800 | `HU10153_Analytics` | 10 |
 | 20260617310000 | `SchemaConformancePatch` | 11 |
 | 20260617310100 | `FixAuditLogsPk` | — (inline SQL) |
+| … | (migraciones intermedias no listadas aquí — ver carpeta `Migrations/` para el historial completo) | — |
+| 20260706223157 | `HU10505_GlobalRoleCatalog` | 12 |
 
 ```bash
 pnpm migrate:core-api   # aplica todas las migraciones pendientes
@@ -50,4 +53,4 @@ pnpm migrate:core-api   # aplica todas las migraciones pendientes
 
 Validar cada migración con `@db-schema-validator` antes de merge.
 
-**ADR relacionados:** [ADR-0018](../adr/ADR-0018-modelo-datos-fase1-evolution.md) · [ADR-0019](../adr/ADR-0019-motor-parametrizacion-global-superadmin.md)
+**ADR relacionados:** [ADR-0018](../adr/ADR-0018-modelo-datos-fase1-evolution.md) · [ADR-0019](../adr/ADR-0019-motor-parametrizacion-global-superadmin.md) · [ADR-0023](../adr/ADR-0023-catalogo-global-roles.md)

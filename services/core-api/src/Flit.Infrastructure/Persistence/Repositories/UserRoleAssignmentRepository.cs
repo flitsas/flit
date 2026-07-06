@@ -14,8 +14,14 @@ public sealed class UserRoleAssignmentRepository(FlitDbContext db) : IUserRoleAs
 
     public async Task<bool> RoleIsActiveInTenantAsync(Guid roleId, Guid tenantId, CancellationToken ct)
     {
+        // HU #10505 / ADR-0023: security.roles es ahora un catálogo GLOBAL (sin tenant_id),
+        // así que "existe y está activo" ya no compara contra el tenant del Role. tenantId se
+        // conserva en la firma porque sigue siendo relevante para la ASIGNACIÓN
+        // (UserRoleAssignment.TenantId, resuelta en AssignRoleHandler — fuera de alcance de
+        // esta HU, ver HU #10506).
+        _ = tenantId;
         return await db.Roles
-            .AnyAsync(r => r.Id == roleId && r.TenantId == tenantId && r.DeletedAt == null, ct);
+            .AnyAsync(r => r.Id == roleId && r.IsActive && r.DeletedAt == null, ct);
     }
 
     public async Task<UserRoleAssignmentSnapshot?> GetActiveAssignmentAsync(Guid userId, Guid tenantId, CancellationToken ct)

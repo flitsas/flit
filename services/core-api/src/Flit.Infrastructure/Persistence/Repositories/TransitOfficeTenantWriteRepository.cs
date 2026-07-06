@@ -4,21 +4,18 @@ using Flit.Admin.Domain.Companies.TransitOffices.Create;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
 /// Implementación EF Core del alta y listado administrativo de tenants Organismo de
-/// Tránsito (OT): <c>identity.tenants</c> (sin RLS) + rol de sistema <c>ot_admin</c>
-/// en <c>security.roles</c> + <c>admin.transit_office_profiles</c> (con RLS por
-/// tenant).
-///
-/// Reutiliza como referencia exacta el patrón de alta de
-/// <see cref="CompanyWriteRepository.CreateAsync"/>, quitando el paso de otorgar
-/// <c>RoleGrant</c>s (el SuperAdmin los cura después vía RBAC Admin,
-/// <c>PUT /api/v1/superadmin/roles/{id}/permissions</c>).
+/// Tránsito (OT): <c>identity.tenants</c> (sin RLS) + <c>admin.transit_office_profiles</c>
+/// (con RLS por tenant). El rol de sistema <c>ot_admin</c> vive en el catálogo GLOBAL
+/// <c>security.roles</c> (HU #10505 / ADR-0023, sin tenant_id) — ya NO se crea una fila de
+/// rol por cada OT nuevo (violaría <c>UNIQUE(code, target_entity_type)</c>): la fila global
+/// única se siembra por migración/seed y se resuelve por Code en la invitación del primer
+/// admin del OT.
 ///
 /// El alta corre dentro de una única transacción con <c>SET LOCAL app.current_tenant_id</c>
 /// (mismo patrón que <see cref="OtProfileRepository"/>) para que el INSERT del perfil
@@ -31,8 +28,6 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
 {
     /// <summary>Código del rol de sistema del módulo OT (no se renombra — ver ADR del refactor adminOT).</summary>
     internal const string OtAdminRoleCode = "ot_admin";
-
-    private const string OtAdminRoleName = "Administrador OT";
 
     private readonly FlitDbContext _context;
 
@@ -63,7 +58,6 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
             async tenantId =>
             {
                 var now = DateTimeOffset.UtcNow;
-                var roleId = Guid.CreateVersion7();
 
                 var tenant = new Tenant
                 {
@@ -84,20 +78,14 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
                 _context.Tenants.Add(tenant);
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-                // Rol de sistema ot_admin SIN RoleGrants (a diferencia de AdminCompany):
-                // el SuperAdmin los cura por tenant vía RBAC Admin.
-                _context.Roles.Add(new Role
-                {
-                    Id = roleId,
-                    TenantId = tenantId,
-                    Code = OtAdminRoleCode,
-                    Name = OtAdminRoleName,
-                    IsSystem = true,
-                    CreatedAt = now,
-                    CreatedBy = newTransitOffice.CreatedBy,
-                    RowVersion = 0,
-                });
-                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                // HU #10505 / ADR-0023: "ot_admin" es ahora un rol del catálogo GLOBAL
+                // (security.roles ya no tiene tenant_id — UNIQUE(code, target_entity_type)). Ya
+                // NO se crea una fila de rol por cada OT nuevo (violaría esa unicidad); el
+                // catálogo trae una única fila "ot_admin" (target_entity_type = TRANSIT_OFFICE)
+                // sembrada por migración/seed, sin RoleGrants (el SuperAdmin los cura vía RBAC
+                // Admin, comportamiento sin cambios). La invitación del primer admin del OT
+                // (POST /api/v1/security/invitations, POST /api/v1/admin/ot/users/invite)
+                // resuelve ese rol global por Code, no por tenant.
 
                 var profile = new TransitOfficeProfile
                 {

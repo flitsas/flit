@@ -4,23 +4,29 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// Catálogo GLOBAL de roles por tipo de entidad (HU #10505 / ADR-0023): ya no filtra por
+/// <c>tenant_id</c> (la columna fue eliminada de <c>security.roles</c>/<c>security.role_permissions</c>).
+/// La unicidad de negocio es <c>(code, target_entity_type)</c>.
+/// </summary>
 public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
 {
-    public async Task<bool> CodeExistsInTenantAsync(Guid tenantId, string code, CancellationToken ct)
+    public async Task<bool> CodeExistsAsync(string targetEntityType, string code, CancellationToken ct)
     {
         return await db.Roles
-            .AnyAsync(r => r.TenantId == tenantId && r.Code == code && r.DeletedAt == null, ct);
+            .AnyAsync(r => r.TargetEntityType == targetEntityType && r.Code == code && r.DeletedAt == null, ct);
     }
 
     public async Task<Guid> CreateAsync(CreateRoleData data, CancellationToken ct)
     {
         var entity = new Role
         {
-            TenantId = data.TenantId,
+            TargetEntityType = data.TargetEntityType,
             Code = data.Code,
             Name = data.Name,
             Description = data.Description,
             IsSystem = false,
+            IsActive = true,
             RowVersion = 0,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -49,12 +55,12 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
 
         return new RoleDetail(
             role.Id,
-            role.TenantId,
+            role.TargetEntityType,
             role.Code,
             role.Name,
             role.Description,
             role.IsSystem,
-            role.DeletedAt == null,
+            role.IsActive && role.DeletedAt == null,
             permissions);
     }
 
@@ -73,11 +79,11 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
                 ct);
     }
 
-    public async Task<IReadOnlyList<RoleSummary>> ListByTenantAsync(Guid tenantId, CancellationToken ct)
+    public async Task<IReadOnlyList<RoleSummary>> ListByTargetEntityTypeAsync(string targetEntityType, CancellationToken ct)
     {
         var rows = await (
             from r in db.Roles.AsNoTracking()
-            where r.TenantId == tenantId && r.DeletedAt == null
+            where r.TargetEntityType == targetEntityType && r.DeletedAt == null
             let permCount = db.RoleGrants.Count(rg => rg.RoleId == r.Id)
             orderby r.Name
             select new RoleSummary(
@@ -95,7 +101,6 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
 
     public async Task SetPermissionsAsync(
         Guid roleId,
-        Guid tenantId,
         IReadOnlyList<Guid> permissionIds,
         CancellationToken ct)
     {
@@ -111,7 +116,6 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             var newGrants = permissionIds.Select(permId => new RoleGrant
             {
                 Id = Guid.NewGuid(),
-                TenantId = tenantId,
                 RoleId = roleId,
                 PermissionId = permId,
                 CreatedAt = now,
@@ -120,5 +124,14 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             db.RoleGrants.AddRange(newGrants);
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task SetActiveAsync(Guid roleId, bool isActive, CancellationToken ct)
+    {
+        await db.Roles
+            .Where(r => r.Id == roleId && r.DeletedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.IsActive, isActive),
+                ct);
     }
 }

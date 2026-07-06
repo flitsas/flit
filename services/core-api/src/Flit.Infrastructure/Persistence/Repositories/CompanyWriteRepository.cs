@@ -1,7 +1,6 @@
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.Create;
 using Flit.Infrastructure.Persistence.Entities.Identity;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -33,17 +32,14 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
     {
         ArgumentNullException.ThrowIfNull(company);
 
-        // Load active permissions (excluding rbac.manage which is superadmin-only)
-        var permissions = await _context.RbacActions
-            .AsNoTracking()
-            .Where(a => a.IsActive && a.Slug != "rbac.manage")
-            .Select(a => a.Id)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
+        // HU #10505 / ADR-0023: "AdminCompany" es ahora un rol del catálogo GLOBAL
+        // (security.roles ya no tiene tenant_id — UNIQUE(code, target_entity_type)). Ya NO se
+        // crea una fila de rol por cada compañía nueva (violaría esa unicidad); el catálogo trae
+        // una única fila "AdminCompany" (target_entity_type = COMPANY) sembrada por migración/seed,
+        // con sus permisos ya asignados. La invitación del primer admin de la compañía (POST
+        // /api/v1/security/invitations) resuelve ese rol global por Code, no por tenant.
         var now = DateTimeOffset.UtcNow;
         var tenantId = Guid.NewGuid();
-        var roleId = Guid.CreateVersion7();
 
         var entity = new Tenant
         {
@@ -58,36 +54,6 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         };
         _context.Tenants.Add(entity);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        // Seed the mandatory "AdminCompany" system role (tenant must exist first for FK)
-        _context.Roles.Add(new Role
-        {
-            Id = roleId,
-            TenantId = tenantId,
-            Code = "AdminCompany",
-            Name = "Administrador de Compañía",
-            IsSystem = true,
-            CreatedAt = now,
-            CreatedBy = company.CreatedBy,
-            RowVersion = 0,
-        });
-
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        // Assign permissions to AdminCompany role (separate save so FK is guaranteed)
-        if (permissions.Count > 0)
-        {
-            _context.RoleGrants.AddRange(permissions.Select(permId => new RoleGrant
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                RoleId = roleId,
-                PermissionId = permId,
-                CreatedAt = now,
-                CreatedBy = company.CreatedBy,
-            }));
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
 
         return Project(entity);
     }
