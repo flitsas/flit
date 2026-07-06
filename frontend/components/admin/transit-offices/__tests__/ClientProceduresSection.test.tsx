@@ -13,6 +13,14 @@ vi.mock("@/lib/api/admin-ot", () => ({
   rejectOtClientProcedure: vi.fn(),
 }));
 
+// N 03 fix — rol simulable: SuperAdmin supervisa la cola pero no decide (approve/reject
+// no soportan su override de organismo); ot_admin conserva las acciones.
+let mockSuperAdmin = false;
+vi.mock("@/lib/auth/jwt", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/jwt")>();
+  return { ...actual, isSuperAdmin: () => mockSuperAdmin };
+});
+
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: {
     listPublishedProcedureTypes: vi.fn().mockResolvedValue([
@@ -47,10 +55,10 @@ const procedure: OtClientProcedure = {
   createdAt: "2026-06-23T09:00:00Z",
 };
 
-function renderSection() {
+function renderSection(transitOfficeId?: string) {
   return render(
     <ToastProvider>
-      <ClientProceduresSection />
+      <ClientProceduresSection transitOfficeId={transitOfficeId} />
     </ToastProvider>,
   );
 }
@@ -58,6 +66,7 @@ function renderSection() {
 describe("ClientProceduresSection — HU #10220", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSuperAdmin = false;
     vi.mocked(fetchOtProfile).mockResolvedValue({
       operationMode: "dashboard",
       quipuxReadOnly: false,
@@ -122,6 +131,7 @@ describe("ClientProceduresSection — HU #10220", () => {
       expect(fetchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({ status: "entregado", pageSize: 20 }),
         expect.anything(),
+        undefined,
       ),
     );
     await user.selectOptions(screen.getByLabelText(/Filtrar por tipo de trámite/i), "matricula_inicial-type-id");
@@ -133,7 +143,31 @@ describe("ClientProceduresSection — HU #10220", () => {
           procedureTypeId: "matricula_inicial-type-id",
         }),
         expect.anything(),
+        undefined,
       ),
     );
+  });
+
+  it("N03 fix — con transitOfficeId scope-a la lista y el perfil (vista SuperAdmin)", async () => {
+    renderSection("aaaaaaaa-0001-4000-8000-000000000001");
+    await waitFor(() =>
+      expect(fetchOtClientProcedures).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "entregado" }),
+        expect.anything(),
+        { transitOfficeId: "aaaaaaaa-0001-4000-8000-000000000001" },
+      ),
+    );
+    expect(fetchOtProfile).toHaveBeenCalledWith(expect.anything(), {
+      transitOfficeId: "aaaaaaaa-0001-4000-8000-000000000001",
+    });
+    expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
+  });
+
+  it("N03 fix — SuperAdmin ve la cola pero sin acciones aprobar/rechazar", async () => {
+    mockSuperAdmin = true;
+    renderSection("aaaaaaaa-0001-4000-8000-000000000001");
+    expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Aprobar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Rechazar/i })).not.toBeInTheDocument();
   });
 });
