@@ -1,5 +1,7 @@
 // Cliente tipado de la API admin OT (HU #10215–#10220).
-import { apiFetch } from "./client";
+import { API_BASE_URL, apiFetch, getToken } from "./client";
+import { downloadFile } from "./download";
+import { ApiError } from "./types";
 import type {
   CreateOtWebhookRequest,
   CreateOtDocumentTagRequest,
@@ -81,6 +83,80 @@ export function rejectOtClientProcedure(
     method: "POST",
     body,
   });
+}
+
+/** Adjunto devuelto por los endpoints de expediente OT (shape del AttachmentDto de trámites). */
+export interface OtProcedureAttachment {
+  id: string;
+  tipo: string;
+  filename: string;
+  mimetype: string;
+  sizeBytes: number;
+  sha256: string;
+  source: string;
+  uploadedAt: string;
+}
+
+/** Genera (o regenera) el expediente consolidado de un trámite de cliente OT. */
+export function generarOtConsolidado(
+  id: string,
+  scope?: OtApiScope,
+): Promise<{ document: { attachmentId: string; tipo: string; filename: string; sha256: string } }> {
+  return apiFetch(`${base}/client-procedures/${id}/consolidado`, {
+    method: "POST",
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
+/** Descarga el PDF del consolidado más reciente de un trámite de cliente OT. */
+export function descargarOtConsolidado(
+  id: string,
+  referenceNumber?: string,
+  scope?: OtApiScope,
+): Promise<void> {
+  return downloadFile(`${base}/client-procedures/${id}/consolidado`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    fallbackFilename: `consolidado_${referenceNumber ?? id}.pdf`,
+  });
+}
+
+/**
+ * Adjunta la Licencia de Tránsito (LT) al trámite de un cliente OT (multipart —
+ * `apiFetch` es JSON-only, así que se usa fetch directo con FormData).
+ */
+export async function adjuntarOtLicenciaTransito(
+  id: string,
+  file: File,
+  scope?: OtApiScope,
+): Promise<OtProcedureAttachment> {
+  const origin =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(`${base}/client-procedures/${id}/attachments`, origin);
+  if (scope?.transitOfficeId) {
+    url.searchParams.set("transitOfficeId", scope.transitOfficeId);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getToken();
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      /* error sin cuerpo JSON */
+    }
+    throw new ApiError(response.status, `Error ${response.status} al adjuntar la LT`, detail);
+  }
+
+  return (await response.json()) as OtProcedureAttachment;
 }
 
 export function fetchOtWebhooks(signal?: AbortSignal): Promise<OtWebhooksListResult> {

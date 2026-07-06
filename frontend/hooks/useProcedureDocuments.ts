@@ -125,8 +125,9 @@ export interface UseProcedureDocumentsOptions {
 /**
  * Carga el checklist guiado por la tipología + los adjuntos de la instancia,
  * y expone subir/borrar/refrescar. En los tipos con OCR, analiza el documento
- * ANTES de subirlo a S3: valida tipo y VIN, recorta PDFs multi-documento, y aplica
- * el comportamiento por modalidad ante rechazo (matrícula sube igual; traspaso no sube).
+ * ANTES de subirlo a S3: valida tipo y VIN, recorta PDFs multi-documento. Un rechazo del
+ * OCR no bloquea el cargue en ninguna modalidad: el documento se sube igual y el rechazo
+ * queda marcado en la UI (ocrResults[tipo].status = 'rejected').
  * `instanceId` null deja el hook inerte (la instancia draft aún no existe).
  */
 export function useProcedureDocuments(
@@ -228,17 +229,8 @@ export function useProcedureDocuments(
           fileToUpload = base64ToPdfFile(ocr.extractedPdfBase64, file.name);
         }
 
-        // Traspaso: si el documento queda rechazado, NO se sube (se deja el estado visible).
-        if (evaluation.rechazado && modalidad === 'traspaso') {
-          setState((s) => ({
-            ...s,
-            analyzingTipo: null,
-            ocrResults: { ...s.ocrResults, [tipo]: ocrUi },
-          }));
-          return false;
-        }
-
-        // Matrícula: se sube igual aunque quede rechazado (el estado queda marcado en la UI).
+        // Ambas modalidades suben igual aunque el OCR quede rechazado: el rechazo no bloquea
+        // el cargue, solo queda marcado en la UI (ocrResults[tipo].status = 'rejected').
         setState((s) => ({
           ...s,
           analyzingTipo: null,

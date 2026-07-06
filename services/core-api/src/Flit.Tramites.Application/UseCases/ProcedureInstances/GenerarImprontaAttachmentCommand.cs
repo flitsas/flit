@@ -15,12 +15,16 @@ public sealed record GenerarImprontaAttachmentResult(
 /// <c>impronta</c>, reusando <see cref="UploadAttachmentHandler"/> para garantizar idéntico
 /// storage/auto-marcado de checklist que una subida manual.
 ///
-/// Datos tomados del trámite: placa (<c>field_values.plate</c>) o, si aún no hay placa asignada
-/// (matrícula inicial), el VIN (<c>field_values.vin</c>); documento del propietario (actor
-/// <c>comprador</c> en matrícula inicial, SIEMPRE <c>vendedor</c> en traspaso — dueño actual al
-/// radicar); nombre de organización = organismo de tránsito ya seleccionado en el paso FUR
-/// (<c>field_values.transit_office_name</c>); operador = usuario autenticado que solicita la
-/// generación, resuelto por <c>Users.DisplayName</c>.
+/// Datos tomados del trámite: en matrícula inicial SIEMPRE se identifica el vehículo por VIN
+/// (<c>field_values.vin</c>), incluso si el RUNT ya devolvió una placa asignada durante la consulta
+/// — el radicador solo tiene certeza del VIN grabado en el vehículo, la placa es un dato que solo
+/// conoce el organismo de tránsito y puede no coincidir con el documento del comprador (verificado
+/// contra el proveedor real: enviar placa+documento sin relación devuelve <c>ok:false</c>, enviar
+/// vin+documento sí resuelve). En traspaso (vehículo ya matriculado) se usa la placa
+/// (<c>field_values.plate</c>). Documento del propietario: actor <c>comprador</c> en matrícula
+/// inicial, SIEMPRE <c>vendedor</c> en traspaso — dueño actual al radicar; nombre de organización =
+/// organismo de tránsito ya seleccionado en el paso FUR (<c>field_values.transit_office_name</c>);
+/// operador = usuario autenticado que solicita la generación, resuelto por <c>Users.DisplayName</c>.
 ///
 /// A diferencia del FUR (que reemplaza en cada regeneración), este handler es idempotente por
 /// NO-regeneración: si ya existe un adjunto tipo <c>impronta</c> (subido a mano o generado antes),
@@ -54,11 +58,14 @@ public sealed class GenerarImprontaAttachmentHandler(
 
         var placa = Get(fv, "plate");
         var vin = Get(fv, "vin");
-        if (string.IsNullOrWhiteSpace(placa) && string.IsNullOrWhiteSpace(vin))
-            return (null, "identificador_vehiculo_requerido");
 
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+
+        // Matrícula inicial: SIEMPRE por VIN (el radicador no conoce la placa aunque el RUNT ya
+        // tenga una asignada). Traspaso: SIEMPRE por placa (vehículo ya matriculado).
+        if (esTraspaso ? string.IsNullOrWhiteSpace(placa) : string.IsNullOrWhiteSpace(vin))
+            return (null, "identificador_vehiculo_requerido");
         // Traspaso: SIEMPRE el vendedor (dueño actual al radicar), nunca el comprador.
         var rolPropietario = esTraspaso ? "vendedor" : "comprador";
         var propietario = instance.Actors.FirstOrDefault(a =>
@@ -75,9 +82,10 @@ public sealed class GenerarImprontaAttachmentHandler(
         {
             providerResult = await externalClient.GenerarAsync(
                 new ImprontaExternalRequest(
-                    // Matrícula inicial (sin placa asignada aún): NO se envía el campo placa (ni
-                    // siquiera vacío) — solo Vin. Traspaso: se envía la placa normalmente.
-                    Placa: string.IsNullOrWhiteSpace(placa) ? null : placa,
+                    // Traspaso: se envía la placa (vehículo ya matriculado). Matrícula inicial:
+                    // NUNCA se envía placa (ni siquiera si el RUNT ya devolvió una en la consulta) —
+                    // ver nota de clase sobre por qué se prioriza siempre el VIN en ese caso.
+                    Placa: esTraspaso ? placa : null,
                     Documento: propietario.DocumentNumber.Trim(),
                     NumMotor: null,
                     NumChasis: null,
@@ -89,8 +97,8 @@ public sealed class GenerarImprontaAttachmentHandler(
                     OrgNit: null,
                     OrgCiudad: null,
                     Operador: operador.Trim(),
-                    // VIN solo cuando aún no hay placa asignada (matrícula inicial).
-                    Vin: string.IsNullOrWhiteSpace(placa) ? vin : null),
+                    // Matrícula inicial: siempre VIN. Traspaso: no se envía (se identifica por placa).
+                    Vin: esTraspaso ? null : vin),
                 ct).ConfigureAwait(false);
         }
         catch (ImprontaRuntException ex)

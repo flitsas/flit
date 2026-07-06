@@ -106,6 +106,10 @@ public static class DependencyInjection
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
+        // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
+        // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
+        services.AddScoped<DescargarConsolidadoHandler>();
+        services.AddScoped<AdjuntarLicenciaTransitoHandler>();
         // Descarga on-demand del certificado (PDF) de la validación de identidad desde Kyverum.
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).

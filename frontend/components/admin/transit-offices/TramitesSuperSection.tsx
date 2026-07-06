@@ -6,8 +6,10 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import {
   approveOtClientProcedure,
+  descargarOtConsolidado,
   fetchOtClientProcedures,
   fetchOtProfile,
+  generarOtConsolidado,
   rejectOtClientProcedure,
   updateOtFeatureFlag,
   updateOtProfile,
@@ -35,6 +37,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const [activePanel, setActivePanel] = useState<TramitesPanel>("dashboard");
   const [switchingMode, setSwitchingMode] = useState(false);
   const [togglingFlagId, setTogglingFlagId] = useState<string | null>(null);
+  const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -155,6 +158,29 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       show("No se pudo actualizar el feature flag.", "error");
     } finally {
       setTogglingFlagId(null);
+    }
+  };
+
+  const handleGenerarConsolidado = async (procedure: OtClientProcedure) => {
+    setConsolidadoActingId(procedure.id);
+    try {
+      await generarOtConsolidado(procedure.id, { transitOfficeId });
+      show("Consolidado generado.", "success");
+    } catch {
+      show("No se pudo generar el consolidado (verifica FUR y documentos del trámite).", "error");
+    } finally {
+      setConsolidadoActingId(null);
+    }
+  };
+
+  const handleVerConsolidado = async (procedure: OtClientProcedure) => {
+    setConsolidadoActingId(procedure.id);
+    try {
+      await descargarOtConsolidado(procedure.id, procedure.referenceNumber, { transitOfficeId });
+    } catch {
+      show("El trámite aún no tiene consolidado generado.", "error");
+    } finally {
+      setConsolidadoActingId(null);
     }
   };
 
@@ -332,6 +358,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
             showApprovalActions={!isReadOnly}
             onApprove={(id) => setApproveTarget(procedures.find((p) => p.id === id) ?? null)}
             onReject={(id) => setRejectTarget(procedures.find((p) => p.id === id) ?? null)}
+            onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
+            onVerConsolidado={handleVerConsolidado}
+            consolidadoActingId={consolidadoActingId}
           />
         </UiStateBoundary>
       </div>
@@ -353,6 +382,8 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           <TramitesProcedureList
             procedures={procedures}
             showApprovalActions={false}
+            onVerConsolidado={handleVerConsolidado}
+            consolidadoActingId={consolidadoActingId}
           />
           <p className="mt-3 text-[11px] opacity-60">
             Vista de cola Quipux en modo {isReadOnly ? "solo lectura" : "operativo"}.

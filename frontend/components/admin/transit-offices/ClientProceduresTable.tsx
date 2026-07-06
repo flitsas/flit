@@ -16,9 +16,17 @@ export interface ClientProceduresTableProps {
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
+  /** Genera/regenera el expediente consolidado (omitir = acción oculta, p. ej. QX read-only). */
+  onGenerarConsolidado?: (row: OtClientProcedure) => void;
+  /** Descarga el PDF del consolidado más reciente. */
+  onVerConsolidado?: (row: OtClientProcedure) => void;
+  /** Adjunta la Licencia de Tránsito a un trámite ya aprobado (solo OT admin). */
+  onAdjuntarLt?: (row: OtClientProcedure) => void;
+  /** Id de la fila con acción de consolidado en curso (deshabilita sus botones). */
+  consolidadoActingId?: string | null;
 }
 
-/** Tabla paginada trámites clientes OT — patrón CompanyListTable (HU #10220). */
+/** Tabla paginada trámites clientes OT ��� patrón CompanyListTable (HU #10220). */
 export function ClientProceduresTable({
   rows,
   totalCount,
@@ -28,6 +36,10 @@ export function ClientProceduresTable({
   onApprove,
   onReject,
   showApprovalActions = true,
+  onGenerarConsolidado,
+  onVerConsolidado,
+  onAdjuntarLt,
+  consolidadoActingId = null,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -80,24 +92,62 @@ export function ClientProceduresTable({
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
               >
-                {row.status === "entregado" && showApprovalActions && (
-                  <RowActions
-                    actions={[
-                      {
-                        icon: Check,
-                        label: `Aprobar trámite ${row.referenceNumber}`,
-                        onClick: () => onApprove(row),
-                        tone: "primary",
-                      },
-                      {
-                        icon: X,
-                        label: `Rechazar trámite ${row.referenceNumber}`,
-                        onClick: () => onReject(row),
-                        tone: "danger",
-                      },
-                    ]}
-                  />
-                )}
+                <div className="flex items-center justify-end gap-2">
+                  {row.status === "entregado" && showApprovalActions && (
+                    <RowActions
+                      actions={[
+                        {
+                          icon: Check,
+                          label: `Aprobar tr?mite ${row.referenceNumber}`,
+                          onClick: () => onApprove(row),
+                          tone: "primary",
+                        },
+                        {
+                          icon: X,
+                          label: `Rechazar tr?mite ${row.referenceNumber}`,
+                          onClick: () => onReject(row),
+                          tone: "danger",
+                        },
+                      ]}
+                    />
+                  )}
+                  {row.status === "aprobado" && onAdjuntarLt && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                      onClick={() => onAdjuntarLt(row)}
+                    >
+                      Adjuntar LT
+                    </button>
+                  )}
+                  {(row.status === "entregado" || row.status === "aprobado") && (
+                    <>
+                      {onGenerarConsolidado && (
+                        <button
+                          type="button"
+                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
+                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                          disabled={consolidadoActingId === row.id}
+                          onClick={() => onGenerarConsolidado(row)}
+                        >
+                          Generar consolidado
+                        </button>
+                      )}
+                      {onVerConsolidado && (
+                        <button
+                          type="button"
+                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
+                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                          disabled={consolidadoActingId === row.id}
+                          onClick={() => onVerConsolidado(row)}
+                        >
+                          Ver consolidado
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

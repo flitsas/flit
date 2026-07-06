@@ -6,9 +6,12 @@ import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import {
+  adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
+  descargarOtConsolidado,
   fetchOtClientProcedures,
   fetchOtProfile,
+  generarOtConsolidado,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
@@ -41,8 +44,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
+  const [ltFile, setLtFile] = useState<File | null>(null);
+  const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
+  const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
+
+  const scope = transitOfficeId ? { transitOfficeId } : undefined;
 
   // El SuperAdmin supervisa la cola pero la decisión aprobar/rechazar es del OT admin
   // (los endpoints approve/reject no soportan el override de organismo del SuperAdmin).
@@ -109,14 +118,63 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!approveTarget) return;
     setActing(true);
     try {
+      // Si el OT seleccionó la Licencia de Tránsito, se adjunta ANTES de aprobar
+      // (el backend la acepta en entregado/aprobado y el consolidado la incluirá).
+      if (ltFile) {
+        try {
+          await adjuntarOtLicenciaTransito(approveTarget.id, ltFile, scope);
+        } catch {
+          show("No se pudo adjuntar la Licencia de Tránsito. El trámite NO fue aprobado.", "error");
+          return;
+        }
+      }
       const updated = await approveOtClientProcedure(approveTarget.id);
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setApproveTarget(null);
-      show("Trámite aprobado.", "success");
+      setLtFile(null);
+      show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch {
       show("No se pudo aprobar el trámite.", "error");
     } finally {
       setActing(false);
+    }
+  };
+
+  const confirmAdjuntarLt = async () => {
+    if (!ltTarget || !ltFile) return;
+    setActing(true);
+    try {
+      await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope);
+      setLtTarget(null);
+      setLtFile(null);
+      show("Licencia de Tránsito adjuntada.", "success");
+    } catch {
+      show("No se pudo adjuntar la Licencia de Tránsito.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleGenerarConsolidado = async (row: OtClientProcedure) => {
+    setConsolidadoActingId(row.id);
+    try {
+      await generarOtConsolidado(row.id, scope);
+      show("Consolidado generado.", "success");
+    } catch {
+      show("No se pudo generar el consolidado (verifica FUR y documentos del trámite).", "error");
+    } finally {
+      setConsolidadoActingId(null);
+    }
+  };
+
+  const handleVerConsolidado = async (row: OtClientProcedure) => {
+    setConsolidadoActingId(row.id);
+    try {
+      await descargarOtConsolidado(row.id, row.referenceNumber, scope);
+    } catch {
+      show("El trámite aún no tiene consolidado generado.", "error");
+    } finally {
+      setConsolidadoActingId(null);
     }
   };
 
@@ -215,9 +273,23 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           page={page}
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
-          onApprove={setApproveTarget}
+          onApprove={(row) => {
+            setLtFile(null);
+            setApproveTarget(row);
+          }}
           onReject={setRejectTarget}
           showApprovalActions={!isReadOnly && !superAdmin}
+          onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
+          onVerConsolidado={handleVerConsolidado}
+          onAdjuntarLt={
+            !isReadOnly && !superAdmin
+              ? (row) => {
+                  setLtFile(null);
+                  setLtTarget(row);
+                }
+              : undefined
+          }
+          consolidadoActingId={consolidadoActingId}
         />
       </UiStateBoundary>
 
@@ -236,6 +308,19 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               ¿Aprobar este trámite?
             </h2>
             <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+              Licencia de Tránsito (LT) — opcional
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                aria-label="Licencia de Tránsito (LT)"
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+              />
+              <span className="mt-1 block text-[11px] font-normal opacity-60">
+                Se adjunta al expediente del trámite y entra al consolidado al generarlo o regenerarlo.
+              </span>
+            </label>
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
@@ -296,6 +381,58 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => void confirmReject()}
               >
                 Confirmar rechazo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ltTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Adjuntar Licencia de Tránsito"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: "1px solid #DFE5ED" }}
+          >
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+              Adjuntar Licencia de Tránsito (LT)
+            </h2>
+            <p className="mt-2 text-sm opacity-80">{ltTarget.referenceNumber}</p>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              aria-label="Archivo de la Licencia de Tránsito"
+              className={`mt-4 ${OT_INPUT_CLS}`}
+              onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+            />
+            <p className="mt-1 text-[11px] opacity-60">
+              Reemplaza la LT previa si existe; regenera el consolidado para incluirla.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                style={{ borderColor: "#DFE5ED" }}
+                onClick={() => {
+                  setLtTarget(null);
+                  setLtFile(null);
+                }}
+                disabled={acting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "#557EFF" }}
+                disabled={acting || !ltFile}
+                onClick={() => void confirmAdjuntarLt()}
+              >
+                {acting ? "Adjuntando…" : "Adjuntar LT"}
               </button>
             </div>
           </div>
