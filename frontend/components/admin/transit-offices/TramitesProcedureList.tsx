@@ -30,7 +30,7 @@ export function TramitesProcedureList({
               Estado: {procedure.status} · Tipo: {procedure.procedureTypeId.slice(0, 8)}…
             </p>
           </div>
-          {showApprovalActions && (
+          {showApprovalActions && procedure.status === "entregado" && (
             <div className="flex gap-2">
               <button
                 type="button"
