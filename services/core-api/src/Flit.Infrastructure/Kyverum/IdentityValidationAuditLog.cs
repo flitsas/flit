@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
@@ -42,7 +43,7 @@ internal sealed class IdentityValidationAuditLog(
                 ProviderStatus = e.ProviderStatus,
                 ErrorType = e.ErrorType,
                 Message = Truncate(e.Message, 1000),
-                Detail = e.Detail,
+                Detail = ToJsonDetail(e.Detail),
                 CreatedAt = now,
             });
 
@@ -56,6 +57,14 @@ internal sealed class IdentityValidationAuditLog(
 
     private static string? Truncate(string? value, int max) =>
         value is not null && value.Length > max ? value[..max] : value;
+
+    /// <summary>
+    /// La columna <c>detail</c> es <c>jsonb</c>: un string plano de diagnóstico (p.ej. <c>conteo=1/3</c>) NO es
+    /// JSON válido y rompería el INSERT (Postgres 22P02). Se envuelve como escalar JSON (string entrecomillado)
+    /// para persistirlo tal cual. Trunca antes para no exceder tamaños razonables en la bitácora.
+    /// </summary>
+    private static string? ToJsonDetail(string? detail) =>
+        detail is null ? null : JsonSerializer.Serialize(Truncate(detail, 1000));
 }
 
 /// <summary>Logging source-generated (CA1848) de la bitácora de identidad.</summary>

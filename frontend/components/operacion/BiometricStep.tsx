@@ -259,7 +259,10 @@ function ParteCard({
 
       {estado === 'aprobado' ? (
         <VerifiedView validation={validation!} instanceId={instanceId} />
-      ) : estado === 'en_proceso' && validation?.captureUrl ? (
+      ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
+        // El enlace de captura solo se muestra si NO está vencido. Un enlace vencido (validation.expired:
+        // backend `now > expiresAt`) cae a RejectedView aunque el estado siga en_proceso, para informar el
+        // vencimiento y re-habilitar el botón de reenvío de inmediato (sin esperar a que el worker lo cambie).
         <KyverumPendingView
           validation={validation}
           instanceId={instanceId}

@@ -69,7 +69,26 @@ public sealed class IniciarKyverumVerifyHandler(
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
                 or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
         if (existing is not null)
-            return (null, "biometria_activa");
+        {
+            // Un enlace VENCIDO no debe bloquear el reenvío. Si la validación activa es en_proceso/enviado y
+            // su enlace ya expiró (now > ExpiresAt), se terminaliza como `expirado` y se deja crear una nueva
+            // (nuevo enlace de captura). Aprobado (ya validó) y pendiente_envio (envío en curso) SÍ bloquean.
+            var nowGuard = DateTimeOffset.UtcNow;
+            var vencida = existing.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado
+                && nowGuard > existing.ExpiresAt;
+            if (!vencida)
+                return (null, "biometria_activa");
+
+            existing.Status = BiometricEstados.Expirado;
+            existing.UpdatedAt = nowGuard;
+            await repo.SaveChangesAsync(ct);
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Expired, IdentityValidationAuditOutcomes.Expired,
+                TenantId: tenantId, ProcedureInstanceId: id, ValidationId: existing.Id,
+                KyverumVerificationId: existing.KyverumVerificationId, PartyRole: parte,
+                Message: "Enlace de captura vencido: se expira la validación previa para permitir el reenvío.",
+                Detail: $"expires_at={existing.ExpiresAt:O}"), ct);
+        }
 
         // Datos del sujeto: el body los puede sobreescribir (API/Postman directo); si vienen vacíos, se
         // resuelven desde el actor de la parte registrado en el trámite (el camino del wizard).
@@ -157,7 +176,10 @@ public sealed class IniciarKyverumVerifyHandler(
             Status = BiometricEstados.EnProceso,
             // Sin magic-link en Kyverum: token_hash aleatorio para cumplir NOT NULL/único.
             TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
-            ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
+            // Vencimiento REAL del enlace de captura (Kyverum lo informa en `expiresAt`). Si el proveedor no
+            // lo envía, se cae al TTL local por defecto. Es lo que decide cuándo el enlace queda inservible y
+            // el gestor debe pedir uno nuevo (Expired del DTO + terminalización del worker).
+            ExpiresAt = provider.ExpiresAt ?? now.AddHours(BiometricRules.TokenTtlHoras),
             Attempts = 0,
             MaxAttempts = BiometricRules.KyverumMaxIntentos,
             CreatedAt = now,
