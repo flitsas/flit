@@ -86,6 +86,31 @@ internal sealed class IdentityValidationReconcileProcessor(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
+
+        // Paso barato (SIN llamar a Kyverum): terminaliza una validación cuyo enlace de captura ya venció
+        // (en_proceso + expires_at <= now) pasándola a `expirado`. Es la cura del "queda trabada": el registro
+        // se limpia solo aunque el gestor nunca reabra el trámite, y desbloquea el reenvío (el guardia deja de
+        // devolver biometria_activa). El worker de reconciliación normal EXCLUYE las vencidas (expires_at > now),
+        // así que esta pasada es la única que las mueve fuera de en_proceso de forma determinista.
+        var expiredId = await ClaimNextExpiredIdAsync(db, now, ct);
+        if (expiredId is not null)
+        {
+            var expired = await db.ProcedureInstanceBiometricValidations.FirstAsync(x => x.Id == expiredId.Value, ct);
+            expired.Status = BiometricEstados.Expirado;
+            expired.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            ReconcileLog.Expired(logger, expired.Id);
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Expired, IdentityValidationAuditOutcomes.Expired,
+                TenantId: expired.TenantId, ProcedureInstanceId: expired.ProcedureInstanceId, ValidationId: expired.Id,
+                KyverumVerificationId: expired.KyverumVerificationId, PartyRole: expired.PartyRole,
+                Message: "Worker: enlace de captura vencido; validación terminalizada como expirada.",
+                Detail: $"expires_at={expired.ExpiresAt:O}"), ct);
+            return true;
+        }
+
         var claimedId = await ClaimNextIdAsync(db, now - Staleness, ct);
         if (claimedId is null)
         {
@@ -201,6 +226,36 @@ internal sealed class IdentityValidationReconcileProcessor(
         return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;
     }
 
+    /// <summary>
+    /// Reclama una validación Kyverum <c>en_proceso</c> cuyo enlace de captura ya VENCIÓ
+    /// (<c>expires_at &lt;= @now</c>), con <c>FOR UPDATE SKIP LOCKED</c>. No consulta a Kyverum: solo se usa
+    /// para terminalizarla como <c>expirado</c>. Devuelve null si no hay ninguna reclamable.
+    /// </summary>
+    private static async Task<Guid?> ClaimNextExpiredIdAsync(FlitDbContext db, DateTimeOffset now, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = """
+            SELECT id
+            FROM tramites.procedure_instance_biometric_validations
+            WHERE status = @status
+              AND provider = @provider
+              AND expires_at <= @now
+            ORDER BY expires_at
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+            """;
+        AddParam(cmd, "status", BiometricEstados.EnProceso);
+        AddParam(cmd, "provider", BiometricProviders.Kyverum);
+        AddParam(cmd, "now", now);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;
+    }
+
     private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
     {
         var p = cmd.CreateParameter();
@@ -216,6 +271,10 @@ internal static partial class ReconcileLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Reconciliación identidad: validación {ValidationId} sincronizada con Kyverum → {Estado}.")]
     public static partial void Reconciled(ILogger logger, Guid validationId, string estado);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Reconciliación identidad: enlace vencido; validación {ValidationId} terminalizada como expirada.")]
+    public static partial void Expired(ILogger logger, Guid validationId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Reconciliación identidad: falló la consulta de {ValidationId} (transitorio={Transient}); se reintentará.")]

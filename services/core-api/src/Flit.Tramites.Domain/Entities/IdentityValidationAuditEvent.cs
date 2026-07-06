@@ -84,6 +84,9 @@ public static class IdentityValidationAuditStages
 
     /// <summary>Reconciliación por consulta al proveedor (endpoint o worker).</summary>
     public const string Reconcile = "reconcile";
+
+    /// <summary>El enlace de captura venció (expires_at &lt;= now) y la validación se terminalizó como expirada.</summary>
+    public const string Expired = "expired";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>
@@ -100,4 +103,5 @@ public static class IdentityValidationAuditOutcomes
     public const string DecryptFailed = "decrypt_failed";
     public const string SignatureInvalid = "firma_invalida";
     public const string ProviderUnavailable = "proveedor_no_disponible";
+    public const string Expired = "expirado";
 }

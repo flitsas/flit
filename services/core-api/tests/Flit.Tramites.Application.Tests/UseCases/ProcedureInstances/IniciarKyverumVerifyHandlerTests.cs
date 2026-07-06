@@ -55,9 +55,9 @@ public sealed class IniciarKyverumVerifyHandlerTests
             Email = email,
         });
 
-    private void StubProviderOk(string verificationId = "kyv_123", string captureUrl = "https://capture/kyv_123", string secret = "whsec_abc") =>
+    private void StubProviderOk(string verificationId = "kyv_123", string captureUrl = "https://capture/kyv_123", string secret = "whsec_abc", DateTimeOffset? expiresAt = null) =>
         _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new KyverumVerifyStartResult(verificationId, captureUrl, secret, "pending", "{\"verification_id\":\"" + verificationId + "\"}"));
+            .Returns(new KyverumVerifyStartResult(verificationId, captureUrl, secret, "pending", "{\"verification_id\":\"" + verificationId + "\"}", expiresAt));
 
     [Fact]
     public async Task Iniciar_HappyPath_PersistsKyverumFieldsAndEmitsRequested()
@@ -87,6 +87,103 @@ public sealed class IniciarKyverumVerifyHandlerTests
         await _repo.Received(1).SaveChangesAsync(ct);
         await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationRequested>(e =>
             e.ValidationId == v.Id && e.Provider == BiometricProviders.Kyverum && e.ProviderVerificationId == "kyv_123"), ct);
+    }
+
+    [Fact]
+    public async Task Iniciar_PersistsProviderExpiresAt_WhenKyverumReportsIt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+        // Kyverum informa el vencimiento REAL del enlace: debe persistirse tal cual (no el TTL local +24h).
+        var kyvExpiry = DateTimeOffset.UtcNow.AddMinutes(20);
+        StubProviderOk(expiresAt: kyvExpiry);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+
+        error.Should().BeNull();
+        var v = instance.BiometricValidations.Should().ContainSingle().Subject;
+        v.ExpiresAt.Should().Be(kyvExpiry);
+    }
+
+    [Fact]
+    public async Task Iniciar_FallsBackToLocalTtl_WhenKyverumOmitsExpiresAt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+        StubProviderOk(); // sin expiresAt
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+
+        error.Should().BeNull();
+        var v = instance.BiometricValidations.Should().ContainSingle().Subject;
+        // Fallback al TTL local (24h) cuando el proveedor no reporta expiresAt.
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(BiometricRules.TokenTtlHoras), TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task Iniciar_ExpiredEnProceso_DoesNotBlock_ExpiresOldAndCreatesNew()
+    {
+        // El enlace de la validación previa venció (en_proceso + expires_at en el pasado): NO debe bloquear;
+        // se terminaliza la vieja como `expirado` y se crea una nueva (nuevo enlace de captura).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        var vencida = new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            PartyRole = "comprador",
+            Status = BiometricEstados.EnProceso,
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-5), // vencida
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            Provider = BiometricProviders.Kyverum,
+        };
+        instance.BiometricValidations.Add(vencida);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+        StubProviderOk(verificationId: "kyv_new", captureUrl: "https://capture/kyv_new");
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+
+        error.Should().BeNull();
+        result!.CaptureUrl.Should().Be("https://capture/kyv_new");
+        // La vieja quedó expirada; existe la nueva en_proceso.
+        vencida.Status.Should().Be(BiometricEstados.Expirado);
+        instance.BiometricValidations.Should().HaveCount(2);
+        instance.BiometricValidations.Should().ContainSingle(v =>
+            v.Status == BiometricEstados.EnProceso && v.KyverumVerificationId == "kyv_new");
+    }
+
+    [Fact]
+    public async Task Iniciar_ActiveEnProcesoNotExpired_ReturnsConflict()
+    {
+        // Una validación en_proceso VIGENTE (enlace no vencido) sigue bloqueando el reenvío.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            PartyRole = "comprador",
+            Status = BiometricEstados.EnProceso,
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10), // vigente
+            CreatedAt = DateTimeOffset.UtcNow,
+            Provider = BiometricProviders.Kyverum,
+        });
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+
+        error.Should().Be("biometria_activa");
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
