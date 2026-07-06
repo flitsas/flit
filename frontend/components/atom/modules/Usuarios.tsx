@@ -84,12 +84,12 @@ export function Usuarios() {
       <ModuleTitle
         title="Administración de usuarios y permisos"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
-        right={
+        action={
           tab === "usuarios" ? (
-            <button onClick={() => setOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
               <Plus className="h-4 w-4" /> Invitar usuario
             </button>
-          ) : null
+          ) : undefined
         }
       />
 
@@ -110,15 +110,16 @@ export function Usuarios() {
             </button>
           );
         })}
+        {tab === "usuarios" && (
+          <div className="ml-auto mb-1.5 flex w-full max-w-xs shrink-0 items-center gap-2 rounded-xl border bg-white px-3 py-1.5 dark:bg-[#0B0F14]">
+            <Search className="h-4 w-4 opacity-60" />
+            <input placeholder="Buscar por nombre o correo..." className="flex-1 bg-transparent outline-none text-xs" />
+          </div>
+        )}
       </div>
 
       {tab === "usuarios" && (
         <>
-          <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-white dark:bg-[#0B0F14] max-w-md shrink-0">
-            <Search className="h-4 w-4 opacity-60" />
-            <input placeholder="Buscar por nombre o correo..." className="flex-1 bg-transparent outline-none text-xs" />
-          </div>
-
           <div className="flex-1 min-h-0 flex flex-col">
             <div
               className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"

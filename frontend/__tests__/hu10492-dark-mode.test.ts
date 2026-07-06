@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { describe, expect, it } from "vitest";
 
 /**
  * HU #10492 — Modo oscuro: uniformar bordes y completar tema en pantallas incompletas.

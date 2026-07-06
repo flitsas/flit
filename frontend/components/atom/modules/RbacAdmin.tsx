@@ -7,6 +7,7 @@ import {
   fetchTransitOfficeTenants,
   type TransitOfficeTenantItem,
 } from "@/lib/api/admin-transit-office-tenants";
+import { ModuleTitle } from "./ModuleTitle";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
@@ -97,29 +98,29 @@ export function RbacAdmin() {
       className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white"
       style={{ fontFamily: "Poppins, sans-serif" }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <button
-            onClick={() => window.history.back()}
-            className="text-xs opacity-60 mb-1 flex items-center gap-1 hover:opacity-100"
-          >
-            ← Volver
-          </button>
-          <h1 className="text-2xl font-bold">RBAC — Administración</h1>
-          <p className="text-xs opacity-60 mt-0.5">
-            Gestiona módulos, permisos y roles del sistema.
-          </p>
-        </div>
-        {activeTab === "modules" && (
-          <button
-            onClick={() => setShowCreateModule(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            <Plus className="h-4 w-4" /> Nuevo módulo
-          </button>
-        )}
+      {/* Header — unificado con ModuleTitle (HU #10493): botón fuera de la caja del título. */}
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => window.history.back()}
+          className="flex w-fit items-center gap-1 text-xs opacity-60 hover:opacity-100"
+        >
+          ← Volver
+        </button>
+        <ModuleTitle
+          title="RBAC — Administración"
+          subtitle="Gestiona módulos, permisos y roles del sistema."
+          action={
+            activeTab === "modules" ? (
+              <button
+                onClick={() => setShowCreateModule(true)}
+                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              >
+                <Plus className="h-4 w-4" /> Nuevo módulo
+              </button>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* Tabs */}
