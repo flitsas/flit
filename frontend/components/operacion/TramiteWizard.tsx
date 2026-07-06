@@ -174,19 +174,9 @@ export function TramiteWizard(props: Props) {
     };
   }, [existingInstanceId]);
 
-  // Tres modos del wizard (HU #10350 — desacople de la validación de identidad async):
-  //  • Editable: borrador SIN finalizar (o trámite nuevo) → captura completa de datos.
-  //  • Borrador finalizado (`draft` + draftFinalizedAt): datos en solo lectura, pero el paso de
-  //    Identidad sigue operable (el cliente valida async). Banner informativo; Radicar solo cuando
-  //    el wizard reporte canSubmit + identidad aprobada.
-  //  • Solo visualización (Track C): el trámite ya salió de `borrador` (entregado, aprobado, etc.).
-  const fullReadOnly = !!instanceStatus && instanceStatus !== 'borrador';
-  const draftFinalized = instanceStatus === 'borrador' && !!draftFinalizedAt;
-  // Captura de datos deshabilitada en ambos modos no-editables (provider de solo lectura).
-  const editLocked = fullReadOnly || draftFinalized;
-  // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
-  // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
-  const navViewOnly = fullReadOnly;
+  // Los modos del wizard se derivan más abajo (tras useWizard): el estado de negocio autoritativo
+  // llega en GET /wizard y se re-lee en cada refresh — necesario para que "Preparar" (N 03)
+  // actualice el modo sin re-consultar la instancia.
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
@@ -220,6 +210,31 @@ export function TramiteWizard(props: Props) {
     refresh,
   } = useWizard(instanceId);
 
+  // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
+  // fallback al fetch inicial de la instancia existente mientras el wizard carga.
+  const estadoTramite = (wizard?.status ?? instanceStatus) as InstanceStatus | null;
+
+  // Modos del wizard (HU #10350 + N 03 radicación en dos pasos):
+  //  • Editable: borrador SIN finalizar (o trámite nuevo) → captura completa de datos.
+  //  • Borrador finalizado (`borrador` + draftFinalizedAt): datos en solo lectura, pero el paso de
+  //    Identidad sigue operable (el cliente valida async). "Preparar" solo cuando el wizard
+  //    reporte canSubmit + identidad aprobada.
+  //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
+  //    paso de decisión.
+  //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
+  const fullReadOnly = !!estadoTramite && estadoTramite !== 'borrador';
+  const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
+  // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
+  const editLocked = fullReadOnly || draftFinalized;
+  // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
+  // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
+  const navViewOnly = fullReadOnly;
+  // N 03 — "Radicar a tránsito" disponible solo en `preparado` y si la máquina lo permite
+  // (el backend manda vía allowedTransitions).
+  const canEntregar =
+    estadoTramite === 'preparado' &&
+    (wizard?.allowedTransitions?.includes('entregado') ?? false);
+
   const [activeIndex, setActiveIndex] = useState(0);
   // Reanudar (Track B): al abrir una instancia existente queremos caer en el
   // paso donde quedó el usuario (la frontera), no en el paso 1. Este ref marca
@@ -243,8 +258,8 @@ export function TramiteWizard(props: Props) {
 
   // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
-  // canRadicar gobierna el botón "Radicar a tránsito": el submit de HU #10349 exige identidad, mientras
-  // que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit para radicar.
+  // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
+  // mientras que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit.
   const identityApproved = isIdentityApproved(steps, modalidad);
   const canRadicar = canSubmit && identityApproved;
 
@@ -313,16 +328,38 @@ export function TramiteWizard(props: Props) {
     }
   }, [instanceId, activeStep?.key]);
 
-  // Radicar a tránsito (AC4): submit estricto — exige identidad + FUR + gates (HU #10349). Solo se
-  // habilita cuando el wizard reporta canSubmit Y la identidad está aprobada (ver `canRadicar`).
-  const handleFinish = async () => {
+  // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
+  // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
+  // canSubmit Y la identidad está aprobada (ver `canRadicar`). El wizard permanece abierto: pasa a
+  // solo lectura y ofrece "Radicar a tránsito".
+  const handlePreparar = async () => {
     if (!instanceId || !canRadicar) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await tramitesClient.submitInstance(instanceId);
-      // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato
-      // (onExit redirige a /tramites; el ToastProvider del layout no se desmonta).
+      await tramitesClient.transitionInstance(instanceId, 'preparado');
+      setInstanceStatus('preparado');
+      show('Trámite preparado: validaciones completas, listo para radicar.', 'success');
+      await refresh();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // N 03 (radicación en dos pasos) — Radicar a tránsito: preparado→entregado vía POST /transition
+  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición). Sin
+  // pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
+  // /tramites; el ToastProvider del layout no se desmonta).
+  const handleRadicar = async () => {
+    if (!instanceId || !canEntregar) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await tramitesClient.transitionInstance(instanceId, 'entregado');
       show(
         modalidad === 'traspaso'
           ? 'Traspaso enviado a tránsito correctamente.'
@@ -633,32 +670,46 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
-            {/* Acción derecha del footer según el modo (HU #10350):
-                · Solo visualización (fullReadOnly): sin acciones, solo se recorre.
-                · Paso de decisión (identidad/FUR): "Radicar a tránsito" si la identidad ya está
-                  aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando los datos están
-                  completos. En borrador ya finalizado solo se ofrece "Radicar" (deshabilitado hasta
-                  que el cliente valide su identidad).
+            {/* Acción derecha del footer según el modo (HU #10350 + N 03 dos pasos):
+                · Preparado: "Radicar a tránsito" (preparado→entregado) en el paso de decisión.
+                · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
+                · Paso de decisión (identidad/FUR) en borrador: "Preparar" (borrador→preparado) si la
+                  identidad ya está aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando
+                  los datos están completos. En borrador ya finalizado solo se ofrece "Preparar"
+                  (deshabilitado hasta que el cliente valide su identidad).
                 · Pasos de datos: en borrador finalizado solo se navega; editable usa Continuar/Guardar. */}
-            {fullReadOnly ? null : isDecisionStep ? (
-              canRadicar ? (
+            {fullReadOnly ? (
+              isDecisionStep && canEntregar ? (
                 <button
-                  onClick={() => void handleFinish()}
+                  onClick={() => void handleRadicar()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Entrega el trámite al organismo de tránsito"
                 >
                   {submitting ? 'Radicando…' : 'Radicar a tránsito'}
                 </button>
+              ) : null
+            ) : isDecisionStep ? (
+              canRadicar ? (
+                <button
+                  onClick={() => void handlePreparar()}
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Deja el trámite validado y listo para radicar"
+                >
+                  {submitting ? 'Preparando…' : 'Preparar'}
+                </button>
               ) : draftFinalized ? (
                 <button
-                  onClick={() => void handleFinish()}
+                  onClick={() => void handlePreparar()}
                   disabled
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
                   title="Disponible cuando el cliente valide su identidad"
                 >
-                  Radicar a tránsito
+                  Preparar
                 </button>
               ) : (
                 <button

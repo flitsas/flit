@@ -12,13 +12,23 @@ import {
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
 const PAGE_SIZE = 20;
 
-/** Vista tenant admin — trámites de clientes OT (HU #10220). */
-export function ClientProceduresSection() {
+/**
+ * Vista tenant admin — trámites de clientes OT (HU #10220).
+ *
+ * `transitOfficeId` (ruta /admin/transit-offices/[id]) scope-a la consulta para el
+ * SuperAdmin: sin él, el backend resuelve el OT desde el tenant del token, que para
+ * SuperAdmin no tiene perfil OT y la lista queda vacía (los trámites `entregado`
+ * "desaparecen"). Para ot_admin el backend ignora el override (seguridad) y sigue
+ * resolviendo por su propio tenant.
+ */
+export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<OtClientProcedure[]>([]);
@@ -34,17 +44,21 @@ export function ClientProceduresSection() {
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
 
+  // El SuperAdmin supervisa la cola pero la decisión aprobar/rechazar es del OT admin
+  // (los endpoints approve/reject no soportan el override de organismo del SuperAdmin).
+  const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+
   const isReadOnly = Boolean(
     profile?.operationMode === "quipux" && profile?.quipuxReadOnly,
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchOtProfile(controller.signal)
+    fetchOtProfile(controller.signal, transitOfficeId ? { transitOfficeId } : undefined)
       .then(setProfile)
       .catch(() => setProfile(null));
     return () => controller.abort();
-  }, []);
+  }, [transitOfficeId]);
 
   useEffect(() => {
     tramitesClient
@@ -65,6 +79,7 @@ export function ClientProceduresSection() {
             pageSize: PAGE_SIZE,
           },
           signal,
+          transitOfficeId ? { transitOfficeId } : undefined,
         );
         if (signal?.aborted) return;
         setRows(result.data);
@@ -75,7 +90,7 @@ export function ClientProceduresSection() {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [statusFilter, typeFilter, page],
+    [statusFilter, typeFilter, page, transitOfficeId],
   );
 
   useEffect(() => {
@@ -202,7 +217,7 @@ export function ClientProceduresSection() {
           onPageChange={setPage}
           onApprove={setApproveTarget}
           onReject={setRejectTarget}
-          showApprovalActions={!isReadOnly}
+          showApprovalActions={!isReadOnly && !superAdmin}
         />
       </UiStateBoundary>
 

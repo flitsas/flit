@@ -86,7 +86,9 @@ internal sealed class KyverumVerifyClient(
 
             // El secreto del webhook viene en la respuesta del create (firma los callbacks). Puede ser
             // vacío si el plan/tenant no lo expone; en ese caso el webhook fallará cerrado (401).
-            return new KyverumVerifyStartResult(payload.Id!, captureUrl!, payload.WebhookSecret ?? string.Empty, status, sanitized);
+            // `expiresAt` es el vencimiento REAL del enlace de captura (puede ser null si el plan no lo expone).
+            return new KyverumVerifyStartResult(
+                payload.Id!, captureUrl!, payload.WebhookSecret ?? string.Empty, status, sanitized, payload.ExpiresAt);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -262,6 +264,8 @@ internal sealed class KyverumVerifyClient(
         [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("status")] string? Status,
         [property: JsonPropertyName("webhookSecret")] string? WebhookSecret,
+        // Vencimiento del enlace de captura informado por Kyverum (TTL real del enlace).
+        [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
         [property: JsonPropertyName("captureLinks")] IReadOnlyList<KyverumCaptureLink>? CaptureLinks);
 
     private sealed record KyverumCaptureLink(
