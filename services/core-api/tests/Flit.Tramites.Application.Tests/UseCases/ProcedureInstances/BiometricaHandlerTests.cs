@@ -685,13 +685,13 @@ public sealed class BiometricaHandlerTests
         // KPIs exactos vienen del conteo agrupado, no de las filas (que están acotadas).
         _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>
-        {
-            [BiometricEstados.Aprobado] = 3,
-            [BiometricEstados.Enviado] = 1,
-            [BiometricEstados.EnProceso] = 2,
-            [BiometricEstados.Rechazado] = 1,
-            [BiometricEstados.Expirado] = 1,
-        });
+            {
+                [BiometricEstados.Aprobado] = 3,
+                [BiometricEstados.Enviado] = 1,
+                [BiometricEstados.EnProceso] = 2,
+                [BiometricEstados.Rechazado] = 1,
+                [BiometricEstados.Expirado] = 1,
+            });
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
 

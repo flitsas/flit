@@ -28,9 +28,9 @@ public sealed record InstanceSummaryDto(
     DateTimeOffset CreatedAt,
     Guid TenantId,                            // compañía dueña (para el scoping/columna del superadmin, #1)
     string? CompaniaNombre,                   // razón social; solo se resuelve en el listado multi-tenant (superadmin)
-    // HU #10350 — desacople de la validación de identidad async. Estos campos alimentan los chips
-    // del listado ("Pendiente validación" / "Pendiente firma" / "Radicar") y la acción de la fila sin
-    // que el frontend recalcule gates. Opcionales (default) para compat con consumidores existentes.
+                                              // HU #10350 — desacople de la validación de identidad async. Estos campos alimentan los chips
+                                              // del listado ("Pendiente validación" / "Pendiente firma" / "Radicar") y la acción de la fila sin
+                                              // que el frontend recalcule gates. Opcionales (default) para compat con consumidores existentes.
     DateTimeOffset? DraftFinalizedAt = null,
     string? IdentityValidationStatus = null,  // aprobado | en_proceso | rechazado | null (sin iniciar)
     bool SignaturePending = false,            // traspaso: compraventa de alguna parte sin firmar
