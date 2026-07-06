@@ -175,7 +175,7 @@ export function Reportes() {
   const activeKey = segment ? `${segment.category}:${segment.status ?? ""}` : undefined;
 
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por categoría de trámite."
@@ -203,7 +203,7 @@ export function Reportes() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+      <div className="pr-1">
         <UiStateBoundary
           status={status}
           errorMessage={errorMessage}

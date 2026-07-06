@@ -47,7 +47,7 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     // tránsito" sigue visible tras la redirección que dispara Finalizar.
     <ToastProvider>
     <Shell active="tramites" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
-      <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-y-auto">
+      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
         {!immersive && (
           <>
             <ModuleTitle

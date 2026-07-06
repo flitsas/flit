@@ -86,7 +86,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="Administración de usuarios y permisos"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
@@ -126,7 +126,7 @@ export function Usuarios() {
 
       {tab === "usuarios" && (
         <>
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex flex-col">
             <div
               className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
               style={{
@@ -143,7 +143,7 @@ export function Usuarios() {
               <div />
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pt-2">
+            <div className="space-y-2 pt-2">
               {loading && (
                 <div className="py-12 text-center text-sm opacity-60">Cargando usuarios…</div>
               )}
@@ -226,7 +226,7 @@ export function Usuarios() {
       )}
 
       {tab === "roles" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {rolesLoading ? (
             <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
           ) : roles.length === 0 ? (
@@ -234,14 +234,14 @@ export function Usuarios() {
               No hay roles configurados para este tenant. Contacta al Super Admin.
             </div>
           ) : (
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex flex-col">
               <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
                 <div className="col-span-2">Código</div>
                 <div className="col-span-4">Nombre</div>
                 <div className="col-span-4">Descripción</div>
                 <div className="col-span-2 text-center">Permisos</div>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pt-2">
+              <div className="space-y-2 pt-2">
                 {roles.map((r) => (
                   <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
                     <div className="col-span-2 font-mono opacity-80">{r.code}</div>

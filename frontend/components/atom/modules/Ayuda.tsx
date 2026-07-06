@@ -10,7 +10,7 @@ const FAQ = [
 
 export function Ayuda() {
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle title="Centro de Ayuda" subtitle="Soporte 24/7, documentación y guías de operación." />
       <div className="grid grid-cols-4 gap-3 shrink-0">
         {[
@@ -31,7 +31,7 @@ export function Ayuda() {
           );
         })}
       </div>
-      <div className="flex-1 min-h-0 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto">
+      <div className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border">
         <h2 className="text-sm font-bold mb-3">Preguntas frecuentes</h2>
         <div className="space-y-3">
           {FAQ.map((f) => (

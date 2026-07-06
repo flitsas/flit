@@ -137,7 +137,7 @@ function DocumentsCatalog() {
   };
 
   return (
-    <div className="flex min-h-full flex-col gap-4 px-6 pt-6 pb-24">
+    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}
