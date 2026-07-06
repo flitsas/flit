@@ -2,7 +2,6 @@
 
 import { type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { List } from 'lucide-react';
 import { Shell, type ModuleId } from '@/components/atom/Shell';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { ToastProvider } from '@/components/admin/Toast';
@@ -49,26 +48,10 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     <Shell active="tramites" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
       <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
         {!immersive && (
-          <>
-            <ModuleTitle
-              title="Gestión Integral de Trámites"
-              subtitle="Embudo de tus trámites vehiculares"
-            />
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => router.push('/tramites')}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition"
-                style={{
-                  borderColor: '#557EFF',
-                  background: 'rgba(85,126,255,0.10)',
-                  color: '#557EFF',
-                }}
-              >
-                <List className="h-3.5 w-3.5" />
-                Operación
-              </button>
-            </div>
-          </>
+          <ModuleTitle
+            title="Gestión Integral de Trámites"
+            subtitle="Embudo de tus trámites vehiculares"
+          />
         )}
         {children}
       </div>

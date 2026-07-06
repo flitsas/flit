@@ -117,6 +117,8 @@ describe('TramitesTable — paginación', () => {
     expect(within(nav).getByText('2 / 3')).toBeInTheDocument();
 
     // Buscar "Comprador" matchea las 23 (siguen 3 páginas) pero resetea a la 1.
+    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
+    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Comprador',
@@ -205,6 +207,7 @@ describe('TramitesTable — organismo de tránsito', () => {
     expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
 
     // El buscador también filtra por organismo.
+    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Cali',

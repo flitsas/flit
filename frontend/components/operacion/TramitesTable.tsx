@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeftRight, Car, Search, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
   InstanceSummary,
@@ -133,12 +135,20 @@ const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
 
+// Registro de nuevo trámite por modalidad (botones estilo "Nuevo Trámite" del diseño).
+const NEW_TRAMITE_ACTIONS: { id: WizardModalidad; label: string; icon: typeof Car }[] = [
+  { id: 'matricula_inicial', label: 'Matrícula inicial', icon: Car },
+  { id: 'traspaso', label: 'Traspaso estándar', icon: ArrowLeftRight },
+];
+
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
   refreshKey?: number;
+  /** Inicia un nuevo trámite de la modalidad elegida (navega al wizard). */
+  onStartTramite?: (modalidad: WizardModalidad) => void;
 }
 
-export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
+export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +156,8 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
 
   // Filtros client-side.
   const [search, setSearch] = useState('');
+  // La búsqueda por placa/VIN está oculta hasta pulsar "Buscar" (paridad con el diseño).
+  const [searchOpen, setSearchOpen] = useState(false);
   const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
@@ -182,6 +194,24 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, refreshKey]);
+
+  // Conteo por estado de negocio (para el funnel de estados). Se calcula sobre el
+  // total de trámites cargados, no sobre `filtered`, para que el embudo muestre
+  // siempre el panorama completo aunque haya un estado seleccionado.
+  const estadoCounts = useMemo(() => {
+    const c: Record<EstadoTramite, number> = {
+      borrador: 0,
+      anulado: 0,
+      preparado: 0,
+      entregado: 0,
+      aprobado: 0,
+      rechazado: 0,
+    };
+    for (const it of items) {
+      if (it.estado in c) c[it.estado as EstadoTramite] += 1;
+    }
+    return c;
+  }, [items]);
 
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
@@ -232,6 +262,11 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     setSearch(v);
     setPage(1);
   };
+  const openSearch = () => setSearchOpen(true);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    handleSearchChange('');
+  };
   const handleModalidadChange = (v: '' | WizardModalidad) => {
     setModalidad(v);
     setPage(1);
@@ -272,16 +307,80 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
       {heading}
 
       <div className="flex flex-col gap-3">
+        {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
+        {!loading && !error && items.length > 0 && (
+          <EstadoFunnel
+            counts={estadoCounts}
+            active={estado}
+            onSelect={handleEstadoChange}
+          />
+        )}
+
+        {/* Fila de acciones (paridad con el diseño): registrar nuevo trámite por
+            modalidad + búsqueda desplegable, en la misma línea y con el mismo estilo
+            (píldora con gradiente). La búsqueda queda oculta hasta pulsar "Buscar". */}
+        <div className="flex flex-wrap items-center gap-2" aria-label="Acciones de trámites">
+          {NEW_TRAMITE_ACTIONS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onStartTramite?.(id)}
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              aria-label={`Iniciar ${label}`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+          {searchOpen ? (
+            <div className="relative min-w-[220px] flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                autoFocus
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') closeSearch();
+                }}
+                placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
+                aria-label="Buscar trámites"
+                className="w-full rounded-xl border bg-white py-2.5 pl-9 pr-9 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                aria-label="Cerrar búsqueda"
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg opacity-60 hover:opacity-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={openSearch}
+              aria-label="Buscar por placa o VIN"
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+              Buscar
+            </button>
+          )}
+        </div>
+
         <TramitesListToolbar
-          search={search}
-          onSearchChange={handleSearchChange}
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
-          estado={estado}
-          onEstadoChange={handleEstadoChange}
           onRefresh={() => void load()}
           onClearFilters={clearFilters}
           loading={loading}
+          hasActiveFilters={hasActiveFilters}
           totalCount={items.length}
           filteredCount={filtered.length}
         />

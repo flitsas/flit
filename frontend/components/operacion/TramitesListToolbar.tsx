@@ -1,28 +1,22 @@
 'use client';
 
-import { RefreshCw, Search, X } from 'lucide-react';
-import type {
-  InstanceStatus,
-  WizardModalidad,
-} from '@/lib/api/types/procedure-runtime';
-import { ESTADO_LABELS } from '@/lib/tramites/estados';
+import { RefreshCw, X } from 'lucide-react';
+import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Barra de filtros del listado de trámites (Track A). Búsqueda client-side +
- * chips de modalidad/estado + Actualizar, en el estilo FLIT del módulo
- * (rounded-2xl, borde #DFE5ED, chips outline/filled). Es presentacional: el
- * estado de filtros y el filtrado viven en el contenedor (TramitesTable).
+ * Barra de filtros del listado de trámites (Track A). Chips de modalidad +
+ * Actualizar + contador/limpiar, en el estilo FLIT del módulo. El filtro por
+ * estado vive en el funnel de estados (EstadoFunnel) y la búsqueda desplegable
+ * en la fila de acciones (ambos en TramitesTable). Es presentacional.
  */
 interface Props {
-  search: string;
-  onSearchChange: (v: string) => void;
   modalidad: '' | WizardModalidad;
   onModalidadChange: (v: '' | WizardModalidad) => void;
-  estado: '' | InstanceStatus;
-  onEstadoChange: (v: '' | InstanceStatus) => void;
   onRefresh: () => void;
   onClearFilters: () => void;
   loading?: boolean;
+  /** ¿Hay algún filtro activo (búsqueda/modalidad/estado/compañía)? Lo calcula el contenedor. */
+  hasActiveFilters: boolean;
   totalCount: number;
   filteredCount: number;
 }
@@ -31,17 +25,6 @@ const MODALIDAD_CHIPS: { value: '' | WizardModalidad; label: string }[] = [
   { value: '', label: 'Todos' },
   { value: 'matricula_inicial', label: 'Matrícula inicial' },
   { value: 'traspaso', label: 'Traspaso' },
-];
-
-// N 03 (RF01) — filtros por los 6 estados de negocio (labels de lib/tramites/estados.ts).
-const ESTADO_CHIPS: { value: '' | InstanceStatus; label: string }[] = [
-  { value: '', label: 'Todos' },
-  { value: 'borrador', label: ESTADO_LABELS.borrador },
-  { value: 'preparado', label: ESTADO_LABELS.preparado },
-  { value: 'entregado', label: ESTADO_LABELS.entregado },
-  { value: 'aprobado', label: ESTADO_LABELS.aprobado },
-  { value: 'rechazado', label: ESTADO_LABELS.rechazado },
-  { value: 'anulado', label: ESTADO_LABELS.anulado },
 ];
 
 /** Chip toggle outline/filled reutilizado por ambos filtros. */
@@ -72,21 +55,15 @@ function FilterChip({
 }
 
 export function TramitesListToolbar({
-  search,
-  onSearchChange,
   modalidad,
   onModalidadChange,
-  estado,
-  onEstadoChange,
   onRefresh,
   onClearFilters,
   loading = false,
+  hasActiveFilters,
   totalCount,
   filteredCount,
 }: Props) {
-  const hasActiveFilters =
-    search.trim() !== '' || modalidad !== '' || estado !== '';
-
   const counterLabel =
     filteredCount === 0
       ? 'Sin resultados'
@@ -96,37 +73,9 @@ export function TramitesListToolbar({
     <div
       className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
     >
-      {/* Búsqueda + Actualizar */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-            aria-hidden="true"
-          />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
-            aria-label="Buscar trámites"
-            className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[11px] font-semibold disabled:opacity-50"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Actualizar listado de trámites"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
-      </div>
-
-      {/* Filtros por chips */}
-      <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-6">
+      {/* Filtro por modalidad + Actualizar (el filtro por estado vive en el funnel
+          de estados y la búsqueda en la fila de acciones de arriba). */}
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por modalidad">
           <span className="mr-1 text-[10px] font-semibold uppercase opacity-50">
             Modalidad
@@ -141,20 +90,17 @@ export function TramitesListToolbar({
             </FilterChip>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por estado">
-          <span className="mr-1 text-[10px] font-semibold uppercase opacity-50">
-            Estado
-          </span>
-          {ESTADO_CHIPS.map((c) => (
-            <FilterChip
-              key={c.value || 'todos'}
-              active={estado === c.value}
-              onClick={() => onEstadoChange(estado === c.value ? '' : c.value)}
-            >
-              {c.label}
-            </FilterChip>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="ml-auto flex shrink-0 items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[11px] font-semibold disabled:opacity-50"
+          style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          aria-label="Actualizar listado de trámites"
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </button>
       </div>
 
       {/* Contador + limpiar filtros */}
