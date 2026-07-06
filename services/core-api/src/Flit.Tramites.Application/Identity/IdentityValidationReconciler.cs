@@ -36,29 +36,29 @@ public static class IdentityValidationReconciler
                     v, new IdentityValidationTerminalResult(true, status.Status, status.RawPayloadSanitized, status.Score, status.FirmaSerie), now, ct);
 
             case "rechazado_intento":
-            {
-                // Idempotencia: una validación ya terminal no se re-evalúa.
-                if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
-                    return false;
-
-                // El conteo lo lleva el webhook (autoritativo). Aquí NO se incrementa: si el webhook ya agotó los
-                // intentos, se terminaliza en rechazado; si aún quedan, solo se refresca el motivo del último intento.
-                if (v.Attempts >= v.MaxAttempts)
-                    // Intentos AGOTADOS → rechazo TERMINAL (publica el evento y habilita "Reintentar").
-                    return await applier.ApplyAsync(
-                        v, new IdentityValidationTerminalResult(false, status.Status, status.RawPayloadSanitized, status.Score), now, ct);
-
-                // Aún quedan intentos → sigue EN_PROCESO (el cliente reintenta en su móvil). Se refresca el
-                // payload (motivo del último intento para la UI) solo si CAMBIÓ; un poll idéntico no re-escribe.
-                if (!string.Equals(v.ProviderPayload, status.RawPayloadSanitized, StringComparison.Ordinal))
                 {
-                    v.ProviderStatus = status.Status;
-                    v.ProviderPayload = status.RawPayloadSanitized;
-                    v.UpdatedAt = now;
-                    return true;
+                    // Idempotencia: una validación ya terminal no se re-evalúa.
+                    if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
+                        return false;
+
+                    // El conteo lo lleva el webhook (autoritativo). Aquí NO se incrementa: si el webhook ya agotó los
+                    // intentos, se terminaliza en rechazado; si aún quedan, solo se refresca el motivo del último intento.
+                    if (v.Attempts >= v.MaxAttempts)
+                        // Intentos AGOTADOS → rechazo TERMINAL (publica el evento y habilita "Reintentar").
+                        return await applier.ApplyAsync(
+                            v, new IdentityValidationTerminalResult(false, status.Status, status.RawPayloadSanitized, status.Score), now, ct);
+
+                    // Aún quedan intentos → sigue EN_PROCESO (el cliente reintenta en su móvil). Se refresca el
+                    // payload (motivo del último intento para la UI) solo si CAMBIÓ; un poll idéntico no re-escribe.
+                    if (!string.Equals(v.ProviderPayload, status.RawPayloadSanitized, StringComparison.Ordinal))
+                    {
+                        v.ProviderStatus = status.Status;
+                        v.ProviderPayload = status.RawPayloadSanitized;
+                        v.UpdatedAt = now;
+                        return true;
+                    }
+                    return false;
                 }
-                return false;
-            }
 
             // Compat: un "rechazado" ya terminal (fixtures u otros orígenes) se aplica directo.
             case "rechazado":

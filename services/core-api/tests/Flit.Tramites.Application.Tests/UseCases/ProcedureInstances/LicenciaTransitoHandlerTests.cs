@@ -231,19 +231,31 @@ public sealed class LicenciaTransitoHandlerTests
         // Se agregan DESORDENADOS a propósito (EF no garantiza el orden de la colección).
         instance.StatusHistory.Add(new ProcedureInstanceStatusHistory
         {
-            Id = Guid.NewGuid(), FromStatus = "entregado", ToStatus = "aprobado", ChangedAt = now,
+            Id = Guid.NewGuid(),
+            FromStatus = "entregado",
+            ToStatus = "aprobado",
+            ChangedAt = now,
         });
         instance.StatusHistory.Add(new ProcedureInstanceStatusHistory
         {
-            Id = Guid.NewGuid(), FromStatus = null, ToStatus = "borrador", ChangedAt = now.AddHours(-3),
+            Id = Guid.NewGuid(),
+            FromStatus = null,
+            ToStatus = "borrador",
+            ChangedAt = now.AddHours(-3),
         });
         instance.StatusHistory.Add(new ProcedureInstanceStatusHistory
         {
-            Id = Guid.NewGuid(), FromStatus = "preparado", ToStatus = "entregado", ChangedAt = now.AddHours(-1),
+            Id = Guid.NewGuid(),
+            FromStatus = "preparado",
+            ToStatus = "entregado",
+            ChangedAt = now.AddHours(-1),
         });
         instance.StatusHistory.Add(new ProcedureInstanceStatusHistory
         {
-            Id = Guid.NewGuid(), FromStatus = "borrador", ToStatus = "preparado", ChangedAt = now.AddHours(-2),
+            Id = Guid.NewGuid(),
+            FromStatus = "borrador",
+            ToStatus = "preparado",
+            ChangedAt = now.AddHours(-2),
         });
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
 

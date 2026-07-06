@@ -112,8 +112,15 @@ public sealed class IdentityValidationCompletedConsumerTests
         var i = Lean(id, tenant, "TRM-2026-000099", traspaso: true);
         i.Actors.Add(new ProcedureInstanceActor
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, ProcedureEntityId = Guid.NewGuid(),
-            ActorType = "comprador", DocumentType = TipoDoc, DocumentNumber = Documento, FullName = "Ana", Metadata = "{}",
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            FullName = "Ana",
+            Metadata = "{}",
             CreatedAt = DateTimeOffset.UtcNow,
         });
         if (existing is not null)
@@ -128,20 +135,40 @@ public sealed class IdentityValidationCompletedConsumerTests
         var i = Lean(id, tenant, "TRM-2026-000050", traspaso: false);
         i.Actors.Add(new ProcedureInstanceActor
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, ProcedureEntityId = Guid.NewGuid(),
-            ActorType = "comprador", DocumentType = TipoDoc, DocumentNumber = Documento, FullName = "Ana", Metadata = "{}",
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            FullName = "Ana",
+            Metadata = "{}",
             CreatedAt = DateTimeOffset.UtcNow,
         });
         i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, PartyRole = "comprador",
-            Status = BiometricEstados.Aprobado, Name = "Ana", DocumentType = TipoDoc, DocumentNumber = Documento, Email = "ana@x.com",
-            TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado,
+            Name = "Ana",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            Email = "ana@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         i.FieldValues.Add(new ProcedureInstanceFieldValue
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, FieldKey = "transit_office_code",
-            ValueText = "11001000", Source = "user",
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_code",
+            ValueText = "11001000",
+            Source = "user",
         });
         _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(i);
         return i;
@@ -195,9 +222,15 @@ public sealed class IdentityValidationCompletedConsumerTests
         // Ya existe una firma activa de compraventa para (comprador) → debe reusarse.
         var existing = new ProcedureInstanceSignature
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, Parte = "comprador",
-            DocTipo = SignatureDocTipos.Compraventa, Estado = SignatureEstados.Enviada, EnvelopeId = "env-1",
-            SolicitadoAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Parte = "comprador",
+            DocTipo = SignatureDocTipos.Compraventa,
+            Estado = SignatureEstados.Enviada,
+            EnvelopeId = "env-1",
+            SolicitadoAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
         var full = StubTraspasoGraph(id, tenant, existing);
 

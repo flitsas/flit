@@ -275,10 +275,18 @@ public sealed class FinalizeDraftProcedureInstanceTests
         });
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
-            Id = Guid.NewGuid(), TenantId = tenant, ProcedureInstanceId = id, PartyRole = "comprador",
-            Status = BiometricEstados.Aprobado, Name = "Ana", DocumentType = "CC", DocumentNumber = "1020304050",
-            Email = "ana@x.com", TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            PartyRole = "comprador",
+            Status = BiometricEstados.Aprobado,
+            Name = "Ana",
+            DocumentType = "CC",
+            DocumentNumber = "1020304050",
+            Email = "ana@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
         });
 
         var typeRepo = Substitute.For<IProcedureTypeRepository>();

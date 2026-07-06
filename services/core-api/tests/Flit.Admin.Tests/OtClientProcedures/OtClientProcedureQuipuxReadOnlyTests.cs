@@ -1,4 +1,4 @@
-﻿using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtProfile;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Infrastructure.Persistence;

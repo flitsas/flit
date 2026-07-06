@@ -1,4 +1,4 @@
-﻿using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
+using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Tramites;

@@ -184,20 +184,20 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
         Tenant tenant,
         TransitOfficeProfile profile,
         TransitOffice? office) => new()
-    {
-        Id = tenant.Id,
-        LegalName = tenant.LegalName,
-        TaxId = tenant.TaxId,
-        Code = tenant.Code,
-        TenantType = tenant.TenantType,
-        EstadoActivo = tenant.IsActive,
-        FechaCreacion = tenant.CreatedAt,
-        RowVersion = tenant.RowVersion,
-        TransitOfficeId = profile.TransitOfficeId,
-        TransitOfficeName = office?.Name ?? string.Empty,
-        TransitOfficeCode = office?.Code ?? string.Empty,
-        OperationMode = profile.OperationMode,
-    };
+        {
+            Id = tenant.Id,
+            LegalName = tenant.LegalName,
+            TaxId = tenant.TaxId,
+            Code = tenant.Code,
+            TenantType = tenant.TenantType,
+            EstadoActivo = tenant.IsActive,
+            FechaCreacion = tenant.CreatedAt,
+            RowVersion = tenant.RowVersion,
+            TransitOfficeId = profile.TransitOfficeId,
+            TransitOfficeName = office?.Name ?? string.Empty,
+            TransitOfficeCode = office?.Code ?? string.Empty,
+            OperationMode = profile.OperationMode,
+        };
 
     /// <summary>
     /// Ejecuta el alta compuesta dentro de una única transacción, fijando

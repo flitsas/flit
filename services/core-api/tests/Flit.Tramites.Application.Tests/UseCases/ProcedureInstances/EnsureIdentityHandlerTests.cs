@@ -263,18 +263,18 @@ public sealed class EnsureIdentityHandlerTests
 
     private static ProcedureInstanceBiometricValidation Validation(
         string estado, DateTimeOffset? validadoAt, string? parte = "comprador") => new()
-    {
-        Id = Guid.NewGuid(),
-        TenantId = TenantId,
-        PartyRole = parte,
-        Status = estado,
-        Name = "Ana Compradora",
-        DocumentType = TipoDoc,
-        DocumentNumber = Documento,
-        Email = "ana@x.com",
-        TokenHash = Guid.NewGuid().ToString("N"),
-        ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-        ValidatedAt = validadoAt,
-        CreatedAt = DateTimeOffset.UtcNow,
-    };
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            PartyRole = parte,
+            Status = estado,
+            Name = "Ana Compradora",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            Email = "ana@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            ValidatedAt = validadoAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
 }

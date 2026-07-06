@@ -1,4 +1,4 @@
-﻿using System.Data.Common;
+using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
 using Microsoft.EntityFrameworkCore;
