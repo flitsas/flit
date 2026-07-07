@@ -137,6 +137,10 @@ public static class DependencyInjection
         services.AddScoped<SetDocumentRequirementOverrideHandler>();
         services.AddScoped<ListDocumentRequirementOverridesHandler>();
 
+        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+        services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
+        services.AddScoped<CompanyDocumentParams.UpsertCompanyDocumentParamHandler>();
+
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureDocumentRequirementsHandler>();

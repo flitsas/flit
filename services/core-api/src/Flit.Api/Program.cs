@@ -186,6 +186,7 @@ app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
 app.MapAdminDocumentRequirementOverridesEndpoints();
 app.MapAdminResolvedDocumentMatrixEndpoints();
+app.MapAdminCompanyDocumentParamsEndpoints();
 app.MapAdminImprontasEndpoints();
 app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();

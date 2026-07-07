@@ -45,6 +45,105 @@ public static class ChecklistEngine
     }
 
     /// <summary>
+    /// Aplica reglas condicionales de obligatoriedad (HU #10521, RF30) sobre la lista base según
+    /// los atributos del trámite (<paramref name="context"/>). Función pura y aditiva:
+    /// <list type="bullet">
+    ///   <item><c>Require</c>: fuerza obligatorio el ítem (lo agrega como obligatorio si no existía).</item>
+    ///   <item><c>Add</c>: agrega el ítem si no existía (respeta su obligatoriedad).</item>
+    ///   <item><c>Hide</c>: quita el ítem.</item>
+    /// </list>
+    /// Sin reglas (o ninguna cuya condición se cumpla) el resultado es idéntico a
+    /// <paramref name="baseItems"/> ⇒ sin cambios de comportamiento.
+    /// </summary>
+    public static IReadOnlyList<ChecklistItem> ApplyConditional(
+        IReadOnlyList<ChecklistItem> baseItems,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules)
+    {
+        ArgumentNullException.ThrowIfNull(baseItems);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (rules is null || rules.Count == 0)
+            return baseItems.ToList();
+
+        var result = baseItems.ToList();
+
+        foreach (var rule in rules)
+        {
+            if (!rule.When(context))
+                continue;
+
+            var index = result.FindIndex(i => i.Id == rule.Item.Id);
+            switch (rule.Effect)
+            {
+                case ConditionalEffect.Hide:
+                    if (index >= 0)
+                        result.RemoveAt(index);
+                    break;
+
+                case ConditionalEffect.Require:
+                    if (index >= 0)
+                        result[index] = result[index] with { Obligatorio = true };
+                    else
+                        result.Add(rule.Item with { Obligatorio = true });
+                    break;
+
+                case ConditionalEffect.Add:
+                    if (index < 0)
+                        result.Add(rule.Item);
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Aplica los parámetros documentales de la compañía gestora (HU #10521, RF31) sobre la lista:
+    /// <c>Oculto</c> quita el ítem, <c>Obligatorio</c> lo fuerza obligatorio y <c>Opcional</c> lo
+    /// vuelve opcional. Empareja por <c>DocTipo</c> o <c>Id</c>. Función pura y aditiva: sin
+    /// parámetros el resultado es idéntico a <paramref name="baseItems"/>.
+    /// </summary>
+    public static IReadOnlyList<ChecklistItem> ApplyCompanyParams(
+        IReadOnlyList<ChecklistItem> baseItems,
+        IReadOnlyCollection<CompanyDocumentParam>? parametros)
+    {
+        ArgumentNullException.ThrowIfNull(baseItems);
+
+        if (parametros is null || parametros.Count == 0)
+            return baseItems.ToList();
+
+        var byDoc = parametros
+            .GroupBy(p => p.DocTipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last().State, StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<ChecklistItem>();
+        foreach (var item in baseItems)
+        {
+            var key = item.DocTipo ?? item.Id;
+            if (!byDoc.TryGetValue(key, out var state) && !byDoc.TryGetValue(item.Id, out state))
+            {
+                result.Add(item);
+                continue;
+            }
+
+            switch (state)
+            {
+                case CompanyDocumentParamState.Oculto:
+                    break; // se omite
+                case CompanyDocumentParamState.Obligatorio:
+                    result.Add(item with { Obligatorio = true });
+                    break;
+                case CompanyDocumentParamState.Opcional:
+                    result.Add(item with { Obligatorio = false });
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Computa el estado del checklist combinando overrides manuales
     /// (<paramref name="checklistEstado"/>) y documentos subidos
     /// (<paramref name="docTipos"/>, que auto-marcan ítems con <c>DocTipo</c>).
