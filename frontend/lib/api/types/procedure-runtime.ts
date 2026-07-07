@@ -167,6 +167,13 @@ export type ActorRol = 'comprador' | 'vendedor';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
+/**
+ * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
+ * identidad se incorpora desde la validación biométrica y el checklist no ofrece la carga
+ * manual de cédula; persona jurídica la conserva.
+ */
+export type ActorPersonType = 'natural' | 'juridical';
+
 // HU #10478 — proveedor primario de consulta resuelto para el tenant, por tipo. El wizard lo usa para
 // adaptar la UI (p. ej. en traspaso ocultar el tipo de documento del propietario cuando el proveedor de
 // placa es Kyverum RUNT, que lo resuelve solo y lo devuelve en la respuesta).
@@ -186,6 +193,11 @@ export interface ProcedureActor {
   /** Persistidos en actor.metadata (JSON) — opcionales. */
   ciudad?: string;
   direccion?: string;
+  /**
+   * Tipo de persona (HU #10543). Persona natural omite la carga manual de cédula en el
+   * checklist (el documento llega desde la validación de identidad).
+   */
+  personType?: ActorPersonType;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */

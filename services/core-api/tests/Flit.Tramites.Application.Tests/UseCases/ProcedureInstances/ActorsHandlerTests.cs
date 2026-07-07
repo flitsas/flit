@@ -121,6 +121,62 @@ public sealed class ActorsHandlerTests
         result.Should().NotBeNull();
     }
 
+    // ── HU #10542 / #10544: tipo de persona y representante legal ──────────────
+
+    [Fact]
+    public async Task Put_PersonaNatural_PersisteTipoYRepresentanteLegal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "traspaso");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var vendedor = new ActorInput(
+            "vendedor", "CC", "999", "Pedro Vendedor", "vendedor@x.com", null,
+            PersonType: "NATURAL", EsRepresentanteLegal: true);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([vendedor]), ct);
+
+        error.Should().BeNull();
+        var dto = result!.Actors.Should().ContainSingle().Subject;
+        dto.PersonType.Should().Be("natural"); // normalizado a minúsculas
+        dto.EsRepresentanteLegal.Should().BeTrue();
+        instance.Actors.Should().ContainSingle()
+            .Which.PersonType.Should().Be("natural");
+    }
+
+    [Fact]
+    public async Task Put_SinTipoPersona_QuedaNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
+
+        error.Should().BeNull();
+        result!.Actors[0].PersonType.Should().BeNull();
+        result.Actors[0].EsRepresentanteLegal.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Put_TipoPersonaInvalido_ReturnsError()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", "CC", "123", "Juan", "c@x.com", null, PersonType: "persona_natural");
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("invalid_person_type");
+        result.Should().BeNull();
+    }
+
     // ── Roles por modalidad ───────────────────────────────────────────────────
 
     [Fact]
