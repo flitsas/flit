@@ -91,13 +91,12 @@ export interface DocumentOrderOverride {
 
 /**
  * Payload del POST /api/v1/admin/document-order-overrides. El `scope` viaja como
- * query; según el scope se envía `transitOfficeId` (OT) o `clienteId` (CLIENTE).
+ * query; el override de orden se define por `transitOfficeId` (scope OT).
  */
 export interface CreateDocumentOrderOverrideRequest {
   procedureTypeId: string;
   documentTypeId: string;
   transitOfficeId?: string;
-  clienteId?: string;
   orden: number;
 }
 

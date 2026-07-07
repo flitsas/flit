@@ -13,9 +13,9 @@ using Xunit;
 namespace Flit.Admin.Tests.DocumentOrderOverrides;
 
 /// <summary>
-/// Matriz documental resuelta (HU #10196) — AC3 (precedencia Cliente &gt; OT &gt; Default),
-/// AC4 (sin overrides → orden Default) y AC6 (tras borrar el override CLIENTE, la fila
-/// vuelve al nivel OT o Default). Ejercita el resolutor EF real sobre InMemory.
+/// Matriz documental resuelta (HU #10196; RF22) — precedencia <b>OT &gt; Default</b> (el OT es
+/// el único nivel que reordena), AC4 (sin overrides → orden Default) y RF22 (las filas legadas
+/// con <c>scope_type='CLIENTE'</c> se ignoran). Ejercita el resolutor EF real sobre InMemory.
 /// </summary>
 public sealed class ResolvedDocumentMatrixHandlerTests
 {
@@ -26,16 +26,16 @@ public sealed class ResolvedDocumentMatrixHandlerTests
     private static readonly Guid TransitOfficeId = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
     private static readonly Guid ClienteId = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
-    // ---------- AC3: precedencia Cliente > OT > Default ----------
+    // ---------- RF22: precedencia OT > Default; las filas CLIENTE legadas se ignoran ----------
 
     [Fact]
-    public async Task AC3_Resolve_AppliesPrecedence_ClienteOverOtOverDefault()
+    public async Task RF22_Resolve_AppliesPrecedence_OtOverDefault_IgnoresLegacyCliente()
     {
         var db = NewDbName();
         await SeedRequirementsAsync(db);
         await using (var seed = NewContext(db))
         {
-            // DocA: override OT y CLIENTE → gana CLIENTE.
+            // DocA: override OT (50) + una fila legada CLIENTE (1) → gana OT; CLIENTE se ignora (RF22).
             seed.DocumentOrderOverrides.Add(Override(DocA, "OT", TransitOfficeId, 50));
             seed.DocumentOrderOverrides.Add(Override(DocA, "CLIENTE", ClienteId, 1));
             // DocB: solo override OT → gana OT.
@@ -49,15 +49,15 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         {
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
-            ClienteId = ClienteId,
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(GetResolvedDocumentMatrixOutcome.Resolved);
         result.Data.Should().HaveCount(3);
 
+        // DocA: la fila CLIENTE se ignora → gana OT (50), NO el 1 del CLIENTE.
         var docA = result.Data.Single(d => d.DocumentTypeId == DocA);
-        docA.OrdenResuelto.Should().Be((short)1);
-        docA.NivelAplicado.Should().Be("CLIENTE");
+        docA.OrdenResuelto.Should().Be((short)50);
+        docA.NivelAplicado.Should().Be("OT");
 
         var docB = result.Data.Single(d => d.DocumentTypeId == DocB);
         docB.OrdenResuelto.Should().Be((short)2);
@@ -67,8 +67,10 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         docC.OrdenResuelto.Should().Be((short)30);
         docC.NivelAplicado.Should().Be("DEFAULT");
 
-        // Orden global por orden resuelto asc: DocA(1), DocB(2), DocC(30).
-        result.Data.Select(d => d.DocumentTypeId).Should().ContainInOrder(DocA, DocB, DocC);
+        // Ningún documento queda en nivel CLIENTE (RF22).
+        result.Data.Should().NotContain(d => d.NivelAplicado == "CLIENTE");
+        // Orden global por orden resuelto asc: DocB(2), DocC(30), DocA(50).
+        result.Data.Select(d => d.DocumentTypeId).Should().ContainInOrder(DocB, DocC, DocA);
     }
 
     // ---------- AC4: sin overrides → orden Default ----------
@@ -123,63 +125,30 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         result.Data.Should().BeEmpty();
     }
 
-    // ---------- AC6: tras borrar override CLIENTE, vuelve a OT o Default ----------
+    // ---------- RF22: una fila legada CLIENTE sin OT NO reordena → cae a Default ----------
 
     [Fact]
-    public async Task AC6_AfterDeletingClienteOverride_MatrixFallsBackToOtThenDefault()
+    public async Task RF22_LegacyClienteOverride_WithoutOt_FallsBackToDefault()
     {
         var db = NewDbName();
         await SeedRequirementsAsync(db);
-        var clienteOverrideId = Guid.NewGuid();
         await using (var seed = NewContext(db))
         {
-            // DocA: OT + CLIENTE; DocC sin OT (caerá a Default tras borrar CLIENTE).
-            seed.DocumentOrderOverrides.Add(Override(DocA, "OT", TransitOfficeId, 5));
-            seed.DocumentOrderOverrides.Add(new DocumentOrderOverride
-            {
-                Id = clienteOverrideId,
-                ProcedureTypeId = ProcedureTypeId,
-                DocumentTypeId = DocA,
-                ScopeType = "CLIENTE",
-                ScopeRefId = ClienteId,
-                SortOrder = 1,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            // DocA: SOLO una fila legada CLIENTE (sin override OT). Tras RF22 se ignora ⇒ Default.
+            seed.DocumentOrderOverrides.Add(Override(DocA, "CLIENTE", ClienteId, 1));
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        // Antes del borrado: DocA en nivel CLIENTE.
-        await using (var before = NewContext(db))
-        {
-            var matrix = await Handler(before).HandleAsync(new GetResolvedDocumentMatrixQuery
-            {
-                ProcedureTypeId = ProcedureTypeId,
-                TransitOfficeId = TransitOfficeId,
-                ClienteId = ClienteId,
-            }, TestContext.Current.CancellationToken);
-            matrix.Data.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("CLIENTE");
-        }
-
-        // Borrado del override CLIENTE.
-        await using (var act = NewContext(db))
-        {
-            var delete = new DeleteDocumentOrderOverrideHandler(new DocumentOrderOverrideRepository(act));
-            var deleted = await delete.HandleAsync(new DeleteDocumentOrderOverrideCommand { Id = clienteOverrideId }, TestContext.Current.CancellationToken);
-            deleted.Outcome.Should().Be(DeleteDocumentOrderOverrideOutcome.Deleted);
-        }
-
-        // Después: DocA cae al nivel OT.
-        await using var after = NewContext(db);
-        var resolved = await Handler(after).HandleAsync(new GetResolvedDocumentMatrixQuery
+        await using var ctx = NewContext(db);
+        var resolved = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
         {
             ProcedureTypeId = ProcedureTypeId,
             TransitOfficeId = TransitOfficeId,
-            ClienteId = ClienteId,
         }, TestContext.Current.CancellationToken);
 
         var docA = resolved.Data.Single(d => d.DocumentTypeId == DocA);
-        docA.NivelAplicado.Should().Be("OT");
-        docA.OrdenResuelto.Should().Be((short)5);
+        docA.NivelAplicado.Should().Be("DEFAULT");
+        docA.OrdenResuelto.Should().Be((short)10); // default_sort_order sembrado para DocA.
     }
 
     // ---------- HU #10198: obligatoriedad por OT (3 estados) ----------

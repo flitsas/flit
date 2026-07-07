@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoint de la matriz documental resuelta (HU #10196, RF18). Aplica la precedencia
-/// Cliente &gt; OT &gt; Default y devuelve el orden final por documento. Exige rol SuperAdmin.
+/// Endpoint de la matriz documental resuelta (HU #10196, RF18; RF22). Aplica la precedencia
+/// OT &gt; Default y devuelve el orden final por documento. Exige rol SuperAdmin.
 /// </summary>
 public static class AdminResolvedDocumentMatrixEndpoints
 {
@@ -20,13 +20,13 @@ public static class AdminResolvedDocumentMatrixEndpoints
             .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithTags("Admin · Órdenes documentales");
 
-        // GET ?procedureTypeId&transitOfficeId?&clienteId? — matriz resuelta (AC3/AC4 → 200 / 400 / 404).
+        // GET ?procedureTypeId&transitOfficeId? — matriz resuelta (AC3/AC4 → 200 / 400 / 404).
         group.MapGet("/", GetAsync)
             .WithName("AdminResolvedDocumentMatrixGet")
-            .WithSummary("Resuelve la matriz documental por OT + Cliente")
+            .WithSummary("Resuelve la matriz documental por OT")
             .WithDescription("Calcula el orden y la obligatoriedad finales de los documentos de un trámite "
-                + "aplicando la precedencia Cliente > OT > Default. transitOfficeId y clienteId son opcionales "
-                + "(sin ellos resuelve solo el default). 400 si falta procedureTypeId, 404 si el trámite no existe. "
+                + "aplicando la precedencia OT > Default (RF22). transitOfficeId es opcional "
+                + "(sin él resuelve el orden base). 400 si falta procedureTypeId, 404 si el trámite no existe. "
                 + "Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
@@ -41,8 +41,7 @@ public static class AdminResolvedDocumentMatrixEndpoints
         [FromServices] GetResolvedDocumentMatrixHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] Guid? procedureTypeId = null,
-        [FromQuery] Guid? transitOfficeId = null,
-        [FromQuery] Guid? clienteId = null)
+        [FromQuery] Guid? transitOfficeId = null)
     {
         if (procedureTypeId is null || procedureTypeId == Guid.Empty)
         {
@@ -57,7 +56,6 @@ public static class AdminResolvedDocumentMatrixEndpoints
                 {
                     ProcedureTypeId = procedureTypeId.Value,
                     TransitOfficeId = transitOfficeId,
-                    ClienteId = clienteId,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
