@@ -21,6 +21,7 @@ public sealed class TramiteLifecycleServiceTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IProcedureTypeRepository _typeRepo = Substitute.For<IProcedureTypeRepository>();
     private readonly ITransitOfficeGrantGate _grantGate = Substitute.For<ITransitOfficeGrantGate>();
+    private readonly IOtOperabilityGate _operabilityGate = Substitute.For<IOtOperabilityGate>();
     private readonly RecordingTransitionRecorder _recorder = new();
     private readonly RecordingTransitionPublisher _publisher = new();
     private readonly TramiteLifecycleService _sut;
@@ -30,9 +31,12 @@ public sealed class TramiteLifecycleServiceTests
         _grantGate
             .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        _operabilityGate
+            .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
         _sut = new TramiteLifecycleService(
-            _repo, _typeRepo, _grantGate, NullOtRuleGate.Instance, _recorder, _publisher);
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
     }
 
     private ProcedureInstance Wire(string status, bool conGates = false)
@@ -257,4 +261,51 @@ public sealed class TramiteLifecycleServiceTests
         outcome.Success.Should().BeTrue();
         i.Status.Should().Be(TramiteEstado.Borrador);
     }
+
+    // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
+    [Fact]
+    public async Task Entrega_OtConGrantPeroNoOperable_BloqueaConOrganismoNoOperable()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        SeleccionarOt(i, Guid.NewGuid());
+        // Grant vigente (default true), pero el OT está inactivo a nivel plataforma.
+        _operabilityGate
+            .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be("organismo_no_operable");
+        i.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().BeEmpty();
+        _publisher.Published.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Entrega_OtConGrantYOperable_Permite()
+    {
+        var officeId = Guid.NewGuid();
+        var i = Wire(TramiteEstado.Preparado);
+        SeleccionarOt(i, officeId);
+        // Grant vigente + OT operativo (ambos gates pasan).
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+        i.TransitOfficeId.Should().Be(officeId); // se promueve el id elegido
+        await _operabilityGate.Received(1).IsOperableAsync(officeId, Arg.Any<CancellationToken>());
+    }
+
+    private static void SeleccionarOt(ProcedureInstance instance, Guid officeId) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "transit_office_id",
+            ValueText = officeId.ToString(),
+            Source = "user",
+        });
 }

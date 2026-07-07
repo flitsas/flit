@@ -2,11 +2,18 @@
 // El gate de UI (middleware) solo necesita leer claims; la API valida la firma
 // criptográficamente (HU #10194, AC6). No confiar en esto para autorización real.
 
+/** Item del claim `roles` (HU #10506): un objeto `{id, code}` por cada rol activo del usuario. */
+export interface JwtRoleClaim {
+  id?: string;
+  code?: string;
+}
+
 export interface JwtPayload {
   sub?: string;
   role?: string;
   role_code?: string;
-  roles?: string[];
+  /** Catálogo global multi-rol (HU #10506) — array de objetos, no de strings. */
+  roles?: JwtRoleClaim[];
   permissions?: string[];
   tenant_id?: string;
   tenant_name?: string;
@@ -70,11 +77,15 @@ export function isSuperAdmin(payload: JwtPayload | null): boolean {
   if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
     return true;
   }
-  return Array.isArray(payload.roles) && payload.roles.some((r) => r?.toLowerCase() === target);
+  return (
+    Array.isArray(payload.roles) &&
+    payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
+  );
 }
 
 /**
- * Indica si el payload contiene el rol AdminCompany.
+ * Indica si el payload contiene el rol AdminCompany (comparación case-insensitive
+ * sobre `role`/`role_code` o el arreglo `roles`, para usuarios multi-rol — HU #10506).
  */
 export function isAdminCompany(payload: JwtPayload | null): boolean {
   if (!payload) {
@@ -88,7 +99,10 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
   if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
     return true;
   }
-  return false;
+  return (
+    Array.isArray(payload.roles) &&
+    payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
+  );
 }
 
 /**
@@ -104,7 +118,10 @@ export function isOtAdmin(payload: JwtPayload | null): boolean {
     return true;
   }
 
-  return Array.isArray(payload.roles) && payload.roles.some((r) => r?.toLowerCase() === target);
+  return (
+    Array.isArray(payload.roles) &&
+    payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
+  );
 }
 
 function base64UrlDecode(value: string): string {

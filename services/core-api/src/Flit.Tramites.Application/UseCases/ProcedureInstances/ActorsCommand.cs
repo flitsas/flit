@@ -24,7 +24,9 @@ public sealed record ActorInput(
     string Email,
     string? Telefono,
     string? Ciudad = null,
-    string? Direccion = null);
+    string? Direccion = null,
+    string? PersonType = null,
+    bool EsRepresentanteLegal = false);
 
 public sealed record ActorDto(
     string Rol,
@@ -34,7 +36,9 @@ public sealed record ActorDto(
     string Email,
     string? Telefono,
     string? Ciudad = null,
-    string? Direccion = null);
+    string? Direccion = null,
+    string? PersonType = null,
+    bool EsRepresentanteLegal = false);
 
 public sealed record PutActorsRequest(IReadOnlyList<ActorInput> Actors);
 
@@ -102,6 +106,9 @@ public sealed class PutActorsHandler(
                 return (null, "missing_full_name");
             if (string.IsNullOrWhiteSpace(a.Email) || !TramiteDocumento.EmailValido(a.Email))
                 return (null, "invalid_email");
+            // HU #10542: tipo de persona opcional; si viene, debe ser natural|juridical.
+            if (!string.IsNullOrWhiteSpace(a.PersonType) && !ActorPersonTypes.IsValid(a.PersonType))
+                return (null, "invalid_person_type");
         }
 
         // 2. Roles permitidos según modalidad_entrada (matriz de dominio, no hardcode).
@@ -177,6 +184,8 @@ public sealed class PutActorsHandler(
                 FullName = a.NombreCompleto.Trim(),
                 Email = a.Email.Trim(),
                 Phone = string.IsNullOrWhiteSpace(a.Telefono) ? null : a.Telefono.Trim(),
+                PersonType = ActorPersonTypes.Normalize(a.PersonType),
+                EsRepresentanteLegal = a.EsRepresentanteLegal,
                 Metadata = SerializeMetadata(a.Ciudad, a.Direccion),
                 CreatedAt = now,
             };
@@ -262,7 +271,9 @@ public sealed class PutActorsHandler(
                     a.Email ?? string.Empty,
                     a.Phone,
                     ciudad,
-                    direccion);
+                    direccion,
+                    a.PersonType,
+                    a.EsRepresentanteLegal);
             })
             .ToList());
 

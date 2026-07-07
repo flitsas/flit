@@ -20,6 +20,7 @@ public sealed class TramiteLifecycleService(
     IProcedureInstanceRepository repo,
     IProcedureTypeRepository typeRepo,
     ITransitOfficeGrantGate transitOfficeGrantGate,
+    IOtOperabilityGate otOperabilityGate,
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
     ITramiteTransitionPublisher publisher) : ITramiteLifecycleService
@@ -146,6 +147,16 @@ public sealed class TramiteLifecycleService(
                     $"El organismo de tránsito seleccionado ({officeId}) no está habilitado para la " +
                     "compañía. Solicite el grant OT↔empresa: sin él, el trámite entregado no llegaría " +
                     "a la bandeja del organismo.");
+
+            // HU #10518 — con grant, pero el OT debe estar OPERATIVO en la plataforma:
+            // catálogo activo + tenant OT existente y activo. Desactivar el OT (is_active=false)
+            // bloquea la radicación aunque el grant siga vigente (no se revoca automáticamente).
+            var operable = await otOperabilityGate
+                .IsOperableAsync(officeId, ct)
+                .ConfigureAwait(false);
+            if (!operable)
+                return ("organismo_no_operable",
+                    "El organismo de tránsito no está operativo en FLIT.");
 
             instance.TransitOfficeId = officeId;
         }
