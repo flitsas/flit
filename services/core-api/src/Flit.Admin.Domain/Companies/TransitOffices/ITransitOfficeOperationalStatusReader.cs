@@ -14,4 +14,13 @@ public interface ITransitOfficeOperationalStatusReader
     /// </summary>
     Task<IReadOnlyList<TransitOfficeOperationalStatusItem>> ListAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Estado operativo de una sola oficina del catálogo (HU #10518, validación del grant).
+    /// Mismo join que <see cref="ListAsync"/> acotado a <paramref name="transitOfficeId"/>.
+    /// Devuelve <c>null</c> si la oficina no existe o no está activa en el catálogo.
+    /// </summary>
+    Task<TransitOfficeOperationalStatusItem?> GetByIdAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
 }

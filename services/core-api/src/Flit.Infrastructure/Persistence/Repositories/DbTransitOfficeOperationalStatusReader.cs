@@ -82,6 +82,65 @@ internal sealed class DbTransitOfficeOperationalStatusReader : ITransitOfficeOpe
             cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<TransitOfficeOperationalStatusItem?> GetByIdAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            () => ProjectOfficeAsync(transitOfficeId, cancellationToken),
+            cancellationToken);
+
+    /// <summary>
+    /// Proyecta el estado operativo de una sola oficina (mismo join catálogo + perfil +
+    /// tenant que <see cref="ListAsync"/>, acotado por id). <c>null</c> si la oficina no
+    /// existe o no está activa en el catálogo.
+    /// </summary>
+    private async Task<TransitOfficeOperationalStatusItem?> ProjectOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var office = await _context.TransitOffices
+            .AsNoTracking()
+            .Where(o => o.Id == transitOfficeId && o.IsActive)
+            .Select(o => new { o.Id, o.Code, o.Name, o.DepartmentCode })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (office is null)
+        {
+            return null;
+        }
+
+        var profile = await _context.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TransitOfficeId == transitOfficeId)
+            .Select(p => new { p.TenantId, p.OperationMode })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var tenant = profile is null
+            ? null
+            : await _context.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == profile.TenantId)
+                .Select(t => new { t.Id, t.IsActive })
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        var hasTenant = profile is not null && tenant is not null;
+
+        return new TransitOfficeOperationalStatusItem
+        {
+            Id = office.Id,
+            Code = office.Code,
+            Name = office.Name,
+            DepartmentCode = office.DepartmentCode,
+            HasTenant = hasTenant,
+            TenantId = hasTenant ? tenant!.Id : null,
+            EstadoActivo = hasTenant ? tenant!.IsActive : null,
+            OperationMode = hasTenant ? profile!.OperationMode : null,
+        };
+    }
+
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,
         CancellationToken cancellationToken)

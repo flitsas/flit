@@ -6,8 +6,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { OTMatrix } from "../OTMatrix";
+import { OTMatrix, type OtOperationalInfo } from "../OTMatrix";
 import type { TransitOffice } from "@/lib/api/types";
+import { ApiValidationError } from "@/lib/api/types";
 
 const offices: TransitOffice[] = [
   { id: "o1", code: "11001", name: "Secretaría de Movilidad Bogotá", departmentCode: "11", cityCode: "11001" },
@@ -75,5 +76,65 @@ describe("OTMatrix (AC4)", () => {
     render(<OTMatrix offices={offices} grantedIds={[]} onToggle={vi.fn()} />);
     await user.type(screen.getByLabelText(/buscar organismo/i), "zzz");
     expect(screen.getByText(/ningún organismo coincide/i)).toBeInTheDocument();
+  });
+
+  // ── HU #10518: bloqueo de habilitación para OT no operativos ─────────────────
+  const operational: Record<string, OtOperationalInfo> = {
+    o1: { hasTenant: true, estadoActivo: true }, // operable
+    o2: { hasTenant: false, estadoActivo: null }, // sin alta
+    o3: { hasTenant: true, estadoActivo: false }, // inactivo
+  };
+
+  it("deshabilita el checkbox y muestra badge para OT sin alta o inactivo", () => {
+    render(
+      <OTMatrix offices={offices} grantedIds={[]} operationalById={operational} onToggle={vi.fn()} />,
+    );
+
+    expect(screen.getByLabelText(/Secretaría de Movilidad Bogotá/i)).not.toBeDisabled();
+    expect(screen.getByLabelText(/Medellín/i)).toBeDisabled(); // sin alta
+    expect(screen.getByLabelText(/Cali/i)).toBeDisabled(); // inactivo
+
+    expect(screen.getByText(/Sin alta en FLIT/i)).toBeInTheDocument();
+    expect(screen.getByText(/Inactivo en FLIT/i)).toBeInTheDocument();
+  });
+
+  it("no dispara onToggle al intentar habilitar un OT no operable", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OTMatrix offices={offices} grantedIds={[]} operationalById={operational} onToggle={onToggle} />,
+    );
+
+    await user.click(screen.getByLabelText(/Medellín/i));
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("permite DESMARCAR (quitar grant) un OT que quedó inactivo pero ya tenía grant", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn().mockResolvedValue(undefined);
+    // o3 está inactivo pero ya estaba habilitado → debe poder quitarse.
+    render(
+      <OTMatrix offices={offices} grantedIds={["o3"]} operationalById={operational} onToggle={onToggle} />,
+    );
+
+    const cali = screen.getByLabelText(/Cali/i);
+    expect(cali).not.toBeDisabled();
+    expect(cali).toBeChecked();
+    await user.click(cali);
+    await waitFor(() => expect(onToggle).toHaveBeenCalledWith("o3", false));
+  });
+
+  it("muestra el mensaje del backend (422) cuando falla el POST del grant", async () => {
+    const user = userEvent.setup();
+    const serverMessage = "Este organismo está inactivo en FLIT. Actívelo antes de habilitarlo para la compañía.";
+    const onToggle = vi
+      .fn()
+      .mockRejectedValue(new ApiValidationError([{ field: "transitOfficeId", message: serverMessage }], 422));
+    const onError = vi.fn();
+    // Sin operationalById → checkbox habilitado, el rechazo llega del backend.
+    render(<OTMatrix offices={offices} grantedIds={[]} onToggle={onToggle} onError={onError} />);
+
+    await user.click(screen.getByLabelText(/Cali/i));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(serverMessage));
   });
 });

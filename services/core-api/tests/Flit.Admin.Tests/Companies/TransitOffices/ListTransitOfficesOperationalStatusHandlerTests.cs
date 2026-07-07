@@ -104,6 +104,57 @@ public sealed class ListTransitOfficesOperationalStatusHandlerTests
         result.Should().OnlyContain(r => !r.HasTenant);
     }
 
+    [Fact]
+    public async Task GetById_ReturnsPerOfficeState_ForGrantValidation()
+    {
+        var db = NewDbName();
+        var officeSinAlta = Guid.NewGuid();
+        var officeActivo = Guid.NewGuid();
+        var officeInactivo = Guid.NewGuid();
+        var officeDescatalogado = Guid.NewGuid();
+        var tenantActivo = Guid.NewGuid();
+        var tenantInactivo = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TransitOffices.AddRange(
+                new TransitOffice { Id = officeSinAlta, Code = "88001", Name = "OT sin alta", DepartmentCode = "88", CityCode = "88001", IsActive = true },
+                new TransitOffice { Id = officeActivo, Code = "88002", Name = "OT activo", DepartmentCode = "88", CityCode = "88002", IsActive = true },
+                new TransitOffice { Id = officeInactivo, Code = "88003", Name = "OT inactivo", DepartmentCode = "88", CityCode = "88003", IsActive = true },
+                new TransitOffice { Id = officeDescatalogado, Code = "88004", Name = "OT descatalogado", DepartmentCode = "88", CityCode = "88004", IsActive = false });
+
+            seed.Tenants.AddRange(
+                new Tenant { Id = tenantActivo, Code = "OT-A", LegalName = "A", TaxId = "900333333-3", TenantType = "RENTING", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new Tenant { Id = tenantInactivo, Code = "OT-I", LegalName = "I", TaxId = "900444444-4", TenantType = "RENTING", IsActive = false, CreatedAt = DateTimeOffset.UtcNow });
+
+            seed.TransitOfficeProfiles.AddRange(
+                new TransitOfficeProfile { Id = Guid.NewGuid(), TenantId = tenantActivo, TransitOfficeId = officeActivo, OperationMode = "dashboard", CreatedAt = DateTimeOffset.UtcNow },
+                new TransitOfficeProfile { Id = Guid.NewGuid(), TenantId = tenantInactivo, TransitOfficeId = officeInactivo, OperationMode = "dashboard", CreatedAt = DateTimeOffset.UtcNow });
+
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var reader = new DbTransitOfficeOperationalStatusReader(ctx);
+        var ct = TestContext.Current.CancellationToken;
+
+        var sinAlta = await reader.GetByIdAsync(officeSinAlta, ct);
+        sinAlta.Should().NotBeNull();
+        sinAlta!.HasTenant.Should().BeFalse();
+
+        var activo = await reader.GetByIdAsync(officeActivo, ct);
+        activo!.HasTenant.Should().BeTrue();
+        activo.EstadoActivo.Should().BeTrue();
+
+        var inactivo = await reader.GetByIdAsync(officeInactivo, ct);
+        inactivo!.HasTenant.Should().BeTrue();
+        inactivo.EstadoActivo.Should().BeFalse();
+
+        // Oficina descatalogada (catálogo inactivo) o inexistente → null.
+        (await reader.GetByIdAsync(officeDescatalogado, ct)).Should().BeNull();
+        (await reader.GetByIdAsync(Guid.NewGuid(), ct)).Should().BeNull();
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-ot-operational-status-{Guid.NewGuid()}";
