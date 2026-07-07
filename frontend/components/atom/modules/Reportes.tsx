@@ -5,7 +5,7 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ShieldQuestion } from "lucide-react";
+import { CalendarClock, ShieldQuestion } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
@@ -16,6 +16,7 @@ import { GlobalFilters } from "./_reportes/GlobalFilters";
 import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
 import { isValidRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
+import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
 import { OperacionTab } from "./_reportes/tabs/OperacionTab";
 import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
 import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
@@ -35,6 +36,9 @@ const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
 
 /** Slug legado: hace visible al menos "Resumen general" (compatibilidad §3). */
 const LEGACY_SLUG = "reportes.read";
+
+/** Slug que habilita la administración de informes programados y alertas (HU-D). */
+const SCHEDULING_SLUG = "reportes.programacion.manage";
 const TAB_QUERY_PARAM = "reportesTab";
 
 /** Pestañas con exportaciones (Excel/PDF ejecutivo con los filtros activos). */
@@ -106,6 +110,10 @@ export function Reportes() {
     return () => controller.abort();
   }, [isSuper]);
 
+  // Programación y alertas (HU-D): visible con su permiso; SuperAdmin bypass.
+  const canManageScheduling = isSuper || permissions.includes(SCHEDULING_SLUG);
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
+
   // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
   const [segment, setSegment] = useState<SelectedSegment | null>(null);
   const openSegment = useCallback((next: SelectedSegment) => setSegment(next), []);
@@ -141,6 +149,17 @@ export function Reportes() {
       {/* Filtros globales (persisten entre pestañas) + exportaciones */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
         <GlobalFilters filters={filters} onChange={setFilters} isSuper={isSuper} companies={companies} />
+        {canManageScheduling && (
+          <button
+            type="button"
+            onClick={() => setSchedulingOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+            data-testid="reportes-abrir-programacion"
+          >
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            Programación y alertas
+          </button>
+        )}
         {activeTab && EXPORT_TABS.includes(activeTab) && (
           <div className="ml-auto">
             <ExportButtons
@@ -186,6 +205,14 @@ export function Reportes() {
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
         </div>
+      )}
+
+      {canManageScheduling && (
+        <SchedulingPanel
+          open={schedulingOpen}
+          onClose={() => setSchedulingOpen(false)}
+          tenantId={filters.tenantId || undefined}
+        />
       )}
 
       {segment && (
