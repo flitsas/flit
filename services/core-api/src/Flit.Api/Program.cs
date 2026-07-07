@@ -36,6 +36,7 @@ builder.Services.AddTramitesApplication();
 
 // Dashboard analítico (Feature #10139, HU #10243): handlers de lectura de agregados.
 builder.Services.AddAnalyticsApplication();
+Flit.Analytics.Application.Scheduling.AnalyticsSchedulingServiceCollectionExtensions.AddAnalyticsScheduling(builder.Services); // Reportes2 HU-D — CRUD de informes programados y alertas
 
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
@@ -209,6 +210,8 @@ app.MapTramitesStatusHistoryEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
+app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
+app.MapAlertRulesEndpoints(); // Reportes2 HU-D
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
