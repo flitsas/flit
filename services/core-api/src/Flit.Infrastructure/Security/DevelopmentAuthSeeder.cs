@@ -723,28 +723,46 @@ public static class DevelopmentAuthSeeder
 
     private static async Task SeedTenantModuleGrantsAsync(FlitDbContext db, CancellationToken ct)
     {
+        var now = DateTimeOffset.UtcNow;
+
         var empresaTenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
-        if (empresaTenant is null) return;
+        if (empresaTenant is not null)
+        {
+            // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
+            var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
+            await GrantModulesToTenantAsync(db, empresaTenant.Id, grantedCodes, now, ct);
+        }
 
-        // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
-        var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
+        // HU #10504 — sin este grant hacia el tenant OT de desarrollo, el fix de scoping por tipo
+        // de entidad (ListAccessibleAsync con targetEntityType) ocultaría estos 4 módulos del
+        // constructor de roles para TRANSIT_OFFICE, ya que hoy solo tienen grant hacia la
+        // compañía demo. "validaciones" queda deliberadamente excluido para OT (decisión confirmada).
+        var otTenantExists = await db.Tenants.AnyAsync(t => t.Id == OtDevTenantId, ct);
+        if (otTenantExists)
+        {
+            var otGrantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes" };
+            await GrantModulesToTenantAsync(db, OtDevTenantId, otGrantedCodes, now, ct);
+        }
+    }
 
+    private static async Task GrantModulesToTenantAsync(
+        FlitDbContext db, Guid tenantId, string[] moduleCodes, DateTimeOffset now, CancellationToken ct)
+    {
         var modules = await db.SecurityModules
-            .Where(m => grantedCodes.Contains(m.Code) && m.DeletedAt == null)
+            .Where(m => moduleCodes.Contains(m.Code) && m.DeletedAt == null)
             .ToListAsync(ct);
 
         var existingModuleIds = await db.TenantModuleGrants
-            .Where(g => g.TenantId == empresaTenant.Id)
+            .Where(g => g.TenantId == tenantId)
             .Select(g => g.ModuleId)
             .ToListAsync(ct);
 
-        var now = DateTimeOffset.UtcNow;
         foreach (var m in modules.Where(m => !existingModuleIds.Contains(m.Id)))
         {
             db.TenantModuleGrants.Add(new Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant
             {
-                TenantId = empresaTenant.Id,
+                TenantId = tenantId,
                 ModuleId = m.Id,
                 GrantedAt = now,
             });
