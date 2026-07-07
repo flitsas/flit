@@ -56,12 +56,15 @@ export interface RoleDetail {
   permissions: { id: string; slug: string; name: string }[];
 }
 
-/** POST /api/v1/security/invitations → 201 | 404 (rol) | 409 (pending duplicado).
- *  SuperAdmin puede pasar targetTenantId para invitar a otro tenant. */
+/** POST /api/v1/security/invitations → 201 | 400 (NO_ROLES_SELECTED) | 404 (rol) | 409 (pending duplicado).
+ *  SuperAdmin puede pasar targetTenantId para invitar a otro tenant (en ese caso el rol de
+ *  sistema lo resuelve el backend y `roleIds` se ignora — se puede enviar `[]`).
+ *  HU #10510: `roleIds` reemplaza el `roleId?` singular — selección múltiple, mínimo 1 rol
+ *  para AdminCompany/OtAdmin (el backend rechaza con NO_ROLES_SELECTED si viene vacío). */
 export async function createInvitation(
   email: string,
   fullName: string,
-  roleId?: string,
+  roleIds: string[],
   targetTenantId?: string,
 ): Promise<InvitationCreatedResult> {
   try {
@@ -70,7 +73,7 @@ export async function createInvitation(
       body: {
         email,
         fullName,
-        roleId: roleId || undefined,
+        roleIds,
         targetTenantId: targetTenantId || undefined,
       },
     });

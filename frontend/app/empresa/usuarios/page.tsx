@@ -90,7 +90,10 @@ function UsuariosList() {
 
   async function handleInvite(email: string, fullName: string, roleId?: string, targetTenantId?: string) {
     try {
-      await createInvitation(email, fullName, roleId, targetTenantId);
+      // NOTA: página deprecada (HU-F4 #10512 la reemplazará por el módulo Shell "Usuarios y
+      // Permisos"). HU #10510 exige `roleIds: string[]` (mínimo 1) en el contrato — se adapta
+      // aquí solo lo mínimo para no romper el build; el selector sigue siendo single-value.
+      await createInvitation(email, fullName, roleId ? [roleId] : [], targetTenantId);
       show(`Invitación enviada a ${email}.`, "success");
       setInviteOpen(false);
       void load();
