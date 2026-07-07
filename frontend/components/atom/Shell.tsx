@@ -207,8 +207,10 @@ export function Shell({
       key: "mi-empresa",
       label: "Mi Empresa",
       icon: Briefcase,
-      active: pathname.startsWith("/empresa"),
-      onClick: () => window.location.assign("/empresa/usuarios"),
+      // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
+      // la SPA hacia /empresa/usuarios, ya deprecado).
+      active: !onAdminRoute && active === "usuarios",
+      onClick: () => onNav("usuarios"),
     });
   }
 
