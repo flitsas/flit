@@ -17,6 +17,7 @@ import type {
   OtDocumentTagsListResult,
   OtFeatureFlag,
   OtProfile,
+  OtRequirements,
   OtRule,
   OtRulesListResult,
   OtWebhook,
@@ -25,6 +26,7 @@ import type {
   UpdateOtDocumentPrecedenceRequest,
   UpdateOtFeatureFlagRequest,
   UpdateOtProfileRequest,
+  UpdateOtRequirementsRequest,
   UpdateOtRuleRequest,
   UpdateOtWebhookRequest,
 } from "./types-ot";
@@ -47,6 +49,27 @@ export function fetchOtProfile(
 
 export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile> {
   return apiFetch<OtProfile>(`${base}/profile`, { method: "PATCH", body });
+}
+
+export function fetchOtRequirements(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtRequirements> {
+  return apiFetch<OtRequirements>(`${base}/requirements`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+export function updateOtRequirements(
+  body: UpdateOtRequirementsRequest,
+  scope?: OtApiScope,
+): Promise<OtRequirements> {
+  return apiFetch<OtRequirements>(`${base}/requirements`, {
+    method: "PUT",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function updateOtFeatureFlag(

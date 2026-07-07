@@ -19,6 +19,8 @@ using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
+using Flit.Admin.Application.OtRequirements.GetOtRequirements;
+using Flit.Admin.Application.OtRequirements.UpdateOtRequirements;
 using Flit.Admin.Application.OtWebhooks;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
@@ -74,6 +76,20 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/requirements", GetRequirementsAsync)
+            .WithName("AdminOtGetRequirements")
+            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPut("/requirements", UpdateRequirementsAsync)
+            .WithName("AdminOtUpdateRequirements")
+            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
             .WithName("AdminOtCreateWebhook")
@@ -353,6 +369,64 @@ public static class AdminOtEndpoints
         }
 
         return Results.Ok(result.Profile);
+    }
+
+    private static async Task<IResult> GetRequirementsAsync(
+        HttpContext httpContext,
+        GetOtRequirementsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var response = await handler.HandleAsync(
+            new GetOtRequirementsQuery
+            {
+                TenantId = tenantId,
+                TransitOfficeId = scopedOfficeId,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(response);
+    }
+
+    private static async Task<IResult> UpdateRequirementsAsync(
+        HttpContext httpContext,
+        UpdateOtRequirementsRequest request,
+        UpdateOtRequirementsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+        {
+            TenantId = tenantId,
+            ChangedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result.Requirements);
     }
 
     private static async Task<IResult> UpdateFeatureFlagAsync(

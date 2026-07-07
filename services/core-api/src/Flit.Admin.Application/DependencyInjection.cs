@@ -41,6 +41,8 @@ using Flit.Admin.Application.OtProfile;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
+using Flit.Admin.Application.OtRequirements.GetOtRequirements;
+using Flit.Admin.Application.OtRequirements.UpdateOtRequirements;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
 using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
@@ -154,6 +156,10 @@ public static class DependencyInjection
         services.AddScoped<UpdateOtProfileHandler>();
         services.AddScoped<UpdateOtFeatureFlagHandler>();
         services.AddScoped<IQuipuxReadOnlyGuard, QuipuxReadOnlyGuard>();
+
+        // HU #10546 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
+        services.AddScoped<GetOtRequirementsHandler>();
+        services.AddScoped<UpdateOtRequirementsHandler>();
 
         // HU #10216 — webhooks OT y bitácora API.
         services.AddScoped<CreateOtWebhookHandler>();

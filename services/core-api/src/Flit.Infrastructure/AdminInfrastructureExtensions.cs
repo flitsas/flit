@@ -9,6 +9,7 @@ using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.OtProfile;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
@@ -82,6 +83,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtProfileRepository, OtProfileRepository>();
         services.AddScoped<IOtFeatureFlagRepository, OtFeatureFlagRepository>();
 
+        // HU #10545 — requisitos configurables por OT + provider con defaults seguros.
+        services.AddScoped<IOtRequirementsRepository, OtRequirementsRepository>();
+        services.AddScoped<IOtRequirementsProvider, OtRequirementsProvider>();
+
         // HU #10216 — webhooks OT, bitácora API y dispatch de cambios de estado.
         services.AddScoped<IOtWebhookSubscriptionRepository, OtWebhookSubscriptionRepository>();
         services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
@@ -107,6 +112,9 @@ public static class AdminInfrastructureExtensions
         // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
         services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
+
+        // HU #10548 — exigibilidad de la validación de identidad según la config del OT destino.
+        services.AddScoped<IIdentityValidationPolicy, IdentityValidationPolicy>();
 
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();

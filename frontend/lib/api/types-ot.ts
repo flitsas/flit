@@ -20,6 +20,21 @@ export interface UpdateOtProfileRequest {
   operationMode?: OtOperationMode;
 }
 
+/** Requisitos configurables por OT (HU #10545 / #10546). */
+export interface OtRequirements {
+  transitOfficeId: string;
+  requiresRnmc: boolean;
+  allowPlatePreassign: boolean;
+  identityValidationEnabled: boolean;
+}
+
+/** Los campos omitidos conservan su valor actual (conmutación independiente). */
+export interface UpdateOtRequirementsRequest {
+  requiresRnmc?: boolean;
+  allowPlatePreassign?: boolean;
+  identityValidationEnabled?: boolean;
+}
+
 export interface UpdateOtFeatureFlagRequest {
   isEnabled: boolean;
 }

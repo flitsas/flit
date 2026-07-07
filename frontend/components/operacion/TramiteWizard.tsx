@@ -117,7 +117,8 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
     return !fur.reasons.includes('pendiente_biometria');
   }
   const identidad = steps.find((s) => s.key === 'identidad');
-  return identidad?.status === 'complete';
+  // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
+  return identidad ? identidad.status === 'complete' : true;
 }
 
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
@@ -489,7 +490,7 @@ export function TramiteWizard(props: Props) {
           {wizard && (
             <p className="text-[11px] opacity-60 mt-0.5">
               {modalidad === 'traspaso' ? 'Traspaso' : 'Matrícula inicial'} ·{' '}
-              {wizard.totalSteps} pasos
+              {steps.length} pasos
             </p>
           )}
         </div>

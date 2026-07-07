@@ -60,10 +60,19 @@ export function useWizard(
     setState((s) => ({ ...s, error: null }));
   }, []);
 
+  // HU #10549 — si el OT destino deshabilita la validación de identidad, el wizard oculta el paso
+  // de identidad (matrícula). El backend ya lo reporta `complete` (no bloquea), así que ocultarlo
+  // no afecta el gate; en traspaso la biométrica vive dentro del paso `fur` (nada que ocultar).
+  const rawSteps = state.wizard?.steps ?? [];
+  const steps =
+    state.wizard?.identityValidationEnabled === false
+      ? rawSteps.filter((s) => s.key !== 'identidad')
+      : rawSteps;
+
   return {
     state,
     wizard: state.wizard,
-    steps: state.wizard?.steps ?? [],
+    steps,
     canSubmit: state.wizard?.canSubmit ?? false,
     blockers: state.wizard?.blockers ?? [],
     loading: state.loading,

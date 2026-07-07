@@ -400,6 +400,11 @@ export interface WizardState {
   status: InstanceStatus | string;
   /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
   allowedTransitions: string[];
+  /**
+   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
+   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   */
+  identityValidationEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
