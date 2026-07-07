@@ -54,6 +54,9 @@ public static class DependencyInjection
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
         services.AddScoped<GetChecklistHandler>();
+        // IT-3 (Feature #10585) — prenda: comando base (registrar/leer decisión vigente).
+        services.AddScoped<RegistrarPrendaHandler>();
+        services.AddScoped<GetPrendaVigenteHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
         services.AddScoped<RunPreflightHandler>();

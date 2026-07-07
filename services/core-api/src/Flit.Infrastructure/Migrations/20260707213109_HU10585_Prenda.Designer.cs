@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260707213109_HU10585_Prenda")]
+    partial class HU10585_Prenda
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -146,115 +149,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("ix_impronta_generations_tenant_id");
 
                     b.ToTable("impronta_generations", "admin");
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<string>("DocumentNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("document_number");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("full_name");
-
-                    b.Property<string>("IntegrityHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("integrity_hash");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<DateTimeOffset>("RegisteredAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("registered_at");
-
-                    b.Property<Guid>("TransitOfficeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("transit_office_id");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id")
-                        .HasName("pk_mandate_signers");
-
-                    b.HasIndex("TransitOfficeId", "IsActive")
-                        .HasDatabaseName("ix_mandate_signers_transit_office_id_is_active");
-
-                    b.ToTable("mandate_signers", "admin");
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<Guid>("CompanyTenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("company_tenant_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<Guid>("MandateSignerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("mandate_signer_id");
-
-                    b.Property<Guid>("TransitOfficeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("transit_office_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_mandate_signer_companies");
-
-                    b.HasIndex("MandateSignerId")
-                        .HasDatabaseName("ix_mandate_signer_companies_mandate_signer_id");
-
-                    b.HasIndex("TransitOfficeId", "CompanyTenantId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_mandate_signer_companies_active")
-                        .HasFilter("is_active");
-
-                    b.ToTable("mandate_signer_companies", "admin");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtApiCallLogEntity", b =>
@@ -634,10 +528,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by");
 
-                    b.Property<string>("ClientIp")
-                        .HasColumnType("text")
-                        .HasColumnName("client_ip");
-
                     b.Property<Guid?>("CorrelationId")
                         .HasColumnType("uuid")
                         .HasColumnName("correlation_id");
@@ -647,10 +537,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("entity_name");
-
-                    b.Property<string>("ErrorCode")
-                        .HasColumnType("text")
-                        .HasColumnName("error_code");
 
                     b.Property<string>("FieldName")
                         .IsRequired()
@@ -666,14 +552,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("old_value");
 
-                    b.Property<string>("Operation")
-                        .HasColumnType("text")
-                        .HasColumnName("operation");
-
-                    b.Property<string>("Result")
-                        .HasColumnType("text")
-                        .HasColumnName("result");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -684,10 +562,6 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ChangedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_changed_at");
-
-                    b.HasIndex("TenantId", "Result", "ChangedAt")
-                        .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_result_changed_at");
 
                     b.ToTable("tenant_config_audit_logs", "admin");
                 });
@@ -4152,16 +4026,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasName("pk_data_protection_keys");
 
                     b.ToTable("data_protection_keys", (string)null);
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
-                {
-                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", null)
-                        .WithMany()
-                        .HasForeignKey("MandateSignerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_mandate_signer_companies_mandate_signers_mandate_signer_id");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>

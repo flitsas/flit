@@ -67,6 +67,8 @@ public static class InfrastructureExtensions
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // IT-3 (Feature #10585) — persistencia del agregado de prenda.
+        services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
 

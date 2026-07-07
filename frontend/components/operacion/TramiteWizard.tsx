@@ -29,6 +29,7 @@ import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import { PrendaForm } from './PrendaForm';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -1372,12 +1373,20 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist
-          instanceId={instanceId}
-          onChanged={onRefresh}
-          hideHeader
-          modalidad={modalidad}
-        />
+        <div className="space-y-4">
+          <DocumentChecklist
+            instanceId={instanceId}
+            onChanged={onRefresh}
+            hideHeader
+            modalidad={modalidad}
+          />
+          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
+              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
+              comercial (HU #10598), no en documentos. */}
+          {modalidad !== 'traspaso' && (
+            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
+          )}
+        </div>
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
@@ -1419,14 +1428,24 @@ function StepBody({
       // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
       // lo dispara el footer "Guardar y continuar" (vía save() del ref).
       return (
-        <CommercialForm
-          key={step.key}
-          ref={stepFormRef}
-          instanceId={instanceId}
-          onSaved={onRefresh}
-          hideHeader
-          embeddedInWizard
-        />
+        <div className="space-y-4">
+          <CommercialForm
+            key={step.key}
+            ref={stepFormRef}
+            instanceId={instanceId}
+            onSaved={onRefresh}
+            hideHeader
+            embeddedInWizard
+          />
+          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
+              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+          <PrendaForm
+            instanceId={instanceId}
+            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            onSaved={onRefresh}
+          />
+        </div>
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).

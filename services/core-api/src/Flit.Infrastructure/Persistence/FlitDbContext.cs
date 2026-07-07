@@ -131,6 +131,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — portal público de participantes (Slice 7 Part B)
     public DbSet<ProcedureInstanceParticipant> ProcedureInstanceParticipants => Set<ProcedureInstanceParticipant>();
 
+    // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
+    public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
