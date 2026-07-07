@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil } from "lucide-react";
 import {
   superadminClient,
   RbacModule,
@@ -349,15 +349,6 @@ const ENTITY_TABLES: { type: RoleTargetEntityType; title: string; icon: typeof B
   { type: "TRANSIT_OFFICE", title: "Roles de Organismo de Tránsito", icon: Landmark },
 ];
 
-/** Rol enriquecido en cliente con el estado activo/inactivo (HU #10509 nota de diseño: el
- * catálogo GLOBAL no expone `isActive` en el listado — RoleSummary del backend solo trae
- * id/code/name/description/isSystem/permissionCount/createdAt. Mientras no exista ese campo
- * o un GET por id, se asume `true` al cargar y se corrige localmente tras Activar/Desactivar
- * en la misma sesión. Ver nota en el resumen de la HU. */
-interface RoleRow extends RbacRole {
-  isActive: boolean;
-}
-
 function RolesTab() {
   return (
     <ToastProvider>
@@ -368,16 +359,13 @@ function RolesTab() {
 
 function RolesTabContent() {
   const { show } = useToast();
-  const [companyRoles, setCompanyRoles] = useState<RoleRow[]>([]);
-  const [otRoles, setOtRoles] = useState<RoleRow[]>([]);
+  const [companyRoles, setCompanyRoles] = useState<RbacRole[]>([]);
+  const [otRoles, setOtRoles] = useState<RbacRole[]>([]);
   const [companyStatus, setCompanyStatus] = useState<"loading" | "error" | "ready">("loading");
   const [otStatus, setOtStatus] = useState<"loading" | "error" | "ready">("loading");
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
   const [showCreateRole, setShowCreateRole] = useState(false);
-  const [editTarget, setEditTarget] = useState<{ role: RoleRow; targetEntityType: RoleTargetEntityType } | null>(null);
-  // Caché en sesión de permisos por rol (id → permisos completos), poblada al crear o editar
-  // un rol. Necesaria porque el backend no expone un GET por id (ver nota arriba).
-  const [permissionsCache, setPermissionsCache] = useState<Record<string, RbacRoleDetail["permissions"]>>({});
+  const [editTarget, setEditTarget] = useState<{ role: RbacRole; targetEntityType: RoleTargetEntityType } | null>(null);
 
   const loadRoles = useCallback((type: RoleTargetEntityType) => {
     const setStatus = type === "COMPANY" ? setCompanyStatus : setOtStatus;
@@ -386,10 +374,7 @@ function RolesTabContent() {
     superadminClient
       .listRoles(type)
       .then((data) => {
-        setRoles((prev) => {
-          const prevActive = new Map(prev.map((r) => [r.id, r.isActive]));
-          return data.map((r) => ({ ...r, isActive: prevActive.get(r.id) ?? true }));
-        });
+        setRoles(data);
         setStatus("ready");
       })
       .catch(() => setStatus("error"));
@@ -401,11 +386,7 @@ function RolesTabContent() {
     loadRoles("TRANSIT_OFFICE");
   }, [loadRoles]);
 
-  function cachePermissions(roleId: string, permissions: RbacRoleDetail["permissions"]) {
-    setPermissionsCache((c) => ({ ...c, [roleId]: permissions }));
-  }
-
-  async function handleToggleActive(role: RoleRow, targetEntityType: RoleTargetEntityType) {
+  async function handleToggleActive(role: RbacRole, targetEntityType: RoleTargetEntityType) {
     setBusyIds((b) => ({ ...b, [role.id]: true }));
     try {
       if (role.isActive) {
@@ -424,7 +405,7 @@ function RolesTabContent() {
     }
   }
 
-  async function handleDelete(role: RoleRow, targetEntityType: RoleTargetEntityType) {
+  async function handleDelete(role: RbacRole, targetEntityType: RoleTargetEntityType) {
     if (!confirm(`¿Eliminar el rol «${role.name}»? Esta acción no se puede deshacer.`)) return;
     setBusyIds((b) => ({ ...b, [role.id]: true }));
     try {
@@ -495,7 +476,6 @@ function RolesTabContent() {
               )}
               {status === "ready" &&
                 roles.map((r) => {
-                  const cached = permissionsCache[r.id];
                   return (
                     <div
                       key={r.id}
@@ -507,11 +487,7 @@ function RolesTabContent() {
                         <p className="font-mono text-[10px] opacity-60">{r.code}</p>
                       </div>
                       <div className="opacity-70 truncate">{r.description ?? "—"}</div>
-                      <div
-                        className="text-center font-bold"
-                        style={{ color: "#557EFF" }}
-                        title={cached ? cached.map((p) => p.name).join(", ") || "Sin permisos" : undefined}
-                      >
+                      <div className="text-center font-bold" style={{ color: "#557EFF" }}>
                         {r.permissionCount}
                       </div>
                       <div className="flex justify-center">
@@ -563,9 +539,8 @@ function RolesTabContent() {
       {showCreateRole && (
         <CreateRoleModal
           onClose={() => setShowCreateRole(false)}
-          onCreated={(id, targetEntityType, permissions) => {
+          onCreated={(targetEntityType) => {
             setShowCreateRole(false);
-            cachePermissions(id, permissions);
             loadRoles(targetEntityType);
           }}
         />
@@ -574,10 +549,8 @@ function RolesTabContent() {
       {editTarget && (
         <EditRolePermissionsModal
           role={editTarget.role}
-          cachedPermissions={permissionsCache[editTarget.role.id] ?? null}
           onClose={() => setEditTarget(null)}
-          onSaved={(permissions) => {
-            cachePermissions(editTarget.role.id, permissions);
+          onSaved={() => {
             loadRoles(editTarget.targetEntityType);
             setEditTarget(null);
             show(`Permisos de «${editTarget.role.name}» actualizados.`, "success");
@@ -670,7 +643,7 @@ function CreateRoleModal({
   onClose, onCreated,
 }: {
   onClose: () => void;
-  onCreated: (roleId: string, targetEntityType: RoleTargetEntityType, permissions: RbacRoleDetail["permissions"]) => void;
+  onCreated: (targetEntityType: RoleTargetEntityType) => void;
 }) {
   const { modules, loading: modulesLoading } = useModulesCatalog();
   const [code, setCode] = useState("");
@@ -711,12 +684,10 @@ function CreateRoleModal({
         name: name.trim(),
         description: description.trim() || undefined,
       });
-      let permissions: RbacRoleDetail["permissions"] = [];
       if (selected.size > 0) {
-        const detail = await superadminClient.setRolePermissions(id, [...selected]);
-        permissions = detail.permissions;
+        await superadminClient.setRolePermissions(id, [...selected]);
       }
-      onCreated(id, targetEntityType, permissions);
+      onCreated(targetEntityType);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
       setError(msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe para este tipo de entidad." : "Error al crear el rol.");
@@ -774,22 +745,36 @@ function CreateRoleModal({
 }
 
 function EditRolePermissionsModal({
-  role, cachedPermissions, onClose, onSaved,
+  role, onClose, onSaved,
 }: {
-  role: RoleRow;
-  /** Permisos actuales del rol si se conocen (creado o editado antes en esta sesión). El
-   * backend no expone un GET por id para recuperarlos de otra forma (ver nota de diseño). */
-  cachedPermissions: RbacRoleDetail["permissions"] | null;
+  role: RbacRole;
   onClose: () => void;
   onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
 }) {
   const { modules, loading: modulesLoading } = useModulesCatalog();
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set((cachedPermissions ?? []).map((p) => p.id)),
-  );
-  const [acknowledged, setAcknowledged] = useState(cachedPermissions !== null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    superadminClient
+      .getRole(role.id)
+      .then((detail) => {
+        if (cancelled) return;
+        setSelected(new Set(detail.permissions.map((p) => p.id)));
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudieron recuperar los permisos actuales de este rol.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCurrent(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [role.id]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -826,41 +811,21 @@ function EditRolePermissionsModal({
   return (
     <Modal open onClose={onClose} busy={busy} size="md" title={`Editar permisos — ${role.name}`} titleClassName="text-lg font-bold text-[#162744] dark:text-white">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {cachedPermissions === null && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 text-xs px-3 py-2.5 rounded-xl font-medium"
-            style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}
-          >
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-            <span>
-              No pudimos recuperar los permisos actuales de este rol. Selecciona <strong>todos</strong> los
-              permisos que debe tener antes de guardar — al confirmar se reemplaza la lista completa.
-            </span>
-          </div>
-        )}
-        <ModulePermissionsChecklist
-          modules={modules}
-          modulesLoading={modulesLoading}
-          selected={selected}
-          onToggle={toggle}
-          onToggleModule={toggleModule}
-        />
-        {cachedPermissions === null && (
-          <label className="flex items-start gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(e) => setAcknowledged(e.target.checked)}
-              className="h-3.5 w-3.5 mt-0.5 accent-[#557EFF]"
-            />
-            <span>Confirmo que seleccioné todos los permisos que este rol debe tener.</span>
-          </label>
+        {loadingCurrent ? (
+          <div className="py-10 text-center text-sm opacity-60">Cargando permisos actuales…</div>
+        ) : (
+          <ModulePermissionsChecklist
+            modules={modules}
+            modulesLoading={modulesLoading}
+            selected={selected}
+            onToggle={toggle}
+            onToggleModule={toggleModule}
+          />
         )}
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
         <button
           type="submit"
-          disabled={busy || !acknowledged}
+          disabled={busy || loadingCurrent}
           className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >

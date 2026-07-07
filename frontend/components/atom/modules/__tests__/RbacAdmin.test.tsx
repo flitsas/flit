@@ -9,20 +9,24 @@ import { RbacAdmin } from "../RbacAdmin";
 
 const companyRole = {
   id: "role-company-1",
+  targetEntityType: "COMPANY",
   code: "SUPERVISOR",
   name: "Supervisor de trámites",
   description: "Rol de compañía",
   isSystem: false,
+  isActive: true,
   permissionCount: 1,
   createdAt: "2026-01-01T00:00:00Z",
 };
 
 const otRole = {
   id: "role-ot-1",
+  targetEntityType: "TRANSIT_OFFICE",
   code: "OT_SUPERVISOR",
   name: "Supervisor OT",
   description: "Rol de organismo",
   isSystem: false,
+  isActive: true,
   permissionCount: 0,
   createdAt: "2026-01-01T00:00:00Z",
 };

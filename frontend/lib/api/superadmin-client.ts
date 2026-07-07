@@ -33,19 +33,21 @@ export interface RbacPermission {
   isActive: boolean;
 }
 
+/** Tipo de entidad a la que aplica un rol del catálogo global. */
+export type RoleTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
+
 /** Fila del catálogo GLOBAL de roles (HU #10505 / #10509) — GET /superadmin/roles?targetEntityType=. */
 export interface RbacRole {
   id: string;
+  targetEntityType: RoleTargetEntityType;
   code: string;
   name: string;
   description: string | null;
   isSystem: boolean;
+  isActive: boolean;
   permissionCount: number;
   createdAt: string;
 }
-
-/** Tipo de entidad a la que aplica un rol del catálogo global. */
-export type RoleTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
 
 /** Detalle completo de un rol (respuesta de PUT .../permissions) — incluye permisos otorgados. */
 export interface RbacRoleDetail {
@@ -211,6 +213,8 @@ export const superadminClient = {
   // Roles RBAC — catálogo GLOBAL por tipo de entidad (HU #10505 gobernanza HU #10508/#10509).
   listRoles: (targetEntityType: RoleTargetEntityType) =>
     request<RbacRole[]>(`/api/v1/superadmin/roles?targetEntityType=${targetEntityType}`),
+  getRole: (id: string) =>
+    request<RbacRoleDetail>(`/api/v1/superadmin/roles/${id}`),
   createRole: (body: { targetEntityType: RoleTargetEntityType; code: string; name: string; description?: string }) =>
     request<{ id: string }>('/api/v1/superadmin/roles', { method: 'POST', body: JSON.stringify(body) }),
   deleteRole: (id: string) =>
