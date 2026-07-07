@@ -83,10 +83,22 @@ leyenda "ya tiene mandatario: {nombre}" (mismo patrón de `OTMatrix`, Oleada 1).
 (activo = el mandatario padre está activo). Al inactivar el mandatario, sus filas dejan de
 contar para el índice → sus compañías quedan libres para reasignar.
 
+**Aislamiento (concreción):** estas tablas **no usan RLS**; el aislamiento es a nivel de
+aplicación por `transit_office_id` (patrón `catalogs`), con lectura cross-tenant vía
+`SET LOCAL row_security = off` y escritura/auditoría atribuida al tenant del OT (resuelto desde
+`transit_office_profiles`). Coherente con el reader de estado operativo de la Oleada 1.
+**Condición de seguridad:** toda query filtra por `transit_office_id` y el acceso está gated por
+`OtModulePolicy` (SuperAdmin/ot_admin). El `document_number` (PII) no se audita ni se loguea.
+
 ### 3. Comportamientos
 
 - **RF22–RF27 (CRUD + consulta):** crear, editar (regenera hash), inactivar (soft-delete que
   libera compañías), listar/consultar por OT y por compañía.
+- **Inactivación visible + reactivación (concreción de implementación):** al inactivar, el
+  mandatario **no desaparece**; queda visible con estado "Inactivo" y sus compañías liberadas
+  ("—"). Se puede **reactivar** (`POST .../{id}/reactivate`, auditado `is_active: false→true`)
+  **sin restaurar** las compañías (pudieron ser tomadas por otro mandatario); se reasignan con
+  "Editar". Los activos se listan antes que los inactivos.
 - **RF28 (auditoría):** todo cambio (alta, edición, inactivación, reasignación de compañías) se
   registra en `admin.tenant_config_audit_logs` (patrón Oleada 1) en la misma transacción.
 - **RF33 (regla de uso):** antes de usar un mandatario para una compañía, validar que la
