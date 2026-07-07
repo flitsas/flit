@@ -47,6 +47,7 @@ using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.ProcessOtWebhookCallback;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
@@ -166,6 +167,8 @@ public static class DependencyInjection
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();
+        // HU #10540 (R09) — diagnóstico de bandeja OT (entregados con/sin grant).
+        services.AddScoped<GetOtBandejaHealthHandler>();
 
         // HU #10221 — motor de reglas AND/OR.
         services.AddScoped<CreateOtRuleHandler>();

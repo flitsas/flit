@@ -115,6 +115,49 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 cancellationToken),
             cancellationToken);
 
+    public Task<OtBandejaHealth?> GetDeliveryHealthAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId =>
+            {
+                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
+                return await ExecuteCrossTenantReadAsync(
+                    async () =>
+                    {
+                        // Todos los 'entregado' dirigidos a este organismo, con o sin grant vigente:
+                        // los "sin grant" son precisamente los que la bandeja no muestra (R09).
+                        var delivered = _context.ProcedureInstances
+                            .AsNoTracking()
+                            .Where(p => p.DeletedAt == null
+                                && p.Status == TramiteEstado.Entregado
+                                && p.TransitOfficeId == transitOfficeId);
+
+                        var deliveredTotal = await delivered
+                            .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        var deliveredWithGrant = grantedClientTenantIds.Count == 0
+                            ? 0
+                            : await delivered
+                                .Where(p => grantedClientTenantIds.Contains(p.TenantId))
+                                .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        return (OtBandejaHealth?)new OtBandejaHealth(
+                            transitOfficeId,
+                            deliveredTotal,
+                            deliveredWithGrant,
+                            deliveredTotal - deliveredWithGrant);
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+
     public Task<OtClientProcedure?> ApproveAsync(
         Guid otTenantId,
         Guid procedureInstanceId,

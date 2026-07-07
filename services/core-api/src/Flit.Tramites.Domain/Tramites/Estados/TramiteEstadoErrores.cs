@@ -30,4 +30,16 @@ public static class TramiteEstadoErrores
 
     /// <summary>La instancia no existe o no pertenece al tenant (404).</summary>
     public const string NoEncontrado = "not_found";
+
+    /// <summary>Gate de entrega — el tipo de trámite no está publicado (422).</summary>
+    public const string TipoNoPublicado = "not_published";
+
+    /// <summary>
+    /// Gate de entrega (R09) — el organismo de tránsito elegido no está habilitado para la
+    /// empresa: sin ese grant el trámite entregado no llega a la bandeja del OT (422).
+    /// </summary>
+    public const string OrganismoNoHabilitado = "organismo_no_habilitado";
+
+    /// <summary>Gate de entrega — una regla OT activa bloquea la entrega (422).</summary>
+    public const string ReglaOtBloquea = "ot_rule_blocked";
 }

@@ -130,11 +130,12 @@ public sealed class TramiteLifecycleService(
     {
         var procedureType = await typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).ConfigureAwait(false);
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
-            return ("not_published", "El tipo de trámite no está publicado.");
+            return (TramiteEstadoErrores.TipoNoPublicado, "El tipo de trámite no está publicado.");
 
-        // #2 — el OT elegido en el FUR (transit_office_id en field_values) debe estar HABILITADO
-        // para la empresa. Se promueve a la columna TransitOfficeId para que el motor de reglas OT
-        // y los listados operen sobre el id real.
+        // #2 (R09) — el OT elegido en el FUR (transit_office_id en field_values) debe estar
+        // HABILITADO para la empresa. Se promueve a la columna TransitOfficeId para que el motor de
+        // reglas OT y la bandeja del OT operen sobre el id real; sin el grant el trámite entregado
+        // NO aparecería en ninguna bandeja (el diagnóstico operativo lo da el endpoint /health).
         var selectedOfficeId = TransitOfficeIdFromFieldValues(instance);
         if (selectedOfficeId is { } officeId)
         {
@@ -142,8 +143,10 @@ public sealed class TramiteLifecycleService(
                 .IsEnabledForTenantAsync(instance.TenantId, officeId, ct)
                 .ConfigureAwait(false);
             if (!enabled)
-                return ("organismo_no_habilitado",
-                    "El organismo de tránsito seleccionado no está habilitado para la compañía.");
+                return (TramiteEstadoErrores.OrganismoNoHabilitado,
+                    $"El organismo de tránsito seleccionado ({officeId}) no está habilitado para la " +
+                    "compañía. Solicite el grant OT↔empresa: sin él, el trámite entregado no llegaría " +
+                    "a la bandeja del organismo.");
 
             // HU #10518 — con grant, pero el OT debe estar OPERATIVO en la plataforma:
             // catálogo activo + tenant OT existente y activo. Desactivar el OT (is_active=false)
@@ -165,7 +168,7 @@ public sealed class TramiteLifecycleService(
             ct).ConfigureAwait(false);
 
         if (ruleResult.IsBlocked)
-            return (ruleResult.ErrorCode ?? "ot_rule_blocked",
+            return (ruleResult.ErrorCode ?? TramiteEstadoErrores.ReglaOtBloquea,
                 "El trámite está bloqueado por una regla OT activa.");
 
         return (null, null);

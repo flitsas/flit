@@ -8,6 +8,7 @@ import type {
   CreateOtRuleRequest,
   OtApiLogsPagedResult,
   OtApiLogsParams,
+  OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
   OtClientProceduresParams,
@@ -65,6 +66,17 @@ export function fetchOtClientProcedures(
       ...params,
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
     },
+    signal,
+  });
+}
+
+/** Diagnóstico de la bandeja OT (HU #10541 / R09): entregados con/sin grant vigente. */
+export function fetchOtBandejaHealth(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaHealth> {
+  return apiFetch<OtBandejaHealth>(`${base}/client-procedures/health`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }
