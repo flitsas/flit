@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260707152005_HU10545_OtRequirements")]
+    partial class HU10545_OtRequirements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1017,72 +1020,6 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("users", "identity");
                 });
 
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTimeOffset?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<Guid>("InvitationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("invitation_id");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
-
-                    b.Property<long>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(0L)
-                        .HasColumnName("row_version");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id")
-                        .HasName("pk_invitation_roles");
-
-                    b.HasIndex("InvitationId")
-                        .HasDatabaseName("ix_invitation_roles_invitation_id");
-
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("ix_invitation_roles_role_id");
-
-                    b.HasIndex("TenantId", "InvitationId", "RoleId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_invitation_roles_tenant_id_invitation_id_role_id");
-
-                    b.ToTable("invitation_roles", "security");
-                });
-
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1264,12 +1201,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
                     b.Property<bool>("IsSystem")
                         .HasColumnType("boolean")
                         .HasColumnName("is_system");
@@ -1285,13 +1216,9 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("row_version");
 
-                    b.Property<string>("TargetEntityType")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("COMPANY")
-                        .HasColumnName("target_entity_type");
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1329,6 +1256,10 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.HasKey("Id")
                         .HasName("pk_role_permissions");
@@ -3925,27 +3856,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasName("pk_data_protection_keys");
 
                     b.ToTable("data_protection_keys", (string)null);
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
-                {
-                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.UserInvitation", "Invitation")
-                        .WithMany()
-                        .HasForeignKey("InvitationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_invitation_roles_user_invitations_invitation_id");
-
-                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.Role", "Role")
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_invitation_roles_roles_role_id");
-
-                    b.Navigation("Invitation");
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.PasswordResetToken", b =>

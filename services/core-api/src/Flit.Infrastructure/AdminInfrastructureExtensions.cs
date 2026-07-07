@@ -9,6 +9,7 @@ using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.OtProfile;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
@@ -81,6 +82,10 @@ public static class AdminInfrastructureExtensions
         // HU #10215 — perfil OT y feature flags.
         services.AddScoped<IOtProfileRepository, OtProfileRepository>();
         services.AddScoped<IOtFeatureFlagRepository, OtFeatureFlagRepository>();
+
+        // HU #10545 — requisitos configurables por OT + provider con defaults seguros.
+        services.AddScoped<IOtRequirementsRepository, OtRequirementsRepository>();
+        services.AddScoped<IOtRequirementsProvider, OtRequirementsProvider>();
 
         // HU #10216 — webhooks OT, bitácora API y dispatch de cambios de estado.
         services.AddScoped<IOtWebhookSubscriptionRepository, OtWebhookSubscriptionRepository>();
