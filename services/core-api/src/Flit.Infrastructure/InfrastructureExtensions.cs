@@ -92,6 +92,12 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
 
+        services.Configure<Telemetry.AnalyticsTelemetryOptions>(configuration.GetSection(Telemetry.AnalyticsTelemetryOptions.SectionName)); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.ChannelUsageEventQueue>(); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.IUsageEventQueue>(sp => sp.GetRequiredService<Telemetry.ChannelUsageEventQueue>()); // Reportes2 HU-A
+        services.AddHostedService<Telemetry.UsageEventWriterProcessor>(); // Reportes2 HU-A
+        services.AddScoped<IUsageMetricsReadRepository, UsageMetricsReadRepository>(); // Reportes2 HU-A
+
         AddAttachmentStorage(services, configuration);
 
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.

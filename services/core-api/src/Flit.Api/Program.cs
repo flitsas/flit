@@ -159,6 +159,8 @@ app.UseAuthorization();
 // (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
 app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 
+app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
+
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
@@ -207,6 +209,7 @@ app.MapTramitesStatusHistoryEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
+app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 app.Run();
 

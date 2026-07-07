@@ -13,6 +13,7 @@ import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { buildValidModules, parseModule } from "@/lib/nav/modules";
+import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 
 function HomeContent() {
   const router = useRouter();
@@ -36,6 +37,12 @@ function HomeContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
+
+  // Reportes2 HU-A — telemetría module_view: una vez por sesión y módulo al abrir
+  // un módulo del dock (fire-and-forget; requiere sesión para enviarse).
+  useEffect(() => {
+    if (authed) trackModuleView(module);
+  }, [module, authed]);
 
   // Track B — Trámites vive en /tramites (ruta propia): el dock y el CTA del
   // dashboard navegan allá. El resto de módulos viven en esta SPA y sincronizan

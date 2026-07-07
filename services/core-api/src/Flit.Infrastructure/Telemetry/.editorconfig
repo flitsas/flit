@@ -1,0 +1,5 @@
+# Reportes 2.0 (HU-A) — el contrato (docs/contratos-reportes-v2.md) fija el nombre de la
+# interfaz `IUsageEventQueue` (cola en memoria de telemetría), que CA1711 rechazaría por el
+# sufijo "Queue" (el tipo envuelve un System.Threading.Channels, no hereda de Queue).
+[*.cs]
+dotnet_diagnostic.CA1711.severity = none
