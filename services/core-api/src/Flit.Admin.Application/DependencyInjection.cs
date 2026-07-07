@@ -13,6 +13,7 @@ using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -110,6 +111,8 @@ public static class DependencyInjection
         // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.
         services.AddScoped<CreateTransitOfficeHandler>();
         services.AddScoped<ListTransitOfficeTenantsHandler>();
+        // HU #10518 — cambio de estado del tenant OT con auditoría atómica.
+        services.AddScoped<SetTransitOfficeTenantStatusHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 
