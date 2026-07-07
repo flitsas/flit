@@ -3,6 +3,8 @@ using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
+using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -50,14 +52,15 @@ public static class AdminTransitOfficeTenantsEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // PUT /api/v1/admin/transit-office-tenants/{tenantId}/status — activa/desactiva el tenant OT.
-        // Reutiliza directamente SetCompanyStatusHandler: es genérico sobre identity.tenants y no
-        // le importa el tenant_type.
+        // Usa SetTransitOfficeTenantStatusHandler (HU #10518): además de cambiar
+        // identity.tenants.is_active, deja auditoría en admin.tenant_config_audit_logs.
         group.MapPut("/{tenantId:guid}/status", SetStatusAsync)
             .WithName("AdminTransitOfficeTenantSetStatus")
             .WithSummary("Activa o desactiva un tenant OT")
-            .WithDescription("Cambia el estado activo/inactivo del tenant OT (identity.tenants.is_active). "
-                + "Idempotente; 404 si el tenant no existe. Requiere SuperAdmin.")
-            .Produces<Flit.Admin.Domain.Companies.CompanyListItem>(StatusCodes.Status200OK)
+            .WithDescription("Cambia el estado activo/inactivo del tenant OT (identity.tenants.is_active) y "
+                + "registra la auditoría de gobernanza (admin.tenant_config_audit_logs). Idempotente; "
+                + "404 si el tenant no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -113,12 +116,12 @@ public static class AdminTransitOfficeTenantsEndpoints
         Guid tenantId,
         SetCompanyStatusRequest request,
         HttpContext httpContext,
-        [FromServices] SetCompanyStatusHandler handler,
+        [FromServices] SetTransitOfficeTenantStatusHandler handler,
         CancellationToken cancellationToken)
     {
         var result = await handler
             .HandleAsync(
-                new SetCompanyStatusCommand
+                new SetTransitOfficeTenantStatusCommand
                 {
                     TenantId = tenantId,
                     EstadoActivo = request.EstadoActivo,
@@ -129,7 +132,8 @@ public static class AdminTransitOfficeTenantsEndpoints
 
         return result.Outcome switch
         {
-            SetCompanyStatusOutcome.Updated => Results.Ok(result.Company),
+            SetTransitOfficeTenantStatusOutcome.Updated =>
+                Results.Ok(new { id = result.TenantId, estadoActivo = result.EstadoActivo }),
             _ => Results.NotFound(new { error = $"No existe el tenant {tenantId}." }),
         };
     }

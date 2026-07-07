@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,9 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoint del catálogo estático de organismos de tránsito (HU #10192, RF13, AC1).
-/// Exige rol SuperAdmin u ot_admin (módulo OT — HU #10218 / #10236). El catálogo es
-/// estático en memoria — no consulta BD.
+/// Endpoints del catálogo de organismos de tránsito (HU #10192, RF13, AC1). La búsqueda
+/// exige rol SuperAdmin u ot_admin (módulo OT — HU #10218 / #10236); el estado operativo
+/// (RF01) es exclusivo de SuperAdmin. El catálogo se lee desde
+/// <c>catalogs.transit_offices</c> (BD).
 /// </summary>
 public static class AdminTransitOfficesEndpoints
 {
@@ -24,8 +26,22 @@ public static class AdminTransitOfficesEndpoints
         group.MapGet("", SearchTransitOfficesAsync)
             .WithName("AdminTransitOfficesSearch")
             .WithSummary("Busca en el catálogo de Organismos de Tránsito")
-            .WithDescription("Catálogo estático (en memoria) de Organismos de Tránsito con búsqueda opcional "
-                + "por nombre/código vía el parámetro search. Requiere SuperAdmin u ot_admin.")
+            .WithDescription("Catálogo de Organismos de Tránsito (catalogs.transit_offices) con búsqueda "
+                + "opcional por nombre/código vía el parámetro search. Requiere SuperAdmin u ot_admin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /api/v1/admin/transit-offices/operational-status — estado operativo por OT (RF01).
+        // Exclusivo de SuperAdmin: añade la policy SuperAdmin sobre la del grupo (OtModule), de
+        // modo que ot_admin —que sí ve el catálogo— queda fuera de la gestión del ciclo de vida.
+        group.MapGet("/operational-status", ListOperationalStatusAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminTransitOfficesOperationalStatus")
+            .WithSummary("Estado operativo de los Organismos de Tránsito")
+            .WithDescription("Por cada oficina del catálogo devuelve si tiene tenant OT dado de alta y, "
+                + "si lo tiene, su estado activo/inactivo y modo de operación (join catalogs.transit_offices "
+                + "+ admin.transit_office_profiles + identity.tenants). Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -40,6 +56,17 @@ public static class AdminTransitOfficesEndpoints
     {
         var result = await handler
             .HandleAsync(new SearchTransitOfficesQuery { Search = search }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> ListOperationalStatusAsync(
+        [FromServices] ListTransitOfficesOperationalStatusHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new ListTransitOfficesOperationalStatusQuery(), cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(result);
