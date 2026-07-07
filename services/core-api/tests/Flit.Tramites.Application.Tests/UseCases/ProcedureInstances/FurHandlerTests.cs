@@ -20,12 +20,20 @@ public sealed class FurHandlerTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
     private readonly FakeCertClient _certClient = new();
+    private readonly IRuesCertificateGenerator _ruesGenerator = Substitute.For<IRuesCertificateGenerator>();
     private readonly FakeStorage _storage = new();
     private readonly GenerarFurHandler _handler;
 
     public FurHandlerTests()
     {
-        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _storage, NullLogger<GenerarFurHandler>.Instance);
+        _ruesGenerator.GenerateRuesCertificate(Arg.Any<RuesCertificateData>())
+            .Returns(ci =>
+            {
+                var d = ci.Arg<RuesCertificateData>();
+                return new GeneratedDocument("certificado_rues", $"certificado_rues_{d.Nit}.pdf",
+                    "application/pdf", Encoding.UTF8.GetBytes($"RUES {d.RazonSocial} {d.Nit} {d.Estado}"));
+            });
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _storage, NullLogger<GenerarFurHandler>.Instance);
     }
 
     /// <summary>
@@ -167,6 +175,57 @@ public sealed class FurHandlerTests
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    private static ProcedureInstanceActor ActorJuridico(ProcedureInstance instance) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "NIT",
+            DocumentNumber = "900123456",
+            FullName = "EMPRESA DEMO S.A.S.",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    [Fact]
+    public async Task Generar_ConActorPersonaJuridica_GeneraCertificadoRuesSystem()
+    {
+        // HU #10589 AC: un actor persona jurídica (NIT) genera el certificado RUES (Source=system)
+        // que se incorpora al consolidado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
+        instance.Attachments.Should().Contain(a => a.Tipo == "certificado_rues" && a.Source == "system");
+    }
+
+    [Fact]
+    public async Task Generar_SinActorPersonaJuridica_NoGeneraCertificadoRues()
+    {
+        // Sin actor NIT no se emite el certificado RUES.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rues");
     }
 
     [Fact]
