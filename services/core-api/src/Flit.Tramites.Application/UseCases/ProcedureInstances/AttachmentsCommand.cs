@@ -44,6 +44,8 @@ public static class AttachmentRules
         // Documentos del checklist de traspaso (antes sin DocTipo → el front subía con el `key`,
         // que no estaba en este set → 400 "tipo inválido").
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
+        // HU #10604 (R19) — paz y salvo RNMC que desbloquea el envío al OT tras "Imponer Medida".
+        "paz_salvo_rnmc",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

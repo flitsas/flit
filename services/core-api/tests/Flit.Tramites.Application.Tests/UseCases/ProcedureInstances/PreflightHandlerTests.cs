@@ -444,6 +444,40 @@ public sealed class PreflightHandlerTests
     }
 
     [Fact]
+    public async Task Post_RnmcMedidaCorrectiva_PersisteSenalPendiente()
+    {
+        // HU #10604: una medida correctiva (rnmc fail) deja la señal rnmc_medida_pendiente=true.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWithRnmc(true,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("red", RnmcCheck("fail")))));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().Contain(f => f.FieldKey == "rnmc_medida_pendiente" && f.ValueText == "true");
+    }
+
+    [Fact]
+    public async Task Post_RnmcSinMedida_NoDejaSenalPendienteTrue()
+    {
+        // Sin medida (rnmc ok) no queda la señal en true.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWithRnmc(true,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "rnmc_medida_pendiente" && f.ValueText == "true");
+    }
+
+    [Fact]
     public async Task Post_Traspaso_VehiculoContextIncludesOwnerDocumentFromFieldValues()
     {
         var ct = TestContext.Current.CancellationToken;

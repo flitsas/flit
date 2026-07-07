@@ -60,6 +60,7 @@ public sealed class RunPreflightHandler(
     private const string SystemSource = "system";
     private const string FieldVinConflictoTraspaso = "vin_conflicto_traspaso";
     private const string CheckVinMatricula = "vin_matricula";
+    private const string FieldRnmcMedidaPendiente = "rnmc_medida_pendiente";
 
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -124,6 +125,16 @@ public sealed class RunPreflightHandler(
                 await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
             }
         }
+
+        // HU #10604 (R19) — señal server-driven de medida correctiva RNMC pendiente ("Imponer Medida")
+        // para el gate de envío al OT (EvaluarEntregaAsync). Se pone en true si algún check RNMC quedó
+        // en "fail" (medidas correctivas); si no, se baja a false (sin crear filas innecesarias).
+        var hasRnmcMedida = checks.Any(c =>
+            c.Key.StartsWith("rnmc_", StringComparison.Ordinal) && c.Status == "fail");
+        if (hasRnmcMedida)
+            SetSignalIfChanged(instance, tenantId, FieldRnmcMedidaPendiente, "true", createIfMissing: true);
+        else
+            SetSignalIfChanged(instance, tenantId, FieldRnmcMedidaPendiente, "false", createIfMissing: false);
 
         // Una sola consulta a Verifik alimenta AMBAS secciones: el proveedor del vehículo ya
         // devolvió los atributos del RUNT (marca/línea/color/…). Los persistimos en field_values
