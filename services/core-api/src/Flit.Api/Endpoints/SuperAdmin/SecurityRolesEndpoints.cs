@@ -56,6 +56,10 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.Conflict(new { code = "ROLE_CODE_DUPLICATE" });
             }
+            catch (InvalidTargetEntityTypeException)
+            {
+                return Results.BadRequest(new { code = "INVALID_TARGET_ENTITY_TYPE" });
+            }
         }).WithName("CreateRole");
 
         // AC7 — PUT /roles/{id}/permissions → reemplaza todos los permisos del rol, retorna 200
@@ -110,6 +114,10 @@ internal static class SecurityRolesEndpoints
             catch (RoleNotFoundException)
             {
                 return Results.NotFound();
+            }
+            catch (RoleSystemLockedException)
+            {
+                return Results.Conflict(new { code = "ROLE_SYSTEM_LOCKED" });
             }
         }).WithName("DeactivateRole");
 

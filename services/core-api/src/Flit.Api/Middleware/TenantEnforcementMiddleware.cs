@@ -49,10 +49,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
             return;
         }
 
-        var role = user.FindFirstValue(AdminAuthorization.RoleClaimType)
-            ?? user.FindFirstValue("role_code")
-            ?? string.Empty;
-        var isSuperAdmin = string.Equals(role, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase);
+        // Multi-rol (HU #10506): el JWT emite un claim POR CADA rol activo, en orden no
+        // determinístico — FindFirstValue solo evalúa el primero. Se evalúan TODOS los claims
+        // de los tipos relevantes (fix post-review #10504).
+        var roleValues = user.Claims
+            .Where(c => c.Type == AdminAuthorization.RoleClaimType || c.Type == "role_code")
+            .Select(c => c.Value);
+        var isSuperAdmin = roleValues.Any(r => string.Equals(r, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
         if (isSuperAdmin)
         {

@@ -11,6 +11,12 @@ public sealed class SetRoleActiveHandler(IRoleRepository repository)
         if (role is null)
             throw new RoleNotFoundException();
 
+        // Fix post-review #10504: solo se bloquea la DESACTIVACIÓN de roles de sistema
+        // (SuperAdmin/AdminCompany/ot_admin) — desactivarlos dejaría al tenant sin admin
+        // funcional. Activar (isActive=true) siempre es inofensivo y sigue permitido.
+        if (!isActive && role.IsSystem)
+            throw new RoleSystemLockedException();
+
         await repository.SetActiveAsync(roleId, isActive, ct);
     }
 }
