@@ -17,14 +17,14 @@ const TABS: { id: TabId; label: string; icon: typeof FileStack; description: str
     label: "Documentos",
     icon: FileStack,
     description:
-      "Define qué documentos exige este trámite y en qué orden por defecto, marcando cuáles son obligatorios.",
+      "Define qué documentos exige este trámite y cuáles son obligatorios. El orden lo define exclusivamente la pestaña «Overrides OT».",
   },
   {
     id: "ot",
     label: "Overrides OT",
     icon: Building2,
     description:
-      "Ajusta el orden de los documentos para un organismo de tránsito específico, sin alterar el orden por defecto.",
+      "Selecciona el organismo de tránsito y define el orden de los documentos: es el único nivel que ordena (RF22).",
   },
   {
     id: "matriz",
