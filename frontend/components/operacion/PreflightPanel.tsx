@@ -60,6 +60,17 @@ export function sourceLabel(source: string | null | undefined): string {
   return SOURCE_LABEL[source] ?? source.toUpperCase();
 }
 
+/**
+ * RNMC (HU #10602/#10603) corre por actor persona natural: las claves quedan
+ * `rnmc_comprador_*` / `rnmc_vendedor_*`. Devuelve el sufijo de rol para
+ * distinguir ambos checks en el panel (el label del proveedor es idéntico).
+ */
+export function checkRoleSuffix(key: string): string {
+  if (key.startsWith('rnmc_comprador')) return ' (comprador)';
+  if (key.startsWith('rnmc_vendedor')) return ' (vendedor)';
+  return '';
+}
+
 export function PreflightPanel({
   snapshot,
   loading,
@@ -147,7 +158,10 @@ export function PreflightPanel({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-semibold">{c.label}</span>
+                    <span className="text-xs font-semibold">
+                      {c.label}
+                      {checkRoleSuffix(c.key)}
+                    </span>
                     <span
                       className="text-[10px] uppercase font-bold"
                       style={{ color: s.text }}
