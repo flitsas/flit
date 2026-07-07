@@ -4,23 +4,19 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
-using Flit.Modules.Security.Application.Roles;
 using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
-using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using IRoleRepository = Flit.Modules.Security.Domain.Roles.IRoleRepository;
 using AuthRoleNotFoundException = Flit.Modules.Security.Domain.Auth.RoleNotFoundException;
-using RolesRoleNotFoundException = Flit.Modules.Security.Domain.Roles.RoleNotFoundException;
 
 namespace Flit.Api.Endpoints;
 
 public static class SecurityEndpoints
 {
-    private static readonly string[] ReservedRoleCodes = ["SuperAdmin", "AdminCompany"];
     public static IEndpointRouteBuilder MapSecurityEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/security").RequireAuthorization();
@@ -43,11 +39,14 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(subClaim, out var invitedBy))
                 return Results.Unauthorized();
 
-            var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
             Guid targetTenantId;
-            Guid? roleId;
+            IReadOnlyList<Guid> roleIds;
 
             if (isSuperAdmin)
             {
@@ -74,9 +73,12 @@ public static class SecurityEndpoints
                     ? AdminAuthorization.OtAdminRole
                     : AdminAuthorization.AdminCompanyRole;
 
+                // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id),
+                // así que el rol de sistema se resuelve por Code únicamente (una sola fila por
+                // (code, target_entity_type) en todo el sistema).
                 var adminRole = await db.Roles
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == targetRoleCode, cancellationToken);
+                    .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
 
                 if (adminRole is null)
                     return Results.Json(
@@ -87,23 +89,33 @@ public static class SecurityEndpoints
                                 : "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
                         statusCode: StatusCodes.Status409Conflict);
 
-                roleId = adminRole.Id;
+                // SuperAdmin siempre fuerza un único rol de sistema según el tipo de tenant
+                // destino — roleIds del body se ignora en esta rama (comportamiento sin cambios).
+                roleIds = [adminRole.Id];
             }
             else
             {
                 targetTenantId = callerTenantId;
-                roleId = Guid.TryParse(request.RoleId, out var parsed) ? parsed : null;
+                // HU #10506 AC4/AC5: roleIds reemplaza el RoleId? nullable — seleccionar al
+                // menos un rol es OBLIGATORIO (validado por el handler → NoRolesSelectedException).
+                roleIds = request.RoleIds ?? [];
             }
 
             try
             {
                 var result = await handler.HandleAsync(
-                    new CreateInvitationCommand(targetTenantId, request.Email, request.FullName ?? string.Empty, roleId, invitedBy),
+                    new CreateInvitationCommand(targetTenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy),
                     cancellationToken);
 
                 return Results.Created(
                     $"/api/v1/security/invitations/{result.InvitationId}",
                     new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
+            }
+            catch (NoRolesSelectedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("NO_ROLES_SELECTED", "Debes seleccionar al menos un rol para invitar al usuario."),
+                    statusCode: StatusCodes.Status400BadRequest);
             }
             catch (AuthRoleNotFoundException)
             {
@@ -131,8 +143,11 @@ public static class SecurityEndpoints
             ListAccessibleModulesHandler handler,
             CancellationToken ct) =>
         {
-            var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
             Guid? tenantId = Guid.TryParse(caller.FindFirstValue("tenant_id"), out var tid) ? tid : null;
 
@@ -140,121 +155,44 @@ public static class SecurityEndpoints
             return Results.Ok(modules);
         }).WithName("ListAccessibleModules");
 
-        // AC5 — GET /roles — lista roles activos del tenant del caller (HU #10164)
+        // AC5 — GET /roles — lista roles del catálogo global aplicable al tenant del caller
+        // (HU #10164 original; HU #10505 lo migra a filtrar por target_entity_type en vez de
+        // tenant_id — security.roles ya no tiene esa columna). Se resuelve COMPANY | TRANSIT_OFFICE
+        // igual que en /invitations: por presencia de TransitOfficeProfile en el tenant del caller.
         group.MapGet("/roles", async (
             ClaimsPrincipal caller,
             IRoleRepository roleRepo,
+            FlitDbContext db,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
             if (!Guid.TryParse(tenantClaim, out var tenantId))
                 return Results.Unauthorized();
 
-            var roles = await roleRepo.ListByTenantAsync(tenantId, cancellationToken);
+            var isOtTenant = await db.TransitOfficeProfiles
+                .AsNoTracking()
+                .AnyAsync(p => p.TenantId == tenantId, cancellationToken);
+            var targetEntityType = isOtTenant ? "TRANSIT_OFFICE" : "COMPANY";
+
+            // Fix 1 (post-review #10504): este endpoint es tenant-facing (checklist de invitación
+            // de AdminCompany/OtAdmin) y NO debe listar roles inactivos ni el rol de sistema
+            // SuperAdmin. NO tocar ListByTargetEntityTypeAsync ni ListRolesHandler — ese mismo
+            // método lo usa la pantalla RBAC de SuperAdmin, que sí necesita ver TODOS los roles.
+            var roles = (await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken))
+                .Where(r => r.IsActive && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             return Results.Ok(roles);
         });
 
-        // POST /security/roles — AdminCompany crea rol en su tenant (Fase 2)
-        group.MapPost("/roles", async (
-            [FromBody] CreateRoleRequest request,
-            ClaimsPrincipal caller,
-            CreateRoleHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
-                return Results.Unauthorized();
+        // HU #10508 AC2: la gobernanza de roles (crear/editar/eliminar) es EXCLUSIVA de
+        // SuperAdmin vía /api/v1/superadmin/roles* (ver SecurityRolesEndpoints). AdminCompany y
+        // OtAdmin conservan únicamente el GET de arriba (solo lectura, para poder asignar roles
+        // existentes a sus usuarios). Antes de esta HU existían aquí POST/PUT-permissions/DELETE
+        // restringidos a AdminCompanyPolicy — se eliminaron junto con
+        // SetTenantRolePermissionsHandler e InsufficientPermissionsForDelegationException.
 
-            if (ReservedRoleCodes.Contains(request.Code, StringComparer.OrdinalIgnoreCase))
-                return Results.Json(
-                    new ErrorResponse("RESERVED_ROLE_CODE", "El código de rol está reservado por el sistema."),
-                    statusCode: StatusCodes.Status400BadRequest);
-
-            try
-            {
-                var id = await handler.HandleAsync(
-                    new CreateRoleCommand(tenantId, request.Code, request.Name, request.Description),
-                    ct);
-                return Results.Created($"/api/v1/security/roles/{id}", new { id });
-            }
-            catch (RoleCodeDuplicateException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_CODE_DUPLICATE", "Ya existe un rol con ese código en tu empresa."));
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("CreateTenantRole");
-
-        // PUT /security/roles/{id}/permissions — AdminCompany asigna permisos (subset del propio rol)
-        group.MapPut("/roles/{id:guid}/permissions", async (
-            Guid id,
-            [FromBody] SetRolePermissionsRequest request,
-            ClaimsPrincipal caller,
-            SetTenantRolePermissionsHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
-                return Results.Unauthorized();
-
-            var callerPermissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
-
-            try
-            {
-                var detail = await handler.HandleAsync(
-                    new SetTenantRolePermissionsCommand(id, tenantId, callerPermissions, request.PermissionIds),
-                    ct);
-                return Results.Ok(detail);
-            }
-            catch (RolesRoleNotFoundException)
-            {
-                return Results.NotFound();
-            }
-            catch (InsufficientPermissionsForDelegationException)
-            {
-                return Results.Json(
-                    new ErrorResponse("INSUFFICIENT_PERMISSIONS", "No puede asignar permisos que no posee."),
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("SetTenantRolePermissions");
-
-        // DELETE /security/roles/{id} — AdminCompany elimina rol no-sistema de su tenant
-        group.MapDelete("/roles/{id:guid}", async (
-            Guid id,
-            ClaimsPrincipal caller,
-            IRoleRepository roleRepository,
-            DeleteRoleHandler handler,
-            CancellationToken ct) =>
-        {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
-                return Results.Unauthorized();
-
-            var role = await roleRepository.GetByIdAsync(id, ct);
-            if (role is null || role.TenantId != tenantId)
-                return Results.NotFound();
-
-            try
-            {
-                await handler.HandleAsync(id, ct);
-                return Results.NoContent();
-            }
-            catch (RolesRoleNotFoundException)
-            {
-                return Results.NotFound();
-            }
-            catch (RoleSystemLockedException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_SYSTEM_LOCKED", "Los roles de sistema no pueden eliminarse."));
-            }
-            catch (RoleHasActiveUsersException)
-            {
-                return Results.Conflict(new ErrorResponse("ROLE_HAS_ACTIVE_USERS", "El rol tiene usuarios activos asignados."));
-            }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
-          .WithName("DeleteTenantRole");
-
-        // AC1/AC2 — PUT /users/{userId}/role — asigna o reemplaza rol (HU #10164)
+        // HU #10506 AC1/AC2 — PUT /users/{userId}/role — asigna un rol ADICIONAL (ya no
+        // reemplaza los demás roles activos del usuario, a diferencia de HU #10164).
         group.MapPut("/users/{userId:guid}/role", async (
             Guid userId,
             [FromBody] AssignRoleRequest request,
@@ -298,6 +236,18 @@ public static class SecurityEndpoints
                     new ErrorResponse("ROLE_NOT_FOUND", "Rol no encontrado o inactivo."),
                     statusCode: StatusCodes.Status404NotFound);
             }
+            catch (RoleTargetEntityTypeMismatchException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_TARGET_ENTITY_TYPE_MISMATCH", "El rol no aplica al tipo de tenant destino."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (RoleAlreadyAssignedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_ALREADY_ASSIGNED", "El usuario ya tiene este rol asignado activamente."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
             catch (Exception ex)
             {
 #pragma warning disable CA1848
@@ -308,7 +258,38 @@ public static class SecurityEndpoints
                     new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        });
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+
+        // HU #10506 AC3 — DELETE /users/{userId}/roles/{roleId} — quita un rol puntual sin
+        // afectar los demás roles activos del usuario (modelo aditivo).
+        group.MapDelete("/users/{userId:guid}/roles/{roleId:guid}", async (
+            Guid userId,
+            Guid roleId,
+            ClaimsPrincipal caller,
+            RemoveRoleAssignmentHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var tenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            try
+            {
+                await handler.HandleAsync(userId, tenantId, roleId, callerId, cancellationToken);
+                return Results.NoContent();
+            }
+            catch (RoleAssignmentNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_ASSIGNMENT_NOT_FOUND", "El usuario no tiene ese rol asignado activamente."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // GET /users — lista usuarios activos + invitaciones pendientes
         // SuperAdmin ve todos los usuarios de todas las compañías (excluye su propio tenant interno)
@@ -321,8 +302,11 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(tenantClaim, out var callerTenantId))
                 return Results.Unauthorized();
 
-            var callerRoleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = callerRoleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             var now = DateTimeOffset.UtcNow;
 
             if (isSuperAdmin)
@@ -558,13 +542,9 @@ public static class SecurityEndpoints
 
     private sealed record AssignRoleRequest(Guid RoleId);
 
-    private sealed record CreateRoleRequest(string Code, string Name, string? Description);
-
-    private sealed record SetRolePermissionsRequest(List<Guid> PermissionIds);
-
     private sealed record SuspendUserRequest(string Reason, DateTimeOffset EndsAt);
 
-    private sealed record CreateInvitationRequest(string Email, string? FullName, string? RoleId, Guid? TargetTenantId);
+    private sealed record CreateInvitationRequest(string Email, string? FullName, Guid[]? RoleIds, Guid? TargetTenantId);
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 

@@ -12,21 +12,48 @@ public sealed class UserRoleAssignmentRepository(FlitDbContext db) : IUserRoleAs
             .AnyAsync(u => u.Id == userId && u.HomeTenantId == tenantId && u.DeletedAt == null, ct);
     }
 
-    public async Task<bool> RoleIsActiveInTenantAsync(Guid roleId, Guid tenantId, CancellationToken ct)
+    public async Task<RoleForAssignmentSnapshot?> GetActiveRoleAsync(Guid roleId, CancellationToken ct)
     {
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id).
         return await db.Roles
-            .AnyAsync(r => r.Id == roleId && r.TenantId == tenantId && r.DeletedAt == null, ct);
+            .AsNoTracking()
+            .Where(r => r.Id == roleId && r.IsActive && r.DeletedAt == null)
+            .Select(r => new RoleForAssignmentSnapshot(r.Id, r.TargetEntityType))
+            .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<UserRoleAssignmentSnapshot?> GetActiveAssignmentAsync(Guid userId, Guid tenantId, CancellationToken ct)
+    public async Task<string> GetTenantTargetEntityTypeAsync(Guid tenantId, CancellationToken ct)
+    {
+        // Mismo criterio ya usado en SecurityEndpoints/AdminOtEndpoints: un tenant con
+        // TransitOfficeProfile asociado es TRANSIT_OFFICE; el resto, COMPANY.
+        var isOtTenant = await db.TransitOfficeProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.TenantId == tenantId, ct);
+        return isOtTenant ? "TRANSIT_OFFICE" : "COMPANY";
+    }
+
+    public async Task<UserRoleAssignmentSnapshot?> GetActiveAssignmentAsync(
+        Guid userId, Guid tenantId, Guid roleId, CancellationToken ct)
     {
         var entity = await db.UserRoleAssignments
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null, ct);
+            .FirstOrDefaultAsync(
+                a => a.UserId == userId && a.TenantId == tenantId && a.RoleId == roleId && a.DeletedAt == null,
+                ct);
 
         return entity is null
             ? null
             : new UserRoleAssignmentSnapshot(entity.Id, entity.UserId, entity.RoleId);
+    }
+
+    public async Task<IReadOnlyList<UserRoleAssignmentSnapshot>> GetActiveAssignmentsAsync(
+        Guid userId, Guid tenantId, CancellationToken ct)
+    {
+        return await db.UserRoleAssignments
+            .AsNoTracking()
+            .Where(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)
+            .Select(a => new UserRoleAssignmentSnapshot(a.Id, a.UserId, a.RoleId))
+            .ToListAsync(ct);
     }
 
     public async Task SoftDeleteAssignmentAsync(Guid assignmentId, Guid deletedBy, CancellationToken ct)

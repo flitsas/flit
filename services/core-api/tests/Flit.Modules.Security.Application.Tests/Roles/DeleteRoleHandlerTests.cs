@@ -12,10 +12,9 @@ public sealed class DeleteRoleHandlerTests
     private readonly DeleteRoleHandler _handler;
 
     private static readonly Guid RoleId = Guid.NewGuid();
-    private static readonly Guid TenantId = Guid.NewGuid();
 
     private static RoleDetail MakeRole(bool isSystem = false) =>
-        new(RoleId, TenantId, "ADMIN", "Administrador", null, isSystem, true, []);
+        new(RoleId, "COMPANY", "ADMIN", "Administrador", null, isSystem, true, []);
 
     public DeleteRoleHandlerTests()
     {

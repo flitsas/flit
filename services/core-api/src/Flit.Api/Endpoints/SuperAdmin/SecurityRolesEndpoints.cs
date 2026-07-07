@@ -10,15 +10,34 @@ internal static class SecurityRolesEndpoints
 {
     internal static void Map(RouteGroupBuilder group)
     {
-        // AC2 — GET /roles?tenantId={guid} → lista de roles con permissionCount
+        // AC2 — GET /roles?targetEntityType={COMPANY|TRANSIT_OFFICE} → catálogo global de roles
+        // (HU #10505: ya no filtra por tenantId — security.roles no tiene esa columna).
         group.MapGet("/roles", async (
-            Guid tenantId,
+            string targetEntityType,
             ListRolesHandler handler,
             CancellationToken ct) =>
         {
-            var items = await handler.HandleAsync(tenantId, ct);
+            var items = await handler.HandleAsync(targetEntityType, ct);
             return Results.Ok(items);
         }).WithName("ListRoles");
+
+        // Detalle de un rol puntual (permisos + is_active exactos) — complementa el listado
+        // resumido, que ya no basta para saber con certeza el estado tras un refresh de UI.
+        group.MapGet("/roles/{id:guid}", async (
+            Guid id,
+            GetRoleHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var detail = await handler.HandleAsync(id, ct);
+                return Results.Ok(detail);
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        }).WithName("GetRole");
 
         // AC1 — POST /roles → 201 con id del nuevo rol
         group.MapPost("/roles", async (
@@ -29,13 +48,17 @@ internal static class SecurityRolesEndpoints
             try
             {
                 var id = await handler.HandleAsync(
-                    new CreateRoleCommand(request.TenantId, request.Code, request.Name, request.Description),
+                    new CreateRoleCommand(request.TargetEntityType, request.Code, request.Name, request.Description),
                     ct);
                 return Results.Created($"/api/v1/superadmin/roles/{id}", new { id });
             }
             catch (RoleCodeDuplicateException)
             {
                 return Results.Conflict(new { code = "ROLE_CODE_DUPLICATE" });
+            }
+            catch (InvalidTargetEntityTypeException)
+            {
+                return Results.BadRequest(new { code = "INVALID_TARGET_ENTITY_TYPE" });
             }
         }).WithName("CreateRole");
 
@@ -49,7 +72,7 @@ internal static class SecurityRolesEndpoints
             try
             {
                 var detail = await handler.HandleAsync(
-                    new SetRolePermissionsCommand(id, request.TenantId, request.PermissionIds),
+                    new SetRolePermissionsCommand(id, request.PermissionIds),
                     ct);
                 return Results.Ok(detail);
             }
@@ -58,6 +81,45 @@ internal static class SecurityRolesEndpoints
                 return Results.NotFound();
             }
         }).WithName("SetRolePermissions");
+
+        // HU #10508 AC1 — PATCH /roles/{id}/activate y /roles/{id}/deactivate → gobernanza
+        // SuperAdmin sobre el ciclo de vida del rol del catálogo global (paralelo a
+        // SecurityModulesEndpoints.ActivateModule/DeactivateModule).
+        group.MapMethods("/roles/{id:guid}/activate", ["PATCH"], async (
+            Guid id,
+            SetRoleActiveHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                await handler.HandleAsync(id, isActive: true, ct);
+                return Results.Ok();
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        }).WithName("ActivateRole");
+
+        group.MapMethods("/roles/{id:guid}/deactivate", ["PATCH"], async (
+            Guid id,
+            SetRoleActiveHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                await handler.HandleAsync(id, isActive: false, ct);
+                return Results.Ok();
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+            catch (RoleSystemLockedException)
+            {
+                return Results.Conflict(new { code = "ROLE_SYSTEM_LOCKED" });
+            }
+        }).WithName("DeactivateRole");
 
         // AC3, AC4, AC5 — DELETE /roles/{id}
         group.MapDelete("/roles/{id:guid}", async (
@@ -85,7 +147,7 @@ internal static class SecurityRolesEndpoints
         }).WithName("DeleteRole");
     }
 
-    private sealed record CreateRoleRequest(Guid TenantId, string Code, string Name, string? Description);
+    private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description);
 
-    private sealed record SetPermissionsRequest(Guid TenantId, List<Guid> PermissionIds);
+    private sealed record SetPermissionsRequest(List<Guid> PermissionIds);
 }
