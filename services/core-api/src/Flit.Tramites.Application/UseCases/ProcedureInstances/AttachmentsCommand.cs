@@ -46,6 +46,8 @@ public static class AttachmentRules
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
         // Prenda / gravamen (IT-3, Feature #10585): un DocTipo por decisión que requiere soporte.
         "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
+        // HU #10604 (R19) — paz y salvo RNMC que desbloquea el envío al OT tras "Imponer Medida".
+        "paz_salvo_rnmc",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

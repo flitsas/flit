@@ -298,6 +298,33 @@ public sealed class TramiteLifecycleServiceTests
         await _operabilityGate.Received(1).IsOperableAsync(officeId, Arg.Any<CancellationToken>());
     }
 
+    // HU #10604 (R19) — "Imponer Medida": registra pero bloquea el envío hasta el paz y salvo RNMC.
+    [Fact]
+    public async Task Entrega_RnmcMedidaPendienteSinPazSalvo_BloqueaEnvio()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        ConSenalRnmcMedida(i); // el preflight detectó una medida correctiva
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.RnmcMedidaBloqueaEnvio);
+        i.Status.Should().Be(TramiteEstado.Preparado); // registrado, no enviado
+    }
+
+    [Fact]
+    public async Task Entrega_RnmcMedidaConPazSalvo_Permite()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        ConSenalRnmcMedida(i);
+        ConPazSalvoRnmc(i); // el paz y salvo desbloquea el envío
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
     private static void SeleccionarOt(ProcedureInstance instance, Guid officeId) =>
         instance.FieldValues.Add(new ProcedureInstanceFieldValue
         {
@@ -307,5 +334,27 @@ public sealed class TramiteLifecycleServiceTests
             FieldKey = "transit_office_id",
             ValueText = officeId.ToString(),
             Source = "user",
+        });
+
+    private static void ConSenalRnmcMedida(ProcedureInstance instance) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "rnmc_medida_pendiente",
+            ValueText = "true",
+            Source = "system",
+        });
+
+    private static void ConPazSalvoRnmc(ProcedureInstance instance) =>
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = "paz_salvo_rnmc",
+            StoragePath = "p/paz_salvo_rnmc",
+            UploadedAt = DateTimeOffset.UtcNow,
         });
 }

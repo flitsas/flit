@@ -54,4 +54,11 @@ public static class TramiteEstadoErrores
     /// adjuntado (409).
     /// </summary>
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
+
+    /// <summary>
+    /// Gate de entrega (R19) — hay una medida correctiva RNMC ("Imponer Medida") pendiente: el trámite
+    /// se puede REGISTRAR pero NO enviar al OT hasta cargar el paz y salvo RNMC (DocTipo
+    /// <c>paz_salvo_rnmc</c>) (422).
+    /// </summary>
+    public const string RnmcMedidaBloqueaEnvio = "rnmc_medida_bloquea_envio";
 }

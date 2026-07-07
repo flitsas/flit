@@ -110,6 +110,13 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
+    public void AttachmentRules_AceptaPazSalvoRnmc()
+    {
+        // HU #10604: el DocTipo paz_salvo_rnmc (que desbloquea el envío) es válido para subida.
+        AttachmentRules.Validate("paz_salvo_rnmc", "application/pdf", 100).Should().BeNull();
+    }
+
+    [Fact]
     public async Task Upload_InvalidMime_ReturnsError()
     {
         var ct = TestContext.Current.CancellationToken;
