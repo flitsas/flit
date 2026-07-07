@@ -1,5 +1,8 @@
 namespace Flit.Modules.Security.Domain.Auth;
 
+/// <summary>Rol activo de un usuario, tal como se emite en el JWT (HU #10506, multi-rol).</summary>
+public sealed record UserRoleSnapshot(Guid Id, string Code);
+
 public sealed class UserAuthSnapshot
 {
     public Guid UserId { get; init; }
@@ -14,9 +17,12 @@ public sealed class UserAuthSnapshot
 
     public Guid TenantId { get; init; }
 
-    public Guid RoleId { get; init; }
-
-    public string RoleCode { get; init; } = string.Empty;
+    /// <summary>
+    /// Roles ACTIVOS del usuario en <see cref="TenantId"/> (HU #10506: soporte multi-rol).
+    /// Puede estar vacía si el usuario no tiene ninguna asignación activa — el bloqueo de login
+    /// por "todos los roles inactivos" es HU #10507, fuera de alcance aquí.
+    /// </summary>
+    public IReadOnlyList<UserRoleSnapshot> ActiveRoles { get; init; } = [];
 
     public IReadOnlyList<string> PermissionSlugs { get; init; } = [];
 

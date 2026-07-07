@@ -1112,7 +1112,7 @@ public static class AdminOtEndpoints
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, role.Id, invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(

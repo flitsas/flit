@@ -29,14 +29,17 @@ public sealed class UserActivationRepository(FlitDbContext db) : IUserActivation
             CreatedAt = data.ActivatedAt,
         });
 
-        if (data.RoleId.HasValue)
+        // HU #10506 AC4: una fila UserRoleAssignment POR CADA rol de la invitación (antes, a lo
+        // sumo una). RoleIds siempre trae al menos un elemento (AC5, validado en
+        // CreateInvitationHandler antes de crear la invitación).
+        foreach (var roleId in data.RoleIds)
         {
             db.UserRoleAssignments.Add(new UserRoleAssignment
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = data.TenantId,
                 UserId = user.Id,
-                RoleId = data.RoleId.Value,
+                RoleId = roleId,
                 AssignedAt = data.ActivatedAt,
                 AssignedBy = data.InvitedBy,
                 CreatedAt = data.ActivatedAt,

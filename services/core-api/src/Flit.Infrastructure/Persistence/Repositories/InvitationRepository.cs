@@ -34,7 +34,10 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
             TenantId = invitation.TenantId,
             Email = invitation.Email,
             FullName = invitation.FullName,
-            RoleId = invitation.RoleId,
+            // El primer rol seleccionado queda como "primario" en la columna singular (HU #10506:
+            // se conserva por compatibilidad con consumidores que aún leen un único RoleId; la
+            // fuente completa de N roles es la tabla puente invitation_roles).
+            RoleId = invitation.RoleIds.Count > 0 ? invitation.RoleIds[0] : null,
             TokenHash = invitation.TokenHash,
             Status = "pending",
             InvitedBy = invitation.InvitedBy,
@@ -43,6 +46,20 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
         };
 
         db.UserInvitations.Add(entity);
+
+        foreach (var roleId in invitation.RoleIds)
+        {
+            db.InvitationRoles.Add(new InvitationRole
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = invitation.TenantId,
+                InvitationId = entity.Id,
+                RoleId = roleId,
+                CreatedAt = entity.CreatedAt,
+                RowVersion = 0,
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return entity.Id;
@@ -53,11 +70,21 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
         CancellationToken cancellationToken)
     {
         var entity = await db.UserInvitations
+            .AsNoTracking()
             .Where(x => x.TokenHash == tokenHash && x.Status == "pending")
-            .Select(x => new PendingInvitation(x.Id, x.TenantId, x.Email, x.FullName, x.RoleId, x.InvitedBy))
+            .Select(x => new { x.Id, x.TenantId, x.Email, x.FullName, x.InvitedBy })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return entity;
+        if (entity is null)
+            return null;
+
+        var roleIds = await db.InvitationRoles
+            .AsNoTracking()
+            .Where(r => r.InvitationId == entity.Id)
+            .Select(r => r.RoleId)
+            .ToListAsync(cancellationToken);
+
+        return new PendingInvitation(entity.Id, entity.TenantId, entity.Email, entity.FullName, roleIds, entity.InvitedBy);
     }
 
     public async Task<IReadOnlyList<PendingInvitationSummary>> ListPendingByTenantAsync(

@@ -33,8 +33,7 @@ public sealed class LoginHandler(
             snapshot.Email,
             snapshot.TenantId,
             snapshot.TenantName,
-            snapshot.RoleId,
-            snapshot.RoleCode,
+            snapshot.ActiveRoles,
             snapshot.PermissionSlugs);
 
         return new LoginResult(issued.Token, issued.ExpiresInSeconds, "Bearer");

@@ -47,7 +47,7 @@ public static class SecurityEndpoints
             var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
 
             Guid targetTenantId;
-            Guid? roleId;
+            IReadOnlyList<Guid> roleIds;
 
             if (isSuperAdmin)
             {
@@ -90,23 +90,33 @@ public static class SecurityEndpoints
                                 : "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
                         statusCode: StatusCodes.Status409Conflict);
 
-                roleId = adminRole.Id;
+                // SuperAdmin siempre fuerza un único rol de sistema según el tipo de tenant
+                // destino — roleIds del body se ignora en esta rama (comportamiento sin cambios).
+                roleIds = [adminRole.Id];
             }
             else
             {
                 targetTenantId = callerTenantId;
-                roleId = Guid.TryParse(request.RoleId, out var parsed) ? parsed : null;
+                // HU #10506 AC4/AC5: roleIds reemplaza el RoleId? nullable — seleccionar al
+                // menos un rol es OBLIGATORIO (validado por el handler → NoRolesSelectedException).
+                roleIds = request.RoleIds ?? [];
             }
 
             try
             {
                 var result = await handler.HandleAsync(
-                    new CreateInvitationCommand(targetTenantId, request.Email, request.FullName ?? string.Empty, roleId, invitedBy),
+                    new CreateInvitationCommand(targetTenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy),
                     cancellationToken);
 
                 return Results.Created(
                     $"/api/v1/security/invitations/{result.InvitationId}",
                     new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
+            }
+            catch (NoRolesSelectedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("NO_ROLES_SELECTED", "Debes seleccionar al menos un rol para invitar al usuario."),
+                    statusCode: StatusCodes.Status400BadRequest);
             }
             catch (AuthRoleNotFoundException)
             {
@@ -270,7 +280,8 @@ public static class SecurityEndpoints
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .WithName("DeleteTenantRole");
 
-        // AC1/AC2 — PUT /users/{userId}/role — asigna o reemplaza rol (HU #10164)
+        // HU #10506 AC1/AC2 — PUT /users/{userId}/role — asigna un rol ADICIONAL (ya no
+        // reemplaza los demás roles activos del usuario, a diferencia de HU #10164).
         group.MapPut("/users/{userId:guid}/role", async (
             Guid userId,
             [FromBody] AssignRoleRequest request,
@@ -314,6 +325,18 @@ public static class SecurityEndpoints
                     new ErrorResponse("ROLE_NOT_FOUND", "Rol no encontrado o inactivo."),
                     statusCode: StatusCodes.Status404NotFound);
             }
+            catch (RoleTargetEntityTypeMismatchException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_TARGET_ENTITY_TYPE_MISMATCH", "El rol no aplica al tipo de tenant destino."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (RoleAlreadyAssignedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_ALREADY_ASSIGNED", "El usuario ya tiene este rol asignado activamente."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
             catch (Exception ex)
             {
 #pragma warning disable CA1848
@@ -323,6 +346,37 @@ public static class SecurityEndpoints
                 return Results.Json(
                     new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
+            }
+        });
+
+        // HU #10506 AC3 — DELETE /users/{userId}/roles/{roleId} — quita un rol puntual sin
+        // afectar los demás roles activos del usuario (modelo aditivo).
+        group.MapDelete("/users/{userId:guid}/roles/{roleId:guid}", async (
+            Guid userId,
+            Guid roleId,
+            ClaimsPrincipal caller,
+            RemoveRoleAssignmentHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var tenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            try
+            {
+                await handler.HandleAsync(userId, tenantId, roleId, callerId, cancellationToken);
+                return Results.NoContent();
+            }
+            catch (RoleAssignmentNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_ASSIGNMENT_NOT_FOUND", "El usuario no tiene ese rol asignado activamente."),
+                    statusCode: StatusCodes.Status404NotFound);
             }
         });
 
@@ -580,7 +634,7 @@ public static class SecurityEndpoints
 
     private sealed record SuspendUserRequest(string Reason, DateTimeOffset EndsAt);
 
-    private sealed record CreateInvitationRequest(string Email, string? FullName, string? RoleId, Guid? TargetTenantId);
+    private sealed record CreateInvitationRequest(string Email, string? FullName, Guid[]? RoleIds, Guid? TargetTenantId);
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
