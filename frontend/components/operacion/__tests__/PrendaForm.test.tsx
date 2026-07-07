@@ -60,6 +60,21 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByRole('note')).toHaveTextContent(/documento de prenda/i);
   });
 
+  it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda")', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.getByRole('option', { name: 'Solicitar constitución de prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Levantar gravamen' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Continuar sin gestionar (asumo el riesgo)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Sin prenda' })).not.toBeInTheDocument();
+  });
+
   it('guarda la decisión con los datos del acreedor', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());

@@ -1428,14 +1428,24 @@ function StepBody({
       // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
       // lo dispara el footer "Guardar y continuar" (vía save() del ref).
       return (
-        <CommercialForm
-          key={step.key}
-          ref={stepFormRef}
-          instanceId={instanceId}
-          onSaved={onRefresh}
-          hideHeader
-          embeddedInWizard
-        />
+        <div className="space-y-4">
+          <CommercialForm
+            key={step.key}
+            ref={stepFormRef}
+            instanceId={instanceId}
+            onSaved={onRefresh}
+            hideHeader
+            embeddedInWizard
+          />
+          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
+              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+          <PrendaForm
+            instanceId={instanceId}
+            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            onSaved={onRefresh}
+          />
+        </div>
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).

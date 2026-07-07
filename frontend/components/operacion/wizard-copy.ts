@@ -31,6 +31,11 @@ const REASON_COPY: Record<string, string> = {
   pendiente_biometria: 'Validación biométrica pendiente',
   pendiente_firma: 'Firma de la compraventa pendiente',
   fur_pendiente: 'FUR pendiente (opcional)',
+  // R10 (HU #10597/#10598) — prenda como gate del traspaso (gravámenes en warn).
+  prenda_decision_requerida:
+    'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
+  prenda_documento_requerido:
+    'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -47,6 +52,11 @@ const BLOCKER_COPY: Record<string, string> = {
   pendiente_firma: 'Firma de la compraventa pendiente',
   fur_pendiente: 'FUR pendiente (opcional)',
   pasos_incompletos: 'Hay pasos sin completar',
+  // R10 (HU #10597/#10598) — gate de preparación/radicación del traspaso por prenda.
+  prenda_decision_requerida:
+    'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
+  prenda_documento_requerido:
+    'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
 };
 
 /** Convierte un código a copy legible (fallback: el código humanizado). */
