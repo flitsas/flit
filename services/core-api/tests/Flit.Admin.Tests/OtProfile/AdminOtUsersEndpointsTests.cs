@@ -8,6 +8,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -287,6 +288,89 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             db.Users.RemoveRange(db.Users.Where(u => u.Id == soloAdminUserId));
             db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == soloTenantId));
             db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == soloTransitOfficeId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #10619 AC5 — AuthUserRepository.FindByEmailAsync (usado por LoginHandler para rechazar
+    // el login, ver LoginHandlerSuspensionTests) debe reportar IsTemporarilySuspended = true
+    // cuando la suspensión activa tiene EndsAt nulo (desactivación indefinida, AC1), igual que
+    // con una suspensión temporal vigente. Seed/cleanup local, sin depender del factory-wide
+    // Dispose(), siguiendo el mismo patrón que Suspend_TargetIsLastActiveOtAdmin_Returns409.
+    [Fact]
+    public async Task FindByEmailAsync_WhenSuspensionHasNullEndsAt_ReportsTemporarilySuspended()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var email = $"indefinite-suspension-{userId:N}@flit.local";
+
+        await using (var db = CreateDbContext())
+        {
+            db.Tenants.Add(new Tenant
+            {
+                Id = tenantId,
+                Code = $"IND-SUSP-{Guid.NewGuid():N}"[..20],
+                LegalName = "Tenant suspensión indefinida (tests)",
+                TaxId = "900777777-7",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = userId,
+                Email = email,
+                DisplayName = "Usuario desactivado indefinidamente (tests)",
+                Status = "active",
+                HomeTenantId = tenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            // AuthUserRepository.FindByEmailAsync exige una fila de credenciales (join
+            // obligatorio); el hash no se valida en este test, solo se necesita que exista.
+            db.UserCredentials.Add(new UserCredential
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PasswordHash = "not-used-in-this-test",
+                MustChangePassword = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.UserTempSuspensions.Add(new UserTempSuspension
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                StartsAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                EndsAt = null,
+                Reason = "HU #10619 AC5 — desactivación indefinida (test)",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IAuthUserRepository>();
+
+            var snapshot = await repository.FindByEmailAsync(email, TestContext.Current.CancellationToken);
+
+            snapshot.Should().NotBeNull();
+            snapshot!.IsTemporarilySuspended.Should().BeTrue(
+                "una suspensión sin fecha de fin (desactivación indefinida, HU #10619 AC1) debe " +
+                "bloquear el login igual que una suspensión temporal vigente (AC5)");
+        }
+        finally
+        {
+            await using var db = CreateDbContext();
+            db.UserTempSuspensions.RemoveRange(db.UserTempSuspensions.Where(s => s.UserId == userId));
+            db.UserCredentials.RemoveRange(db.UserCredentials.Where(c => c.UserId == userId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == userId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == tenantId));
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
     }
