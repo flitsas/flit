@@ -890,6 +890,69 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/ot/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Admin · OT]
+      operationId: adminOtUpdateUser
+      summary: Edita nombre y/o correo de un usuario del tenant OT (#10621)
+      description: >
+        Edita displayName y/o email de un usuario dentro del alcance del caller
+        (propio tenant para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). `rowVersion` es obligatorio (concurrencia optimista: el valor
+        leído de `OtUserItem.rowVersion`). No invalida sesiones activas — el cambio
+        de correo solo aplica en el próximo login. Requiere JWT con rol SuperAdmin
+        u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOtUserRequest"
+      responses:
+        "200":
+          description: Usuario actualizado.
+        "400":
+          description: Datos inválidos (longitud de nombre/correo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o el usuario no pertenece al tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El correo ya tiene una cuenta activa (`USER_ALREADY_EXISTS`), pertenece
+            a una cuenta eliminada (`EMAIL_BELONGS_TO_DELETED_USER`), o `rowVersion`
+            quedó desactualizado (`CONCURRENCY_CONFLICT` — otro admin ya modificó al
+            usuario). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/ot/users/{userId}/suspend:
     parameters:
       - name: userId
@@ -3546,7 +3609,33 @@ components:
           enum: [active, inactive, pending]
         createdAt: { type: string, format: date-time, nullable: true }
         isSuspended: { type: boolean }
-      required: [id, fullName, email, status, isSuspended]
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
+
+    UpdateOtUserRequest:
+      type: object
+      description: Edición de nombre/correo de un usuario del tenant OT (#10621).
+      properties:
+        displayName:
+          type: string
+          nullable: true
+          description: Nombre nuevo. Omitido o vacío = no se modifica.
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Correo nuevo. Omitido o vacío = no se modifica.
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista, AC4).
+      required: [rowVersion]
 
     OtUserListResponse:
       type: object

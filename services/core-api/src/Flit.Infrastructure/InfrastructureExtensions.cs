@@ -23,6 +23,7 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
@@ -117,6 +118,9 @@ public static class InfrastructureExtensions
 
         // HU #10164 — Asignación única de rol por usuario tenant
         services.AddScoped<IUserRoleAssignmentRepository, UserRoleAssignmentRepository>();
+
+        // HU #10621 — Editar nombre/correo de un usuario
+        services.AddScoped<IUserManagementRepository, UserManagementRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();

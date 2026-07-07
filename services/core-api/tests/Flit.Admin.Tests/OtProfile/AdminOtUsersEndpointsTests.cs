@@ -176,6 +176,94 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // HU #10621 AC1 — nombre y correo válidos y distintos → se persisten, y row_version avanza
+    // (trigger tr_users_row_version).
+    [Fact]
+    public async Task UpdateUser_AsOtAdmin_WithValidData_Returns200AndPersistsChanges()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var newEmail = $"colaborador-editado-{Guid.NewGuid():N}@flit.local";
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}",
+            new { displayName = "Colaborador Editado", email = newEmail, rowVersion },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db2 = CreateDbContext();
+        var user = await db2.Users.AsNoTracking()
+            .SingleAsync(u => u.Id == _collaboratorUserId, TestContext.Current.CancellationToken);
+        user.DisplayName.Should().Be("Colaborador Editado");
+        user.Email.Should().Be(newEmail);
+        user.RowVersion.Should().BeGreaterThan(rowVersion);
+    }
+
+    // HU #10621 AC4 — rowVersion desactualizado (otro admin ya guardó cambios) → 409, sin
+    // sobrescribir nada.
+    [Fact]
+    public async Task UpdateUser_AsOtAdmin_WithStaleRowVersion_Returns409AndDoesNotPersist()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}",
+            new { displayName = "No debería guardarse", rowVersion = -999L },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        await using var db = CreateDbContext();
+        var user = await db.Users.AsNoTracking()
+            .SingleAsync(u => u.Id == _collaboratorUserId, TestContext.Current.CancellationToken);
+        user.DisplayName.Should().NotBe("No debería guardarse");
+    }
+
+    // HU #10621 AC2 — el correo ya pertenece a otra cuenta ACTIVA (el propio ot_admin) → 409
+    // USER_ALREADY_EXISTS.
+    [Fact]
+    public async Task UpdateUser_WhenEmailBelongsToAnotherActiveUser_Returns409UserAlreadyExists()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        string otAdminEmail;
+        await using (var db = CreateDbContext())
+        {
+            var target = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => new { u.RowVersion })
+                .SingleAsync(TestContext.Current.CancellationToken);
+            rowVersion = target.RowVersion;
+            otAdminEmail = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _otAdminUserId)
+                .Select(u => u.Email)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}",
+            new { email = otAdminEmail, rowVersion },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("USER_ALREADY_EXISTS");
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();
@@ -338,4 +426,6 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     private sealed record ListUsersBody(List<ListUserItem> Data);
 
     private sealed record ListUserItem(string Id, string FullName, string Email, string Status);
+
+    private sealed record ErrorBody(string Error, string? Message);
 }

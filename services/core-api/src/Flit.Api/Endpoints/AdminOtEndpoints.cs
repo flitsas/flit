@@ -31,7 +31,10 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserManagement;
+using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -284,6 +287,18 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPatch("/users/{userId:guid}", UpdateUserAsync)
+            .WithName("AdminOtUpdateUser")
+            .WithSummary("Edita nombre y/o correo de un usuario del tenant OT")
+            .WithDescription("HU #10621: rowVersion es obligatorio (concurrencia optimista). 409 si el correo ya "
+                + "tiene cuenta activa, si pertenece a una cuenta eliminada, o si rowVersion quedó desactualizado.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapPost("/users/{userId:guid}/suspend", SuspendUserAsync)
             .WithName("AdminOtSuspendUser")
@@ -1284,7 +1299,8 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                u.RowVersion)
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var usersWithoutRole = await (
@@ -1302,7 +1318,8 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                u.RowVersion)
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var pending = await db.UserInvitations
@@ -1310,10 +1327,77 @@ public static class AdminOtEndpoints
             .Where(x => x.TenantId == tenantId && x.Status == "pending")
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new OtUserDto(
-                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false))
+                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false, 0L))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
+    }
+
+    private static async Task<IResult> UpdateUserAsync(
+        Guid userId,
+        HttpContext httpContext,
+        UpdateOtUserRequest request,
+        UpdateUserHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var callerId = ResolveUserId(httpContext.User);
+        if (callerId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            await handler.HandleAsync(
+                new UpdateUserCommand(
+                    tenantId, userId, request.DisplayName, request.Email, request.RowVersion,
+                    callerId.Value, IsSuperAdmin(httpContext.User)),
+                cancellationToken).ConfigureAwait(false);
+            return Results.Ok();
+        }
+        catch (TargetUserNotFoundException)
+        {
+            return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe." });
+        }
+        catch (UserOutOfScopeException)
+        {
+            return Results.Json(
+                new { error = "OUT_OF_SCOPE", message = "El usuario no pertenece al tenant OT." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            return Results.Json(
+                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserEmailBelongsToDeletedAccountException ex)
+        {
+            return Results.Json(
+                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserProfileConcurrencyException ex)
+        {
+            return Results.Json(
+                new { error = "CONCURRENCY_CONFLICT", message = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.Json(
+                new { error = "VALIDATION_ERROR", message = ex.Message },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     private static async Task<IResult> SuspendUserAsync(
@@ -1470,6 +1554,10 @@ public static class AdminOtEndpoints
 
     private sealed record InviteOtUserRequest(string Email, string? FullName);
 
+    // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
+    // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).
+    private sealed record UpdateOtUserRequest(string? DisplayName, string? Email, long RowVersion);
+
     private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset EndsAt);
 
     private sealed record OtUserDto(
@@ -1481,5 +1569,6 @@ public static class AdminOtEndpoints
         Guid? RoleId,
         string Status,
         DateTimeOffset? CreatedAt,
-        bool IsSuspended);
+        bool IsSuspended,
+        long RowVersion);
 }
