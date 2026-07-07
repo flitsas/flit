@@ -42,4 +42,11 @@ public static class TramiteEstadoErrores
 
     /// <summary>Gate de entrega — una regla OT activa bloquea la entrega (422).</summary>
     public const string ReglaOtBloquea = "ot_rule_blocked";
+
+    /// <summary>
+    /// Gate de entrega (R19) — hay una medida correctiva RNMC ("Imponer Medida") pendiente: el trámite
+    /// se puede REGISTRAR pero NO enviar al OT hasta cargar el paz y salvo RNMC (DocTipo
+    /// <c>paz_salvo_rnmc</c>) (422).
+    /// </summary>
+    public const string RnmcMedidaBloqueaEnvio = "rnmc_medida_bloquea_envio";
 }

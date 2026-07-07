@@ -130,6 +130,9 @@ public static class AdminInfrastructureExtensions
         // HU #10548 — exigibilidad de la validación de identidad según la config del OT destino.
         services.AddScoped<IIdentityValidationPolicy, IdentityValidationPolicy>();
 
+        // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
+        services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
