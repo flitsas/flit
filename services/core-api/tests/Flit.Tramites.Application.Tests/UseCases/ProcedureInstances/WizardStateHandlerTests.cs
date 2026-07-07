@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
@@ -131,6 +132,36 @@ public sealed class WizardStateHandlerTests
         result!.Modalidad.Should().Be("matricula_inicial");
         result.TotalSteps.Should().Be(5);
         result.Steps.Should().HaveCount(5);
+    }
+
+    // ── HU #10548 — flag de exigibilidad de identidad por OT ─────────────────
+
+    [Fact] // Por defecto (política permisiva/no cableada) la identidad se exige.
+    public async Task Get_IdentityValidation_EnabledByDefault()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(Base("matricula_inicial"));
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.IdentityValidationEnabled.Should().BeTrue();
+    }
+
+    [Fact] // AC3 — OT con identidad deshabilitada: el flag viaja en false para que el wizard oculte el paso.
+    public async Task Get_IdentityValidationDisabled_FlagFalse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(Base("matricula_inicial"));
+
+        var policy = Substitute.For<IIdentityValidationPolicy>();
+        policy.IsIdentityValidationRequiredAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(false);
+        var handler = new GetWizardStateHandler(_repo, policy);
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.IdentityValidationEnabled.Should().BeFalse();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.IdentidadNoAprobada);
     }
 
     [Fact]

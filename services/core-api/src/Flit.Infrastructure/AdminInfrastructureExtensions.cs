@@ -113,6 +113,9 @@ public static class AdminInfrastructureExtensions
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
         services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
 
+        // HU #10548 — exigibilidad de la validación de identidad según la config del OT destino.
+        services.AddScoped<IIdentityValidationPolicy, IdentityValidationPolicy>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

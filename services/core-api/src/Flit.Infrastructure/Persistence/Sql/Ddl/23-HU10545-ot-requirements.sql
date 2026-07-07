@@ -16,9 +16,16 @@ CREATE TABLE admin.ot_requirements (
     CONSTRAINT uq_ot_requirements_transit_office_id UNIQUE (transit_office_id)
 );
 
+-- RLS: la config de requisitos del OT es operativa (la empresa que radica la necesita para su
+-- wizard y para el gate de identidad), no es dato sensible por tenant. Lectura ABIERTA; la
+-- escritura queda AISLADA por tenant (solo el OT dueño modifica su fila).
 ALTER TABLE admin.ot_requirements ENABLE ROW LEVEL SECURITY;
-CREATE POLICY tenant_isolation ON admin.ot_requirements
-  USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
+CREATE POLICY ot_requirements_read ON admin.ot_requirements
+  FOR SELECT USING (true);
+CREATE POLICY ot_requirements_write ON admin.ot_requirements
+  FOR ALL
+  USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
 DROP TRIGGER IF EXISTS tr_ot_requirements_row_version ON admin.ot_requirements;
 CREATE TRIGGER tr_ot_requirements_row_version BEFORE UPDATE ON admin.ot_requirements

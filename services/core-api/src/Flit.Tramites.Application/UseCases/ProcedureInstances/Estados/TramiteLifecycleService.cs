@@ -23,8 +23,14 @@ public sealed class TramiteLifecycleService(
     IOtOperabilityGate otOperabilityGate,
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
-    ITramiteTransitionPublisher publisher) : ITramiteLifecycleService
+    ITramiteTransitionPublisher publisher,
+    IIdentityValidationPolicy? identityPolicy = null) : ITramiteLifecycleService
 {
+    // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
+    // Default permisivo (siempre exige) cuando no hay política cableada (tests).
+    private readonly IIdentityValidationPolicy _identityPolicy =
+        identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
         CancellationToken ct = default)
@@ -68,6 +74,14 @@ public sealed class TramiteLifecycleService(
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
                 repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+
+            // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
+            // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
+            var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
+                instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
+            if (!identityRequired)
+                identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
+
             var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
@@ -176,6 +190,18 @@ public sealed class TramiteLifecycleService(
     /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
     /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
     /// </summary>
+    /// <summary>
+    /// Marca la identidad de ambas partes (comprador y vendedor) como satisfecha, uniéndolas al set
+    /// aprobado. Se usa cuando el OT destino deshabilita la validación de identidad (HU #10548): así
+    /// el <see cref="SubmitGate"/> no exige identidad sin tocar su firma.
+    /// </summary>
+    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
+        new(approved, StringComparer.OrdinalIgnoreCase)
+        {
+            BiometricRules.ParteComprador,
+            BiometricRules.ParteVendedor,
+        };
+
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
     {
         var raw = instance.FieldValues.FirstOrDefault(f =>
