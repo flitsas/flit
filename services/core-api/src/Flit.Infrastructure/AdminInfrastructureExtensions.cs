@@ -50,6 +50,10 @@ public static class AdminInfrastructureExtensions
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
 
+        // RF01 — estado operativo del catálogo OT (catálogo LEFT JOIN perfil + tenant),
+        // lectura cross-tenant para el listado del SuperAdmin.
+        services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
