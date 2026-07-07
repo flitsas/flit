@@ -97,6 +97,17 @@ const MODALIDAD_NOMBRE: Record<WizardModalidad, string> = {
   traspaso_unilateral: 'Traspaso unilateral',
 };
 
+/**
+ * Mensaje de éxito al radicar a tránsito (preparado→entregado), por modalidad. HU #10593 — al ser un
+ * `Record<WizardModalidad, ...>`, TS obliga a cubrir el unilateral y evita que caiga en la rama binaria
+ * "Matrícula inicial" del antiguo ternario.
+ */
+const MODALIDAD_RADICACION_TOAST: Record<WizardModalidad, string> = {
+  matricula_inicial: 'Matrícula inicial enviada a tránsito correctamente.',
+  traspaso: 'Traspaso enviado a tránsito correctamente.',
+  traspaso_unilateral: 'Traspaso unilateral enviado a tránsito correctamente.',
+};
+
 const STATUS_BADGE: Record<
   WizardStepStatus,
   { bg: string; color: string }
@@ -128,9 +139,15 @@ const STEP_SUBTITLE: Record<string, string> = {
  * pasos, sin recálculo en cliente: en matrícula el paso `identidad` queda `complete` cuando la
  * biométrica del comprador está aprobada; en traspaso la biométrica vive dentro del paso `fur`, que
  * lista `pendiente_biometria` mientras falte alguna parte. `locked` ⇒ aún no alcanzable ⇒ no aprobada.
+ *
+ * HU #10593 (traspaso unilateral) — sigue la MISMA rama que el traspaso estándar: la biométrica de la
+ * Arrendadora (rep. legal; el Locatario es documental y no valida identidad) también vive en el paso
+ * `fur`, que reporta `pendiente_biometria` hasta que la Arrendadora aprueba. El gate real de las partes
+ * lo resuelve el backend server-driven (SubmitGate.EvaluateTraspasoUnilateral, #10592); aquí solo se
+ * refleja para que el botón de envío quede deshabilitado mientras la validación esté pendiente.
  */
 function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): boolean {
-  if (modalidad === 'traspaso') {
+  if (modalidad === 'traspaso' || modalidad === 'traspaso_unilateral') {
     const fur = steps.find((s) => s.key === 'fur');
     if (!fur || fur.status === 'locked') return false;
     return !fur.reasons.includes('pendiente_biometria');
@@ -378,12 +395,7 @@ export function TramiteWizard(props: Props) {
     setSubmitError(null);
     try {
       await tramitesClient.transitionInstance(instanceId, 'entregado');
-      show(
-        modalidad === 'traspaso'
-          ? 'Traspaso enviado a tránsito correctamente.'
-          : 'Matrícula inicial enviada a tránsito correctamente.',
-        'success',
-      );
+      show(MODALIDAD_RADICACION_TOAST[modalidad], 'success');
       onExit();
     } catch (err) {
       setSubmitError(

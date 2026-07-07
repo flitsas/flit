@@ -1079,7 +1079,8 @@ export const tramitesClient = {
 const TRANSITION_ERROR_COPY: Record<string, string> = {
   transicion_no_permitida: 'La transición de estado solicitada no está permitida.',
   estado_final: 'El trámite está en un estado final y no admite cambios.',
-  identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
+  // Parte requerida: comprador en matrícula/traspaso; Arrendadora en el unilateral (HU #10593). Neutro.
+  identidad_no_aprobada: 'La validación de identidad de la parte requerida no está aprobada.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',

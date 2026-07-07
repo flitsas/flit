@@ -1035,3 +1035,134 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     );
   });
 });
+
+// HU #10593 (Feature #10584 · Traspaso unilateral, R12) — el botón de envío al OT del unilateral.
+// El wizard es server-driven: el gate real de la Arrendadora lo resuelve el backend
+// (SubmitGate.EvaluateTraspasoUnilateral, #10592). El FE solo debe: (1) deshabilitar el botón de envío
+// mientras la validación de la Arrendadora esté pendiente y habilitarlo en verde —la biométrica vive en
+// el paso `fur`, igual que el traspaso estándar—; (2) mostrar el toast del unilateral al radicar (no el
+// de matrícula); (3) traducir el gate `identidad_no_aprobada` con copy neutro (Arrendadora, no comprador).
+describe('TramiteWizard — envío al OT del traspaso unilateral (HU #10593)', () => {
+  // Base: unilateral en borrador con TODO completo (5 pasos placa-first, la Arrendadora validada ⇒ el
+  // paso `fur` no reporta pendiente_biometria). El Locatario es documental y no valida identidad.
+  const UNILATERAL_WIZARD: WizardState = {
+    modalidad: 'traspaso_unilateral',
+    tipologiaCodigo: 'traspaso_unilateral',
+    totalSteps: 5,
+    canSubmit: true,
+    blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
+    steps: [
+      { index: 0, key: 'consulta', label: 'Consulta del vehículo', status: 'complete', reasons: [] },
+      { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+      { index: 2, key: 'arrendadora', label: 'Arrendadora', status: 'complete', reasons: [] },
+      { index: 3, key: 'locatario', label: 'Locatario', status: 'complete', reasons: [] },
+      { index: 4, key: 'fur', label: 'Generar FUR', status: 'complete', reasons: [] },
+    ],
+  };
+
+  it('verde: en borrador con la Arrendadora validada, el botón de envío "Preparar" queda habilitado', async () => {
+    mocks.getWizardState.mockResolvedValue(UNILATERAL_WIZARD);
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta del vehículo/ });
+    // El encabezado toma la modalidad server-driven (no cae en la rama binaria "Matrícula inicial").
+    expect(screen.getByText(/Traspaso unilateral · 5 pasos/)).toBeInTheDocument();
+    // Navega al paso de decisión (FUR) y verifica que el botón de envío está habilitado.
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Generar FUR/ }));
+    const preparar = await screen.findByRole('button', { name: /^Preparar$/ });
+    expect(preparar).toBeEnabled();
+  });
+
+  it('pendiente: con la identidad de la Arrendadora pendiente, el botón de envío queda deshabilitado', async () => {
+    // Datos completos pero la biométrica de la Arrendadora pendiente (el paso `fur` lista
+    // pendiente_biometria) + borrador finalizado ⇒ "Preparar" visible pero DESHABILITADO.
+    const PENDIENTE: WizardState = {
+      ...UNILATERAL_WIZARD,
+      steps: UNILATERAL_WIZARD.steps.map((s) =>
+        s.key === 'fur'
+          ? { ...s, status: 'incomplete', reasons: ['pendiente_biometria', 'fur_pendiente'] as string[] }
+          : s,
+      ),
+    };
+    mocks.getWizardState.mockResolvedValue(PENDIENTE);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-uni',
+      status: 'borrador',
+      draftFinalizedAt: '2026-07-07T10:00:00Z',
+      fieldValues: [],
+      actors: [],
+    });
+    render(<TramiteWizard existingInstanceId="inst-uni" onExit={() => {}} />);
+
+    // Reanuda en la frontera (el paso FUR incompleto): el botón de envío existe pero no se puede pulsar.
+    const preparar = await screen.findByRole('button', { name: /^Preparar$/ });
+    expect(preparar).toBeDisabled();
+  });
+
+  it('radicar: el toast de éxito es el del unilateral, no el binario de matrícula', async () => {
+    const PREPARADO: WizardState = {
+      ...UNILATERAL_WIZARD,
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
+    };
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-uni',
+      status: 'preparado',
+      draftFinalizedAt: null,
+      fieldValues: [],
+      actors: [],
+    });
+    mocks.transitionInstance.mockResolvedValue({ id: 'inst-uni', status: 'entregado' });
+    const onExit = vi.fn();
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-uni" onExit={onExit} />);
+
+    const radicar = await screen.findByRole('button', { name: /Radicar a tránsito/ });
+    expect(radicar).toBeEnabled();
+    await user.click(radicar);
+
+    await waitFor(() =>
+      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-uni', 'entregado'),
+    );
+    // Copy específico del unilateral…
+    expect(toastShow).toHaveBeenCalledWith(
+      'Traspaso unilateral enviado a tránsito correctamente.',
+      'success',
+    );
+    // …y NUNCA el copy de matrícula (la trampa del antiguo ternario binario).
+    expect(toastShow).not.toHaveBeenCalledWith(
+      expect.stringMatching(/Matrícula/i),
+      'success',
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('gate: el bloqueo identidad_no_aprobada se traduce con copy neutro (parte requerida, no "comprador")', async () => {
+    // El backend reusa el código `identidad_no_aprobada` para el unilateral (la Arrendadora). El copy
+    // debe ser neutro para no hablar de "comprador" en un flujo donde no lo hay.
+    const BLOQUEADO: WizardState = {
+      ...UNILATERAL_WIZARD,
+      canSubmit: false,
+      blockers: ['identidad_no_aprobada'],
+      steps: UNILATERAL_WIZARD.steps.map((s) =>
+        s.key === 'fur'
+          ? { ...s, status: 'incomplete', reasons: ['pendiente_biometria'] as string[] }
+          : s,
+      ),
+    };
+    mocks.getWizardState.mockResolvedValue(BLOQUEADO);
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta del vehículo/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Generar FUR/ }));
+
+    expect(
+      await screen.findByText(/La validación de identidad de la parte requerida no está aprobada/),
+    ).toBeInTheDocument();
+    // No debe mencionar "comprador" (confuso para el unilateral).
+    expect(screen.queryByText(/identidad del comprador/i)).not.toBeInTheDocument();
+  });
+});
