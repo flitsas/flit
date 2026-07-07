@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Star, X } from "lucide-react";
 import { OtStatusBadge } from "./OtStatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -70,7 +70,17 @@ export function ClientProceduresTable({
           {rows.map((row) => (
             <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
-                {row.referenceNumber}
+                <span className="flex items-center gap-1.5">
+                  {/* HU #10536 — distintivo de prioridad (solo lectura para el OT). */}
+                  {row.prioritario && (
+                    <Star
+                      className="h-3.5 w-3.5 shrink-0"
+                      style={{ color: "#F59E0B", fill: "#F59E0B" }}
+                      aria-label="Trámite prioritario"
+                    />
+                  )}
+                  {row.referenceNumber}
+                </span>
               </td>
               <td className="border-y px-4 py-3">
                 {row.procedureTypeName ?? row.procedureTypeId}

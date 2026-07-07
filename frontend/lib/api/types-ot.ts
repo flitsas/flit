@@ -35,6 +35,8 @@ export interface OtClientProcedure {
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;
+  /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
+  prioritario?: boolean;
 }
 
 export interface OtClientProcedurePagedResult {

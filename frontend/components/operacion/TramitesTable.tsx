@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Car, Search, X } from 'lucide-react';
+import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -162,6 +162,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   const [compania, setCompania] = useState('');
+  // HU #10536 — filtro "solo prioritarios".
+  const [soloPrioritarios, setSoloPrioritarios] = useState(false);
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
   // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
@@ -241,9 +243,10 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       if (modalidad && item.modalidad !== modalidad) return false;
       if (estado && item.estado !== estado) return false;
       if (compania && item.companiaNombre !== compania) return false;
+      if (soloPrioritarios && !item.prioritario) return false;
       return true;
     });
-  }, [items, search, modalidad, estado, compania]);
+  }, [items, search, modalidad, estado, compania, soloPrioritarios]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Página segura: si los filtros/refetch reducen los resultados por debajo de
@@ -279,15 +282,43 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setCompania(v);
     setPage(1);
   };
+  const handlePrioritariosChange = (v: boolean) => {
+    setSoloPrioritarios(v);
+    setPage(1);
+  };
+
+  // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
+  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento (el listado ya viene ordenado
+  // con los prioritarios primero; el reordenamiento visual se aplica al siguiente refetch).
+  const handleTogglePriority = useCallback(
+    async (id: string, next: boolean, tenantId: string) => {
+      setItems((prev) =>
+        prev.map((it) => (it.id === id ? { ...it, prioritario: next } : it)),
+      );
+      try {
+        await tramitesClient.setPriority(id, next, isAdmin ? tenantId : undefined);
+      } catch {
+        setItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, prioritario: !next } : it)),
+        );
+      }
+    },
+    [isAdmin],
+  );
 
   const hasActiveFilters =
-    search.trim() !== '' || modalidad !== '' || estado !== '' || compania !== '';
+    search.trim() !== '' ||
+    modalidad !== '' ||
+    estado !== '' ||
+    compania !== '' ||
+    soloPrioritarios;
 
   const clearFilters = () => {
     setSearch('');
     setModalidad('');
     setEstado('');
     setCompania('');
+    setSoloPrioritarios(false);
     setPage(1);
   };
 
@@ -383,6 +414,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           hasActiveFilters={hasActiveFilters}
           totalCount={items.length}
           filteredCount={filtered.length}
+          soloPrioritarios={soloPrioritarios}
+          onPrioritariosChange={handlePrioritariosChange}
         />
 
         {/* #1 — Filtro por compañía (solo SuperAdmin, que ve trámites de todas las empresas). */}
@@ -421,6 +454,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           showCompania={isAdmin}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
+          onTogglePriority={handleTogglePriority}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -448,6 +482,7 @@ function TableBody({
   showCompania,
   onRetry,
   onClearFilters,
+  onTogglePriority,
   onOpen,
 }: {
   loading: boolean;
@@ -462,6 +497,7 @@ function TableBody({
   showCompania: boolean;
   onRetry: () => void;
   onClearFilters: () => void;
+  onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
@@ -572,6 +608,7 @@ function TableBody({
               item={item}
               showCompania={showCompania}
               gridCols={gridCols}
+              onTogglePriority={onTogglePriority}
               onOpen={onOpen}
             />
           ))}
@@ -653,11 +690,13 @@ function TramiteRow({
   item,
   showCompania,
   gridCols,
+  onTogglePriority,
   onOpen,
 }: {
   item: InstanceSummary;
   showCompania: boolean;
   gridCols: string;
+  onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
@@ -689,12 +728,40 @@ function TramiteRow({
             {item.companiaNombre ?? '—'}
           </span>
         )}
-        <span className="min-w-0">
-          <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-            {item.placa ?? '—'}
-          </span>
-          <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-            {item.referenceNumber}
+        <span className="flex min-w-0 items-center gap-2">
+          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePriority(item.id, !item.prioritario, item.tenantId);
+            }}
+            aria-pressed={item.prioritario}
+            aria-label={
+              item.prioritario
+                ? `Quitar prioridad al trámite ${item.referenceNumber}`
+                : `Marcar como prioritario el trámite ${item.referenceNumber}`
+            }
+            title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
+            className="shrink-0 rounded-md p-0.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          >
+            <Star
+              className="h-4 w-4"
+              style={
+                item.prioritario
+                  ? { color: '#F59E0B', fill: '#F59E0B' }
+                  : { color: '#162744', opacity: 0.3 }
+              }
+              aria-hidden="true"
+            />
+          </button>
+          <span className="min-w-0">
+            <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
+              {item.placa ?? '—'}
+            </span>
+            <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
+              {item.referenceNumber}
+            </span>
           </span>
         </span>
         <span className="block text-[#162744] dark:text-white/90 truncate">
