@@ -75,16 +75,26 @@ function useCurrentUser() {
     const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
     const payload = decodeJwtPayload(token);
     if (!payload) return null;
-    const roleCode =
-      (payload.role_code as string | undefined) ?? (payload.role as string | undefined) ?? "";
-    const roleLabel =
-      roleCode === "SuperAdmin"
-        ? "Super Admin"
-        : roleCode === "AdminCompany"
-          ? "Admin de Compañía"
-          : roleCode === "ot_admin"
-            ? "Admin OT"
-            : roleCode || "Usuario";
+    // HU #10506 (multi-rol): con 2+ roles, el backend serializa role_code/role como
+    // ARRAY (colapso de claims .NET), no como string — por eso la fuente confiable es
+    // siempre el claim `roles` (array explícito de {id, code}), con role_code/role como
+    // fallback solo cuando de verdad vienen como string (usuario con un único rol).
+    const roleCodes = Array.isArray(payload.roles)
+      ? payload.roles
+          .map((r) => r?.code)
+          .filter((c): c is string => typeof c === "string")
+      : [];
+    if (roleCodes.length === 0) {
+      if (typeof payload.role_code === "string") roleCodes.push(payload.role_code);
+      else if (typeof payload.role === "string") roleCodes.push(payload.role);
+    }
+    const roleLabel = roleCodes.includes("SuperAdmin")
+      ? "Super Admin"
+      : roleCodes.includes("AdminCompany")
+        ? "Admin de Compañía"
+        : roleCodes.includes("ot_admin")
+          ? "Admin OT"
+          : roleCodes[0] || "Usuario";
     return {
       displayName:
         (payload.display_name as string | undefined) ??
