@@ -133,22 +133,96 @@ public sealed class ConsolidadoHandlerTests
         });
     }
 
-    [Fact]
-    public async Task HandleAsync_ModalidadDesconocida_ReturnsModalidadNoSoportada()
+    private sealed class FakeMatrixOrder(IReadOnlyList<string> order) : IConsolidadoMatrixOrderProvider
     {
-        // AC3 (#10455): una modalidad no habilitada distinta de matrícula/traspaso sigue rechazando.
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyList<string>?> GetOrderAsync(ProcedureInstance instance, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<IReadOnlyList<string>?>(order);
+        }
+    }
+
+    private string ConsolidadoContent()
+    {
+        var path = _storage.Saved.Last();
+        return System.Text.Encoding.UTF8.GetString(_storage.Files[path]);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConsolidadoFromMatrixOff_UsaOrdenHardcoded()
+    {
+        // RF26 flag OFF (default): matrícula ⇒ factura antes que aduana (precedencia hard-coded).
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var matrix = new FakeMatrixOrder(["aduana", "factura"]);
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage,
+            new DocumentBehaviorOptions { ConsolidadoFromMatrix = false },
+            matrix);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        matrix.Calls.Should().Be(0); // flag OFF ⇒ no consulta la matriz
+        var content = ConsolidadoContent();
+        content.IndexOf("factura", StringComparison.Ordinal)
+            .Should().BeLessThan(content.IndexOf("aduana", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConsolidadoFromMatrixOn_OrdenaPorLaMatriz()
+    {
+        // RF26 flag ON: usa la prelación de la matriz (aduana antes que factura).
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var matrix = new FakeMatrixOrder(["fur", "certificado_identidad", "aduana", "factura", "impronta"]);
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage,
+            new DocumentBehaviorOptions { ConsolidadoFromMatrix = true },
+            matrix);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        matrix.Calls.Should().Be(1);
+        var content = ConsolidadoContent();
+        content.IndexOf("aduana", StringComparison.Ordinal)
+            .Should().BeLessThan(content.IndexOf("factura", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ModalidadDistinta_GeneraConOrdenGenerico()
+    {
+        // HU #10522 (RF27/41): una modalidad distinta de matrícula/traspaso YA NO se rechaza;
+        // se genera el consolidado con el orden genérico (documentos generados primero).
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
         instance.ModalidadEntrada = "sucesion";
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
 
-        result.Should().BeNull();
-        error.Should().Be("modalidad_no_soportada");
+        error.Should().NotBe("modalidad_no_soportada");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Document.Tipo.Should().Be("consolidado");
     }
 
     [Fact]

@@ -71,6 +71,18 @@ public static class InfrastructureExtensions
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // HU #10522 — flags de unificación documental (RF17/22/26), OFF por defecto (sección DocumentBehavior).
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.DocumentBehaviorOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.DocumentBehaviorOptions.SectionName));
+        // El handler de consolidado (Application) recibe el POCO directamente (no referencia IOptions).
+        services.AddScoped(sp => sp.GetRequiredService<
+            Microsoft.Extensions.Options.IOptions<
+                Flit.Tramites.Application.UseCases.ProcedureInstances.DocumentBehaviorOptions>>().Value);
+        // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions.SectionName));
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();

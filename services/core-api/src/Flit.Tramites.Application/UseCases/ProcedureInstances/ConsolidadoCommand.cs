@@ -4,7 +4,6 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
-using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -22,7 +21,9 @@ public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document);
 public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    DocumentBehaviorOptions? behaviorOptions = null,
+    IConsolidadoMatrixOrderProvider? matrixOrderProvider = null)
 {
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -33,12 +34,8 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
-        // HU #10455 — el consolidado soporta matrícula inicial Y traspaso. Cualquier otra modalidad
-        // no habilitada (o un código no reconocido) sigue devolviendo modalidad_no_soportada.
-        if (modalidad is not TramiteModalidadEntrada.MatriculaInicial and not TramiteModalidadEntrada.Traspaso)
-            return (null, "modalidad_no_soportada");
-        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
+        // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
+        // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
 
         if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
             return (null, SubmitGate.FurRequerido);
@@ -46,10 +43,13 @@ public sealed class GenerarConsolidadoHandler(
         if (!DocumentosObligatoriosCompletos(instance))
             return (null, SubmitGate.DocumentosIncompletos);
 
-        // Traspaso incluye el contrato de compraventa en el expediente; matrícula lo excluye.
-        var ordered = esTraspaso
-            ? TraspasoConsolidadoOrdering.SelectOrdered(instance.Attachments)
-            : MatriculaConsolidadoOrdering.SelectOrdered(instance.Attachments);
+        // RF26 (flag OFF por defecto) — si ConsolidadoFromMatrix está activo y hay proveedor de matriz,
+        // ordena por la prelación configurada; si no, orden hard-coded por modalidad (comportamiento actual).
+        IReadOnlyList<string>? matrixOrder = null;
+        if (behaviorOptions?.ConsolidadoFromMatrix == true && matrixOrderProvider is not null)
+            matrixOrder = await matrixOrderProvider.GetOrderAsync(instance, ct);
+
+        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada, matrixOrder);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
