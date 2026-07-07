@@ -45,6 +45,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<SetRolePermissionsHandler>();
         services.AddScoped<SetRoleActiveHandler>();
         services.AddScoped<ListRolesHandler>();
+        services.AddScoped<GetRoleHandler>();
 
         // HU #10164 — Asignación única de rol por usuario tenant
         // HU #10506 — soporte multi-rol por usuario (modelo aditivo) + quitar rol puntual
@@ -53,7 +54,6 @@ public static class SecurityApplicationExtensions
 
         // Fase 2 — Endpoints AdminCompañía
         services.AddScoped<ListAccessibleModulesHandler>();
-        services.AddScoped<SetTenantRolePermissionsHandler>();
 
         return services;
     }

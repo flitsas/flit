@@ -88,10 +88,12 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             orderby r.Name
             select new RoleSummary(
                 r.Id,
+                r.TargetEntityType,
                 r.Code,
                 r.Name,
                 r.Description,
                 r.IsSystem,
+                r.IsActive,
                 permCount,
                 r.CreatedAt)
         ).ToListAsync(ct);

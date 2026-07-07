@@ -22,7 +22,7 @@ public sealed class ListRolesHandlerTests
     {
         var expected = new List<RoleSummary>
         {
-            new(Guid.NewGuid(), "AdminCompany", "Administrador de Compañía", null, true, 8, DateTimeOffset.UtcNow),
+            new(Guid.NewGuid(), "COMPANY", "AdminCompany", "Administrador de Compañía", null, true, true, 8, DateTimeOffset.UtcNow),
         };
         _repo.ListByTargetEntityTypeAsync("COMPANY", Arg.Any<CancellationToken>()).Returns(expected);
 
