@@ -104,6 +104,10 @@ public static class AdminInfrastructureExtensions
         // #2 — validación de OT habilitado por empresa en el submit de trámites.
         services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
 
+        // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
+        // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
+        services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
