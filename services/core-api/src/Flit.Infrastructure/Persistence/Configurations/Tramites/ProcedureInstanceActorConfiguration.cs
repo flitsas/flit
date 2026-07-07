@@ -21,6 +21,11 @@ internal sealed class ProcedureInstanceActorConfiguration : IEntityTypeConfigura
         builder.Property(x => x.FullName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Email).HasMaxLength(320);
         builder.Property(x => x.Phone).HasMaxLength(20);
+        builder.Property(x => x.PersonType).HasColumnName("person_type").HasMaxLength(10);
+        builder.Property(x => x.EsRepresentanteLegal)
+            .HasColumnName("es_representante_legal")
+            .IsRequired()
+            .HasDefaultValue(false);
         builder.Property(x => x.Metadata).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
         builder.Property(x => x.CreatedAt).IsRequired();
 

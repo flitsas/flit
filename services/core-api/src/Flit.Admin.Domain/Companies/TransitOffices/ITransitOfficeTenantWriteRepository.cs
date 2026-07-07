@@ -38,4 +38,16 @@ public interface ITransitOfficeTenantWriteRepository
     Task<PagedResult<TransitOfficeTenantItem>> ListAsync(
         TransitOfficeTenantListFilter filter,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Activa/desactiva el tenant OT (<c>identity.tenants.is_active</c>) dejando auditoría en
+    /// <c>admin.tenant_config_audit_logs</c> en la MISMA transacción (HU #10518, RF06). Idempotente:
+    /// si el estado no cambia no persiste ni audita. No revoca grants (decisión producto v1).
+    /// </summary>
+    Task<SetTransitOfficeTenantStatusResult> SetStatusAsync(
+        Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        Guid? correlationId,
+        CancellationToken cancellationToken = default);
 }

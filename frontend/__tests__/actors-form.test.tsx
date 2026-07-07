@@ -170,10 +170,48 @@ describe('ActorsForm — submit', () => {
         nombreCompleto: 'Juan Perez',
         email: 'juan@example.com',
         telefono: undefined,
+        // HU #10543: por defecto persona natural.
+        personType: 'natural',
       },
     ]);
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Actores guardados/)).toBeInTheDocument();
+  });
+});
+
+describe('ActorsForm — tipo de persona (HU #10543)', () => {
+  it('por defecto persona natural: selector activo y nota de cédula automática', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(
+      await screen.findByRole('button', { name: 'Persona natural' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: 'Persona jurídica' }),
+    ).toHaveAttribute('aria-pressed', 'false');
+    // Persona natural: la cédula se incorpora desde la validación de identidad.
+    expect(screen.getByText(/no se carga manualmente/)).toBeInTheDocument();
+  });
+
+  it('al elegir persona jurídica: oculta la nota y guarda personType=juridical', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Persona jurídica' }),
+    );
+    expect(screen.queryByText(/no se carga manualmente/)).toBeNull();
+
+    await user.type(screen.getByLabelText(/Número de documento/), '900123');
+    await user.type(screen.getByLabelText(/Nombre completo/), 'Empresa SAS');
+    await user.type(
+      screen.getByLabelText(/Correo electrónico/),
+      'empresa@example.com',
+    );
+    await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+
+    await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
+    const [, actors] = mocks.saveActors.mock.calls[0];
+    expect(actors[0].personType).toBe('juridical');
   });
 });
 

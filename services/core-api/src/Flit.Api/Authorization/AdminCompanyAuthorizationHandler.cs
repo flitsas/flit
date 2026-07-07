@@ -13,10 +13,15 @@ public sealed class AdminCompanyAuthorizationHandler
         AuthorizationHandlerContext context,
         AdminCompanyRequirement requirement)
     {
-        var roleCode = context.User.FindFirst(AdminAuthorization.RoleClaimType)?.Value;
+        // Multi-rol (HU #10506): el JWT emite un claim "role" POR CADA rol activo, en orden no
+        // determinístico — FindFirst solo evalúa el primero. Se evalúan TODOS los claims del
+        // tipo relevante (fix post-review #10504).
+        var roleCodes = context.User.Claims
+            .Where(c => c.Type == AdminAuthorization.RoleClaimType)
+            .Select(c => c.Value);
 
-        if (roleCode == AdminAuthorization.AdminCompanyRole ||
-            roleCode == AdminAuthorization.SuperAdminRole)
+        if (roleCodes.Contains(AdminAuthorization.AdminCompanyRole) ||
+            roleCodes.Contains(AdminAuthorization.SuperAdminRole))
         {
             context.Succeed(requirement);
         }
