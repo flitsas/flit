@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
+import { EditUserModal } from "./users/EditUserModal";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -40,6 +41,7 @@ export function Usuarios() {
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [suspendTarget, setSuspendTarget] = useState<TenantUser | null>(null);
+  const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
 
   async function loadUsers() {
     setLoading(true);
@@ -202,7 +204,20 @@ export function Usuarios() {
                       <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
                     </div>
                     <div className="opacity-70">{u.createdAt ?? "—"}</div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
+                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
+                          no hay una cuenta real que editar. */}
+                      {u.status !== "pending" && !isSuperAdmin && (
+                        <button
+                          title="Editar usuario"
+                          aria-label={`Editar usuario ${u.fullName}`}
+                          onClick={() => setEditTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          style={{ color: "#557EFF" }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {u.status !== "pending" && !isSuperAdmin && (
                         u.isSuspended ? (
                           <button
@@ -307,6 +322,22 @@ export function Usuarios() {
             await handleSuspend(suspendTarget.id, reason, endsAt);
             setSuspendTarget(null);
           }}
+        />
+      )}
+      {editTarget && (
+        <EditUserModal
+          user={{
+            id: editTarget.id,
+            fullName: editTarget.fullName,
+            email: editTarget.email,
+            rowVersion: editTarget.rowVersion,
+          }}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            loadUsers();
+          }}
+          onUpdate={updateUser}
         />
       )}
     </div>

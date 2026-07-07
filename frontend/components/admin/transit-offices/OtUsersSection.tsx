@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, Pencil, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -9,9 +9,11 @@ import {
   inviteOtUser,
   suspendOtUser,
   unsuspendOtUser,
+  updateOtUser,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
+import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -29,6 +31,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<OtUserItem | null>(null);
+  const [editTarget, setEditTarget] = useState<OtUserItem | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -90,6 +93,16 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     } catch {
       show("No se pudo reactivar al usuario.", "error");
     }
+  }
+
+  // Inyectado a EditUserModal — liga el scope OT (transitOfficeId) a updateOtUser. Los
+  // errores 409/404 los mapea el propio modal (no se atrapan aquí para no perder el
+  // mensaje específico ni el texto escrito en el formulario, AC2/AC3).
+  function handleUpdateUser(
+    userId: string,
+    payload: { displayName?: string; email?: string; rowVersion: number },
+  ) {
+    return updateOtUser(userId, payload, { transitOfficeId });
   }
 
   return (
@@ -164,30 +177,46 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                     <OtUserStatusBadge status={u.status} isSuspended={u.isSuspended} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {u.status !== "pending" &&
-                      (u.isSuspended ? (
+                    <div className="flex items-center justify-end gap-1">
+                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
+                          no hay una cuenta real que editar. */}
+                      {u.status !== "pending" && (
                         <button
                           type="button"
-                          title="Reactivar usuario"
-                          aria-label={`Reactivar usuario ${u.fullName}`}
-                          onClick={() => void handleUnsuspend(u.id)}
-                          className="p-1.5 rounded-lg transition hover:bg-green-50"
-                          style={{ color: "#00DBD5" }}
+                          title="Editar usuario"
+                          aria-label={`Editar usuario ${u.fullName}`}
+                          onClick={() => setEditTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          style={{ color: "#557EFF" }}
                         >
-                          <ShieldOff className="h-4 w-4" />
+                          <Pencil className="h-4 w-4" />
                         </button>
-                      ) : (
-                        <button
-                          type="button"
-                          title="Suspender usuario"
-                          aria-label={`Suspender usuario ${u.fullName}`}
-                          onClick={() => setSuspendTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <Ban className="h-4 w-4" />
-                        </button>
-                      ))}
+                      )}
+                      {u.status !== "pending" &&
+                        (u.isSuspended ? (
+                          <button
+                            type="button"
+                            title="Reactivar usuario"
+                            aria-label={`Reactivar usuario ${u.fullName}`}
+                            onClick={() => void handleUnsuspend(u.id)}
+                            className="p-1.5 rounded-lg transition hover:bg-green-50"
+                            style={{ color: "#00DBD5" }}
+                          >
+                            <ShieldOff className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            title="Suspender usuario"
+                            aria-label={`Suspender usuario ${u.fullName}`}
+                            onClick={() => setSuspendTarget(u)}
+                            className="p-1.5 rounded-lg transition hover:bg-red-50"
+                            style={{ color: "#FF4E00" }}
+                          >
+                            <Ban className="h-4 w-4" />
+                          </button>
+                        ))}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -204,6 +233,23 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           user={suspendTarget}
           onConfirm={(reason, endsAt) => handleSuspend(suspendTarget.id, reason, endsAt)}
           onClose={() => setSuspendTarget(null)}
+        />
+      )}
+      {editTarget && (
+        <EditUserModal
+          user={{
+            id: editTarget.id,
+            fullName: editTarget.fullName,
+            email: editTarget.email,
+            rowVersion: editTarget.rowVersion,
+          }}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            show("Usuario actualizado correctamente.", "success");
+            void load();
+          }}
+          onUpdate={handleUpdateUser}
         />
       )}
     </div>

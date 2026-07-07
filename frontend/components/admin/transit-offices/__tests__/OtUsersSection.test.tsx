@@ -12,6 +12,7 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   inviteOtUser: vi.fn(),
   suspendOtUser: vi.fn(),
   unsuspendOtUser: vi.fn(),
+  updateOtUser: vi.fn(),
 }));
 
 import {
@@ -31,6 +32,7 @@ const activeUser: OtUserItem = {
   status: "active",
   createdAt: "2026-06-23T10:00:00Z",
   isSuspended: false,
+  rowVersion: 1,
 };
 
 const suspendedUser: OtUserItem = {
@@ -43,6 +45,7 @@ const suspendedUser: OtUserItem = {
   status: "active",
   createdAt: "2026-06-20T10:00:00Z",
   isSuspended: true,
+  rowVersion: 5,
 };
 
 function renderSection() {

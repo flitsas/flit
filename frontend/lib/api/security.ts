@@ -19,6 +19,16 @@ export interface TenantUser {
   isSuspended: boolean;
   tenantId?: string | null;
   tenantName?: string | null;
+  /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
+  rowVersion: number;
+}
+
+/** HU #10621: payload de edición — displayName/email opcionales ("no tocar ese campo");
+ *  rowVersion obligatorio (concurrencia optimista, AC3). */
+export interface UpdateUserRequest {
+  displayName?: string;
+  email?: string;
+  rowVersion: number;
 }
 
 export interface TenantRole {
@@ -161,5 +171,15 @@ export async function blockUser(
 export async function unblockUser(userId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/security/users/${userId}/suspend`, {
     method: "DELETE",
+  });
+}
+
+/** PATCH /api/v1/security/users/{userId} — edita nombre y/o correo del usuario (HU #10621).
+ *  409 con código USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
+ *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+export async function updateUser(userId: string, request: UpdateUserRequest): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/users/${userId}`, {
+    method: "PATCH",
+    body: request,
   });
 }

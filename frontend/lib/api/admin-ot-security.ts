@@ -17,6 +17,8 @@ export interface OtUserItem {
   status: "active" | "inactive" | "pending";
   createdAt: string | null;
   isSuspended: boolean;
+  /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
+  rowVersion: number;
 }
 
 export interface OtUserListResponse {
@@ -37,6 +39,14 @@ export interface InviteOtUserResponse {
 export interface SuspendOtUserRequest {
   reason: string;
   endsAt: string;
+}
+
+/** HU #10621: payload de edición — displayName/email opcionales ("no tocar ese campo");
+ *  rowVersion obligatorio (concurrencia optimista, AC3). */
+export interface UpdateOtUserRequest {
+  displayName?: string;
+  email?: string;
+  rowVersion: number;
 }
 
 function scopeQuery(scope?: OtApiScope) {
@@ -77,6 +87,21 @@ export function suspendOtUser(
 export function unsuspendOtUser(userId: string, scope?: OtApiScope): Promise<void> {
   return apiFetch<void>(`${base}/users/${userId}/suspend`, {
     method: "DELETE",
+    query: scopeQuery(scope),
+  });
+}
+
+/** PATCH /api/v1/admin/ot/users/{userId} — edita nombre y/o correo del usuario (HU #10621).
+ *  409 con código USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
+ *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+export function updateOtUser(
+  userId: string,
+  body: UpdateOtUserRequest,
+  scope?: OtApiScope,
+): Promise<void> {
+  return apiFetch<void>(`${base}/users/${userId}`, {
+    method: "PATCH",
+    body,
     query: scopeQuery(scope),
   });
 }
