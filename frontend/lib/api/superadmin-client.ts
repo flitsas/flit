@@ -33,15 +33,30 @@ export interface RbacPermission {
   isActive: boolean;
 }
 
+/** Fila del catálogo GLOBAL de roles (HU #10505 / #10509) — GET /superadmin/roles?targetEntityType=. */
 export interface RbacRole {
   id: string;
-  tenantId: string;
   code: string;
   name: string;
   description: string | null;
   isSystem: boolean;
   permissionCount: number;
   createdAt: string;
+}
+
+/** Tipo de entidad a la que aplica un rol del catálogo global. */
+export type RoleTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
+
+/** Detalle completo de un rol (respuesta de PUT .../permissions) — incluye permisos otorgados. */
+export interface RbacRoleDetail {
+  id: string;
+  targetEntityType: RoleTargetEntityType;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  permissions: { id: string; slug: string; name: string }[];
 }
 
 export interface TenantModuleGrantItem {
@@ -68,18 +83,19 @@ function resolveBaseUrl(): string {
   );
 }
 
-const SUPERADMIN_HEADERS: HeadersInit = {
+const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
-  'X-Flit-SuperAdmin': 'true',
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== 'undefined' ? getToken() : null;
   // Path absoluto → toma el ORIGEN del base e ignora su path (evita duplicar /api/v1).
+  // HU #10508: la policy real es el JWT SuperAdmin (Authorization: Bearer); el header
+  // X-Flit-SuperAdmin quedó obsoleto y el backend ya no lo lee.
   const res = await fetch(new URL(path, resolveBaseUrl()).toString(), {
     ...init,
     headers: {
-      ...SUPERADMIN_HEADERS,
+      ...JSON_HEADERS,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -192,18 +208,22 @@ export const superadminClient = {
   deletePermission: (id: string) =>
     request<void>(`/api/v1/superadmin/permissions/${id}`, { method: 'DELETE' }),
 
-  // Roles RBAC (SuperAdmin scope — tenantId requerido)
-  listRoles: (tenantId: string) =>
-    request<RbacRole[]>(`/api/v1/superadmin/roles?tenantId=${tenantId}`),
-  createRole: (body: { tenantId: string; code: string; name: string; description?: string }) =>
+  // Roles RBAC — catálogo GLOBAL por tipo de entidad (HU #10505 gobernanza HU #10508/#10509).
+  listRoles: (targetEntityType: RoleTargetEntityType) =>
+    request<RbacRole[]>(`/api/v1/superadmin/roles?targetEntityType=${targetEntityType}`),
+  createRole: (body: { targetEntityType: RoleTargetEntityType; code: string; name: string; description?: string }) =>
     request<{ id: string }>('/api/v1/superadmin/roles', { method: 'POST', body: JSON.stringify(body) }),
   deleteRole: (id: string) =>
     request<void>(`/api/v1/superadmin/roles/${id}`, { method: 'DELETE' }),
-  setRolePermissions: (id: string, tenantId: string, permissionIds: string[]) =>
-    request<unknown>(`/api/v1/superadmin/roles/${id}/permissions`, {
+  setRolePermissions: (id: string, permissionIds: string[]) =>
+    request<RbacRoleDetail>(`/api/v1/superadmin/roles/${id}/permissions`, {
       method: 'PUT',
-      body: JSON.stringify({ tenantId, permissionIds }),
+      body: JSON.stringify({ permissionIds }),
     }),
+  activateRole: (id: string) =>
+    request<void>(`/api/v1/superadmin/roles/${id}/activate`, { method: 'PATCH' }),
+  deactivateRole: (id: string) =>
+    request<void>(`/api/v1/superadmin/roles/${id}/deactivate`, { method: 'PATCH' }),
 
   // Compañías (para el picker de tenant en gestión de roles)
   listCompanies: () =>
