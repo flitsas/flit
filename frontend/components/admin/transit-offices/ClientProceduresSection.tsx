@@ -9,12 +9,13 @@ import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
   descargarOtConsolidado,
+  fetchOtBandejaHealth,
   fetchOtClientProcedures,
   fetchOtProfile,
   generarOtConsolidado,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
-import type { OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { ClientProceduresTable } from "./ClientProceduresTable";
@@ -50,6 +51,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
+  // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
+  const [health, setHealth] = useState<OtBandejaHealth | null>(null);
 
   const scope = transitOfficeId ? { transitOfficeId } : undefined;
 
@@ -95,6 +98,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setTotalCount(result.totalCount);
         setPage(result.page);
         setStatus(result.data.length === 0 ? "empty" : "ready");
+        // Diagnóstico de bandeja (R09) — se refresca junto con la lista; nunca la bloquea.
+        fetchOtBandejaHealth(signal, transitOfficeId ? { transitOfficeId } : undefined)
+          .then((h) => {
+            if (!signal?.aborted) setHealth(h);
+          })
+          .catch(() => {
+            /* el diagnóstico es informativo: su fallo no afecta la bandeja */
+          });
       } catch {
         if (!signal?.aborted) setStatus("error");
       }
@@ -209,6 +220,23 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           <span className="text-[11px] opacity-60">
             Modo QX activo — no se pueden aprobar ni rechazar trámites.
           </span>
+        </div>
+      )}
+      {health?.hasDeliveredWithoutGrant && (
+        <div
+          role="alert"
+          className="rounded-xl px-4 py-3 text-xs"
+          style={{ background: "#FFF4EC", color: "#7A2E00", border: "1px solid #FFD9C2" }}
+        >
+          <span className="font-semibold">
+            {health.deliveredWithoutGrant}{" "}
+            {health.deliveredWithoutGrant === 1
+              ? "trámite entregado sin grant vigente"
+              : "trámites entregados sin grant vigente"}
+          </span>{" "}
+          no {health.deliveredWithoutGrant === 1 ? "aparece" : "aparecen"} en esta bandeja.
+          Habilita el grant OT↔empresa correspondiente para que el organismo pueda recibirlos y
+          aprobarlos.
         </div>
       )}
       <form

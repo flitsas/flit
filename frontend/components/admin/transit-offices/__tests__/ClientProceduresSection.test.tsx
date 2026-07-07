@@ -8,6 +8,7 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  fetchOtBandejaHealth: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
@@ -44,6 +45,7 @@ import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
   descargarOtConsolidado,
+  fetchOtBandejaHealth,
   fetchOtClientProcedures,
   fetchOtProfile,
   generarOtConsolidado,
@@ -84,6 +86,15 @@ describe("ClientProceduresSection — HU #10220", () => {
       totalCount: 1,
       page: 1,
       pageSize: 20,
+    });
+    // Por defecto la bandeja está sana (sin entregados huérfanos): el banner no se muestra.
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 1,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 0,
+      hasDeliveredWithoutGrant: false,
     });
     vi.mocked(approveOtClientProcedure).mockResolvedValue({
       ...procedure,
@@ -243,6 +254,36 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(within(dialog).getByRole("button", { name: /^Adjuntar LT$/i }));
     await waitFor(() =>
       expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined),
+    );
+  });
+
+  it("HU10541 — muestra banner de diagnóstico cuando hay entregados sin grant", async () => {
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 3,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 2,
+      hasDeliveredWithoutGrant: true,
+    });
+    renderSection();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/2\s+trámites entregados sin grant vigente/i);
+    expect(alert).toHaveTextContent(/grant OT.?empresa/i);
+  });
+
+  it("HU10541 — no muestra el banner cuando la bandeja está sana", async () => {
+    renderSection();
+    expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("HU10541 — el diagnóstico se consulta con el scope del SuperAdmin", async () => {
+    renderSection("aaaaaaaa-0001-4000-8000-000000000001");
+    await waitFor(() =>
+      expect(fetchOtBandejaHealth).toHaveBeenCalledWith(expect.anything(), {
+        transitOfficeId: "aaaaaaaa-0001-4000-8000-000000000001",
+      }),
     );
   });
 });

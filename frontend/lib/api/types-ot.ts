@@ -51,6 +51,16 @@ export interface OtClientProceduresParams {
   pageSize?: number;
 }
 
+/** Diagnóstico de la bandeja OT (HU #10540/#10541 — R09): entregados con/sin grant vigente. */
+export interface OtBandejaHealth {
+  transitOfficeResolved: boolean;
+  transitOfficeId: string | null;
+  deliveredTotal: number;
+  deliveredWithGrant: number;
+  deliveredWithoutGrant: number;
+  hasDeliveredWithoutGrant: boolean;
+}
+
 export interface OtWebhook {
   id: string;
   eventType: string;
