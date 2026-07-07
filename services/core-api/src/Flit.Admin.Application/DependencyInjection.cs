@@ -10,8 +10,10 @@ using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
+using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -99,6 +101,9 @@ public static class DependencyInjection
         // HU #10192 — catálogo OT (BD) + grants + consulta audit log.
         // ITransitOfficeCatalog se registra en AddAdminInfrastructure (DbTransitOfficeCatalog).
         services.AddScoped<SearchTransitOfficesHandler>();
+        // RF01 — estado operativo del catálogo OT (join catálogo + perfil + tenant).
+        // ITransitOfficeOperationalStatusReader se registra en AddAdminInfrastructure.
+        services.AddScoped<ListTransitOfficesOperationalStatusHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
 
@@ -106,6 +111,8 @@ public static class DependencyInjection
         // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.
         services.AddScoped<CreateTransitOfficeHandler>();
         services.AddScoped<ListTransitOfficeTenantsHandler>();
+        // HU #10518 — cambio de estado del tenant OT con auditoría atómica.
+        services.AddScoped<SetTransitOfficeTenantStatusHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 

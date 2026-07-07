@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.TransitOffices.Create;
@@ -28,6 +29,14 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
 {
     /// <summary>Código del rol de sistema del módulo OT (no se renombra — ver ADR del refactor adminOT).</summary>
     internal const string OtAdminRoleCode = "ot_admin";
+
+    private const string OtAdminRoleName = "Administrador OT";
+
+    /// <summary>Entidad lógica auditada al activar/desactivar el tenant OT (HU #10518).</summary>
+    private const string TenantStatusAuditEntity = "transit_office_tenant";
+
+    /// <summary>Campo auditado al cambiar el estado del tenant OT.</summary>
+    private const string TenantStatusAuditField = "is_active";
 
     private readonly FlitDbContext _context;
 
@@ -168,6 +177,65 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
             cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<SetTransitOfficeTenantStatusResult> SetStatusAsync(
+        Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        Guid? correlationId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInExistingTenantScopeAsync(
+            tenantId,
+            () => PersistSetStatusAsync(tenantId, isActive, changedBy, correlationId, cancellationToken),
+            cancellationToken);
+
+    private async Task<SetTransitOfficeTenantStatusResult> PersistSetStatusAsync(
+        Guid tenantId,
+        bool isActive,
+        Guid? changedBy,
+        Guid? correlationId,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await _context.Tenants
+            .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (tenant is null)
+        {
+            return SetTransitOfficeTenantStatusResult.NotFound(tenantId);
+        }
+
+        // Idempotente: mismo estado → sin persistir ni duplicar auditoría.
+        if (tenant.IsActive == isActive)
+        {
+            return SetTransitOfficeTenantStatusResult.Applied(tenantId, isActive, changed: false);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var previous = tenant.IsActive;
+
+        tenant.IsActive = isActive;
+        tenant.UpdatedAt = now;
+        tenant.UpdatedBy = changedBy;
+
+        // Auditoría de gobernanza en la MISMA transacción (patrón TransitGrantRepository):
+        // consultable vía el historial del tenant (admin.tenant_config_audit_logs).
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = TenantStatusAuditEntity,
+            FieldName = TenantStatusAuditField,
+            OldValue = JsonSerializer.Serialize(previous),
+            NewValue = JsonSerializer.Serialize(isActive),
+            ChangedAt = now,
+            ChangedBy = changedBy,
+            CorrelationId = correlationId,
+        });
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return SetTransitOfficeTenantStatusResult.Applied(tenantId, isActive, changed: true);
+    }
+
     private static TransitOfficeTenantItem Project(
         Tenant tenant,
         TransitOfficeProfile profile,
@@ -219,6 +287,41 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
                     cancellationToken).ConfigureAwait(false);
 
                 var result = await action(tenantId).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Ejecuta <paramref name="action"/> dentro de una transacción fijando
+    /// <c>app.current_tenant_id</c> al tenant EXISTENTE indicado (mismo patrón que
+    /// <c>TransitGrantRepository</c>), para que el INSERT en <c>tenant_config_audit_logs</c>
+    /// —tabla con RLS— pase la política. En proveedor no relacional se ejecuta directo.
+    /// </summary>
+    private async Task<T> ExecuteInExistingTenantScopeAsync<T>(
+        Guid tenantId,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            return await action().ConfigureAwait(false);
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            var transaction = await _context.Database
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (transaction.ConfigureAwait(false))
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                    cancellationToken).ConfigureAwait(false);
+
+                var result = await action().ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 return result;
             }

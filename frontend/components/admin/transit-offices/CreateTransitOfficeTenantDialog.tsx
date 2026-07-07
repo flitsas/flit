@@ -29,6 +29,8 @@ export interface CreateTransitOfficeTenantDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (tenant: TransitOfficeTenantItem) => void;
+  /** Oficina del catálogo a preseleccionar (p. ej. la fila «Dar de alta» del listado). */
+  initialOfficeId?: string;
 }
 
 type FieldErrors = Partial<Record<"transitOfficeId" | "legalName" | "taxId" | "code", string>>;
@@ -37,6 +39,7 @@ export function CreateTransitOfficeTenantDialog({
   open,
   onClose,
   onCreated,
+  initialOfficeId,
 }: CreateTransitOfficeTenantDialogProps) {
   const [availableOffices, setAvailableOffices] = useState<TransitOffice[]>([]);
   const [officesLoading, setOfficesLoading] = useState(false);
@@ -66,7 +69,11 @@ export function CreateTransitOfficeTenantDialog({
           return;
         }
         const assignedIds = new Set(tenants.data.map((t) => t.transitOfficeId));
-        setAvailableOffices(catalog.filter((office) => !assignedIds.has(office.id)));
+        const available = catalog.filter((office) => !assignedIds.has(office.id));
+        setAvailableOffices(available);
+        if (initialOfficeId && available.some((o) => o.id === initialOfficeId)) {
+          setTransitOfficeId(initialOfficeId);
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -79,7 +86,7 @@ export function CreateTransitOfficeTenantDialog({
         }
       });
     return () => controller.abort();
-  }, [open]);
+  }, [open, initialOfficeId]);
 
   if (!open) {
     return null;
