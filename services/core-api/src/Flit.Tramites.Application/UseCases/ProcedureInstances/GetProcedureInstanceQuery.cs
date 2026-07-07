@@ -67,7 +67,12 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.FieldValues
                 .Select(f => new ProcedureInstanceFieldValueDto(f.FormFieldId, f.FieldKey, f.ValueText, f.ValueJson, f.Source))
                 .ToList(),
+            // Trazabilidad cronológica: EF materializa la colección sin orden garantizado — se
+            // ordena por fecha/hora con desempate estable por Id (mismo criterio que el endpoint
+            // de status-history) para que el Expediente pinte las transiciones en orden real.
             e.StatusHistory
+                .OrderBy(h => h.ChangedAt)
+                .ThenBy(h => h.Id)
                 .Select(h => new ProcedureInstanceStatusHistoryDto(h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason))
                 .ToList(),
             e.Actors

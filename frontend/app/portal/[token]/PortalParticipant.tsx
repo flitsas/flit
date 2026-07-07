@@ -53,7 +53,7 @@ export function PortalParticipant({ token }: Props) {
 
   if (finalized) {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="status">
+      <div className={CARD} role="status">
         <div
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
           style={{ background: 'rgba(0,219,213,0.15)' }}
@@ -70,7 +70,7 @@ export function PortalParticipant({ token }: Props) {
 
   if (load.kind === 'loading') {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }}>
+      <div className={CARD}>
         <p className="text-sm opacity-70 text-center">Cargando portal…</p>
       </div>
     );
@@ -78,7 +78,7 @@ export function PortalParticipant({ token }: Props) {
 
   if (load.kind === 'error') {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="alert">
+      <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Portal del participante</h1>
         <p className="text-sm" style={{ color: '#FF4E00' }}>
           {load.message}
@@ -91,7 +91,7 @@ export function PortalParticipant({ token }: Props) {
 
   if (view.completado) {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="status">
+      <div className={CARD} role="status">
         <h1 className="text-lg font-bold mb-2">Trámite completado</h1>
         <p className="text-sm opacity-70">
           Ya completaste tu parte de este trámite.
@@ -102,7 +102,7 @@ export function PortalParticipant({ token }: Props) {
 
   if (view.expirado) {
     return (
-      <div className={CARD} style={{ borderColor: '#DFE5ED' }} role="alert">
+      <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Enlace expirado</h1>
         <p className="text-sm opacity-70">
           El enlace del portal expiró. Solicita uno nuevo a tu gestor.
@@ -112,7 +112,7 @@ export function PortalParticipant({ token }: Props) {
   }
 
   return (
-    <div className={CARD} style={{ borderColor: '#DFE5ED' }}>
+    <div className={CARD}>
       <h1 className="text-lg font-bold">Portal del participante</h1>
       <p className="text-sm opacity-70 mt-1">
         Hola {view.nombre} ({view.rol}). Trámite {view.instancia.referencia}
@@ -170,7 +170,6 @@ function ConsentGate({
       </div>
       <div
         className="rounded-xl border p-3 text-[11px] leading-relaxed max-h-48 overflow-y-auto opacity-80"
-        style={{ borderColor: '#DFE5ED' }}
       >
         {view.consentText}
       </div>
@@ -476,7 +475,7 @@ function FinalizarTask({
   };
 
   return (
-    <section aria-label="Finalizar" className="pt-2 border-t" style={{ borderColor: '#DFE5ED' }}>
+    <section aria-label="Finalizar" className="pt-2 border-t">
       <button
         type="button"
         onClick={() => void handleFinalizar()}

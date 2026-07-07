@@ -6,6 +6,8 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -30,7 +32,10 @@ public sealed record BiometricValidationDto(
     string Provider = BiometricProviders.Mock,
     string? CaptureUrl = null,
     // HU #10234 (AC4): motivo de rechazo SANITIZADO. Solo se expone en estado rechazado; null en otros.
-    string? RejectionReason = null);
+    string? RejectionReason = null,
+    // Motivo del ÚLTIMO intento fallido MIENTRAS la validación sigue abierta (en_proceso): Kyverum permite
+    // reintentar (p.ej. "El rostro no es completamente visible…"). Null si no hubo intento fallido o no aplica.
+    string? UltimoIntentoMotivo = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -123,7 +128,7 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
@@ -182,7 +187,8 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
                 && v.Status == BiometricEstados.EnProceso
                     ? v.CaptureUrl
                     : null,
-            ExtractMotivoRechazo(v));
+            ExtractMotivoRechazo(v),
+            ExtractUltimoIntentoMotivo(v));
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
@@ -200,6 +206,12 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         if (!string.IsNullOrWhiteSpace(motivo))
             return motivo;
 
+        // Kyverum: mensaje REAL del proveedor (subject_motivo), capturado en la consulta de estado. Es una guía
+        // amigable sin PII (p.ej. "coincidencia facial insuficiente"), mejor que el texto genérico de abajo.
+        var kyverumMotivo = TryReadString(v.ProviderPayload, "subject_motivo");
+        if (!string.IsNullOrWhiteSpace(kyverumMotivo))
+            return kyverumMotivo;
+
         // Kyverum: deriva el motivo de las coincidencias sanitizadas del payload del proveedor.
         if (TryParseJson(v.ProviderPayload, out var payload)
             && payload.TryGetProperty("coincidencias", out var coincidencias)
@@ -212,6 +224,27 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         }
 
         return "La validación de identidad no fue aprobada por el proveedor.";
+    }
+
+    /// <summary>
+    /// Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso/enviado): Kyverum
+    /// permite reintentar (hasta agotar sus intentos). Se lee del provider_payload sanitizado (subject_motivo,
+    /// estampado por la consulta de estado) SOLO si el último intento fue rechazado. Null si no aplica. Permite
+    /// al front mostrar "el cliente está reintentando: &lt;motivo&gt;" sin terminalizar la validación.
+    /// </summary>
+    internal static string? ExtractUltimoIntentoMotivo(ProcedureInstanceBiometricValidation v)
+    {
+        if (v.Status is not BiometricEstados.EnProceso and not BiometricEstados.Enviado)
+            return null;
+        if (!TryParseJson(v.ProviderPayload, out var payload))
+            return null;
+        if (!(payload.TryGetProperty("subject_status", out var st)
+              && st.ValueKind == JsonValueKind.String
+              && string.Equals(st.GetString(), BiometricEstados.Rechazado, StringComparison.OrdinalIgnoreCase)))
+            return null;
+        return payload.TryGetProperty("subject_motivo", out var m) && m.ValueKind == JsonValueKind.String
+            ? m.GetString()
+            : null;
     }
 
     private static string? TryReadString(string? json, string property)
@@ -251,7 +284,7 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -260,6 +293,34 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
             .OrderBy(v => v.CreatedAt)
             .Select(v => IniciarBiometriaHandler.ToDto(v, now))
             .ToList();
+
+        // Identidad REFERENCIADA (HU #10350): si el trámite no tiene validación PROPIA vigente-aprobada de una
+        // parte pero la PERSONA (documento del actor) sí tiene una en otro trámite, se expone ESA (sin clonar)
+        // para que la UI muestre "identidad verificada". La validación referenciada se rotula con la parte
+        // actual (su PartyRole de origen puede diferir, p.ej. matrícula→traspaso).
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
+                         == TramiteModalidadEntrada.Traspaso;
+        var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        foreach (var parte in partes)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+            if (actor is null || string.IsNullOrWhiteSpace(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+                continue;
+
+            var yaLocal = instance.BiometricValidations.Any(v =>
+                string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                && BiometricRules.EsAprobadaVigente(v, now)
+                && BiometricRules.DocumentoCoincide(v, actor.DocumentType, actor.DocumentNumber));
+            if (yaLocal)
+                continue;
+
+            var source = await repo.FindVigenteApprovedByDocumentAsync(
+                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+            if (source is not null)
+                dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
+        }
+
         return (new BiometricValidationsResponse(dtos, providerOptions.Provider), null);
     }
 }

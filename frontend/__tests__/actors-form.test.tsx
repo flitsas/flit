@@ -372,6 +372,83 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
     expect(numero).toHaveValue('');
   });
+
+  // El layout split del vendedor no expone un selector de tipo visible: el tipo sembrado se
+  // verifica a través del payload de guardado (save() vía ref).
+  it('el seed también fija el TIPO de documento del propietario (visible en el guardado)', async () => {
+    const user = userEvent.setup();
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CE' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+    const ref = createRef<ActorsFormHandle>();
+    render(
+      <ActorsForm
+        ref={ref}
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor']}
+        layout="split"
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Número de documento')).toHaveValue('1090123456'),
+    );
+    // Completa los requeridos del vendedor para que el guardado sea válido.
+    await user.type(screen.getByLabelText(/Nombre completo/), 'Ana Vendedora');
+    await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+
+    expect(ok).toBe(true);
+    const [, actors] = mocks.saveActors.mock.calls[0];
+    expect(actors[0]).toMatchObject({ tipoDocumento: 'CE', numeroDocumento: '1090123456' });
+  });
+
+  it('un tipo de documento inválido del propietario cae a CC', async () => {
+    const user = userEvent.setup();
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'ZZ' }, // no está en el catálogo
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+    const ref = createRef<ActorsFormHandle>();
+    render(
+      <ActorsForm
+        ref={ref}
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor']}
+        layout="split"
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Número de documento')).toHaveValue('1090123456'),
+    );
+    await user.type(screen.getByLabelText(/Nombre completo/), 'Ana Vendedora');
+    await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+
+    expect(ok).toBe(true);
+    const [, actors] = mocks.saveActors.mock.calls[0];
+    expect(actors[0].tipoDocumento).toBe('CC');
+  });
 });
 
 describe('validateActors — unidad', () => {
@@ -396,6 +473,22 @@ describe('validateActors — unidad', () => {
       ],
       'traspaso',
     );
+    expect(v.valid).toBe(false);
+  });
+
+  it('rechaza número de documento con letras cuando el tipo no es pasaporte', () => {
+    const v = validateActors([{ ...base, tipoDocumento: 'CC', numeroDocumento: '12A4' }], 'matricula_inicial');
+    expect(v.valid).toBe(false);
+    expect(v.byActor[0].numeroDocumento).toContain('dígitos');
+  });
+
+  it('acepta pasaporte alfanumérico', () => {
+    const v = validateActors([{ ...base, tipoDocumento: 'PAS', numeroDocumento: 'AB123CD' }], 'matricula_inicial');
+    expect(v.valid).toBe(true);
+  });
+
+  it('rechaza nombre con caracteres especiales', () => {
+    const v = validateActors([{ ...base, nombreCompleto: '<script>' }], 'matricula_inicial');
     expect(v.valid).toBe(false);
   });
 });

@@ -168,6 +168,150 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["processing_year"].Text.Should().Be("2026");
     }
 
+    // ── HU #10457 — calibración de la sección comprador/vendedor del FUR de traspaso ──
+
+    [Fact]
+    public void FurFieldMapper_TraspasoWithoutBuyer_LeavesBuyerSectionBlank()
+    {
+        // AC2: traspaso sin comprador resuelto → sección comprador en blanco (no '-' ni basura),
+        // incluidos los checkboxes de tipo de documento del comprador.
+        var data = TraspasoData() with
+        {
+            Partes = [new DocumentParte("vendedor", "VENDEDOR TEST", "1000445459", null, DocumentType: "CC")],
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_buyer_name"].Text.Should().BeEmpty();
+        values["vehicle_buyer_first_last_name"].Text.Should().BeEmpty();
+        values["vehicle_buyer_second_last_name"].Text.Should().BeEmpty();
+        values["vehicle_buyer_document_number"].Text.Should().BeEmpty();
+        values["vehicle_buyer_address"].Text.Should().BeEmpty();
+        values["vehicle_buyer_signature"].Text.Should().BeEmpty();
+        values["vehicle_buyer_document_type_c"].Text.Should().Be("");
+        values["vehicle_buyer_document_type_p"].Text.Should().Be("");
+    }
+
+    [Fact]
+    public void FurFieldMapper_CompoundBuyerName_SplitsNamesAndLastNames()
+    {
+        // AC3: nombre compuesto (4+ palabras) → SplitName reparte 2 apellidos + nombres.
+        var data = TraspasoData() with
+        {
+            Partes =
+            [
+                new DocumentParte("vendedor", "VENDEDOR TEST", "1000445459", null, DocumentType: "CC"),
+                new DocumentParte("comprador", "JUAN CARLOS PEREZ GOMEZ", "1234567890", null, DocumentType: "CC"),
+            ],
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_buyer_first_last_name"].Text.Should().Be("PEREZ");
+        values["vehicle_buyer_second_last_name"].Text.Should().Be("GOMEZ");
+        values["vehicle_buyer_name"].Text.Should().Be("JUAN CARLOS");
+    }
+
+    [Fact]
+    public void FurFieldMapper_PlateWithHyphen_SplitsLettersAndNumbers()
+    {
+        // AC3: placa con guion → SplitPlaca separa letras/números en plate_letter/plate_number.
+        var data = TraspasoData() with
+        {
+            Vehiculo = TraspasoData().Vehiculo with { Placa = "ABC-123" },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["plate_letter"].Text.Should().Be("ABC");
+        values["plate_number"].Text.Should().Be("123");
+    }
+
+    // ── HU #10463 — sello "NO FIRMADO" cuando no hay validación de identidad ──
+
+    [Fact]
+    public void FurFieldMapper_WithoutIdentity_PaintsNoFirmadoInSignatures()
+    {
+        // AC1: sin validación de identidad, el espacio de firma muestra "NO FIRMADO"
+        // (traspaso: vendedor/propietario + comprador).
+        var data = TraspasoData() with { IdentidadValidada = false };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().Be("NO FIRMADO");
+    }
+
+    [Fact]
+    public void FurFieldMapper_WithIdentity_DoesNotPaintNoFirmado()
+    {
+        // AC2: con validación (por defecto), no se pinta "NO FIRMADO".
+        var values = FurFieldMapper.Map(TraspasoData());
+        values["vehicle_owner_signature"].Text.Should().NotBe("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().NotBe("NO FIRMADO");
+    }
+
+    // ── HU #10488 — sello de la validación biométrica (firma como texto) en el espacio de firma ──
+
+    [Fact]
+    public void FurFieldMapper_Matricula_PaintsIdentitySealInOwnerSignature()
+    {
+        // AC3: matrícula → el propietario es el "comprador"; el sello de identidad se pinta en su firma.
+        var data = FullData() with
+        {
+            SellosIdentidad = new Dictionary<string, string> { ["comprador"] = "SELLO-IDENTIDAD-COMPRADOR" },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("SELLO-IDENTIDAD-COMPRADOR");
+    }
+
+    [Fact]
+    public void FurFieldMapper_Traspaso_PaintsIdentitySealForSellerAndBuyer()
+    {
+        // AC3: traspaso → vendedor en la firma del propietario y comprador en la del comprador.
+        var data = TraspasoData() with
+        {
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "SELLO-VENDEDOR",
+                ["comprador"] = "SELLO-COMPRADOR",
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("SELLO-VENDEDOR");
+        values["vehicle_buyer_signature"].Text.Should().Be("SELLO-COMPRADOR");
+    }
+
+    [Fact]
+    public void FurFieldMapper_IdentitySeal_OverriddenByNoFirmado_WhenIdentityNotValidated()
+    {
+        // AC4: aunque haya sello de identidad, sin identidad validada el override "NO FIRMADO" tiene la última palabra.
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = false,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "SELLO-VENDEDOR",
+                ["comprador"] = "SELLO-COMPRADOR",
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Be("NO FIRMADO");
+        values["vehicle_buyer_signature"].Text.Should().Be("NO FIRMADO");
+    }
+
+    [Fact]
+    public void FurFieldMapper_WithoutIdentitySeal_FallsBackToSellosFirma()
+    {
+        // Compat: sin sello de identidad, el espacio de firma cae al sello previo de firma electrónica.
+        var data = FullData() with
+        {
+            SellosFirma = ["comprador/compraventa: abc123 (2026-07-03T00:00:00.0000000+00:00)"],
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].Text.Should().Contain("comprador/compraventa");
+    }
+
     // ── HU #10256 fix — resolutor de fuentes embebido (raíz del HTTP 500 en runtime alpine) ──
 
     [Fact]

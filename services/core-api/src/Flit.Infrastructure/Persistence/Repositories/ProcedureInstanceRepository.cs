@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -25,6 +26,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstances
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
+    public async Task<IReadOnlyList<IdentityValidationAuditEvent>> ListIdentityAuditByValidationAsync(
+        Guid validationId, CancellationToken ct) =>
+        await db.IdentityValidationAudits
+            .AsNoTracking()
+            .Where(x => x.ValidationId == validationId)
+            .OrderBy(x => x.OccurredAt)
+            .ToListAsync(ct);
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -64,7 +73,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return await db.ProcedureInstances
             .Include(i => i.Actors)
             .Where(i => i.TenantId == tenantId
-                && i.Status == Flit.Tramites.Domain.Enums.ProcedureInstanceStatus.Draft
+                && i.Status == TramiteEstado.Borrador
                 && i.DraftFinalizedAt != null
                 && i.DeletedAt == null
                 && i.Actors.Any(a =>
@@ -137,15 +146,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // Filtro grueso en SQL por timestamp (validado_at >= corte), con un día de margen para no
         // descartar candidatos cerca del límite; el corte fino por DÍA calendario se aplica en memoria
         // con BiometricRules.EsAprobadaVigente (semántica "día de aprobación = día 1; vence el día 31").
+        // Filtro grueso en SQL. `valid_until` es la fuente de verdad del vencimiento (editable en BD); cuando
+        // está, se filtra por él (> now). Si falta (registros viejos), se cae al corte por validated_at con un
+        // día de margen. El corte fino lo aplica BiometricRules.EsAprobadaVigente (misma prioridad valid_until).
         var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
                 && v.Status == BiometricEstados.Aprobado
-                && v.ValidatedAt != null
-                && v.ValidatedAt >= cutoff
                 && v.DocumentType == tipoDoc
                 && v.DocumentNumber == documento
+                && ((v.ValidUntil != null && v.ValidUntil > now)
+                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null)
             .OrderByDescending(v => v.ValidatedAt)
@@ -153,6 +165,36 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToListAsync(ct);
 
         return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
+    }
+
+    public async Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        if (tenantIds.Count == 0)
+            return keys;
+
+        // Mismo filtro grueso que FindVigenteApproved… (corte por timestamp con un día de margen); el corte
+        // fino por día calendario se aplica en memoria con EsAprobadaVigente. Una sola consulta para todos
+        // los tenants del listado (WHERE tenant_id IN (...)) → sin N+1.
+        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => tenantIds.Contains(v.TenantId)
+                && v.Status == BiometricEstados.Aprobado
+                && v.DocumentType != null
+                && v.DocumentNumber != null
+                && ((v.ValidUntil != null && v.ValidUntil > now)
+                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .ToListAsync(ct);
+
+        foreach (var v in candidates)
+            if (BiometricRules.EsAprobadaVigente(v, now))
+                keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
+
+        return keys;
     }
 
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
@@ -344,6 +386,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
+    // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
+    // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
+    public async Task<bool> TryCountKyverumAttemptAsync(
+        Guid validationId, string attemptKey, DateTimeOffset now, CancellationToken ct)
+    {
+        var affected = await db.ProcedureInstanceBiometricValidations
+            .Where(x => x.Id == validationId
+                        && x.Status == BiometricEstados.EnProceso
+                        && (x.LastAttemptAt == null || x.LastAttemptAt != attemptKey))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Attempts, x => x.Attempts + 1)
+                .SetProperty(x => x.LastAttemptAt, attemptKey)
+                .SetProperty(x => x.ReconcilePollCount, 0)
+                .SetProperty(x => x.UpdatedAt, now), ct);
+        return affected > 0;
+    }
+
+    public Task ReloadBiometricAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct) =>
+        db.Entry(validation).ReloadAsync(ct);
+
     public Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.Participants)
@@ -466,4 +528,58 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task SaveChangesAsync(CancellationToken ct) =>
         db.SaveChangesAsync(ct);
+
+    // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
+    // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
+    // transicionó la instancia entre carga y commit, EF lanza DbUpdateConcurrencyException y
+    // aquí se traduce a false SIN efectos parciales (Application no referencia EF).
+    public async Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct)
+    {
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        var query = db.ProcedureInstanceStatusHistories.AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == id && h.TenantId == tenantId);
+
+        var total = await query.CountAsync(ct);
+
+        // Left join a identity.users vía subconsulta (se traduce a LEFT JOIN LATERAL y funciona
+        // igual con el provider InMemory de los tests). Desempate por Id para orden determinista
+        // cuando dos transiciones comparten changed_at (p. ej. borrador→preparado→entregado del submit).
+        var items = await query
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .Skip(skip)
+            .Take(take)
+            .Select(h => new ProcedureInstanceStatusHistoryEntry(
+                h.Id,
+                h.FromStatus,
+                h.ToStatus,
+                h.ChangedAt,
+                h.ChangedBy,
+                db.Users.Where(u => u.Id == h.ChangedBy).Select(u => u.DisplayName).FirstOrDefault(),
+                h.Reason))
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    public Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct) =>
+        db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
 }

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
+import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import {
   METODOS_RECAUDO,
   NOTIFICATION_TARGET_LABELS,
@@ -115,7 +116,6 @@ export function ConfiguracionEmpresaTab({
               <label
                 key={metodo}
                 className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 <input
                   type="checkbox"
@@ -135,8 +135,10 @@ export function ConfiguracionEmpresaTab({
         )}
       </fieldset>
 
+      <ConsultaProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
+
       {otSlot && (
-        <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+        <div className="rounded-2xl border p-4">
           {otSlot}
         </div>
       )}

@@ -4,7 +4,7 @@ import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt
 
 export const FORBIDDEN_PATH = "/403";
 
-export type UserRole = "superadmin" | "admincompany" | "user";
+export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
 export interface AdminAccessDecision {
   /** `true` si el token corresponde a un usuario con acceso permitido. */
@@ -73,6 +73,7 @@ export function getUserRole(token: string | null | undefined): UserRole {
   const payload = decodeJwtPayload(token);
   if (payload && isSuperAdmin(payload)) return "superadmin";
   if (payload && isAdminCompany(payload)) return "admincompany";
+  if (payload && isOtAdmin(payload)) return "ot_admin";
   return "user";
 }
 

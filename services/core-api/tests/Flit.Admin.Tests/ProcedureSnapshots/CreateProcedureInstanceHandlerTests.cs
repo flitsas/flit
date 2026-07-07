@@ -64,7 +64,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.Created);
         result.Response.Should().NotBeNull();
         result.Response!.ReferenceNumber.Should().Be("TR-2026-0001");
-        result.Response.Status.Should().Be("draft");
+        result.Response.Status.Should().Be("borrador");
         result.Response.DocumentCount.Should().Be(2);
 
         await using var verify = NewContext(db);
@@ -73,7 +73,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         instance.ProcedureTypeId.Should().Be(ProcedureTypeId);
         instance.TransitOfficeId.Should().Be(TransitOfficeId);
         instance.CreatedByUserId.Should().Be(Actor);
-        instance.Status.Should().Be("draft");
+        instance.Status.Should().Be("borrador");
 
         var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         snapshot.ProcedureInstanceId.Should().Be(instance.Id);
@@ -164,7 +164,7 @@ public sealed class CreateProcedureInstanceHandlerTests
                 TenantId = ClienteId,
                 ProcedureTypeId = ProcedureTypeId,
                 ReferenceNumber = "TR-DUP",
-                Status = "draft",
+                Status = "borrador",
                 CreatedByUserId = Actor,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

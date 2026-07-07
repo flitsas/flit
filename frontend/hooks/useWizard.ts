@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { DEV_TENANT_ID } from '@/lib/api/dev-constants';
 import type { WizardState } from '@/lib/api/types/procedure-runtime';
 
 export interface WizardHookState {
@@ -27,7 +26,10 @@ const INITIAL_STATE: WizardHookState = {
  */
 export function useWizard(
   instanceId: string | null,
-  tenantId: string = DEV_TENANT_ID,
+  // Sin default hardcodeado: el tenant lo resuelve `tenantHeader` (tenant activo del `?t=` → JWT).
+  // Forzar DEV_TENANT_ID aquí mandaba X-Tenant-Id=11111111 y un SuperAdmin veía 404 "not found" en
+  // instancias de su compañía real (creadas bajo su tenant del JWT, no bajo el "Flit Dev Tenant").
+  tenantId?: string,
 ) {
   const [state, setState] = useState<WizardHookState>(INITIAL_STATE);
 

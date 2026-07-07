@@ -14,7 +14,8 @@ namespace Flit.Infrastructure.Consultations;
 /// </summary>
 internal sealed class VerifikConsultationProvider(
     HttpClient http,
-    IOptions<VerifikOptions> options) : IConsultationProvider
+    IOptions<VerifikOptions> options,
+    IOptions<ConsultationProviderModeOptions> modeOptions) : IConsultationProvider
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -24,6 +25,7 @@ internal sealed class VerifikConsultationProvider(
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
     private readonly VerifikOptions _options = options.Value;
+    private readonly ConsultationProviderModeOptions _modes = modeOptions.Value;
 
     public string Key => "verifik";
 
@@ -31,6 +33,12 @@ internal sealed class VerifikConsultationProvider(
     {
         var vin = GetValue(ctx, "vin");
         var plate = GetValue(ctx, "plate");
+
+        // Toggle VERIFIK_VEHICLE_MODE=mock (Consultations:VerifikVehicleMode): devuelve un vehículo
+        // canónico VERDE reusando el VIN/placa capturado, para desatascar el pre-vuelo cuando el RUNT
+        // (Verifik) esté caído o el token vencido, sin depender de la red. Mismo patrón que el SIMIT.
+        if (ConsultationProviderModeOptions.IsMock(_modes.VerifikVehicleMode))
+            return MockResult(vin, plate);
 
         if (IsValidVin(vin))
             return await ConsultByVinAsync(vin!, ct);
@@ -146,6 +154,55 @@ internal sealed class VerifikConsultationProvider(
         {
             return (ProviderUnavailable(), false);
         }
+    }
+
+    // Vehículo VERDE con datos REALES del RUNT ya obtenidos para el VIN LRWYGCEKXTC564524
+    // (Tesla Model Y, placa QPL705) que quedaron en la BD de una consulta previa. Se reusa el
+    // VIN/placa capturados en el trámite (fallback a los del registro conocido) y se pasa por el
+    // mapper real para hidratar los mismos campos que la respuesta viva. Desatasca el pre-vuelo
+    // para probar la validación de identidad mientras el RUNT/Verifik está indisponible. Sin red.
+    private static ConsultationResult MockResult(string? vin, string? plate)
+    {
+        var effectiveVin = string.IsNullOrWhiteSpace(vin) ? "LRWYGCEKXTC564524" : vin;
+        return VerifikResultMapper.MapVehicle(new VerifikVehicleResponse
+        {
+            Data = new VerifikVehicleData
+            {
+                InformacionGeneral = new VerifikInformacionGeneral
+                {
+                    NoVin = effectiveVin,
+                    NoChasis = effectiveVin,
+                    NoPlaca = string.IsNullOrWhiteSpace(plate) ? "QPL705" : plate,
+                    Marca = "TESLA",
+                    Linea = "MODELO Y",
+                    Modelo = "2026",
+                    Color = "PLATA METALICO",
+                    ClaseVehiculo = "CAMIONETA",
+                    TipoCarroceria = "SUV",
+                    TipoServicio = "Particular",
+                    TipoCombustible = "ELECTRICO",
+                    Cilindraje = "0",
+                    PasajerosSentados = "5",
+                    NoEjes = "2",
+                    PesoBruto = "1992",
+                    EstadoDelVehiculo = "ACTIVO",
+                    // El registro real no trajo señal de gravámenes/prendas ni RTM: se dejan sin
+                    // dato (checks 'unknown', no bloquean). SOAT vigente + estado ACTIVO → overall green.
+                    FechaMatricula = "06/05/2026",
+                },
+                Soat =
+                [
+                    new VerifikSoat
+                    {
+                        Estado = "VIGENTE",
+                        FechaVencimiento = "05/05/2027",
+                        EntidadExpideSoat = "LA PREVISORA S.A.COMPAÑIA DE SEGUROS",
+                    },
+                ],
+                TecnoMecanica = [],
+                GarantiasMobiliarias = [],
+            },
+        });
     }
 
     private static ConsultationResult VehicleNotFound() =>

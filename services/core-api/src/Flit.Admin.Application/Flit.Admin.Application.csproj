@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

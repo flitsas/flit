@@ -60,6 +60,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<OtApiCallLogEntity> OtApiCallLogs => Set<OtApiCallLogEntity>();
 
+    // HU #10466 — historial de improntas generadas (ADR-0022). Sin RLS (dispensa documentada A10).
+    public DbSet<ImprontaGenerationEntity> ImprontaGenerations => Set<ImprontaGenerationEntity>();
+
     public DbSet<OtDocumentPrecedenceEntity> OtDocumentPrecedences => Set<OtDocumentPrecedenceEntity>();
 
     public DbSet<OtDocumentTagEntity> OtDocumentTags => Set<OtDocumentTagEntity>();
@@ -104,6 +107,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
+
+    // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
+    public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
+
+    // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
+    public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();
 
     // Trámites — firma electrónica (Slice 7, mock)
     public DbSet<ProcedureInstanceSignature> ProcedureInstanceSignatures => Set<ProcedureInstanceSignature>();

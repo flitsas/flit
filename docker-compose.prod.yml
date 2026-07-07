@@ -101,6 +101,26 @@ services:
       KYVERUM_AUTH_SCHEME: ${KYVERUM_AUTH_SCHEME:-Bearer}
       KYVERUM_TIMEOUT_SECONDS: ${KYVERUM_TIMEOUT_SECONDS:-30}
       KYVERUM_WEBHOOK_CALLBACK_URL: ${KYVERUM_WEBHOOK_CALLBACK_URL:-}
+      # Kyverum RUNT — dominio DISTINTO de Kyverum Verify (runt.kyverum.com vs
+      # verify.kyverum.com): mismo proveedor, otro producto y otra API key/scope.
+      # UN SOLO bloque alimenta DOS consumidores porque comparten ImprontaRuntOptions:
+      #   · improntas (HU #10465, ImprontaRuntClient — endpoint improntas:generar)
+      #   · consultas RUNT (HU #10478, KyverumRuntApiClient — vehículo/conductor default,
+      #     con fallback a Verifik).
+      # Mismo patrón CRUDO: InfrastructureExtensions.AddImprontas lee
+      # Environment.GetEnvironmentVariable("KYVERUM_RUNT_*"), NO `ImprontaRunt__*`.
+      KYVERUM_RUNT_BASE_URL: ${KYVERUM_RUNT_BASE_URL:-https://runt.kyverum.com}
+      KYVERUM_RUNT_API_KEY: ${KYVERUM_RUNT_API_KEY:-}
+      KYVERUM_RUNT_AUTH_SCHEME: ${KYVERUM_RUNT_AUTH_SCHEME:-Bearer}
+      KYVERUM_RUNT_TIMEOUT_SECONDS: ${KYVERUM_RUNT_TIMEOUT_SECONDS:-30}
+      # OCR de trámites (Anthropic). Mismo patrón: el código lee env vars CRUDAS
+      # (OCR_PROVIDER / ANTHROPIC_*), no `Anthropic__*`. Default mock ⇒ no rompe si el .env no lo define.
+      OCR_PROVIDER: ${OCR_PROVIDER:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-60}
+      ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-2000}
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:

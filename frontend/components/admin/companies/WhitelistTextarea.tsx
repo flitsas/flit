@@ -119,7 +119,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
       </button>
 
       {entries.length > 0 && (
-        <div className="rounded-xl border p-3" style={{ borderColor: "#DFE5ED" }}>
+        <div className="rounded-xl border p-3">
           <p className="mb-2 text-[10px] font-semibold uppercase opacity-60">
             Correos exentos actuales ({entries.length})
           </p>

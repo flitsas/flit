@@ -7,6 +7,7 @@ using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
+using Flit.Admin.Domain.Improntas;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Admin.Domain.OtClientProcedures;
@@ -44,6 +45,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
+
+        // Refactor adminOT — alta/listado de tenants Organismo de Tránsito (OT como
+        // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
+        services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
@@ -98,6 +103,9 @@ public static class AdminInfrastructureExtensions
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
+
+        // HU #10466 — historial de improntas generadas (ADR-0022).
+        services.AddScoped<IImprontaRepository, ImprontaRepository>();
 
         return services;
     }

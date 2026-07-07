@@ -13,10 +13,11 @@ export const OT_WEBHOOK_EVENT_TYPES = [
   { value: "procedure_state_changed", label: "Cambio estado trámite" },
 ] as const;
 
+// N 03 (ADR-0022) — vocabulario de estados de negocio: `entregado` = en cola de decisión OT.
 export const OT_PROCEDURE_STATUS_LABELS: Record<string, string> = {
-  pending_ot: "Pendiente OT",
-  approved_ot: "Aprobado OT",
-  rejected_ot: "Rechazado OT",
+  entregado: "Pendiente OT",
+  aprobado: "Aprobado OT",
+  rechazado: "Rechazado OT",
 };
 
 export function formatOtProcedureStatus(status: string): string {
@@ -24,9 +25,9 @@ export function formatOtProcedureStatus(status: string): string {
 }
 
 export function procedureStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "approved_ot") return "success";
-  if (status === "rejected_ot") return "danger";
-  if (status === "pending_ot") return "warning";
+  if (status === "aprobado") return "success";
+  if (status === "rechazado") return "danger";
+  if (status === "entregado") return "warning";
   return "neutral";
 }
 

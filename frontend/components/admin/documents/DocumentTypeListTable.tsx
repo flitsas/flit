@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { DocumentType } from "@/lib/api/types-documents";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
+import { RowActions } from "@/components/atom/RowActions";
+import { Pagination } from "@/components/atom/Pagination";
 
 // Tabla paginada del catálogo de tipos de documento (HU #10198, AC1). Columnas:
 // Código, Nombre, Estado, Fecha de creación + acciones Editar/Desactivar.
@@ -28,10 +30,6 @@ export function DocumentTypeListTable({
   onDeactivate,
   onReactivate,
 }: DocumentTypeListTableProps) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalCount);
-
   return (
     <div className="flex flex-1 flex-col">
       <table className="w-full border-separate border-spacing-y-2 text-xs">
@@ -59,14 +57,14 @@ export function DocumentTypeListTable({
             const activo = d.estado === "activo";
             return (
               <tr key={d.id} className="bg-white dark:bg-[#0B0F14]">
-                <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono">
                   {d.codigo}
                 </td>
-                <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 font-semibold">
                   {d.nombre}
                   {d.descripcion && <p className="mt-0.5 text-[10px] font-normal opacity-60">{d.descripcion}</p>}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3">
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
                     style={{ background: activo ? "#00DBD5" : "#FF4E00" }}
@@ -74,20 +72,21 @@ export function DocumentTypeListTable({
                     {activo ? "Activo" : "Inactivo"}
                   </span>
                 </td>
-                <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-70">
                   {formatDate(d.fechaCreacion)}
                 </td>
-                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(d)}
-                      aria-label={`Editar ${d.nombre}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                      style={{ background: "#557EFF" }}
-                    >
-                      <Pencil className="h-3 w-3" /> Editar
-                    </button>
+                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <RowActions
+                      actions={[
+                        {
+                          icon: Pencil,
+                          label: `Editar ${d.nombre}`,
+                          onClick: () => onEdit(d),
+                          tone: "primary",
+                        },
+                      ]}
+                    />
                     <SwitchToggle
                       checked={activo}
                       onChange={() => (activo ? onDeactivate(d) : onReactivate(d))}
@@ -101,36 +100,13 @@ export function DocumentTypeListTable({
         </tbody>
       </table>
 
-      <div className="mt-auto flex items-center justify-between pt-3 text-[11px]">
-        <p className="opacity-60">
-          Mostrando {from}–{to} de {totalCount}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Página anterior"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-            style={{ borderColor: "#DFE5ED" }}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-          </button>
-          <span className="font-semibold" style={{ color: "#557EFF" }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            aria-label="Página siguiente"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-            style={{ borderColor: "#DFE5ED" }}
-          >
-            Siguiente <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        className="mt-auto"
+      />
     </div>
   );
 }

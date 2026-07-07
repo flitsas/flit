@@ -47,7 +47,6 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
       onSubmit={handleSubmit}
       aria-label="Filtros de compañías"
       className="grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 md:grid-cols-6 dark:bg-[#0B0F14]"
-      style={{ borderColor: "#DFE5ED" }}
     >
       <Field label="NIT" htmlFor="filter-nit">
         <input
@@ -124,7 +123,6 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
           type="button"
           onClick={handleClear}
           className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <X className="h-4 w-4" /> Limpiar
         </button>

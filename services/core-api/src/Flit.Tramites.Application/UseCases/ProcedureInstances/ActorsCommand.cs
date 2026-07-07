@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -6,6 +7,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -53,6 +55,11 @@ public sealed class PutActorsHandler(
     private static readonly HashSet<string> ValidDocumentTypes =
         new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI" };
 
+    // Charset del número de documento (espejo de fieldRules.ts): pasaporte admite letras y
+    // números; el resto (CC/CE/TI/NIT) solo dígitos.
+    private static readonly Regex DocNumeric = new("^[0-9]+$", RegexOptions.Compiled);
+    private static readonly Regex DocAlphanumeric = new("^[A-Za-z0-9]+$", RegexOptions.Compiled);
+
     // rol (actor_type) → code de procedure_entities (catálogo HU10151).
     private static readonly Dictionary<ParteRol, string> RolToEntityCode =
         new()
@@ -71,7 +78,7 @@ public sealed class PutActorsHandler(
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var inputs = request.Actors ?? [];
@@ -86,6 +93,11 @@ public sealed class PutActorsHandler(
                 return (null, "invalid_document_type");
             if (string.IsNullOrWhiteSpace(a.NumeroDocumento))
                 return (null, "missing_document_number");
+            var docNumber = a.NumeroDocumento.Trim();
+            var isPassport = string.Equals(a.TipoDocumento.Trim(), "PAS", StringComparison.OrdinalIgnoreCase);
+            var docValid = isPassport ? DocAlphanumeric.IsMatch(docNumber) : DocNumeric.IsMatch(docNumber);
+            if (!docValid)
+                return (null, "invalid_document_number");
             if (string.IsNullOrWhiteSpace(a.NombreCompleto))
                 return (null, "missing_full_name");
             if (string.IsNullOrWhiteSpace(a.Email) || !TramiteDocumento.EmailValido(a.Email))

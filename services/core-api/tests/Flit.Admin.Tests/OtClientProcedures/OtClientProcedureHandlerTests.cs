@@ -14,6 +14,7 @@ using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Admin.Tests.OtClientProcedures;
 
@@ -44,16 +45,16 @@ public sealed class OtClientProcedureHandlerTests
             SeedGrant(seed, ClientTenant, TransitOffice, isEnabled: true);
             SeedGrant(seed, UnlinkedClient, OtherOffice, isEnabled: true);
             SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
-            SeedProcedure(seed, pendingId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
-            SeedProcedure(seed, otherClientProcedureId, UnlinkedClient, OtherOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            SeedProcedure(seed, pendingId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            SeedProcedure(seed, otherClientProcedureId, UnlinkedClient, OtherOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
-        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx));
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
-            Status = ProcedureInstanceStatus.PendingOt,
+            Status = TramiteEstado.Entregado,
         }, TestContext.Current.CancellationToken);
 
         result.Data.Should().ContainSingle();
@@ -74,7 +75,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
@@ -87,12 +88,12 @@ public sealed class OtClientProcedureHandlerTests
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(ApproveOtClientProcedureStatus.Approved);
-        result.Procedure!.Status.Should().Be(ProcedureInstanceStatus.ApprovedOt);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Aprobado);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
-        history.ToStatus.Should().Be(ProcedureInstanceStatus.ApprovedOt);
+        history.ToStatus.Should().Be(TramiteEstado.Aprobado);
         history.ChangedBy.Should().Be(Approver);
         history.Metadata.Should().Contain(OtTenant.ToString());
     }
@@ -109,7 +110,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
@@ -123,7 +124,7 @@ public sealed class OtClientProcedureHandlerTests
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
-        result.Procedure!.Status.Should().Be(ProcedureInstanceStatus.RejectedOt);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Rechazado);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
@@ -142,11 +143,12 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedOt(seed, OtherOtTenant, OtherOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            // N 03: el OT solo decide sobre 'entregado'; un borrador NO es aprobable.
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Borrador);
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetOtClientProcedureHandler(new OtClientProcedureRepository(ctx));
+        var handler = new GetOtClientProcedureHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
         var result = await handler.HandleAsync(new GetOtClientProcedureQuery
         {
             OtTenantId = OtherOtTenant,
@@ -168,13 +170,13 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, typeA1, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt, "REF-A1");
-            SeedProcedure(seed, typeA2, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt, "REF-A2");
-            SeedProcedure(seed, typeB1, ClientTenant, TransitOffice, ProcedureTypeB, ProcedureInstanceStatus.PendingOt, "REF-B1");
+            SeedProcedure(seed, typeA1, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-A1");
+            SeedProcedure(seed, typeA2, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-A2");
+            SeedProcedure(seed, typeB1, ClientTenant, TransitOffice, ProcedureTypeB, TramiteEstado.Entregado, "REF-B1");
         }
 
         await using var ctx = NewContext(db);
-        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx));
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
@@ -199,11 +201,11 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice, isEnabled: false);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
-        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx));
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery { OtTenantId = OtTenant }, TestContext.Current.CancellationToken);
 
         result.Data.Should().BeEmpty();
@@ -220,11 +222,11 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
-        var repo = new OtClientProcedureRepository(ctx);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.ApproveAsync(
             OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
 
@@ -232,7 +234,7 @@ public sealed class OtClientProcedureHandlerTests
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
-        history.ToStatus.Should().Be(ProcedureInstanceStatus.ApprovedOt);
+        history.ToStatus.Should().Be(TramiteEstado.Aprobado);
         history.ChangedBy.Should().Be(Approver);
         history.Metadata.Should().Contain("source").And.Contain(OtTransitionSource.OtAdmin);
     }
@@ -247,11 +249,12 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.PendingOt);
+            // N 03: el webhook Quipux decide sobre un trámite 'entregado'.
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
         }
 
         await using var ctx = NewContext(db);
-        var repo = new OtClientProcedureRepository(ctx);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.RejectAsync(
             OtTenant, procedureId, "Rechazado vía integración Quipux", rejectedBy: null,
             OtTransitionSource.QuipuxWebhook, TestContext.Current.CancellationToken);
@@ -260,7 +263,7 @@ public sealed class OtClientProcedureHandlerTests
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
-        history.ToStatus.Should().Be(ProcedureInstanceStatus.RejectedOt);
+        history.ToStatus.Should().Be(TramiteEstado.Rechazado);
         history.ChangedBy.Should().BeNull();
         history.Metadata.Should().Contain("source").And.Contain(OtTransitionSource.QuipuxWebhook);
     }
@@ -275,11 +278,12 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, ProcedureInstanceStatus.Submitted);
+            // N 03: el OT solo decide sobre 'entregado'; un borrador NO es aprobable.
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Borrador);
         }
 
         await using var ctx = NewContext(db);
-        var repo = new OtClientProcedureRepository(ctx);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.ApproveAsync(
             OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
 
@@ -288,6 +292,51 @@ public sealed class OtClientProcedureHandlerTests
         var hasHistory = await verify.ProcedureInstanceStatusHistories
             .AnyAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
         hasHistory.Should().BeFalse();
+    }
+
+    [Fact] // Consolidado/LT OT — el acceso puntual soporta el override de organismo del SuperAdmin.
+    public async Task GetById_ConOverrideDeOrganismo_ResuelveSinPerfilOtDelTenant()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var superAdminTenant = Guid.NewGuid(); // sin TransitOfficeProfile
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+
+        // Sin override, un tenant sin perfil OT no ve nada (el bug que ocultaba los entregados).
+        var sinOverride = await repo.GetByIdAsync(
+            superAdminTenant, procedureId, TestContext.Current.CancellationToken);
+        sinOverride.Should().BeNull();
+
+        // Con override del organismo, el SuperAdmin accede al trámite del cliente.
+        var conOverride = await repo.GetByIdAsync(
+            superAdminTenant, procedureId, TransitOffice, TestContext.Current.CancellationToken);
+        conOverride.Should().NotBeNull();
+        conOverride!.ClientTenantId.Should().Be(ClientTenant);
+        conOverride.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    [Fact] // El executor de scope cliente ejecuta la acción (passthrough en InMemory, RLS en Postgres).
+    public async Task ExecuteInClientTenantScope_EjecutaLaAccion()
+    {
+        var db = NewDbName();
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+
+        var ran = await repo.ExecuteInClientTenantScopeAsync(
+            ClientTenant,
+            () => Task.FromResult(42),
+            TestContext.Current.CancellationToken);
+
+        ran.Should().Be(42);
     }
 
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)
@@ -402,10 +451,10 @@ public sealed class OtClientProcedureHandlerTests
     private static string NewDbName() => Guid.NewGuid().ToString();
 
     private static ApproveOtClientProcedureHandler NewApproveHandler(FlitDbContext ctx) =>
-        new(new OtClientProcedureRepository(ctx), new AllowAllQuipuxGuard());
+        new(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()), new AllowAllQuipuxGuard());
 
     private static RejectOtClientProcedureHandler NewRejectHandler(FlitDbContext ctx) =>
-        new(new OtClientProcedureRepository(ctx), new AllowAllQuipuxGuard());
+        new(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()), new AllowAllQuipuxGuard());
 
     private sealed class AllowAllQuipuxGuard : IQuipuxReadOnlyGuard
     {

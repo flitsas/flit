@@ -30,7 +30,6 @@ export function ProcedureTypeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <option value="">{placeholder}</option>
         {PROCEDURE_TYPES.map((p) => (

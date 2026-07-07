@@ -100,7 +100,6 @@ function CopyLink({ link, label }: { link: string; label: string }) {
         value={link}
         aria-label={label}
         className={INPUT_BASE}
-        style={{ borderColor: '#DFE5ED' }}
       />
       <button
         type="button"
@@ -227,6 +226,13 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
     onRefresh?.();
   };
 
+  // Tras generar la impronta o el FUR, refresca adjuntos para que el resumen y el
+  // visor reflejen el nuevo documento sin remontar el paso.
+  const handleDocumentGenerated = useCallback(() => {
+    onRefresh?.();
+    void loadExpediente();
+  }, [onRefresh, loadExpediente]);
+
   return (
     <div className="space-y-8">
       <OrganismoSection
@@ -237,7 +243,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
 
       <MatriculaResumen
         modalidad={modalidad}
-        status={detail?.status ?? 'draft'}
+        status={detail?.status ?? 'borrador'}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)
@@ -281,15 +287,11 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
       )}
       <ParticipantesSection instanceId={instanceId} />
+      <ImprontaSection instanceId={instanceId} onRefresh={handleDocumentGenerated} />
       <FurSection
         instanceId={instanceId}
         modalidad={modalidad}
-        onRefresh={() => {
-          onRefresh?.();
-          // Tras generar el FUR, refresca adjuntos para que el resumen y el
-          // visor reflejen el nuevo documento sin remontar el paso.
-          void loadExpediente();
-        }}
+        onRefresh={handleDocumentGenerated}
       />
 
       <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
@@ -452,7 +454,6 @@ function OrganismoModal({
     >
       <div
         className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
-        style={{ borderColor: '#DFE5ED' }}
       >
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -493,7 +494,6 @@ function OrganismoModal({
             placeholder="Buscar por nombre o código…"
             aria-label="Buscar organismo de tránsito"
             className={`${INPUT_BASE} pl-9`}
-            style={{ borderColor: '#DFE5ED' }}
             autoFocus
           />
         </div>
@@ -512,7 +512,6 @@ function OrganismoModal({
                 onClick={() => void persist(o)}
                 disabled={saving}
                 className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <p className="text-xs font-semibold">{o.name}</p>
                 <p className="text-[11px] opacity-70">{o.code}</p>
@@ -691,7 +690,6 @@ function FirmaParteCard({
   return (
     <fieldset
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label={`Firma ${PARTE_LABEL[parte]}`}
     >
       <legend className="px-1 text-xs font-bold flex items-center gap-2">
@@ -847,7 +845,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
       <form
         onSubmit={handleInvite}
         className="rounded-xl border p-4 space-y-3"
-        style={{ borderColor: '#DFE5ED' }}
         noValidate
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -860,7 +857,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={rol}
               onChange={(e) => setRol(e.target.value as ParticipantRol)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             >
               {ROL_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -879,7 +875,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
           <div>
@@ -892,7 +887,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
           <div>
@@ -905,7 +899,6 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               className={INPUT_BASE}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </div>
         </div>
@@ -994,7 +987,7 @@ function ParticipantRow({
   };
 
   return (
-    <li className="rounded-xl border p-3" style={{ borderColor: '#DFE5ED' }}>
+    <li className="rounded-xl border p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold capitalize">
@@ -1068,6 +1061,142 @@ function StatusChip({
     >
       {ok ? okLabel : pendingLabel}
     </span>
+  );
+}
+
+// ── Impronta integrada al trámite ────────────────────────────────────
+
+/**
+ * Botón "Generar Impronta" del paso FUR: genera el Certificado de Improntas Digitales (Kyverum
+ * RUNT) con los datos ya disponibles del trámite (placa/VIN, documento del propietario, organismo
+ * de tránsito, operador) y lo adjunta al expediente (mismo flujo que una subida manual). Solo se
+ * muestra si aún no existe un adjunto tipo 'impronta' (cargado a mano o generado antes) — la
+ * generación es idempotente por NO-regeneración en el backend.
+ */
+function ImprontaSection({
+  instanceId,
+  onRefresh,
+}: {
+  instanceId: string | null;
+  onRefresh?: () => void;
+}) {
+  const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [radicado, setRadicado] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!instanceId) return;
+    try {
+      const list = await tramitesClient.getAttachments(instanceId);
+      setAttachment(list.find((a) => a.tipo === 'impronta') ?? null);
+    } catch {
+      // Informativo; no bloquea el render del paso.
+    }
+  }, [instanceId]);
+
+  useEffect(() => {
+    // load solo hace setState DESPUÉS del await (no es cascada síncrona).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const handleGenerate = async () => {
+    if (!instanceId) return;
+    setGenerating(true);
+    setError(null);
+    setRadicado(null);
+    try {
+      const result = await tramitesClient.generarImpronta(instanceId);
+      setRadicado(result.radicado);
+      await load();
+      onRefresh?.();
+
+      // Descarga automática al equipo del usuario (además de quedar cargada en el trámite).
+      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, result.attachmentId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || result.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      setError(
+        msg.includes('organismo de tránsito')
+          ? 'Selecciona el organismo de tránsito antes de generar la impronta.'
+          : msg.includes('placa o el VIN')
+            ? 'Falta la placa o el VIN del vehículo para generar la impronta.'
+            : msg.includes('documento del propietario')
+              ? 'Falta el documento del propietario para generar la impronta.'
+              : msg.includes('ya existe un documento de impronta')
+                ? 'Ya existe una impronta cargada para este trámite.'
+                : msg.includes('operador')
+                  ? 'No se pudo resolver el operador que solicita la impronta.'
+                  : msg.includes('Kyverum RUNT')
+                    ? 'Kyverum RUNT no pudo generar la impronta. Intenta de nuevo en unos minutos.'
+                    : 'No se pudo generar la impronta.',
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo del botón.
+  if (attachment === undefined) return null;
+  // Ya existía un adjunto de impronta ANTES de esta sesión (manual o generado antes): la sección
+  // no aparece. Si se acaba de generar en esta sesión (radicado con valor), se mantiene visible
+  // para mostrar el mensaje de éxito aunque el botón ya no se necesite.
+  if (attachment && radicado === null) return null;
+
+  return (
+    <section className="space-y-4" aria-label="Generación de la impronta">
+      <div>
+        <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
+        <p className="text-xs opacity-70">
+          Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y
+          adjúntalo automáticamente al expediente. Se descargará también a tu equipo. Si ya tienes
+          tu propia impronta generada, puedes subirla manualmente en su lugar.
+        </p>
+      </div>
+
+      {error && (
+        <div
+          className="rounded-xl p-3 text-xs border"
+          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </div>
+      )}
+
+      {radicado && !error && (
+        <div
+          className="rounded-xl p-3 text-xs border"
+          style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)', color: '#5B8A1F' }}
+          role="status"
+          aria-live="polite"
+        >
+          Impronta generada (radicado {radicado}) y cargada al trámite. La descarga se inició en tu
+          navegador.
+        </div>
+      )}
+
+      {!attachment && (
+        <button
+          type="button"
+          onClick={() => void handleGenerate()}
+          disabled={generating || !instanceId}
+          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        >
+          {generating ? 'Generando…' : 'Generar Improntas'}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -1151,7 +1280,7 @@ function FurSection({
           : msg.includes('documentos_incompletos')
             ? 'Sube los documentos obligatorios antes de generar el consolidado.'
             : msg.includes('modalidad_no_soportada')
-              ? 'El consolidado solo aplica a matrícula inicial.'
+              ? 'El consolidado no está disponible para esta modalidad.'
               : 'No se pudo generar el consolidado.',
       );
     } finally {
@@ -1223,14 +1352,15 @@ function FurSection({
         </ul>
       )}
 
-      {modalidad === 'matricula_inicial' && (
-        <div className="space-y-3 pt-2 border-t" style={{ borderColor: '#DFE5ED' }}>
+      {(modalidad === 'matricula_inicial' || modalidad === 'traspaso') && (
+        <div className="space-y-3 pt-2 border-t">
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
               Un solo PDF con el FUR, el certificado de identidad y los documentos
-              cargados en el trámite. Opcional: puedes generarlo cuando el FUR
-              esté listo.
+              cargados en el trámite
+              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}.
+              Opcional: puedes generarlo cuando el FUR esté listo.
             </p>
           </div>
 

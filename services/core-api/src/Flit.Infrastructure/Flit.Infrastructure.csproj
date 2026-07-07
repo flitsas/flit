@@ -30,6 +30,7 @@
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

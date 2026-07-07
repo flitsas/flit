@@ -38,14 +38,12 @@ export function OtSidePanel({
       />
       <aside
         className="relative flex h-full w-full max-w-md flex-col border-l bg-white shadow-2xl dark:bg-[#0B0F14]"
-        style={{ borderColor: "#DFE5ED" }}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
       >
         <div
           className="flex items-center justify-between border-b px-4 py-3"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <h2 className="text-sm font-bold" style={{ color: "#162744" }}>
             {title}
@@ -56,7 +54,7 @@ export function OtSidePanel({
         </div>
         <div className="flex-1 overflow-y-auto p-4">{children}</div>
         {footer && (
-          <div className="border-t p-4" style={{ borderColor: "#DFE5ED" }}>
+          <div className="border-t p-4">
             {footer}
           </div>
         )}

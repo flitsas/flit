@@ -180,11 +180,13 @@ app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
 app.MapAdminDocumentRequirementOverridesEndpoints();
 app.MapAdminResolvedDocumentMatrixEndpoints();
+app.MapAdminImprontasEndpoints();
 app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();
 
@@ -198,6 +200,7 @@ app.MapPublicPortalEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
 app.MapTramitesAttachmentEndpoints();
+app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();
 app.MapTramitesFirmaEndpoints();
@@ -207,6 +210,7 @@ app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
 app.MapTramitesWizardEndpoints();
+app.MapTramitesStatusHistoryEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();

@@ -31,7 +31,7 @@ function makeInstances(n: number): InstanceSummary[] {
       id: `inst-${num}`,
       referenceNumber: `TR-${num}`,
       modalidad: 'traspaso',
-      estado: 'draft',
+      estado: 'borrador',
       placa: `P${num}`,
       vin: `VIN-${num}`,
       vehiculoMarca: 'Toyota',
@@ -117,6 +117,8 @@ describe('TramitesTable — paginación', () => {
     expect(within(nav).getByText('2 / 3')).toBeInTheDocument();
 
     // Buscar "Comprador" matchea las 23 (siguen 3 páginas) pero resetea a la 1.
+    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
+    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Comprador',
@@ -136,7 +138,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         ...base,
         id: 'pending',
         placa: 'PEND01',
-        estado: 'draft',
+        estado: 'borrador',
         draftFinalizedAt: '2026-06-20T10:00:00Z',
         identityValidationStatus: 'en_proceso',
       },
@@ -157,7 +159,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         ...base,
         id: 'firma',
         placa: 'FIRM01',
-        estado: 'draft',
+        estado: 'borrador',
         draftFinalizedAt: '2026-06-20T10:00:00Z',
         identityValidationStatus: 'aprobado',
         signaturePending: true,
@@ -175,7 +177,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         ...base,
         id: 'ready',
         placa: 'RDY001',
-        estado: 'draft',
+        estado: 'borrador',
         draftFinalizedAt: '2026-06-20T10:00:00Z',
         identityValidationStatus: 'aprobado',
         signaturePending: false,
@@ -205,6 +207,7 @@ describe('TramitesTable — organismo de tránsito', () => {
     expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
 
     // El buscador también filtra por organismo.
+    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Cali',
@@ -223,7 +226,7 @@ function superAdminToken(): string {
 
 function instance(over: Partial<InstanceSummary>): InstanceSummary {
   return {
-    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'draft',
+    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'borrador',
     placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',

@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -62,7 +63,7 @@ public sealed class PortalHandlerTests
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = tipologia == "traspaso_standard" ? "traspaso" : "matricula_inicial",
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,

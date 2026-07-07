@@ -13,6 +13,12 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
+import {
+  sanitizeDocNumber,
+  validateDocNumber,
+  sanitizeName,
+  validateReadableName,
+} from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
   ActorRol,
@@ -112,7 +118,15 @@ export function validateActors(
   const byActor: ActorErrors[] = actors.map((a) => {
     const e: ActorErrors = {};
     if (!a.numeroDocumento.trim()) e.numeroDocumento = 'Número requerido';
+    else {
+      const docErr = validateDocNumber(a.numeroDocumento.trim(), a.tipoDocumento);
+      if (docErr) e.numeroDocumento = docErr;
+    }
     if (!a.nombreCompleto.trim()) e.nombreCompleto = 'Nombre requerido';
+    else {
+      const nameErr = validateReadableName(a.nombreCompleto.trim(), 'El nombre');
+      if (nameErr) e.nombreCompleto = nameErr;
+    }
     if (!a.email.trim()) e.email = 'Correo requerido';
     else if (!EMAIL_RE.test(a.email.trim())) e.email = 'Correo no válido';
     return e;
@@ -277,7 +291,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const validation = validateActors(actors, modalidad);
 
   const updateActor = (index: number, patch: Partial<ProcedureActor>) => {
-    setActors((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+    setActors((prev) =>
+      prev.map((a, i) => {
+        if (i !== index) return a;
+        const next = { ...a, ...patch };
+        // Saneo de caracteres por tipo de campo (Ajuste 3): número de documento según
+        // el tipo (pasaporte alfanumérico, resto solo dígitos) y nombre sin caracteres
+        // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
+        if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
+          next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        if (patch.nombreCompleto !== undefined)
+          next.nombreCompleto = sanitizeName(next.nombreCompleto);
+        return next;
+      }),
+    );
   };
 
   const setRuntFor = (index: number, value: RuntState) =>
@@ -464,7 +491,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return (
         <div
           className="rounded-xl p-3 text-[11px] border opacity-80"
-          style={{ borderColor: '#DFE5ED' }}
           role="status"
           aria-live="polite"
         >
@@ -505,8 +531,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         {errorBanner}
 
         {/* Sección A — Identificación */}
-        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden" style={{ borderColor: '#DFE5ED' }}>
-          <div className={sectionHeader} style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}>
+        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
+          <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
             <UserRound className="h-4 w-4" style={{ color: '#557EFF' }} />
             <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               {`Identificación · ${ROL_LABEL[actor.rol]}`}
@@ -531,7 +557,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   aria-describedby={errors.numeroDocumento ? 'comprador-numeroDoc-err' : undefined}
                   placeholder={`Número de documento del ${actor.rol}…`}
                   className={`${INPUT_BASE} font-mono`}
-                  style={{ borderColor: '#DFE5ED' }}
                 />
                 {errors.numeroDocumento && (
                   <p id="comprador-numeroDoc-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -558,8 +583,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </section>
 
         {/* Sección B — Datos de contacto */}
-        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden" style={{ borderColor: '#DFE5ED' }}>
-          <div className="border-b px-4 py-3" style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}>
+        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
+          <div className="border-b px-4 py-3" style={{ background: 'rgba(85,126,255,0.04)' }}>
             <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               Datos de contacto
             </span>
@@ -579,7 +604,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={errors.nombreCompleto ? 'comprador-nombre-err' : undefined}
                 className={INPUT_BASE}
-                style={{ borderColor: '#DFE5ED' }}
               />
               {errors.nombreCompleto && (
                 <p id="comprador-nombre-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -598,7 +622,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 value={actor.numeroDocumento}
                 readOnly
                 className="w-full px-3 py-2 rounded-xl border text-xs font-mono opacity-80"
-                style={{ borderColor: '#DFE5ED', background: 'rgba(223,229,237,0.35)' }}
+                style={{ background: 'rgba(223,229,237,0.35)' }}
               />
             </div>
             {/* Email */}
@@ -616,7 +640,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 aria-invalid={!!errors.email}
                 aria-describedby={errors.email ? 'comprador-email-err' : undefined}
                 className={INPUT_BASE}
-                style={{ borderColor: '#DFE5ED' }}
               />
               {errors.email && (
                 <p id="comprador-email-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -636,7 +659,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 onChange={(e) => updateActor(0, { telefono: e.target.value })}
                 placeholder="3001234567"
                 className={INPUT_BASE}
-                style={{ borderColor: '#DFE5ED' }}
               />
             </div>
             {/* Ciudad (autocomplete) */}
@@ -659,12 +681,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 autoComplete="off"
                 placeholder="Escribe para buscar…"
                 className={INPUT_BASE}
-                style={{ borderColor: '#DFE5ED' }}
               />
               {showCiudades && (
                 <ul
                   className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-auto rounded-xl border bg-white dark:bg-[#0B0F14]"
-                  style={{ borderColor: '#DFE5ED' }}
                   aria-label="Sugerencias de ciudad"
                 >
                   {ciudades.map((c) => (
@@ -677,7 +697,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                           setCiudadOpen((p) => ({ ...p, 0: false }));
                         }}
                         className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[rgba(85,126,255,0.06)]"
-                        style={{ borderColor: '#DFE5ED' }}
                       >
                         {c}
                       </button>
@@ -697,7 +716,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 value={actor.direccion ?? ''}
                 onChange={(e) => updateActor(0, { direccion: e.target.value })}
                 className={INPUT_BASE}
-                style={{ borderColor: '#DFE5ED' }}
               />
             </div>
           </div>
@@ -714,7 +732,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     <form
       onSubmit={handleSubmit}
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label="Captura de actores del trámite"
       noValidate
     >
@@ -740,7 +757,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           const prefix = `actor-${actor.rol}`;
           const runtState: RuntState = runt[index] ?? { status: 'idle' };
           return (
-            <fieldset key={actor.rol} className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+            <fieldset key={actor.rol} className="rounded-xl border p-4">
               <legend className="px-1 text-xs font-bold">{ROL_LABEL[actor.rol]}</legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Tipo de documento */}
@@ -753,7 +770,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     value={actor.tipoDocumento}
                     onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
                     className={INPUT_BASE}
-                    style={{ borderColor: '#DFE5ED' }}
                   >
                     {DOC_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -777,7 +793,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     aria-invalid={!!errors.numeroDocumento}
                     aria-describedby={errors.numeroDocumento ? `${prefix}-numeroDoc-err` : undefined}
                     className={INPUT_BASE}
-                    style={{ borderColor: '#DFE5ED' }}
                   />
                   {errors.numeroDocumento && (
                     <p id={`${prefix}-numeroDoc-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -817,7 +832,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     aria-invalid={!!errors.nombreCompleto}
                     aria-describedby={errors.nombreCompleto ? `${prefix}-nombre-err` : undefined}
                     className={INPUT_BASE}
-                    style={{ borderColor: '#DFE5ED' }}
                   />
                   {errors.nombreCompleto && (
                     <p id={`${prefix}-nombre-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -840,7 +854,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     aria-invalid={!!errors.email}
                     aria-describedby={errors.email ? `${prefix}-email-err` : undefined}
                     className={INPUT_BASE}
-                    style={{ borderColor: '#DFE5ED' }}
                   />
                   {errors.email && (
                     <p id={`${prefix}-email-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -860,7 +873,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     value={actor.telefono ?? ''}
                     onChange={(e) => updateActor(index, { telefono: e.target.value })}
                     className={INPUT_BASE}
-                    style={{ borderColor: '#DFE5ED' }}
                   />
                 </div>
               </div>

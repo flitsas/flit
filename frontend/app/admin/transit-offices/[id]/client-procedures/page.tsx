@@ -22,7 +22,7 @@ function OtClientProceduresPageInner() {
       activeTab="client-procedures"
       moduleTitle="Administración OT — Trámites de clientes"
     >
-      <ClientProceduresSection />
+      <ClientProceduresSection transitOfficeId={params.id} />
     </OtHubLayout>
   );
 }

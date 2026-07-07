@@ -4,6 +4,7 @@ import type {
   InstanceStatus,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 
 // Resumen consolidado de la matrícula (paso FUR): muestra el estado final de un
 // vistazo (placa, vehículo, comprador, identidad, documentos, organismo) sin
@@ -26,22 +27,7 @@ interface Props {
   orgTransito: { nombre?: string; ciudad?: string };
 }
 
-/** Etiqueta + tono por estado de la instancia (espejo de InstanceStatus). */
-const ESTADO_LABEL: Record<InstanceStatus, string> = {
-  draft: 'Borrador (en preparación)',
-  submitted: 'Enviado a tránsito',
-  in_review: 'En revisión',
-  completed: 'Completada',
-  rejected: 'Devuelto con observación',
-};
-
-const ESTADO_TONE: Record<InstanceStatus, string> = {
-  draft: '#9AA5B1',
-  submitted: '#557EFF',
-  in_review: '#557EFF',
-  completed: '#5B8A1F',
-  rejected: '#FF4E00',
-};
+// N 03 — labels/tonos desde la fuente única lib/tramites/estados.ts (6 estados de negocio).
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -64,7 +50,7 @@ export default function MatriculaResumen({
   identidadAprobada,
   orgTransito,
 }: Props) {
-  const tone = ESTADO_TONE[status];
+  const tone = estadoChipStyle(status).color;
   const orgTxt = [orgTransito?.nombre, orgTransito?.ciudad].filter(Boolean).join(' · ');
   // Traspaso y matrícula son procesos distintos: el resumen se rotula acorde.
   const resumenTitulo =
@@ -74,7 +60,6 @@ export default function MatriculaResumen({
     <section
       aria-label={resumenTitulo}
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -85,7 +70,7 @@ export default function MatriculaResumen({
           className="rounded-full px-3 py-1 text-[11px] font-semibold"
           style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}
         >
-          {ESTADO_LABEL[status]}
+          {estadoLabel(status)}
         </span>
       </div>
 

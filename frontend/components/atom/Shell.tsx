@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { decodeJwtPayload, isAdminCompany, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -26,6 +26,7 @@ import {
   Lock,
   Briefcase,
   Landmark,
+  Fingerprint,
 } from "lucide-react";
 
 export type ModuleId =
@@ -81,7 +82,9 @@ function useCurrentUser() {
         ? "Super Admin"
         : roleCode === "AdminCompany"
           ? "Admin de Compañía"
-          : roleCode || "Usuario";
+          : roleCode === "ot_admin"
+            ? "Admin OT"
+            : roleCode || "Usuario";
     return {
       displayName:
         (payload.display_name as string | undefined) ??
@@ -92,6 +95,7 @@ function useCurrentUser() {
       tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
+      isOtAdmin: isOtAdmin(payload),
     };
   });
   return user;
@@ -170,6 +174,13 @@ export function Shell({
         onClick: () => window.location.assign("/admin/documents"),
       },
       {
+        key: "admin-improntas",
+        label: "Improntas",
+        icon: Fingerprint,
+        active: pathname.startsWith("/admin/improntas"),
+        onClick: () => window.location.assign("/admin/improntas"),
+      },
+      {
         key: "rbac",
         label: "RBAC Admin",
         icon: Lock,
@@ -177,6 +188,18 @@ export function Shell({
         onClick: () => onNav("rbac"),
       },
     );
+  }
+
+  // Bloque independiente del de SuperAdmin: ot_admin solo ve "Tránsito" (su propio
+  // hub OT), nunca "Compañías"/"Documental"/"RBAC Admin" (HU #10218 refactor adminOT).
+  if (currentUser?.isOtAdmin) {
+    entries.push({
+      key: "admin-transit",
+      label: "Tránsito",
+      icon: Landmark,
+      active: pathname.startsWith("/admin/transit-offices"),
+      onClick: () => window.location.assign("/admin/transit-offices"),
+    });
   }
 
   if (currentUser?.isAdminCompany) {
@@ -303,7 +326,9 @@ export function Shell({
 
       {/* Main */}
       <main className="flex-1 min-h-0 overflow-hidden relative">
-        <div className="absolute inset-0 overflow-hidden">{children}</div>
+        {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
+            padding inferior libera el dock flotante para que nada quede oculto tras él. */}
+        <div className="absolute inset-0 overflow-y-auto pb-28">{children}</div>
 
         {/* Bottom dock */}
         <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40">

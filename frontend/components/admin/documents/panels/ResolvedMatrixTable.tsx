@@ -35,19 +35,19 @@ export function ResolvedMatrixTable({ rows }: ResolvedMatrixTableProps) {
       <tbody>
         {rows.map((row) => (
           <tr key={row.documentTypeId} className="bg-white dark:bg-[#0B0F14]">
-            <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+            <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
               {row.ordenResuelto}
             </td>
-            <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+            <td className="border-y px-4 py-3 font-mono">
               {row.codigo}
             </td>
-            <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+            <td className="border-y px-4 py-3 font-semibold">
               {row.nombre}
             </td>
-            <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+            <td className="border-y px-4 py-3">
               {row.obligatorio ? "Sí" : "No"}
             </td>
-            <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+            <td className="rounded-r-xl border-y border-r px-4 py-3">
               <ScopeBadge scope={row.nivelAplicado} />
             </td>
           </tr>

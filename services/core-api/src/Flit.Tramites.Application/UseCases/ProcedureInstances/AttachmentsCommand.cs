@@ -4,6 +4,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -111,7 +112,7 @@ public sealed class UploadAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -175,7 +176,7 @@ public sealed class PresignAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -212,7 +213,7 @@ public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -313,7 +314,7 @@ public sealed class DeleteAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return "not_found";
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return "not_draft";
 
         var attachment = instance.Attachments.FirstOrDefault(a => a.Id == attachmentId);

@@ -10,7 +10,7 @@ const FAQ = [
 
 export function Ayuda() {
   return (
-    <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle title="Centro de Ayuda" subtitle="Soporte 24/7, documentación y guías de operación." />
       <div className="grid grid-cols-4 gap-3 shrink-0">
         {[
@@ -21,7 +21,7 @@ export function Ayuda() {
         ].map((k) => {
           const Icon = k.i;
           return (
-            <div key={k.l} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border" style={{ borderColor: "#DFE5ED" }}>
+            <div key={k.l} className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border">
               <div className="h-10 w-10 rounded-xl grid place-items-center mb-2" style={{ background: "rgba(0,219,213,0.15)" }}>
                 <Icon className="h-5 w-5" style={{ color: "#00DBD5" }} />
               </div>
@@ -31,11 +31,11 @@ export function Ayuda() {
           );
         })}
       </div>
-      <div className="flex-1 min-h-0 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto" style={{ borderColor: "#DFE5ED" }}>
+      <div className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border">
         <h2 className="text-sm font-bold mb-3">Preguntas frecuentes</h2>
         <div className="space-y-3">
           {FAQ.map((f) => (
-            <details key={f.q} className="p-3 rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
+            <details key={f.q} className="p-3 rounded-xl border">
               <summary className="text-xs font-semibold cursor-pointer">{f.q}</summary>
               <p className="text-xs opacity-70 mt-2">{f.a}</p>
             </details>

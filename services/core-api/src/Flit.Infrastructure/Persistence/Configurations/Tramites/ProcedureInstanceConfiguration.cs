@@ -24,7 +24,8 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.ReferenceNumber).HasMaxLength(30).IsRequired();
-        builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("draft");
+        // N 03 (ADR-0022): estados de negocio en español (TramiteEstado); default = borrador.
+        builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
         builder.Property(x => x.ModalidadEntrada)
@@ -44,7 +45,7 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(x => new { x.TenantId, x.DraftFinalizedAt })
             .HasDatabaseName("ix_procedure_instances_draft_finalized")
-            .HasFilter("status = 'draft' AND draft_finalized_at IS NOT NULL");
+            .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
 
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()

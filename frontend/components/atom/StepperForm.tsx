@@ -103,14 +103,16 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
   const prev = () => step > 1 && setStep(step - 1);
 
   return (
-    <div className="grid lg:grid-cols-[280px_1fr] gap-6">
+    // AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista del
+    // stepper cuando excede el alto disponible; ambos contenedores quedan a la par abajo.
+    <div className="grid lg:grid-cols-[280px_1fr] gap-6 lg:items-stretch">
       {/* Stepper Sidebar */}
-      <div className="glass rounded-2xl p-4 lg:sticky lg:top-[88px] lg:self-start max-h-[calc(100vh-120px)] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100vh-120px)]">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <h3 className="font-bold text-slate-800 text-sm">Asistente Transaccional</h3>
           <button onClick={onExit} className="p-1 rounded-lg hover:bg-white/70"><X className="h-4 w-4 text-slate-500" /></button>
         </div>
-        <ol className="space-y-2">
+        <ol className="space-y-2 flex-1 min-h-0 overflow-y-auto">
           {STEPS.map((label, i) => {
             const n = i + 1;
             const done = n < step; const active = n === step;

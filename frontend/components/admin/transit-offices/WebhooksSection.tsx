@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { RowActions } from "@/components/atom/RowActions";
 import { useToast } from "@/components/admin/Toast";
 import {
   createOtWebhook,
@@ -167,36 +169,37 @@ export function WebhooksSection() {
               <tbody>
                 {webhooks.map((w) => (
                   <tr key={w.id} className="bg-white dark:bg-[#0B0F14]">
-                    <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="rounded-l-xl border-y border-l px-4 py-3">
                       {w.eventType}
                     </td>
-                    <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3 font-mono">
                       {maskTargetUrl(w.targetUrl)}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3">
                       <OtStatusBadge
                         label={w.isActive ? "Activo" : "Inactivo"}
                         tone={w.isActive ? "success" : "danger"}
                       />
                     </td>
-                    <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3 opacity-70">
                       {new Date(w.createdAt).toLocaleString("es-CO")}
                     </td>
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                      style={{ borderColor: "#DFE5ED" }}
                     >
-                      <button
-                        type="button"
-                        className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-white"
-                        style={{ background: "#557EFF" }}
-                        onClick={() => {
-                          setEditing(w);
-                          setFormOpen(true);
-                        }}
-                      >
-                        Editar
-                      </button>
+                      <RowActions
+                        actions={[
+                          {
+                            icon: Pencil,
+                            label: `Editar webhook ${w.eventType}`,
+                            onClick: () => {
+                              setEditing(w);
+                              setFormOpen(true);
+                            },
+                            tone: "primary",
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -210,7 +213,6 @@ export function WebhooksSection() {
         <div role="tabpanel" className="space-y-3 pt-2">
           <form
             className={OT_FILTER_FORM_CLS}
-            style={{ borderColor: "#DFE5ED" }}
             onSubmit={(e) => {
               e.preventDefault();
               applyLogFilters();
@@ -306,22 +308,20 @@ export function WebhooksSection() {
                   >
                     <td
                       className="max-w-[220px] truncate rounded-l-xl border-y border-l px-4 py-3"
-                      style={{ borderColor: "#DFE5ED" }}
                     >
                       {log.endpoint}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3">
                       {log.httpMethod}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3">
                       {log.responseCode ?? "—"}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3">
                       {log.durationMs ?? "—"}
                     </td>
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 opacity-70"
-                      style={{ borderColor: "#DFE5ED" }}
                     >
                       {new Date(log.calledAt).toLocaleString("es-CO")}
                     </td>

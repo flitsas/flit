@@ -48,7 +48,6 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
           }}
           onDragEnd={() => setDragIndex(null)}
           className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <span className="cursor-grab text-slate-400" aria-hidden="true">
             <GripVertical className="h-4 w-4" />
@@ -74,7 +73,6 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               disabled={busy || index === 0}
               aria-label={`Subir ${o.documento.nombre}`}
               className="rounded-lg border p-1 disabled:opacity-30"
-              style={{ borderColor: "#DFE5ED" }}
             >
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
@@ -84,7 +82,6 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               disabled={busy || index === overrides.length - 1}
               aria-label={`Bajar ${o.documento.nombre}`}
               className="rounded-lg border p-1 disabled:opacity-30"
-              style={{ borderColor: "#DFE5ED" }}
             >
               <ArrowDown className="h-3.5 w-3.5" />
             </button>

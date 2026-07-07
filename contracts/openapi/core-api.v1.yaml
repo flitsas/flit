@@ -19,6 +19,14 @@ tags:
     description: Autenticación y sesión (login, perfil del usuario).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
+  - name: Admin · Tenants OT
+    description: >
+      Alta y listado de tenants Organismo de Tránsito (rol SuperAdmin, refactor
+      adminOT). El self-service de usuarios OT vive bajo el tag Admin · OT.
+  - name: Admin · OT
+    description: >
+      Perfil OT, módulo operativo y self-service de usuarios del tenant OT (rol
+      SuperAdmin u ot_admin).
   - name: Admin · Documentos
     description: Catálogo maestro de tipos de documento por trámite (rol SuperAdmin).
   - name: Admin · Documentos por Trámite
@@ -27,12 +35,21 @@ tags:
     description: >
       Overrides de orden documental por OT/Cliente y matriz documental resuelta
       con precedencia Cliente > OT > Default (rol SuperAdmin).
+  - name: Admin · Improntas
+    description: >
+      Historial del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte, integración Kyverum RUNT — ADR-0022). Vista global cross-tenant
+      sin RLS, rol SuperAdmin.
   - name: Trámites · Documentos
     description: >
       Alta de trámite con snapshot documental inmutable y lectura de los documentos
       requeridos congelados al crear el trámite (cualquier JWT válido).
   - name: Trámites · Traspaso
     description: Radicación de traspasos vehiculares.
+  - name: Admin · Improntas
+    description: >
+      Generación del Certificado de Improntas Digitales vehicular (Res. 17145/2023
+      Mintransporte) vía Kyverum RUNT, con persistencia de trazabilidad (rol SuperAdmin).
 
 paths:
   /api/v1/auth/login:
@@ -571,6 +588,372 @@ paths:
       responses:
         "200":
           description: Perfil actualizado.
+
+  /api/v1/admin/transit-office-tenants/index:
+    get:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantsIndex
+      summary: Listado paginado de tenants OT (refactor adminOT)
+      description: >
+        Retorna el listado paginado de tenants Organismo de Tránsito (join
+        identity.tenants + admin.transit_office_profiles), ordenado por fecha de
+        creación descendente. Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: legalName
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: estadoActivo
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitOfficeTenantPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-office-tenants:
+    post:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantCreate
+      summary: Alta de tenant OT (refactor adminOT)
+      description: >
+        Da de alta un tenant Organismo de Tránsito: tenant (tenant_type=RENTING,
+        decisión intencional — ver RestrictTenantTypeCatalog), rol de sistema
+        ot_admin SIN permisos (el SuperAdmin los cura después vía RBAC Admin,
+        `PUT /api/v1/superadmin/roles/{id}/permissions`) y perfil OT vinculado a la
+        oficina del catálogo. La oficina no debe tener ya un tenant OT asociado.
+        Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransitOfficeRequest"
+      responses:
+        "201":
+          description: Tenant OT creado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitOfficeTenantItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Datos inválidos (campos requeridos, longitudes, código duplicado,
+            oficina inexistente/inactiva u oficina ya asignada a otro tenant OT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+
+  /api/v1/admin/transit-office-tenants/{tenantId}/status:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant OT.
+    put:
+      tags: [Admin · Tenants OT]
+      operationId: adminTransitOfficeTenantSetStatus
+      summary: Activa o desactiva un tenant OT (refactor adminOT)
+      description: >
+        Cambia el estado activo/inactivo del tenant OT (identity.tenants.is_active).
+        Reutiliza el mismo caso de uso genérico del alta de compañías. Idempotente.
+        Requiere JWT con rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCompanyStatusRequest"
+      responses:
+        "200":
+          description: Estado actualizado; devuelve el tenant con su nuevo estado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyListItem"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El tenant no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/improntas:
+    get:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasIndex
+      summary: Listado paginado del historial de improntas (HU #10468)
+      description: >
+        Retorna el listado paginado y filtrable (placa, radicado, rango de fecha de
+        creación) del historial de improntas generadas (admin.impronta_generations —
+        ADR-0022), ordenado por fecha de creación descendente. Vista global
+        cross-tenant (sin RLS): no expone el PDF, solo metadata. Requiere JWT con
+        rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre la placa.
+        - name: radicado
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre el radicado.
+        - name: createdFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite inferior (inclusive) del rango de fecha de creación.
+        - name: createdTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite superior (inclusive) del rango de fecha de creación.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImprontaGenerationPagedResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users/invite:
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtInviteUser
+      summary: Invita un usuario al tenant OT (self-service, refactor adminOT)
+      description: >
+        Crea una invitación por email con el rol ot_admin del tenant resuelto.
+        ot_admin invita colaboradores de su propio tenant (JWT); SuperAdmin debe
+        indicar `?transitOfficeId=` (oficina del catálogo) para invitar al primer
+        adminOT de un tenant recién creado. El rol se resuelve automáticamente:
+        un tenant OT solo tiene el rol de sistema ot_admin (sin roles
+        personalizados). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Oficina del catálogo cuyo tenant OT es el destino. Obligatorio para
+            SuperAdmin; ignorado para ot_admin (siempre usa su propio tenant).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteOtUserRequest"
+      responses:
+        "201":
+          description: Invitación creada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteOtUserResponse"
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Invitación pendiente duplicada o el correo ya tiene cuenta activa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListUsers
+      summary: Lista los usuarios del tenant OT (self-service, refactor adminOT)
+      description: >
+        Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto
+        (propio para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Usuarios del tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtUserListResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users/{userId}/suspend:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtSuspendUser
+      summary: Suspende temporalmente a un usuario del tenant OT (self-service, refactor adminOT)
+      description: >
+        Suspende a un usuario del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin). El usuario debe
+        pertenecer al tenant resuelto (no se puede suspender usuarios de otro OT).
+        Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendOtUserRequest"
+      responses:
+        "201":
+          description: Suspensión creada.
+        "400":
+          description: Auto-suspensión no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtUnsuspendUser
+      summary: Levanta la suspensión activa de un usuario del tenant OT (self-service, refactor adminOT)
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Suspensión levantada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no tiene una suspensión activa en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/integrations/ot/webhooks/{subscriptionId}/callback:
     post:
@@ -1939,6 +2322,267 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/ocr/{tipo}:
+    post:
+      operationId: analyzeTramiteDocumentOcr
+      tags: [Tramites]
+      summary: OCR semántico de un documento de trámite
+      description: >
+        Analiza un documento (factura, aduana, impronta o soat) con un modelo de visión ANTES de subirlo
+        al expediente. Es stateless: no asocia el documento a ninguna instancia ni persiste el resultado.
+        Con `Ocr:Provider = mock` devuelve datos de ejemplo; con `anthropic` llama a la Anthropic Messages
+        API. Si el documento ocupa sólo un subconjunto de páginas de un PDF multi-documento, la respuesta
+        incluye `extractedPdfBase64` con el PDF recortado para subir al expediente sólo lo relevante.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tipo
+          in: path
+          required: true
+          description: Tipo de documento a analizar.
+          schema:
+            type: string
+            enum: [factura, aduana, impronta, soat]
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Documento a analizar (PDF, JPG o PNG). Máximo 10 MB.
+      responses:
+        "200":
+          description: Análisis correcto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentOcrResponse"
+        "400":
+          description: >
+            Tipo no soportado, archivo ausente o vacío, archivo mayor a 10 MB, o formato no PDF/JPG/PNG.
+            También si falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: No se pudo extraer datos del documento (respuesta del modelo no interpretable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            El servicio de lectura automática no está disponible (proveedor caído, timeout o sin API key).
+            El operador puede adjuntar el documento manualmente y continuar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado:
+    get:
+      operationId: descargarCertificadoIdentidad
+      tags: [Tramites, Identidad]
+      summary: Descargar el certificado (PDF) de una validación de identidad (Kyverum)
+      description: >
+        Descarga el certificado oficial en PDF de una validación de identidad desde la API pública de
+        Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
+        create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
+        `validationId`, sirve para cualquier parte (comprador/vendedor).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF del certificado.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe (para el tenant/instancia) o no tiene certificado disponible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la descarga del certificado (error definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/audit:
+    get:
+      operationId: getIdentidadAudit
+      tags: [Tramites, Identidad]
+      summary: Bitácora del ciclo de una validación de identidad
+      description: >
+        Devuelve, en orden cronológico, la bitácora del ciclo de una validación: envío al proveedor, llegada
+        del webhook, si el secreto se pudo descifrar o no (diagnóstico del keyring), verificación de firma,
+        resultado aplicado y reconciliaciones. Para depurar "qué pasó" desde la API sin entrar a la BD ni a los
+        logs del pod. No incluye secretos ni PII.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bitácora de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [validationId, events]
+                properties:
+                  validationId:
+                    type: string
+                    format: uuid
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        occurredAt: { type: string, format: date-time }
+                        stage: { type: string, description: "send|send_response|send_error|webhook_received|webhook_not_verifiable|webhook_signature_invalid|webhook_applied|reconcile" }
+                        outcome: { type: string }
+                        httpStatus: { type: integer, nullable: true }
+                        signaturePresent: { type: boolean, nullable: true }
+                        secretPresent: { type: boolean, nullable: true }
+                        decryptOk: { type: boolean, nullable: true }
+                        providerStatus: { type: string, nullable: true }
+                        errorType: { type: string, nullable: true }
+                        message: { type: string, nullable: true }
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/instances/{id}/biometric/{validationId}/reconcile:
+    post:
+      operationId: reconciliarIdentidad
+      tags: [Tramites, Identidad]
+      summary: Reconciliar una validación con Kyverum (fallback de webhook)
+      description: >
+        Consulta el estado real de una validación en Kyverum (`GET /v1/validations/{kyverumVerificationId}`)
+        y lo aplica si ya es terminal (aprobado/rechazado). Sirve como respaldo cuando el webhook no llegó
+        (p.ej. callback mal ruteado entre ambientes). Idempotente: si ya está terminal no hace nada. El
+        frontend puede invocarlo en la pantalla "Esperando validación" para desatascar en vivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado (posiblemente actualizado) de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updated]
+                properties:
+                  status:
+                    type: string
+                    description: Estado FLIT tras reconciliar (en_proceso|aprobado|rechazado|expirado).
+                  updated:
+                    type: boolean
+                    description: true si la consulta cambió el estado local.
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe para el tenant/instancia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La validación no es del proveedor Kyverum.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la consulta de estado (definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/webhooks/kyverum-verify/{validationId}:
     post:
       operationId: kyverumVerifyWebhook
@@ -2240,6 +2884,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/improntas/generate:
+    post:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasGenerate
+      summary: Genera, persiste y entrega el PDF del Certificado de Improntas Digitales (HU #10467)
+      description: >
+        Llama a Kyverum RUNT (HU #10465), decodifica el PDF del Data URI base64 devuelto, persiste
+        el registro de trazabilidad (HU #10466: radicado, hash, fechaImpresa, datos del vehículo,
+        organización, operador, tenant y usuario SuperAdmin que la generó) y responde con el binario
+        íntegro, listo para descarga (`impronta_{radicado}.pdf`). Requiere rol SuperAdmin (AC2).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerarImprontaRequest"
+      responses:
+        "200":
+          description: PDF del Certificado de Improntas Digitales.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: No autenticado, o Kyverum RUNT rechazó la autenticación (key inválida/scope insuficiente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Usuario autenticado sin rol SuperAdmin (AC2).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Falta placa/identificador de vehículo/organización/operador (validación local), o
+            Kyverum RUNT respondió VALIDATION_ERROR (AC3).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Kyverum RUNT no disponible temporalmente (UPSTREAM_UNAVAILABLE, AC3).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2429,6 +3128,33 @@ components:
         error: { type: string }
       required: [error]
 
+    DocumentOcrResponse:
+      type: object
+      description: Resultado del OCR semántico de un documento de trámite.
+      required: [ok, tipo]
+      properties:
+        ok:
+          type: boolean
+          description: true cuando el análisis fue correcto.
+        tipo:
+          type: string
+          enum: [factura, aduana, impronta, soat]
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >
+            JSON extraído por el modelo (campos según el tipo). Incluye la validez semántica
+            (`es_factura_valida` para factura, `es_valido` para el resto), datos del documento/vehículo y,
+            en PDFs multi-documento, `paginas_documento`/`total_paginas` (y `_paginas_extraidas` /
+            `_paginas_originales` cuando hubo recorte).
+        extractedPdfBase64:
+          type: string
+          nullable: true
+          description: >
+            PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de páginas de un PDF
+            multi-documento; null si no hubo recorte (imagen, PDF de una página, o el tipo abarca todo el PDF).
+
     DocumentTypeAssociationsError:
       type: object
       description: Error 409 del soft-delete con los trámites que usan el documento.
@@ -2469,8 +3195,30 @@ components:
         metodosRecaudo:
           type: array
           items: { type: string }
+        runtFailoverTimeoutMs:
+          type: integer
+          description: Presupuesto (ms) del proveedor de consulta primario antes de caer al fallback (HU #10478).
+        consultationProviderConfig:
+          type: object
+          description: >-
+            Override por tenant de la cadena de proveedores de consulta RUNT (HU #10478). Objeto vacío
+            = usar los defaults globales. Claves: vehicle_vin, vehicle_plate, conductor.
+          additionalProperties:
+            $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
+
+    ConsultationProviderChoice:
+      type: object
+      description: Proveedor primario + orden de fallback para un tipo de consulta (HU #10478).
+      properties:
+        primary:
+          type: string
+          description: Proveedor primario. vehicle_*, kyverum_runt|verifik; conductor, kyverum_runt_conductor|verifik_conductor.
+        fallback:
+          type: array
+          items: { type: string }
+      required: [primary, fallback]
 
     TenantSettingsUpdate:
       type: object
@@ -2487,6 +3235,18 @@ components:
         metodosRecaudo:
           type: array
           items: { type: string }
+        runtFailoverTimeoutMs:
+          type: integer
+          minimum: 500
+          maximum: 60000
+          description: Opcional. Si se omite, se conserva el valor previo (HU #10478).
+        consultationProviderConfig:
+          type: object
+          description: >-
+            Opcional (HU #10478). Override por tenant de la cadena de proveedores de consulta. Si se
+            omite, se conserva el valor previo. Claves: vehicle_vin, vehicle_plate, conductor.
+          additionalProperties:
+            $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
 
@@ -2630,6 +3390,170 @@ components:
           items:
             $ref: "#/components/schemas/TransitGrantValidationError"
       required: [errors]
+
+    TransitOfficeTenantItem:
+      type: object
+      description: >
+        Tenant Organismo de Tránsito (join identity.tenants +
+        admin.transit_office_profiles, refactor adminOT).
+      properties:
+        id: { type: string, format: uuid }
+        legalName: { type: string }
+        taxId: { type: string }
+        code: { type: string, description: Código único del tenant (inmutable). }
+        tenantType:
+          type: string
+          enum: [RENTING]
+          description: >-
+            Siempre RENTING para tenants OT (decisión intencional — ver
+            RestrictTenantTypeCatalog. admin.transit_office_profiles es la fuente de
+            verdad de que un tenant "es" un OT, no tenantType).
+        estadoActivo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+        rowVersion: { type: integer, format: int64 }
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: Oficina del catálogo vinculada (admin.transit_office_profiles.transit_office_id).
+        transitOfficeName: { type: string }
+        transitOfficeCode: { type: string }
+        operationMode:
+          type: string
+          enum: [dashboard, quipux]
+      required:
+        [id, legalName, taxId, code, tenantType, estadoActivo, fechaCreacion, rowVersion,
+         transitOfficeId, transitOfficeName, transitOfficeCode, operationMode]
+
+    TransitOfficeTenantPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitOfficeTenantItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    ImprontaGenerationItem:
+      type: object
+      description: >
+        Metadata de una generación de impronta (admin.impronta_generations — ADR-0022).
+        Deliberadamente NO incluye el PDF (pdf_content): el listado nunca arrastra el
+        binario del certificado, solo pdfSizeBytes como sustituto liviano.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        flitUserId: { type: string, format: uuid }
+        radicado: { type: string }
+        hashSha256: { type: string }
+        fechaImpresa: { type: string, format: date-time }
+        placa: { type: string }
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string }
+        orgCiudad: { type: string }
+        operador: { type: string }
+        pdfSizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required:
+        [id, tenantId, flitUserId, radicado, hashSha256, fechaImpresa, placa, orgNombre,
+         orgNit, orgCiudad, operador, pdfSizeBytes, createdAt]
+
+    ImprontaGenerationPagedResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImprontaGenerationItem"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    CreateTransitOfficeRequest:
+      type: object
+      description: Alta de tenant OT (refactor adminOT).
+      properties:
+        transitOfficeId:
+          type: string
+          format: uuid
+          description: >-
+            Oficina del catálogo catalogs.transit_offices a vincular. Debe existir,
+            estar activa y no tener ya un TransitOfficeProfile asociado.
+        legalName:
+          type: string
+          maxLength: 255
+          description: Razón social (legal_name).
+        taxId:
+          type: string
+          maxLength: 20
+          description: NIT (tax_id). Solo dígitos, puntos y guiones.
+        code:
+          type: string
+          maxLength: 32
+          description: Código único del tenant. Alfanumérico con guion y guion bajo.
+        operationMode:
+          type: string
+          enum: [dashboard, quipux]
+          default: dashboard
+      required: [transitOfficeId, legalName, taxId, code]
+
+    InviteOtUserRequest:
+      type: object
+      description: Invitación de usuario al tenant OT (self-service).
+      properties:
+        email: { type: string, format: email }
+        fullName: { type: string, nullable: true }
+      required: [email]
+
+    InviteOtUserResponse:
+      type: object
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailSent: { type: boolean }
+      required: [invitationId, email, emailSent]
+
+    OtUserItem:
+      type: object
+      description: Usuario (activo, sin rol o invitación pendiente) del tenant OT.
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, nullable: true }
+        roleCode: { type: string, nullable: true }
+        roleId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        createdAt: { type: string, format: date-time, nullable: true }
+        isSuspended: { type: boolean }
+      required: [id, fullName, email, status, isSuspended]
+
+    OtUserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtUserItem"
+      required: [data]
+
+    SuspendOtUserRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        endsAt: { type: string, format: date-time }
+      required: [reason, endsAt]
 
     AuditLogEntry:
       type: object
@@ -3337,3 +4261,30 @@ components:
         to: { type: string, format: date }
         tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin." }
       required: [from, to]
+
+    GenerarImprontaRequest:
+      type: object
+      description: >
+        Datos del vehículo y de la organización solicitante para generar el Certificado de
+        Improntas Digitales (Res. 17145/2023). Placa y documento son obligatorios; Kyverum RUNT
+        resuelve motor/chasis/serie internamente vía placa+documento cuando no se envían
+        (verificado contra el proveedor real). El certificado siempre imprime los tres bloques,
+        marcando "(SIN DATO)" los que no se resuelvan.
+      properties:
+        placa: { type: string }
+        documento:
+          type: string
+          description: >
+            Documento de identidad del propietario del vehículo. Requerido por Kyverum RUNT para
+            toda consulta por placa (no documentado originalmente en el contrato del proveedor).
+        numMotor: { type: string, nullable: true }
+        numChasis: { type: string, nullable: true }
+        numSerie: { type: string, nullable: true }
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modelo: { type: string, nullable: true }
+        orgNombre: { type: string }
+        orgNit: { type: string, nullable: true }
+        orgCiudad: { type: string, nullable: true }
+        operador: { type: string }
+      required: [placa, documento, orgNombre, operador]

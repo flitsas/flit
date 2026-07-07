@@ -1,7 +1,9 @@
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Services;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Tramites.Application;
@@ -33,6 +35,13 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
+
+        // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
+        // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher
+        // de outbox hacia webhooks OT (HU-3) se registra en Infraestructura
+        // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
+        services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
+        services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         services.AddScoped<UploadAttachmentHandler>();
@@ -41,12 +50,19 @@ public static class DependencyInjection
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
+        services.AddScoped<GenerarImprontaAttachmentHandler>();
         services.AddScoped<GetChecklistHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();
+        // HU #10478 — proveedor de consulta resuelto por tenant, para adaptar la UI del wizard.
+        services.AddScoped<UseCases.Consultations.GetConsultationConfigHandler>();
+
+        // HU-2 (N03): puerto de historial del lifecycle — 1 fila de status_history + 1 evento por transición.
+        services.AddScoped<Domain.Tramites.Estados.ITramiteTransitionRecorder, UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder>();
+        services.AddScoped<UseCases.ProcedureInstances.Estados.GetStatusHistoryHandler>();
 
         // Biométrica (Slice 6, mock). El scorer es un MOCK determinista; se reemplazará por uno real
         // (proveedor biométrico) sin tocar handlers. Contract-first, igual que los consultation providers.
@@ -65,6 +81,10 @@ public static class DependencyInjection
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();
         services.AddScoped<KyverumWebhookHandler>();
+        // Punto único de aplicación del resultado (webhook + reconciliación) y reconciliación por consulta
+        // (fallback cuando el webhook se pierde): desatasca validaciones colgadas consultando a Kyverum.
+        services.AddScoped<Identity.IdentityValidationResultApplier>();
+        services.AddScoped<ReconciliarIdentidadHandler>();
 
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
         // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
@@ -78,12 +98,22 @@ public static class DependencyInjection
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).
         // MockFurDocumentGenerator se conserva para tests; solo se quitó el registro de DI.
         services.AddSingleton<Signatures.ISignatureProvider, Signatures.MockSignatureProvider>();
-        services.AddSingleton<Documents.IIdentityCertificateGenerator, Documents.MockIdentityCertificateGenerator>();
+        // Certificado de identidad: el FUR embebe el PDF REAL de Kyverum (IKyverumCertificateClient,
+        // registrado en Infraestructura, HttpClient con cookie). IIdentityCertificateGenerator (#10458,
+        // QuestPDF) permanece registrado en Infraestructura; MockIdentityCertificateGenerator solo para tests.
         services.AddScoped<SolicitarFirmaHandler>();
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
+        // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
+        // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
+        services.AddScoped<DescargarConsolidadoHandler>();
+        services.AddScoped<AdjuntarLicenciaTransitoHandler>();
+        // Descarga on-demand del certificado (PDF) de la validación de identidad desde Kyverum.
+        services.AddScoped<DescargarCertificadoIdentidadHandler>();
+        // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
+        services.AddScoped<GetIdentityAuditHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los
@@ -100,6 +130,11 @@ public static class DependencyInjection
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
+
+        // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
+        // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura
+        // (AddOcr) — mismo split app-layer/infra que los consultation providers.
+        services.AddScoped<Ocr.AnalyzeDocumentHandler>();
 
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();

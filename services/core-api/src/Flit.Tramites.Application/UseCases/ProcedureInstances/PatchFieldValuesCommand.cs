@@ -1,6 +1,7 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -24,7 +25,7 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
         {
             // Tras el envío solo se permiten claves de organismo de tránsito (generación
             // diferida del FUR). Cualquier otro campo sigue bloqueado en not_draft.

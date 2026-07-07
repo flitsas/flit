@@ -38,6 +38,8 @@ const BLOCKER_COPY: Record<string, string> = {
   preflight_red: 'Hay bloqueos críticos en el pre-vuelo',
   preflight_provider_error: 'No se pudo verificar la consulta (RUNT/SIMIT/RNMC); vuelve a intentarla antes de continuar',
   documentos_incompletos: 'Faltan documentos obligatorios',
+  // N 03 (RF03) — gate Borrador→Preparado: identidad del comprador aprobada y vigente.
+  identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada',
   actores_incompletos: 'Faltan datos de los participantes',
   comercial_incompleto: 'Faltan datos comerciales',
   identidad_pendiente: 'Validación biométrica pendiente',

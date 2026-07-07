@@ -4,6 +4,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -78,7 +79,7 @@ public sealed class FinalizeDraftProcedureInstanceHandler(IProcedureInstanceRepo
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         // Idempotencia: borrador ya finalizado → no se re-sella ni se duplica la bitácora.

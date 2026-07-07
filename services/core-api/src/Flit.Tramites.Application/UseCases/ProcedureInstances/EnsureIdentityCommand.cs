@@ -96,37 +96,15 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.EnProceso), null);
         }
 
-        // 2) ¿La persona (documento actual) tiene una validación vigente en otro trámite? → reutilizar (clonar).
+        // 2) ¿La persona (documento actual) tiene una identidad vigente aprobada en otro trámite del tenant?
+        // → se REFERENCIA (HU #10350 rediseño): NO se clona ni se crea fila. La identidad se valida UNA sola
+        // vez por persona y sirve para N trámites hasta que venza; los gates y la vista la resuelven por
+        // documento (FindVigenteApprovedByDocument). Devolvemos el id de la validación ORIGEN como referencia.
         var source = await repo.FindVigenteApprovedByDocumentAsync(tenantId, tipoActual, docActual, now, ct);
         if (source is not null)
         {
-            var clone = new ProcedureInstanceBiometricValidation
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                ProcedureInstanceId = id,
-                PartyRole = normalized,
-                Name = string.IsNullOrWhiteSpace(actor.FullName) ? source.Name : actor.FullName,
-                DocumentType = actor.DocumentType,
-                DocumentNumber = actor.DocumentNumber,
-                Email = string.IsNullOrWhiteSpace(actor.Email) ? source.Email : actor.Email,
-                Status = BiometricEstados.Aprobado,
-                Score = source.Score,
-                // Hereda la fecha de aprobación original Y su fin de vigencia → conserva el MISMO vencimiento
-                // (no reinicia el reloj; por eso copia valid_until en vez de llamar a Approve(now)).
-                ValidatedAt = source.ValidatedAt,
-                ValidUntil = source.ValidUntil,
-                Provider = source.Provider,
-                ProviderStatus = source.ProviderStatus,
-                TokenHash = Guid.NewGuid().ToString("N"),
-                ExpiresAt = source.ExpiresAt,
-                MaxAttempts = BiometricRules.MaxIntentos,
-                CreatedAt = now,
-                Detail = $"{{\"reuso\":true,\"origen\":\"{source.Id}\"}}",
-            };
-            repo.Add(clone);
-            await repo.SaveChangesAsync(ct);
-            return (new EnsureIdentityResult(EnsureIdentityOutcomes.Reusada, clone.Id), null);
+            if (changed) await repo.SaveChangesAsync(ct);
+            return (new EnsureIdentityResult(EnsureIdentityOutcomes.Reusada, source.Id), null);
         }
 
         // 3) No hay vigente → el cliente debe validar (el frontend dispara la validación automáticamente).

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, UserCheck, UserX, Clock, ChevronDown, Ban, ShieldOff } from "lucide-react";
+import { Plus, UserCheck, UserX, Clock, ChevronDown, Ban, ShieldOff, Shield, Landmark } from "lucide-react";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -17,7 +17,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
-import { superadminClient, type RbacRole } from "@/lib/api/superadmin-client";
+import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function EmpresaUsuariosPage() {
@@ -139,7 +139,7 @@ function UsuariosList() {
       >
         <div
           className="rounded-xl border overflow-hidden"
-          style={{ borderColor: "#DFE5ED", background: "#FFFFFF" }}
+          style={{ background: "#FFFFFF" }}
         >
           <table className="w-full text-sm">
             <thead>
@@ -274,7 +274,6 @@ function RoleSelector({
         title={disabled ? "No puedes cambiar tu propio rol" : undefined}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition"
         style={{
-          borderColor: "#DFE5ED",
           color: disabled ? "#9CA3AF" : "#162744",
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.6 : 1,
@@ -323,32 +322,30 @@ function InviteDialog({
   const [roleId, setRoleId] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [tenantRoles, setTenantRoles] = useState<{ id: string; name: string }[]>([]);
+  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // El rol de sistema a asignar ya no se limita a AdminCompany: el backend lo resuelve
+  // según el tipo de tenant destino (ot_admin para organismos de tránsito). El SuperAdmin
+  // ya no elige el rol aquí (el backend siempre lo fuerza), solo ve qué rol se creará.
+  const isSelectedTenantOt = transitOfficeTenants.some((t) => t.id === selectedTenantId);
 
   useEffect(() => {
     if (!isSuperAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTenantsLoading(true);
-    fetchCompaniesIndex({ pageSize: 200 })
-      .then((r) => setCompanies(r.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial }))))
+    Promise.all([
+      fetchCompaniesIndex({ pageSize: 200 }),
+      fetchTransitOfficeTenants({ pageSize: 200 }),
+    ])
+      .then(([companiesResult, otResult]) => {
+        setCompanies(companiesResult.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial })));
+        setTransitOfficeTenants(otResult.data);
+      })
       .catch(() => { /* silencioso */ })
       .finally(() => setTenantsLoading(false));
   }, [isSuperAdmin]);
-
-  useEffect(() => {
-    if (!selectedTenantId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTenantRoles([]);
-      return;
-    }
-    superadminClient.listRoles(selectedTenantId)
-      .then((r) => setTenantRoles((r as RbacRole[]).map((role) => ({ id: role.id, name: role.name }))))
-      .catch(() => setTenantRoles([]));
-  }, [selectedTenantId]);
-
-  const rolesForDropdown = isSuperAdmin ? tenantRoles : roles;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -368,19 +365,29 @@ function InviteDialog({
         <h2 className="text-base font-bold mb-4" style={{ color: "#162744" }}>Invitar usuario</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSuperAdmin && (
-            <Field label="Empresa destino *">
+            <Field label="Empresa u organismo destino *">
               <select
                 value={selectedTenantId}
                 onChange={(e) => { setSelectedTenantId(e.target.value); setRoleId(""); }}
                 required
                 disabled={tenantsLoading}
                 className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-                style={{ borderColor: "#DFE5ED" }}
               >
-                <option value="">{tenantsLoading ? "Cargando empresas…" : "Seleccionar empresa…"}</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
+                {companies.length > 0 && (
+                  <optgroup label="Compañías">
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {transitOfficeTenants.length > 0 && (
+                  <optgroup label="Organismos de Tránsito">
+                    {transitOfficeTenants.map((t) => (
+                      <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </Field>
           )}
@@ -391,7 +398,6 @@ function InviteDialog({
               required
               placeholder="Ej. Laura García"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <Field label="Correo electrónico">
@@ -402,28 +408,38 @@ function InviteDialog({
               required
               placeholder="laura@empresa.com"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
-          <Field label="Rol (opcional)">
-            <select
-              value={roleId}
-              onChange={(e) => setRoleId(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
-              style={{ borderColor: "#DFE5ED" }}
-            >
-              <option value="">Sin rol asignado</option>
-              {rolesForDropdown.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-          </Field>
+          {isSuperAdmin ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
+              {isSelectedTenantOt
+                ? <Landmark className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />
+                : <Shield className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />}
+              <span>
+                Se creará como{" "}
+                <strong>{isSelectedTenantOt ? "Administrador OT" : "Administrador de Compañía"}</strong>
+              </span>
+            </div>
+          ) : (
+            <Field label="Rol (opcional)">
+              <select
+                value={roleId}
+                onChange={(e) => setRoleId(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              >
+                <option value="">Sin rol asignado</option>
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>
@@ -481,7 +497,6 @@ function SuspendDialog({
               rows={3}
               placeholder="Ej. Incumplimiento de políticas"
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400 resize-none"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <Field label="Bloqueado hasta *">
@@ -492,7 +507,6 @@ function SuspendDialog({
               min={new Date().toISOString().slice(0, 16)}
               required
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </Field>
           <div className="flex gap-3 pt-2">
@@ -500,7 +514,7 @@ function SuspendDialog({
               type="button"
               onClick={onClose}
               className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              style={{ color: "#162744" }}
             >
               Cancelar
             </button>

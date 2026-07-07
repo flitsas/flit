@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark } from "lucide-react";
 import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
+import { Modal } from "@/components/atom/Modal";
+import {
+  fetchTransitOfficeTenants,
+  type TransitOfficeTenantItem,
+} from "@/lib/api/admin-transit-office-tenants";
+import { ModuleTitle } from "./ModuleTitle";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
@@ -90,32 +96,32 @@ export function RbacAdmin() {
 
   return (
     <div
-      className="min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4"
-      style={{ background: "#EEF5FF", color: "#162744", fontFamily: "Poppins, sans-serif" }}
+      className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white"
+      style={{ fontFamily: "Poppins, sans-serif" }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <button
-            onClick={() => window.history.back()}
-            className="text-xs opacity-60 mb-1 flex items-center gap-1 hover:opacity-100"
-          >
-            ← Volver
-          </button>
-          <h1 className="text-2xl font-bold">RBAC — Administración</h1>
-          <p className="text-xs opacity-60 mt-0.5">
-            Gestiona módulos, permisos y roles del sistema.
-          </p>
-        </div>
-        {activeTab === "modules" && (
-          <button
-            onClick={() => setShowCreateModule(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            <Plus className="h-4 w-4" /> Nuevo módulo
-          </button>
-        )}
+      {/* Header — unificado con ModuleTitle (HU #10493): botón fuera de la caja del título. */}
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => window.history.back()}
+          className="flex w-fit items-center gap-1 text-xs opacity-60 hover:opacity-100"
+        >
+          ← Volver
+        </button>
+        <ModuleTitle
+          title="RBAC — Administración"
+          subtitle="Gestiona módulos, permisos y roles del sistema."
+          action={
+            activeTab === "modules" ? (
+              <button
+                onClick={() => setShowCreateModule(true)}
+                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              >
+                Nuevo módulo
+              </button>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* Tabs */}
@@ -138,7 +144,6 @@ export function RbacAdmin() {
       {/* ── Pestaña Módulos y Permisos ── */}
       {activeTab === "modules" && <div
         className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <div
           className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
@@ -179,8 +184,7 @@ export function RbacAdmin() {
                 className="grid items-center px-4 py-3 border-b text-xs"
                 style={{
                   gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
-                  borderColor: "#DFE5ED",
-                }}
+                  }}
               >
                 <button
                   onClick={() => toggleExpand(mod)}
@@ -212,7 +216,7 @@ export function RbacAdmin() {
                     onClick={() => setGrantsForModule(mod)}
                     aria-label="Gestionar empresas"
                     className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                    style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                    style={{ color: "#557EFF" }}
                   >
                     <Building2 className="h-3.5 w-3.5" />
                   </button>
@@ -223,7 +227,6 @@ export function RbacAdmin() {
                       onClick={() => handleDeactivateModule(mod.id)}
                       aria-label="Desactivar módulo"
                       className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                      style={{ borderColor: "#DFE5ED" }}
                     >
                       <PowerOff className="h-3.5 w-3.5" />
                     </button>
@@ -232,7 +235,7 @@ export function RbacAdmin() {
                       onClick={() => handleActivateModule(mod.id)}
                       aria-label="Activar módulo"
                       className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                      style={{ borderColor: "#DFE5ED", color: "#00DBD5" }}
+                      style={{ color: "#00DBD5" }}
                     >
                       <Power className="h-3.5 w-3.5" />
                     </button>
@@ -256,10 +259,7 @@ export function RbacAdmin() {
               </div>
               {/* Sublistado de permisos */}
               {expanded[mod.id] && (
-                <div
-                  className="border-b px-8 py-3"
-                  style={{ borderColor: "#DFE5ED", background: "#F8FAFF" }}
-                >
+                <div className="border-b px-8 py-3 bg-[#F8FAFF] dark:bg-white/5">
                   {(permissions[mod.id] ?? []).length === 0 ? (
                     <p className="text-xs opacity-60">
                       Sin permisos. Haz click en &quot;+ Permiso&quot; para agregar.
@@ -336,6 +336,7 @@ export function RbacAdmin() {
 
 function RolesTab() {
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [roles, setRoles] = useState<RbacRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
@@ -345,6 +346,11 @@ function RolesTab() {
   useEffect(() => {
     superadminClient.listCompanies()
       .then((r) => setCompanies(r.data))
+      .catch(() => {});
+    // Tenants OT (refactor adminOT): el SuperAdmin también puede curar los permisos
+    // del rol ot_admin de cada organismo de tránsito, no solo de compañías.
+    fetchTransitOfficeTenants({ pageSize: 100 })
+      .then((r) => setTransitOfficeTenants(r.data))
       .catch(() => {});
   }, []);
 
@@ -376,38 +382,55 @@ function RolesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Selector de tenant */}
+      {/* Selector de tenant: compañías y tenants OT (refactor adminOT) en un mismo picker */}
       <div className="flex items-center gap-3">
         <label htmlFor="tenant-picker" className="text-sm font-semibold shrink-0">Tenant:</label>
         <select
           id="tenant-picker"
           value={selectedTenantId}
           onChange={(e) => setSelectedTenantId(e.target.value)}
-          className="text-sm px-3 py-2 rounded-xl border bg-white outline-none focus:border-[#557EFF]"
-          style={{ borderColor: "#DFE5ED", minWidth: 280 }}
+          className="text-sm px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] dark:text-white outline-none focus:border-[#557EFF]"
+          style={{ minWidth: 280 }}
         >
-          <option value="">— Selecciona una compañía —</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
-          ))}
+          <option value="">— Selecciona un tenant —</option>
+          {companies.length > 0 && (
+            <optgroup label="Compañías">
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
+              ))}
+            </optgroup>
+          )}
+          {transitOfficeTenants.length > 0 && (
+            <optgroup label="Organismos de Tránsito">
+              {transitOfficeTenants.map((t) => (
+                <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
+              ))}
+            </optgroup>
+          )}
         </select>
+        {selectedTenantId && transitOfficeTenants.some((t) => t.id === selectedTenantId) && (
+          <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#557EFF" }}>
+            <Landmark className="h-3.5 w-3.5" aria-hidden="true" />
+            Organismo de Tránsito
+          </span>
+        )}
         {selectedTenantId && (
           <button
             onClick={() => setShowCreateRole(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
             style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
           >
-            <Plus className="h-4 w-4" /> Nuevo rol
+            Nuevo rol
           </button>
         )}
       </div>
 
       {/* Tabla de roles */}
       {!selectedTenantId && (
-        <div className="py-12 text-center text-sm opacity-60">Selecciona una compañía para ver sus roles.</div>
+        <div className="py-12 text-center text-sm opacity-60">Selecciona un tenant para ver sus roles.</div>
       )}
       {selectedTenantId && (
-        <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden" style={{ borderColor: "#DFE5ED" }}>
+        <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden">
           <div className="grid px-4 py-2.5 text-[10px] font-semibold uppercase" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px", background: "#DFE5ED", color: "#162744" }}>
             <div>Código</div>
             <div>Nombre</div>
@@ -422,7 +445,7 @@ function RolesTab() {
             <div className="py-12 text-center text-sm opacity-60">No hay roles. Crea el primero.</div>
           )}
           {!rolesLoading && !rolesError && roles.map((r) => (
-            <div key={r.id} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px", borderColor: "#DFE5ED" }}>
+            <div key={r.id} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px" }}>
               <div className="font-mono opacity-80">{r.code}</div>
               <div className="font-semibold">{r.name}</div>
               <div className="opacity-70">{r.description ?? "—"}</div>
@@ -494,32 +517,26 @@ function CreateRoleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
-        <div className="flex items-start justify-between mb-4">
-          <h3 className="text-lg font-bold">Nuevo rol</h3>
-          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
-        </div>
+    <Modal open onClose={onClose} busy={busy} size="sm" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="admin_tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="admin_tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
           </div>
           <div>
             <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
-            <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrador Tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+            <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrador Tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
           </div>
           <div>
             <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
-            <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Acceso completo a la configuración del tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" style={{ borderColor: "#DFE5ED" }} />
+            <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Acceso completo a la configuración del tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
           </div>
           {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
             {busy ? "Creando…" : "Crear rol"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -559,17 +576,7 @@ function CreateModuleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border"
-        style={{ borderColor: "#DFE5ED" }}
-      >
-        <div className="flex items-start justify-between mb-4">
-          <h3 className="text-lg font-bold">Nuevo módulo</h3>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo módulo" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="mod-code" className="text-xs font-semibold block mb-1">
@@ -601,7 +608,6 @@ function CreateModuleModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="Trámites"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           <div>
@@ -614,7 +620,6 @@ function CreateModuleModal({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Gestión de trámites vehiculares"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           <div>
@@ -628,7 +633,6 @@ function CreateModuleModal({
               onChange={(e) => setSortOrder(e.target.value)}
               placeholder="1"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           {error && !error.includes("código") && (
@@ -649,8 +653,7 @@ function CreateModuleModal({
             {loading ? "Creando…" : "Crear módulo"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -707,12 +710,7 @@ function ModuleGrantsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md border" style={{ borderColor: "#DFE5ED" }}>
-        <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold">Empresas con acceso</h3>
-          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
-        </div>
+    <Modal open onClose={onClose} size="sm" title="Empresas con acceso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <p className="text-xs opacity-60 mb-4">
           Módulo: <strong>{module.name}</strong> ({module.code})
         </p>
@@ -754,8 +752,7 @@ function ModuleGrantsModal({
         >
           Listo
         </button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -800,17 +797,7 @@ function CreatePermissionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border"
-        style={{ borderColor: "#DFE5ED" }}
-      >
-        <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold">Nuevo permiso</h3>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <Modal open onClose={onClose} busy={loading} size="sm" title="Nuevo permiso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
         <p className="text-xs opacity-60 mb-4">
           Módulo: <strong>{module.name}</strong> ({module.code})
         </p>
@@ -826,7 +813,6 @@ function CreatePermissionModal({
               onChange={(e) => setSlug(e.target.value)}
               placeholder="tramites.read"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF] font-mono"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           <div>
@@ -840,7 +826,6 @@ function CreatePermissionModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="Leer trámites"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           <div>
@@ -852,7 +837,6 @@ function CreatePermissionModal({
               value={action}
               onChange={(e) => setAction(e.target.value)}
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none"
-              style={{ borderColor: "#DFE5ED" }}
             >
               {["CUSTOM", "READ", "CREATE", "UPDATE", "DELETE"].map((a) => (
                 <option key={a} value={a}>
@@ -871,7 +855,6 @@ function CreatePermissionModal({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Permite leer el listado de trámites"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              style={{ borderColor: "#DFE5ED" }}
             />
           </div>
           {error && (
@@ -892,7 +875,6 @@ function CreatePermissionModal({
             {loading ? "Creando…" : "Crear permiso"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

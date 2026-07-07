@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -74,7 +75,7 @@ public sealed class AttachmentsHandlerTests
     private static ProcedureInstance Instance(
         Guid id, Guid tenantId,
         string modalidad = "matricula_inicial",
-        string status = ProcedureInstanceStatus.Draft,
+        string status = TramiteEstado.Borrador,
         string? tipologia = null,
         string checklistEstado = "{}") =>
         new()
@@ -645,13 +646,14 @@ public sealed class AttachmentsHandlerTests
 
         error.Should().BeNull();
         result!.Items.Should().Contain(i => i.Key == "factura" && i.Satisfied);
-        // soat ahora es opcional: presente pero no bloquea
+        // soat e impronta ahora son opcionales: presentes pero no bloquean
         result.Items.Should().Contain(i => i.Key == "soat" && !i.Satisfied);
         result.FaltanObligatorios.Should().NotContain("soat");
-        // aduana e impronta son los obligatorios restantes (junto a factura ya subida)
+        result.Items.Should().Contain(i => i.Key == "impronta" && !i.Satisfied);
+        result.FaltanObligatorios.Should().NotContain("impronta");
+        // aduana es el único obligatorio restante (junto a factura ya subida)
         result.Items.Should().Contain(i => i.Key == "aduana" && !i.Satisfied);
         result.FaltanObligatorios.Should().Contain("aduana");
-        result.FaltanObligatorios.Should().Contain("impronta");
         result.Completo.Should().BeFalse();
     }
 
@@ -661,7 +663,7 @@ public sealed class AttachmentsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        // matricula_inicial: obligatorios = factura, aduana, impronta (docTipo). SOAT es opcional.
+        // matricula_inicial: obligatorios = factura, aduana. impronta y soat son opcionales.
         var instance = Instance(
             id, tenant,
             tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);

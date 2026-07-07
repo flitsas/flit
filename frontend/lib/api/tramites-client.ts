@@ -10,13 +10,17 @@ import type {
   ChecklistView,
   CommercialData,
   CompletarBiometriaResult,
+  ConsultationProvidersConfig,
   ConsultationResult,
   CreateInstanceRequest,
+  DocumentOcrResult,
   EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
   GenerarConsolidadoResult,
+  GenerarImprontaAttachmentResult,
+  IdentityAuditResponse,
   InstanceSummary,
   InstancesResponse,
   TransitOfficeOption,
@@ -35,6 +39,7 @@ import type {
   ProcedureAttachment,
   ProcedureConfiguration,
   ProcedureInstanceDetail,
+  ReconcileIdentityResult,
   ProcedureInstanceSummary,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
@@ -42,6 +47,7 @@ import type {
   SignaturesResponse,
   SimularFirmaResult,
   SolicitarFirmaInput,
+  StatusHistoryPage,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
   StuckIdentityValidationsResponse,
@@ -332,7 +338,7 @@ export const tramitesClient = {
   // trámite permanece en `draft`; la firma se dispara async cuando el cliente valida su identidad.
   // Distinto de submit (que sí radica a tránsito y exige identidad + gates completos).
   // 409 si la instancia no es draft o faltan datos (actores/documentos/organismo).
-  finalizeDraft: (id: string, tenantId: string = DEV_TENANT_ID) =>
+  finalizeDraft: (id: string, tenantId?: string) =>
     request<ProcedureInstanceSummary>(
       `/api/v1/tramites/instances/${id}/finalize-draft`,
       {
@@ -386,6 +392,15 @@ export const tramitesClient = {
       },
     ),
 
+  // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
+  // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
+  // placa es Kyverum RUNT, que lo resuelve solo).
+  getConsultationConfig: (tenantId?: string) =>
+    request<ConsultationProvidersConfig>(
+      `/api/v1/tramites/consultation-config`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
   // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea
   // ConsultationResult del backend al shape PreflightSnapshot del panel.
   runConsultation: async (
@@ -432,6 +447,29 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.attachments ?? [];
+  },
+
+  // OCR semántico de un documento ANTES de subirlo al expediente. Multipart POST a través del API
+  // (a diferencia de uploadAttachment, que sube el binario directo a S3). Devuelve el JSON extraído y,
+  // en PDFs multi-documento, el recorte en base64. Lanza si la respuesta no es OK (proveedor caído/
+  // timeout/tipo o archivo inválido) → el hook aborta la subida y ofrece carga manual.
+  analyzeDocument: async (
+    tipo: string,
+    file: File,
+    tenantId?: string,
+  ): Promise<DocumentOcrResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    // Sin Content-Type manual: el navegador fija el boundary del multipart. tenantHeader añade Bearer + X-Tenant-Id.
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/ocr/${encodeURIComponent(tipo)}`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as DocumentOcrResult;
   },
 
   // Subida directa navegador→S3 (presigned). El binario NO pasa por el request del
@@ -644,7 +682,7 @@ export const tramitesClient = {
   ensureIdentity: (
     instanceId: string,
     parte: BiometricParte,
-    tenantId: string = DEV_TENANT_ID,
+    tenantId?: string,
   ) =>
     request<EnsureIdentityResult>(
       `/api/v1/tramites/instances/${instanceId}/identity/ensure`,
@@ -763,6 +801,69 @@ export const tramitesClient = {
     return res ?? { validations: [], provider: 'mock' };
   },
 
+  // GET descargar el certificado (PDF) de una validación de identidad desde Kyverum (keyed por
+  // validationId → sirve para comprador o vendedor). Mismo patrón blob que downloadAttachment. El
+  // mensaje de error usa el ProblemDetails del backend (p.ej. "No hay certificado disponible…") para
+  // que el consumidor lo muestre tal cual. 404 sin_certificado/not_found; 502/503 proveedor.
+  downloadBiometricCertificado: async (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
+    const res = await fetch(
+      apiUrl(
+        `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/certificado`,
+      ),
+      { headers: tenantHeader(tenantId) },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    const blob = await res.blob();
+    const mimetype = res.headers.get('content-type') ?? 'application/pdf';
+    const cd = res.headers.get('content-disposition') ?? '';
+    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+    const plain = /filename="?([^";]+)"?/i.exec(cd);
+    const raw = star?.[1] ?? plain?.[1] ?? '';
+    let filename = raw.trim();
+    try {
+      filename = raw ? decodeURIComponent(raw.trim()) : '';
+    } catch {
+      // raw no era URI-encoded; se usa tal cual.
+    }
+    return {
+      blob,
+      filename: filename || `certificado_identidad_${validationId}.pdf`,
+      mimetype,
+    };
+  },
+
+  // POST reconciliar una validación con el proveedor (fallback si el webhook no llegó): consulta el
+  // estado real en Kyverum y lo aplica si ya es terminal. Idempotente. Devuelve { status, updated }.
+  // El wizard lo usa para desatascar en vivo una validación colgada en `en_proceso`.
+  reconcileBiometric: (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<ReconcileIdentityResult> =>
+    request<ReconcileIdentityResult>(
+      `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/reconcile`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
+  // secreto, firma, resultado y reconciliaciones. Sin PII/secretos. Diagnóstico de soporte desde la UI.
+  getBiometricAudit: (
+    instanceId: string,
+    validationId: string,
+    tenantId?: string,
+  ): Promise<IdentityAuditResponse> =>
+    request<IdentityAuditResponse>(
+      `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/audit`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
   // ── Firma electrónica (Slice 7A) — lado gestor autenticado ──────────
   // POST solicitar firma de una parte de la compraventa. Solo traspaso
   // (matrícula → 409 no_aplica). Idempotente por (parte, docTipo).
@@ -830,6 +931,20 @@ export const tramitesClient = {
       },
     ),
 
+  // POST generar impronta (Kyverum RUNT) con los datos del trámite y adjuntarla. Idempotente por
+  // NO-regeneración: 409 impronta_ya_existe si ya hay un adjunto tipo 'impronta' (manual o generado).
+  // Otros errores: organismo_requerido | identificador_vehiculo_requerido |
+  // documento_propietario_requerido | operador_no_resuelto | provider_validation |
+  // provider_unauthorized | provider_unavailable.
+  generarImpronta: (instanceId: string, tenantId?: string) =>
+    request<GenerarImprontaAttachmentResult>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/generate-impronta`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
+    ),
+
   // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
   // POST invitar participante. Devuelve el token CRUDO + magicLinkPath
   // (/portal/{token}) solo aquí (en BD se persiste solo el hash).
@@ -872,6 +987,71 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
       },
     ),
+
+  // HU-2 (N03, RF05) — historial de transiciones de estado, paginado, más reciente primero.
+  getStatusHistory: (
+    instanceId: string,
+    page = 1,
+    pageSize = 20,
+    tenantId?: string,
+  ) =>
+    request<StatusHistoryPage>(
+      `/api/v1/tramites/instances/${instanceId}/status-history?page=${page}&pageSize=${pageSize}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // ── N 03 — transición de estado de negocio ──────────────────────
+  // POST /instances/{id}/transition. Errores: ProblemDetails con title = CÓDIGO
+  // (transicion_no_permitida, estado_final, identidad_no_aprobada, documentos_incompletos,
+  // motivo_requerido, conflicto_concurrencia 409, estado_desconocido) y detail = mensaje;
+  // aquí se mapea el código a copy UX (fallback: el detail del backend).
+  transitionInstance: async (
+    instanceId: string,
+    toStatus: string,
+    reason?: string,
+    tenantId?: string,
+  ): Promise<InstanceSummary> => {
+    const token = getToken();
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/transition`),
+      {
+        method: 'POST',
+        headers: {
+          ...JSON_HEADERS,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...tenantHeader(tenantId),
+        },
+        body: JSON.stringify({ toStatus, reason: reason ?? null }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      let code: string | undefined;
+      let detail: string | undefined;
+      try {
+        const problem = JSON.parse(body) as { title?: string; detail?: string };
+        code = problem.title;
+        detail = problem.detail;
+      } catch {
+        // cuerpo no-JSON (gateway) → mensaje genérico abajo.
+      }
+      throw new Error(
+        (code && TRANSITION_ERROR_COPY[code]) ?? detail ?? problemMessage(res, body),
+      );
+    }
+    return (await res.json()) as InstanceSummary;
+  },
+};
+
+/** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */
+const TRANSITION_ERROR_COPY: Record<string, string> = {
+  transicion_no_permitida: 'La transición de estado solicitada no está permitida.',
+  estado_final: 'El trámite está en un estado final y no admite cambios.',
+  identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
+  documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
+  motivo_requerido: 'Debes indicar el motivo para esta transición.',
+  conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
+  estado_desconocido: 'El estado destino no es válido.',
 };
 
 /**

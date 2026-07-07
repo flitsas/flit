@@ -31,7 +31,7 @@ public static class TramiteTipologiaCatalog
                     "Manifiesto de importación / Aduana",
                     Obligatorio: true,
                     DocTipo: "aduana"),
-                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: true, DocTipo: "impronta"),
+                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: false, DocTipo: "impronta"),
                 new ChecklistItem("soat", "SOAT vigente", Obligatorio: false, DocTipo: "soat"),
                 new ChecklistItem(
                     "certificado_ambiental",
@@ -58,7 +58,7 @@ public static class TramiteTipologiaCatalog
                     Obligatorio: true,
                     DocTipo: "compraventa",
                     Ayuda: "Firmas autenticadas ante notaría de comprador y vendedor."),
-                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: true, DocTipo: "impronta"),
+                new ChecklistItem("impronta", "Impronta de motor y chasis", Obligatorio: false, DocTipo: "impronta"),
                 new ChecklistItem("soat", "SOAT vigente", Obligatorio: true, DocTipo: "soat"),
                 new ChecklistItem(
                     "rtm",

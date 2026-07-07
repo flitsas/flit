@@ -70,7 +70,6 @@ export function Step5Campos({
             <div
               key={step.id ?? i}
               className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-              style={{ borderColor: '#DFE5ED' }}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span
@@ -91,7 +90,6 @@ export function Step5Campos({
                     <div
                       key={section.id ?? si}
                       className="pl-3 border-l-2"
-                      style={{ borderColor: '#DFE5ED' }}
                     >
                       <p className="text-[11px] font-semibold mb-1">{section.title}</p>
                       {section.formFields.length === 0 ? (

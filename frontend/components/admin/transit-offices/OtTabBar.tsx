@@ -17,7 +17,6 @@ export function OtTabBar({ tabs, activeId, onChange, ariaLabel }: OtTabBarProps)
   return (
     <div
       className="flex items-center gap-1 overflow-x-auto border-b"
-      style={{ borderColor: "#DFE5ED" }}
       role="tablist"
       aria-label={ariaLabel}
     >

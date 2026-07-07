@@ -93,13 +93,17 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 6. Trámites pending_ot de clientes (tab client-procedures)
+-- 6. Trámites entregados de clientes en cola de decisión OT (tab client-procedures).
+--    N 03 (ADR-0022): 'entregado' reemplaza a 'pending_ot' — el approve/reject OT opera
+--    sobre entregado → aprobado | rechazado. Este seed también lo re-ejecuta
+--    DevelopmentAuthSeeder en cada arranque dev (post-migraciones), por eso debe usar
+--    el vocabulario nuevo.
 -- ─────────────────────────────────────────────────────────────────────────────
 INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, status, transit_office_id,
      submitted_at, created_by_user_id, created_at)
 SELECT
-    v.id, v.tenant_id, v.procedure_type_id, v.reference_number, 'pending_ot',
+    v.id, v.tenant_id, v.procedure_type_id, v.reference_number, 'entregado',
     'aaaaaaaa-0001-4000-8000-000000000001', now(),
     'ec4dddb9-ade5-43e8-b33b-c6036eba49d0', now()
 FROM (VALUES

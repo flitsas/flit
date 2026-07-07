@@ -6,8 +6,10 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
+using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.VehicleOwnership;
@@ -29,6 +31,8 @@ using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.Improntas.GenerarImpronta;
+using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
 using Flit.Admin.Application.ProcedureSnapshots.GetProcedureDocumentRequirements;
 using Flit.Admin.Application.OtProfile;
@@ -97,8 +101,17 @@ public static class DependencyInjection
         services.AddScoped<SearchTransitOfficesHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
+
+        // Refactor adminOT — alta/listado de tenants OT.
+        // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<CreateTransitOfficeHandler>();
+        services.AddScoped<ListTransitOfficeTenantsHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
+        // IImprontaRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<ListImprontasHandler>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<CreateDocumentTypeHandler>();
@@ -158,6 +171,11 @@ public static class DependencyInjection
         services.AddScoped<CreateOtDocumentTagHandler>();
         services.AddScoped<DeleteOtDocumentTagHandler>();
         services.AddScoped<ListOtDocumentTagsHandler>();
+
+        // HU #10467 — generación/persistencia/entrega del PDF de impronta (Kyverum RUNT).
+        // IImprontaExternalClient (HU #10465) e IImprontaRepository (HU #10466) se registran en
+        // Flit.Infrastructure (InfrastructureExtensions/AddAdminInfrastructure).
+        services.AddScoped<GenerarImprontaHandler>();
 
         return services;
     }

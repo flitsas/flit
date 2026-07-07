@@ -69,7 +69,6 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             value={transitOfficeId}
             onChange={(e) => setTransitOfficeId(e.target.value)}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-            style={{ borderColor: "#DFE5ED" }}
           >
             <option value="">Sin OT (nivel Default/Cliente)</option>
             {offices.map((o) => (
@@ -89,7 +88,6 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             value={clienteId}
             onChange={(e) => setClienteId(e.target.value)}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-            style={{ borderColor: "#DFE5ED" }}
           >
             <option value="">Sin Cliente (nivel Default/OT)</option>
             {companies.map((c) => (
@@ -122,7 +120,7 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
           <ResolvedMatrixTable rows={rows} />
         </UiStateBoundary>
       ) : (
-        <p className="rounded-2xl border p-6 text-center text-xs opacity-60" style={{ borderColor: "#DFE5ED" }}>
+        <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
           Elige una combinación y pulsa «Ver matriz resuelta» para simular el orden final.
         </p>
       )}
