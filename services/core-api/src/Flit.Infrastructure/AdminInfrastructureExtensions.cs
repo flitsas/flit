@@ -50,6 +50,10 @@ public static class AdminInfrastructureExtensions
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
 
+        // RF01 — estado operativo del catálogo OT (catálogo LEFT JOIN perfil + tenant),
+        // lectura cross-tenant para el listado del SuperAdmin.
+        services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
@@ -99,6 +103,10 @@ public static class AdminInfrastructureExtensions
 
         // #2 — validación de OT habilitado por empresa en el submit de trámites.
         services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
+
+        // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
+        // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
+        services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
 
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
