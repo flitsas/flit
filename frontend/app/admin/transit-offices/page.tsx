@@ -30,6 +30,7 @@ function AdminTransitOfficesPageInner() {
   const { show } = useToast();
   const [role, setRole] = useState<RoleResolution>("checking");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createOfficeId, setCreateOfficeId] = useState<string | undefined>(undefined);
   const [listVersion, setListVersion] = useState(0);
 
   useEffect(() => {
@@ -88,7 +89,10 @@ function AdminTransitOfficesPageInner() {
         />
         <button
           type="button"
-          onClick={() => setCreateOpen(true)}
+          onClick={() => {
+            setCreateOfficeId(undefined);
+            setCreateOpen(true);
+          }}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-sm"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
@@ -100,11 +104,18 @@ function AdminTransitOfficesPageInner() {
       <div
         className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
       >
-        <TransitOfficesList key={listVersion} />
+        <TransitOfficesList
+          key={listVersion}
+          onCreateTenant={(office) => {
+            setCreateOfficeId(office.id);
+            setCreateOpen(true);
+          }}
+        />
       </div>
 
       <CreateTransitOfficeTenantDialog
         open={createOpen}
+        initialOfficeId={createOfficeId}
         onClose={() => setCreateOpen(false)}
         onCreated={(tenant) => {
           setCreateOpen(false);

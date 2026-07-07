@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { OTMatrix } from "@/components/admin/companies/OTMatrix";
+import { OTMatrix, type OtOperationalInfo } from "@/components/admin/companies/OTMatrix";
 import {
   addTransitGrant,
   fetchTransitGrants,
   fetchTransitOffices,
   removeTransitGrant,
 } from "@/lib/api/admin-companies";
+import {
+  fetchTransitOfficesOperationalStatus,
+  type TransitOfficeOperationalStatus,
+} from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
 
 // Slot de matriz OT (HU #10194, AC4). Carga el catálogo completo y los grants del
@@ -19,20 +23,31 @@ export function OTMatrixPanel({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [grantedIds, setGrantedIds] = useState<string[]>([]);
+  const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [catalog, grants] = await Promise.all([
+        const [catalog, grants, opStatus] = await Promise.all([
           fetchTransitOffices(undefined, signal),
           fetchTransitGrants(tenantId, signal),
+          // HU #10518 — estado operativo por OT para bloquear habilitación. Best-effort:
+          // si falla (p. ej. permisos), la matriz sigue y el backend hace de árbitro (422).
+          fetchTransitOfficesOperationalStatus(signal).catch(
+            () => [] as TransitOfficeOperationalStatus[],
+          ),
         ]);
         if (signal?.aborted) {
           return;
         }
         setOffices(catalog);
         setGrantedIds(grants.transitOfficeIds);
+        setOperationalById(
+          Object.fromEntries(
+            opStatus.map((s) => [s.id, { hasTenant: s.hasTenant, estadoActivo: s.estadoActivo }]),
+          ),
+        );
         setStatus(catalog.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
@@ -70,6 +85,7 @@ export function OTMatrixPanel({ tenantId }: { tenantId: string }) {
       <OTMatrix
         offices={offices}
         grantedIds={grantedIds}
+        operationalById={operationalById}
         onToggle={handleToggle}
         onError={(message) => show(message, "error")}
       />
