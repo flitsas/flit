@@ -12,6 +12,10 @@ import {
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
+import {
+  SuspendOrDeactivateModal,
+  type SuspendMode,
+} from "@/components/atom/modules/users/SuspendOrDeactivateModal";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -28,7 +32,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [suspendTarget, setSuspendTarget] = useState<OtUserItem | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<{ user: OtUserItem; mode: SuspendMode } | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -71,15 +75,15 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     }
   }
 
-  async function handleSuspend(userId: string, reason: string, endsAt: string) {
-    try {
-      await suspendOtUser(userId, { reason, endsAt }, { transitOfficeId });
-      show("Usuario suspendido correctamente.", "success");
-      setSuspendTarget(null);
-      void load();
-    } catch {
-      show("No se pudo suspender al usuario.", "error");
-    }
+  // Nota (HU #10620/AC3): a diferencia de `handleInvite`/`handleUnsuspend`, aquí NO se
+  // atrapa el error con un toast genérico — se deja propagar para que
+  // `SuspendOrDeactivateModal` lo mapee (p. ej. "último administrador activo") y lo
+  // muestre inline, igual que en el módulo de Compañía (paridad AC4).
+  async function handleSuspend(userId: string, reason: string, endsAt: string | null) {
+    await suspendOtUser(userId, { reason, endsAt }, { transitOfficeId });
+    show(endsAt === null ? "Usuario desactivado correctamente." : "Usuario suspendido correctamente.", "success");
+    setSuspendTarget(null);
+    void load();
   }
 
   async function handleUnsuspend(userId: string) {
@@ -177,16 +181,28 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           <ShieldOff className="h-4 w-4" />
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          title="Suspender usuario"
-                          aria-label={`Suspender usuario ${u.fullName}`}
-                          onClick={() => setSuspendTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <Ban className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            title="Suspender temporalmente"
+                            aria-label={`Suspender temporalmente a ${u.fullName}`}
+                            onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
+                            className="p-1.5 rounded-lg transition hover:bg-orange-50"
+                            style={{ color: "#FF4E00" }}
+                          >
+                            <Clock className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Desactivar indefinidamente"
+                            aria-label={`Desactivar indefinidamente a ${u.fullName}`}
+                            onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
+                            className="p-1.5 rounded-lg transition hover:bg-red-50"
+                            style={{ color: "#557EFF" }}
+                          >
+                            <Ban className="h-4 w-4" />
+                          </button>
+                        </div>
                       ))}
                   </td>
                 </tr>
@@ -200,9 +216,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         <OtInviteUserDialog onConfirm={handleInvite} onClose={() => setInviteOpen(false)} />
       )}
       {suspendTarget && (
-        <OtSuspendUserDialog
-          user={suspendTarget}
-          onConfirm={(reason, endsAt) => handleSuspend(suspendTarget.id, reason, endsAt)}
+        <SuspendOrDeactivateModal
+          user={suspendTarget.user}
+          mode={suspendTarget.mode}
+          onConfirm={(reason, endsAt) => handleSuspend(suspendTarget.user.id, reason, endsAt)}
           onClose={() => setSuspendTarget(null)}
         />
       )}
@@ -322,92 +339,6 @@ function OtInviteUserDialog({
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function OtSuspendUserDialog({
-  user,
-  onConfirm,
-  onClose,
-}: {
-  user: OtUserItem;
-  onConfirm: (reason: string, endsAt: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  // eslint-disable-next-line react-hooks/purity
-  const defaultEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    await onConfirm(reason.trim(), new Date(endsAt || defaultEndsAt).toISOString());
-    setBusy(false);
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(22,39,68,0.45)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="ot-suspend-user-title"
-    >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl" style={{ background: "#FFFFFF" }}>
-        <h2 id="ot-suspend-user-title" className="text-base font-bold mb-1" style={{ color: "#162744" }}>
-          Suspender usuario
-        </h2>
-        <p className="text-xs mb-4" style={{ color: "#557EFF" }}>
-          {user.fullName}
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <OtField label="Motivo *" htmlFor="ot-suspend-reason">
-            <textarea
-              id="ot-suspend-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              required
-              rows={3}
-              placeholder="Ej. Incumplimiento de políticas"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400 resize-none"
-            />
-          </OtField>
-          <OtField label="Suspendido hasta *" htmlFor="ot-suspend-ends-at">
-            <input
-              id="ot-suspend-ends-at"
-              type="datetime-local"
-              value={endsAt || defaultEndsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              required
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
-            />
-          </OtField>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60"
-              style={{ color: "#162744" }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "#FF4E00" }}
-            >
-              {busy ? "Aplicando…" : "Suspender"}
             </button>
           </div>
         </form>

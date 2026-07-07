@@ -34,9 +34,11 @@ export interface InviteOtUserResponse {
   emailSent: boolean;
 }
 
+/** `endsAt` nulo = desactivación indefinida (HU #10619/#10620); con valor = suspensión
+ *  temporal hasta esa fecha. */
 export interface SuspendOtUserRequest {
   reason: string;
-  endsAt: string;
+  endsAt: string | null;
 }
 
 function scopeQuery(scope?: OtApiScope) {
