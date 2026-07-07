@@ -12,7 +12,8 @@ namespace Flit.Infrastructure.Consultations;
 /// Proveedor RUES (Registro Único Empresarial y Social): consulta persona jurídica por NIT.
 /// Resuelve el template <c>RUES_ACTOR_JURIDICAL</c> (entity_scope=actor, person_type=juridical).
 /// Mode=mock (default) devuelve datos canónicos de una empresa activa con la misma forma del
-/// contrato → swap transparente cuando exista el endpoint real. NUNCA lanza excepciones de
+/// contrato → swap transparente al modo real (<c>VERIFIK_RUES_MODE=real</c>). El modo real consulta
+/// <c>GET /v2/co/rues/complete</c> en Verifik (misma config que RUNT). NUNCA lanza excepciones de
 /// transporte al handler (contrato <see cref="IConsultationProvider"/>): errores de red se
 /// mapean a un check "error" (bloqueo duro). El certificado RUES en PDF se genera e incorpora
 /// al consolidado en HU #10589.
@@ -45,8 +46,10 @@ internal sealed class VerifikRuesConsultationProvider(
 
         try
         {
+            // Endpoint real Verifik RUES (misma config que RUNT por Verifik: BaseUrl/ApiToken/AuthScheme).
             using var request = new HttpRequestMessage(
-                HttpMethod.Get, $"/v2/co/rues/consultar?nit={Uri.EscapeDataString(nit)}");
+                HttpMethod.Get,
+                $"/v2/co/rues/complete?documentType=NIT&documentNumber={Uri.EscapeDataString(nit)}");
             if (!string.IsNullOrWhiteSpace(_opts.ApiToken))
                 request.Headers.Authorization = new AuthenticationHeaderValue(_opts.AuthScheme, _opts.ApiToken);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
