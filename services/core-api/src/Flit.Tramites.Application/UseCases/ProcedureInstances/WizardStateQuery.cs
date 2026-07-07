@@ -27,7 +27,7 @@ public sealed record WizardStepDto(
 public sealed record WizardStateDto(
     string Modalidad,
     string? TipologiaCodigo,
-    int TotalSteps,          // 5 matrícula | 6 traspaso
+    int TotalSteps,          // 5 matrícula | 6 traspaso | 5 traspaso unilateral
     IReadOnlyList<WizardStepDto> Steps,
     bool CanSubmit,
     IReadOnlyList<string> Blockers,
@@ -96,9 +96,19 @@ public sealed class GetWizardStateHandler(
         return (state, null);
     }
 
-    /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
+    /// <summary>
+    /// Marca como satisfechas TODAS las partes que pueden validar identidad en cualquier modalidad
+    /// (comprador/vendedor del traspaso bilateral + arrendadora del unilateral) cuando el OT destino
+    /// deshabilita la identidad (HU #10548). Superset inocuo: cada <c>Build*</c> solo consulta las partes
+    /// de su propia modalidad.
+    /// </summary>
     private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
-        new(approved, StringComparer.OrdinalIgnoreCase) { "comprador", "vendedor" };
+        new(approved, StringComparer.OrdinalIgnoreCase)
+        {
+            BiometricRules.ParteComprador,
+            BiometricRules.ParteVendedor,
+            BiometricRules.ParteArrendadora,
+        };
 
     /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
@@ -122,9 +132,12 @@ public sealed class GetWizardStateHandler(
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
-        return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes)
-            : BuildMatricula(instance, identidadAprobadaPartes);
+        return modalidad switch
+        {
+            TramiteModalidadEntrada.Traspaso => BuildTraspaso(instance, identidadAprobadaPartes),
+            TramiteModalidadEntrada.TraspasoUnilateral => BuildTraspasoUnilateral(instance, identidadAprobadaPartes),
+            _ => BuildMatricula(instance, identidadAprobadaPartes),
+        };
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
@@ -349,6 +362,174 @@ public sealed class GetWizardStateHandler(
             TramiteModalidadEntradaCodes.Traspaso,
             instance.TipologiaCodigo,
             TraspasoGates.TotalPasos,
+            steps,
+            canSubmit,
+            blockers,
+            instance.Status,
+            TramiteStateMachine.TransitionsFrom(instance.Status));
+    }
+
+    // ---- Traspaso unilateral (5 pasos) --------------------------------------
+
+    /// <summary>
+    /// Traspaso unilateral de leasing (HU #10590/#10592, R12): 5 pasos (Consulta del vehículo,
+    /// Documentos, Arrendadora, Locatario, Generar FUR). La ARRENDADORA es la ÚNICA parte que valida
+    /// identidad (vía su representante legal — D3); el LOCATARIO participa de forma DOCUMENTAL (paz y
+    /// salvo + documento del locatario), sin biométrica. No hay firma de compraventa (no es compraventa
+    /// directa). El paso 5 (FUR) es DIFERIDO — igual que el paso 6 del traspaso estándar: emite
+    /// <c>pendiente_biometria</c> mientras la arrendadora no esté aprobada y <c>fur_pendiente</c> hasta
+    /// que se genere el FUR (contrato con el FE #10591/#10593: <c>key == "fur"</c>).
+    /// </summary>
+    private static WizardStateDto BuildTraspasoUnilateral(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    {
+        const int totalPasos = 5;
+
+        var fv = FieldValues(instance);
+        var preflight = PreflightOf(instance);
+        var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var riesgoAceptado = RiesgoAceptado(instance);
+
+        var consultaOk = HasVehiculoConsulta(fv);                       // placa-first
+        var providerError = preflight?.ProviderError == true;           // consulta no verificable (bloqueo duro)
+        var preflightRojoBloquea = preflight?.Overall == "red" && !riesgoAceptado;
+
+        // La ARRENDADORA es la única parte que valida identidad (D3). Aprobación PER-PERSONA (documento),
+        // referenciada de su validación vigente (HU #10350). El LOCATARIO NO valida biométrica.
+        var arrendadoraAprobada = identidadAprobadaPartes.Contains(BiometricRules.ParteArrendadora);
+        var furOk = FurGenerado(instance);
+
+        // Paso 1 (consulta) completo: placa consultada y sin error DURO de proveedor.
+        var consultaCompleta = consultaOk && !providerError;
+        // Paso 2 (documentos): tras la consulta, sin bloqueo de preflight + checklist obligatorio completo.
+        var documentosCompletos = consultaCompleta && !preflightRojoBloquea && docsCompletos;
+        // "Datos" completos (consulta + documentos): habilitan los pasos diferidos (3 Arrendadora,
+        // 4 Locatario, 5 FUR) AUNQUE la biométrica de la arrendadora siga pendiente (paridad HU #10350).
+        var datosCompletos = consultaCompleta && documentosCompletos;
+
+        var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoUnilateral)?.Pasos
+                    ?? [];
+
+        var steps = new List<WizardStepDto>(totalPasos);
+        for (var p = 1; p <= totalPasos; p++)
+        {
+            var reasons = new List<string>();
+            string status;
+
+            switch (p)
+            {
+                // 1 = Consulta del vehículo por placa (frontera): un unilateral recién creado abre aquí.
+                case 1:
+                    if (providerError)
+                    {
+                        status = "incomplete";
+                        reasons.Add("preflight_provider_error");
+                    }
+                    else if (consultaOk)
+                    {
+                        status = "complete";
+                    }
+                    else
+                    {
+                        status = "incomplete";
+                        reasons.Add("consulta_pendiente");
+                    }
+                    break;
+
+                // 2 = Documentos obligatorios del checklist unilateral (paridad con matrícula/traspaso).
+                case 2:
+                    if (!consultaCompleta)
+                    {
+                        status = "locked";
+                    }
+                    else if (providerError)
+                    {
+                        status = "incomplete";
+                        reasons.Add("preflight_provider_error");
+                    }
+                    else if (preflightRojoBloquea)
+                    {
+                        status = "incomplete";
+                        reasons.Add("preflight_red");
+                    }
+                    else if (docsCompletos)
+                    {
+                        status = "complete";
+                    }
+                    else
+                    {
+                        status = "incomplete";
+                        reasons.Add(TramiteEstadoErrores.DocumentosIncompletos);
+                    }
+                    break;
+
+                // 3 = Arrendadora: ÚNICA parte que valida identidad (biométrica, D3). Diferida como el
+                // paso 4 de matrícula — alcanzable con datos completos aunque la biométrica siga pendiente.
+                case 3:
+                    if (!datosCompletos)
+                    {
+                        status = "locked";
+                    }
+                    else if (arrendadoraAprobada)
+                    {
+                        status = "complete";
+                    }
+                    else
+                    {
+                        status = "incomplete";
+                        reasons.Add("identidad_pendiente");
+                        reasons.Add(PendienteBiometria);
+                    }
+                    break;
+
+                // 4 = Locatario: DOCUMENTAL (paz y salvo + documento del locatario). NO exige biométrica;
+                // completa cuando el checklist obligatorio (que incluye los documentos del locatario) está.
+                case 4:
+                    if (!datosCompletos)
+                    {
+                        status = "locked";
+                    }
+                    else if (docsCompletos)
+                    {
+                        status = "complete";
+                    }
+                    else
+                    {
+                        status = "incomplete";
+                        reasons.Add(TramiteEstadoErrores.DocumentosIncompletos);
+                    }
+                    break;
+
+                // 5 = Generar FUR (DIFERIDO, como el paso 6 del traspaso): biométrica de la ARRENDADORA +
+                // FUR generado. NO exige firma de compraventa. Emite las razones precisas de lo que falta.
+                default:
+                    if (!datosCompletos)
+                    {
+                        status = "locked";
+                    }
+                    else
+                    {
+                        if (!arrendadoraAprobada)
+                            reasons.Add(PendienteBiometria);
+                        if (!furOk)
+                            reasons.Add(FurPendiente);
+                        status = (arrendadoraAprobada && furOk) ? "complete" : "incomplete";
+                    }
+                    break;
+            }
+
+            steps.Add(new WizardStepDto(p, UnilateralStepKey(p), StepLabel(pasos, p), status, reasons));
+        }
+
+        // N 03 (RF03): mismo gate de preparación que el traspaso — la identidad exigida es la de la
+        // ARRENDADORA (D3), no la del comprador/vendedor. El FUR (paso 5) sigue diferido; el blocker
+        // global cubre identidad de la arrendadora + documentos obligatorios.
+        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, arrendadoraAprobada);
+        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [5]);
+
+        return new WizardStateDto(
+            TramiteModalidadEntradaCodes.TraspasoUnilateral,
+            instance.TipologiaCodigo,
+            totalPasos,
             steps,
             canSubmit,
             blockers,
@@ -581,4 +762,20 @@ public sealed class GetWizardStateHandler(
                 5 => "fur",
                 _ => $"paso_{index}",
             };
+
+    /// <summary>
+    /// Keys de los 5 pasos del traspaso unilateral. El paso 5 DEBE ser <c>fur</c>: el FE (#10591/#10593)
+    /// localiza el paso final por <c>steps.find(s =&gt; s.key === 'fur')</c> y lee sus reasons
+    /// (<c>pendiente_biometria</c>) para el gate de identidad.
+    /// </summary>
+    private static string UnilateralStepKey(int index) =>
+        index switch
+        {
+            1 => "consulta",
+            2 => "documentos",
+            3 => "arrendadora",
+            4 => "locatario",
+            5 => "fur",
+            _ => $"paso_{index}",
+        };
 }
