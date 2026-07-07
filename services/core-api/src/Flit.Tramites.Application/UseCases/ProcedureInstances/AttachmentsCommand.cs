@@ -44,6 +44,8 @@ public static class AttachmentRules
         // Documentos del checklist de traspaso (antes sin DocTipo → el front subía con el `key`,
         // que no estaba en este set → 400 "tipo inválido").
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
+        // Prenda / gravamen (IT-3, Feature #10585): un DocTipo por decisión que requiere soporte.
+        "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
