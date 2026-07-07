@@ -30,6 +30,9 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        // Catálogo global (HU #10505 / ADR-0023): sin tenant_id, sin RLS. Protegido por RBAC SuperAdmin.
+        builder.Property(x => x.TargetEntityType).HasMaxLength(20).IsRequired().HasDefaultValue("COMPANY");
+        builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
     }
 }

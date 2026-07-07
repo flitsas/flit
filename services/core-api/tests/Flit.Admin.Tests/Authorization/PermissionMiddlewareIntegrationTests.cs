@@ -55,12 +55,16 @@ public sealed class ForbiddenResultHandlerBodyTests
     }
 
     // ── AC3 retrocompatibilidad: otro requirement → body { error } ───────────
+    // Nota (HU #10508): el requirement usado aquí solo necesita NO ser un PermissionRequirement
+    // para ejercer la rama "retrocompatibilidad" del handler — no necesita ser el requirement real
+    // de la policy SuperAdmin (que hoy es RolesAuthorizationRequirement vía RequireRole).
+    // AdminCompanyRequirement sirve como cualquier otro requirement no-permiso.
 
     [Fact]
-    public async Task AC3_SuperAdminRequirementFail_Returns403WithErrorField()
+    public async Task AC3_NonPermissionRequirementFail_Returns403WithErrorField()
     {
         var (httpContext, responseBody) = BuildHttpContext();
-        var requirement = new SuperAdminRequirement();
+        var requirement = new AdminCompanyRequirement();
         var failure = AuthorizationFailure.Failed([requirement]);
         var authorizeResult = PolicyAuthorizationResult.Forbid(failure);
         var policy = new AuthorizationPolicyBuilder()

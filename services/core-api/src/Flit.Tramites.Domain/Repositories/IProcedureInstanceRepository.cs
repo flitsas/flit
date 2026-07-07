@@ -15,6 +15,13 @@ public interface IProcedureInstanceRepository
 
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Carga la instancia con sus <c>Actors</c> y <c>Attachments</c>. Query lean para el
+    /// cómputo del checklist, que necesita los tipos de documento subidos (auto-marca) y el
+    /// tipo de persona de los actores (supresión de <c>cedulas</c> para persona natural, HU #10542).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con TODO el grafo del wizard: actores, field values, adjuntos,
     /// datos comerciales y snapshots de preflight (Slice 4 — wizard server-driven).</summary>
     Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);

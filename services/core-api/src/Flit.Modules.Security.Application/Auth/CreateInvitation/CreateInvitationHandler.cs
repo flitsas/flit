@@ -16,10 +16,16 @@ public sealed partial class CreateInvitationHandler(
     {
         var email = command.Email?.Trim() ?? string.Empty;
 
-        if (command.RoleId.HasValue)
+        // AC5 — seleccionar al menos un rol es OBLIGATORIO al invitar (ya no se permite
+        // "sin rol asignado").
+        var roleIds = command.RoleIds?.Distinct().ToList() ?? [];
+        if (roleIds.Count == 0)
+            throw new NoRolesSelectedException();
+
+        foreach (var roleId in roleIds)
         {
             var roleExists = await invitationRepository.RoleExistsInTenantAsync(
-                command.TenantId, command.RoleId.Value, cancellationToken);
+                command.TenantId, roleId, cancellationToken);
             if (!roleExists)
                 throw new RoleNotFoundException();
         }
@@ -36,7 +42,7 @@ public sealed partial class CreateInvitationHandler(
         var token = tokenGenerator.Generate();
 
         var invitationId = await invitationRepository.CreateAsync(
-            new UserInvitationData(command.TenantId, email, command.FullName, command.RoleId, token.TokenHash, command.InvitedBy),
+            new UserInvitationData(command.TenantId, email, command.FullName, roleIds, token.TokenHash, command.InvitedBy),
             cancellationToken);
 
         var link = BuildActivateLink(options.ActivateUrlBase, token.RawToken);

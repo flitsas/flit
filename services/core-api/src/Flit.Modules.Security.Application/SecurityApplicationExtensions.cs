@@ -39,17 +39,21 @@ public static class SecurityApplicationExtensions
         services.AddScoped<ListPermissionsHandler>();
 
         // HU #10163 — CRUD roles y asociación de permisos Super Admin
+        // HU #10505 — catálogo global de roles por tipo de entidad
         services.AddScoped<CreateRoleHandler>();
         services.AddScoped<DeleteRoleHandler>();
         services.AddScoped<SetRolePermissionsHandler>();
+        services.AddScoped<SetRoleActiveHandler>();
         services.AddScoped<ListRolesHandler>();
+        services.AddScoped<GetRoleHandler>();
 
         // HU #10164 — Asignación única de rol por usuario tenant
+        // HU #10506 — soporte multi-rol por usuario (modelo aditivo) + quitar rol puntual
         services.AddScoped<AssignRoleHandler>();
+        services.AddScoped<RemoveRoleAssignmentHandler>();
 
         // Fase 2 — Endpoints AdminCompañía
         services.AddScoped<ListAccessibleModulesHandler>();
-        services.AddScoped<SetTenantRolePermissionsHandler>();
 
         return services;
     }

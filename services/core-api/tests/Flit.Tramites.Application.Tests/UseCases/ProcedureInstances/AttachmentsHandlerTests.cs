@@ -640,7 +640,7 @@ public sealed class AttachmentsHandlerTests
             StoragePath = "p",
             UploadedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAndAttachmentsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
@@ -677,7 +677,7 @@ public sealed class AttachmentsHandlerTests
                 UploadedAt = DateTimeOffset.UtcNow,
             });
         }
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAndAttachmentsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
@@ -693,7 +693,7 @@ public sealed class AttachmentsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, modalidad: "desconocida", tipologia: "no_existe");
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithActorsAndAttachmentsAsync(id, tenant, ct).Returns(instance);
 
         var (_, error) = await _checklist.HandleAsync(id, tenant, ct);
 

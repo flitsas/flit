@@ -39,11 +39,15 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
     private readonly Guid _superAdminTenantId = Guid.NewGuid();
 
     private readonly Guid _companyTenantId = Guid.NewGuid();
-    private readonly Guid _companyAdminRoleId = Guid.NewGuid();
+
+    // HU #10505: security.roles es un catálogo GLOBAL — "AdminCompany"/"ot_admin" ya no se
+    // crean por tenant en el seed de este test; se resuelven por Code contra las filas
+    // globales sembradas por DevelopmentAuthSeeder al levantar la WebApplicationFactory.
+    private Guid _companyAdminRoleId;
 
     private readonly Guid _transitOfficeId = Guid.NewGuid();
     private readonly Guid _otTenantId = Guid.NewGuid();
-    private readonly Guid _otAdminRoleId = Guid.NewGuid();
+    private Guid _otAdminRoleId;
 
     public SecurityInvitationsRoleResolutionTests(WebApplicationFactory<Program> factory)
     {
@@ -138,32 +142,21 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        // Tenants + Users primero (el Role y el perfil OT dependen del tenant recién
-        // insertado; sin navegaciones EF entre estos agregados, mismo motivo que en
+        // Tenants + Users primero (el perfil OT depende del tenant recién insertado; sin
+        // navegaciones EF entre estos agregados, mismo motivo que en
         // AdminOtUsersEndpointsTests.SeedAsync).
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        db.Roles.Add(new Role
-        {
-            Id = _companyAdminRoleId,
-            TenantId = _companyTenantId,
-            Code = "AdminCompany",
-            Name = "Administrador de Compañía",
-            IsSystem = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            RowVersion = 0,
-        });
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // reutiliza la fila si ya existe (p.ej. sembrada por DevelopmentAuthSeeder) o se crea
+        // aquí mismo si no (BD limpia, como la que usa CI): el test no puede depender de que
+        // el seeder de desarrollo haya corrido antes que este, solo de que exista una única
+        // fila global (violaría UNIQUE(code, target_entity_type) crear una por tenant de prueba).
+        _companyAdminRoleId = await GetOrCreateGlobalRoleAsync(
+            db, "AdminCompany", "Administrador de Compañía", "COMPANY", TestContext.Current.CancellationToken);
 
-        db.Roles.Add(new Role
-        {
-            Id = _otAdminRoleId,
-            TenantId = _otTenantId,
-            Code = "ot_admin",
-            Name = "Administrador OT",
-            IsSystem = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            RowVersion = 0,
-        });
+        _otAdminRoleId = await GetOrCreateGlobalRoleAsync(
+            db, "ot_admin", "Administrador OT", "TRANSIT_OFFICE", TestContext.Current.CancellationToken);
 
         db.TransitOfficeProfiles.Add(new TransitOfficeProfile
         {
@@ -179,6 +172,32 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
 
     private FlitDbContext CreateDbContext() =>
         _factory.Services.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
+
+    private static async Task<Guid> GetOrCreateGlobalRoleAsync(
+        FlitDbContext db, string code, string name, string targetEntityType, CancellationToken ct)
+    {
+        var existingId = await db.Roles.AsNoTracking()
+            .Where(r => r.Code == code && r.TargetEntityType == targetEntityType && r.DeletedAt == null)
+            .Select(r => r.Id)
+            .SingleOrDefaultAsync(ct);
+
+        if (existingId != Guid.Empty)
+            return existingId;
+
+        var role = new Role
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            Name = name,
+            TargetEntityType = targetEntityType,
+            IsSystem = true,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Roles.Add(role);
+        await db.SaveChangesAsync(ct);
+        return role.Id;
+    }
 
     private static string MintToken(string role, Guid tenantId, Guid userId)
     {
@@ -212,9 +231,8 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId));
         db.SaveChanges();
 
-        db.Roles.RemoveRange(
-            db.Roles.Where(r => r.TenantId == _companyTenantId || r.TenantId == _otTenantId));
-        db.SaveChanges();
+        // HU #10505: "AdminCompany"/"ot_admin" son roles del catálogo GLOBAL, sembrados una sola
+        // vez por DevelopmentAuthSeeder — este test NO los crea ni los borra, solo los resuelve.
 
         db.Users.RemoveRange(db.Users.Where(u => u.Id == _superAdminUserId));
         db.Tenants.RemoveRange(

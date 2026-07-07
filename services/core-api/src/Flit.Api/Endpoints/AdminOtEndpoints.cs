@@ -1093,9 +1093,11 @@ public static class AdminOtEndpoints
 
         // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
         // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
+        // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
         var role = await db.Roles.AsNoTracking()
             .FirstOrDefaultAsync(
-                r => r.TenantId == tenantId && r.Code == TransitOfficeTenantWriteRepositoryRoleCode,
+                r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1110,7 +1112,7 @@ public static class AdminOtEndpoints
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, role.Id, invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(

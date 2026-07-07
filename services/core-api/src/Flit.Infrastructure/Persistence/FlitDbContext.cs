@@ -41,6 +41,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
 
+    // HU #10506 — soporte multi-rol: tabla puente N:M invitación-roles.
+    public DbSet<InvitationRole> InvitationRoles => Set<InvitationRole>();
+
     public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
 
     public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();

@@ -28,8 +28,15 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.redirectTo).toBeUndefined();
   });
 
-  it("reconoce el rol en el arreglo roles (case-insensitive)", () => {
-    const decision = evaluateAdminAccess(makeToken({ roles: ["operador", "superadmin"] }));
+  it("reconoce el rol en el arreglo roles (case-insensitive, HU #10506: objetos {id, code})", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({
+        roles: [
+          { id: "r1", code: "operador" },
+          { id: "r2", code: "superadmin" },
+        ],
+      }),
+    );
     expect(decision.allowed).toBe(true);
   });
 

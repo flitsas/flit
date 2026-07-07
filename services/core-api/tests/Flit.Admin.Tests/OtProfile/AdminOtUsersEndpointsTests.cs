@@ -36,7 +36,12 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
     private readonly Guid _transitOfficeId = Guid.NewGuid();
     private readonly Guid _otTenantId = Guid.NewGuid();
-    private readonly Guid _roleId = Guid.NewGuid();
+
+    // HU #10505: security.roles es un catálogo GLOBAL — "ot_admin" ya no se crea por tenant en
+    // el seed de este test; se resuelve por Code contra la fila global sembrada por
+    // DevelopmentAuthSeeder al levantar la WebApplicationFactory.
+    private Guid _roleId;
+
     private readonly Guid _superAdminUserId = Guid.NewGuid();
     private readonly Guid _otAdminUserId = Guid.NewGuid();
     private readonly Guid _collaboratorUserId = Guid.NewGuid();
@@ -205,22 +210,39 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        // Tenant + Users primero (sin FK entre sí): el Role y el perfil OT dependen del
-        // tenant recién insertado, y no hay navegación EF entre estos agregados que le
-        // permita a SaveChanges inferir el orden de inserción por sí solo (mismo motivo
-        // por el que CompanyWriteRepository.CreateAsync guarda el Tenant antes del Role).
+        // Tenant + Users primero (sin FK entre sí): el perfil OT depende del tenant recién
+        // insertado, y no hay navegación EF entre estos agregados que le permita a
+        // SaveChanges inferir el orden de inserción por sí solo.
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        db.Roles.Add(new Role
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // reutiliza la fila "ot_admin" si ya existe (p.ej. sembrada por DevelopmentAuthSeeder)
+        // o se crea aquí mismo si no (BD limpia, como la que usa CI): el test no puede depender
+        // de que el seeder de desarrollo haya corrido antes, solo de que exista una única fila
+        // global (violaría UNIQUE(code, target_entity_type) crear una por tenant de prueba).
+        var existingOtAdminRole = await db.Roles.AsNoTracking()
+            .Where(r => r.Code == "ot_admin" && r.TargetEntityType == "TRANSIT_OFFICE" && r.DeletedAt == null)
+            .Select(r => r.Id)
+            .SingleOrDefaultAsync(TestContext.Current.CancellationToken);
+
+        if (existingOtAdminRole == Guid.Empty)
         {
-            Id = _roleId,
-            TenantId = _otTenantId,
-            Code = "ot_admin",
-            Name = "Administrador OT",
-            IsSystem = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            RowVersion = 0,
-        });
+            var newRole = new Role
+            {
+                Id = Guid.NewGuid(),
+                Code = "ot_admin",
+                Name = "Administrador OT",
+                TargetEntityType = "TRANSIT_OFFICE",
+                IsSystem = true,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Roles.Add(newRole);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            existingOtAdminRole = newRole.Id;
+        }
+
+        _roleId = existingOtAdminRole;
 
         db.TransitOfficeProfiles.Add(new TransitOfficeProfile
         {
@@ -303,8 +325,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId));
         db.SaveChanges();
 
-        db.Roles.RemoveRange(db.Roles.Where(r => r.TenantId == _otTenantId));
-        db.SaveChanges();
+        // HU #10505: "ot_admin" es un rol del catálogo GLOBAL, sembrado una sola vez por
+        // DevelopmentAuthSeeder — este test NO lo crea ni lo borra, solo lo resuelve.
 
         db.Users.RemoveRange(db.Users.Where(u =>
             u.Id == _superAdminUserId || u.Id == _otAdminUserId || u.Id == _collaboratorUserId));
