@@ -28,6 +28,12 @@ public sealed class LoginHandler(
         if (snapshot.IsTemporarilySuspended)
             throw new AccountSuspendedException();
 
+        // HU #10507 AC2: el usuario tuvo roles asignados alguna vez, pero todos están inactivos
+        // hoy. Si nunca tuvo ningún rol asignado (TotalAssignedRolesCount == 0), el login procede
+        // con normalidad (AC3) — no se bloquea.
+        if (snapshot.TotalAssignedRolesCount > 0 && snapshot.ActiveRoles.Count == 0)
+            throw new AllRolesInactiveException();
+
         var issued = jwtTokenIssuer.IssueToken(
             snapshot.UserId,
             snapshot.Email,

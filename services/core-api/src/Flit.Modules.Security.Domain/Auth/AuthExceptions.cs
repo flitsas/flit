@@ -25,6 +25,19 @@ public sealed class AccountSuspendedException : Exception
 }
 
 /// <summary>
+/// El usuario tuvo al menos una asignación de rol alguna vez, pero TODAS fueron desactivadas
+/// (HU #10507 AC2). Distinto de un usuario que nunca tuvo rol asignado (AC3), caso en el que
+/// el login debe proceder con normalidad.
+/// </summary>
+public sealed class AllRolesInactiveException : Exception
+{
+    public AllRolesInactiveException()
+        : base("All roles assigned to the user are inactive.")
+    {
+    }
+}
+
+/// <summary>
 /// El token de recuperación es inválido, ya fue usado o expiró. Mensaje genérico para
 /// no revelar cuál de los casos ocurrió.
 /// </summary>
