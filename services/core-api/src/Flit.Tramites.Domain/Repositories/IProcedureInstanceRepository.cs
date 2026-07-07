@@ -15,6 +15,14 @@ public interface IProcedureInstanceRepository
 
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Carga la instancia con el grafo necesario para computar el checklist condicional
+    /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
+    /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
+    /// <c>Participants</c> (tramitador). Es el grafo que consume <c>GetChecklistHandler</c>.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con TODO el grafo del wizard: actores, field values, adjuntos,
     /// datos comerciales y snapshots de preflight (Slice 4 — wizard server-driven).</summary>
     Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);

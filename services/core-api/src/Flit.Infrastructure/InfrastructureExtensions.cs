@@ -71,6 +71,8 @@ public static class InfrastructureExtensions
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 — flags de unificación documental (RF17/22/26), OFF por defecto (sección DocumentBehavior).
         services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.DocumentBehaviorOptions>(
             configuration.GetSection(

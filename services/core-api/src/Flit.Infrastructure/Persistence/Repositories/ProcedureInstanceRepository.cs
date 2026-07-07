@@ -40,6 +40,15 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstances
+            .AsSplitQuery()
+            .Include(x => x.Attachments)
+            .Include(x => x.Actors)
+            .Include(x => x.FieldValues)
+            .Include(x => x.Participants)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
     public Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .AsSplitQuery()

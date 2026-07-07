@@ -179,6 +179,33 @@ public static class ChecklistEngine
         return ComputeFromItems(tip.Codigo, tip.Nombre, effective, checklistEstado, docTipos);
     }
 
+    /// <summary>
+    /// Computa el checklist aplicando, sobre la lista base de la tipología, las reglas
+    /// condicionales por atributo del trámite (<paramref name="context"/>, RF30/33/35/37/38/39)
+    /// y los parámetros de la compañía gestora (<paramref name="companyParams"/>, RF31), antes de
+    /// resolver el estado de satisfacción. Con contexto vacío, sin reglas y sin parámetros el
+    /// resultado es idéntico a <see cref="Compute"/> ⇒ sin cambios de comportamiento. Devuelve
+    /// <c>null</c> si la tipología no existe.
+    /// </summary>
+    public static ChecklistResultado? ComputeConditional(
+        string? codigo,
+        IReadOnlyDictionary<string, bool>? checklistEstado,
+        IReadOnlyCollection<string>? docTipos,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules,
+        IReadOnlyCollection<CompanyDocumentParam>? companyParams)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var tip = TramiteTipologiaCatalog.Get(codigo);
+        if (tip is null)
+            return null;
+
+        var conditional = ApplyConditional(tip.Checklist, context, rules);
+        var effective = ApplyCompanyParams(conditional, companyParams);
+        return ComputeFromItems(tip.Codigo, tip.Nombre, effective, checklistEstado, docTipos);
+    }
+
     private static ChecklistResultado ComputeFromItems(
         string codigo,
         string nombre,

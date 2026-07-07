@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -15,6 +16,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 public sealed class AttachmentsHandlerTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
+    private readonly IChecklistCompanyParamsProvider _companyParams = Substitute.For<IChecklistCompanyParamsProvider>();
     private readonly FakeStorage _storage = new();
     private readonly UploadAttachmentHandler _upload;
     private readonly PresignAttachmentHandler _presign;
@@ -32,7 +34,9 @@ public sealed class AttachmentsHandlerTests
         _list = new ListAttachmentsHandler(_repo);
         _delete = new DeleteAttachmentHandler(_repo, _storage);
         _download = new DownloadAttachmentHandler(_repo, _storage);
-        _checklist = new GetChecklistHandler(_repo);
+        _companyParams.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>(new List<CompanyDocumentParam>()));
+        _checklist = new GetChecklistHandler(_repo, _companyParams);
     }
 
     /// <summary>Storage en memoria: registra saves/deletes y devuelve un hash determinista.</summary>
@@ -619,7 +623,7 @@ public sealed class AttachmentsHandlerTests
     public async Task Checklist_NotFound_Returns404()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        _repo.GetByIdWithChecklistGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
 
         var (_, error) = await _checklist.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
@@ -640,7 +644,7 @@ public sealed class AttachmentsHandlerTests
             StoragePath = "p",
             UploadedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
@@ -677,7 +681,7 @@ public sealed class AttachmentsHandlerTests
                 UploadedAt = DateTimeOffset.UtcNow,
             });
         }
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
@@ -693,7 +697,7 @@ public sealed class AttachmentsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, modalidad: "desconocida", tipologia: "no_existe");
-        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
         var (_, error) = await _checklist.HandleAsync(id, tenant, ct);
 
