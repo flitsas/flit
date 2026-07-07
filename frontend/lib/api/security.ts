@@ -101,9 +101,18 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
   });
 }
 
-/** GET /api/v1/security/modules → módulos accesibles según permisos del caller. */
-export async function getAccessibleModules(): Promise<AccessibleModule[]> {
-  return apiFetch<AccessibleModule[]>("/api/v1/security/modules");
+/** Tipo de entidad objetivo para filtrar el catálogo de módulos (HU #10504). */
+export type ModulesTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
+
+/** GET /api/v1/security/modules → módulos accesibles según permisos del caller.
+ *  Si se pasa `targetEntityType`, el backend excluye los módulos scoped (vía Empresas)
+ *  únicamente al otro tipo de entidad — los módulos sin scope configurado siempre aparecen. */
+export async function getAccessibleModules(
+  targetEntityType?: ModulesTargetEntityType,
+): Promise<AccessibleModule[]> {
+  return apiFetch<AccessibleModule[]>("/api/v1/security/modules", {
+    query: { targetEntityType },
+  });
 }
 
 /** POST /api/v1/security/roles → AdminCompany crea rol en su empresa. */

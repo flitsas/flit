@@ -137,10 +137,18 @@ public static class SecurityEndpoints
             }
         });
 
-        // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT
+        // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
+        // HU #10504: acepta un query param opcional targetEntityType ("COMPANY" | "TRANSIT_OFFICE")
+        // que usa el constructor de roles SuperAdmin (checklist "Nuevo rol"/"Editar permisos") para
+        // que el checklist de módulos respete el scoping por tipo de tenant (columna "Empresas" en
+        // Módulos y Permisos). Solo tiene efecto para el caller SuperAdmin (includeAll=true); si
+        // viene un valor distinto a esos dos, se ignora silenciosamente (no rompe la pantalla
+        // "Módulos y Permisos", que llama a este mismo endpoint sin el parámetro y debe seguir
+        // viendo todos los módulos).
         group.MapGet("/modules", async (
             ClaimsPrincipal caller,
             ListAccessibleModulesHandler handler,
+            string? targetEntityType,
             CancellationToken ct) =>
         {
             // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
@@ -151,7 +159,11 @@ public static class SecurityEndpoints
             var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
             Guid? tenantId = Guid.TryParse(caller.FindFirstValue("tenant_id"), out var tid) ? tid : null;
 
-            var modules = await handler.HandleAsync(permissions, isSuperAdmin, tenantId, ct);
+            var normalizedTargetEntityType = targetEntityType is "COMPANY" or "TRANSIT_OFFICE"
+                ? targetEntityType
+                : null;
+
+            var modules = await handler.HandleAsync(permissions, isSuperAdmin, tenantId, ct, normalizedTargetEntityType);
             return Results.Ok(modules);
         }).WithName("ListAccessibleModules");
 
