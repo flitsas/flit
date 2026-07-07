@@ -49,6 +49,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
+    public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
+
+    public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
+
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────

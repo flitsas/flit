@@ -5,6 +5,10 @@ using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
@@ -115,6 +119,13 @@ public static class DependencyInjection
         services.AddScoped<SetTransitOfficeTenantStatusHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
+        // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.
+        services.AddScoped<CreateMandateSignerHandler>();
+        services.AddScoped<UpdateMandateSignerHandler>();
+        services.AddScoped<InactivateMandateSignerHandler>();
+        services.AddScoped<ListMandateSignersHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.

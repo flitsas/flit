@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies;
+using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -53,6 +54,11 @@ public static class AdminInfrastructureExtensions
         // RF01 — estado operativo del catálogo OT (catálogo LEFT JOIN perfil + tenant),
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
+
+        // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
+        // escritura con auditoría atómica (RF22–RF28).
+        services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
+        services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
