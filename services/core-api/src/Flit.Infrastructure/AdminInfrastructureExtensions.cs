@@ -16,6 +16,8 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Application.Auditing;
+using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Domain.Integration;
@@ -34,6 +36,12 @@ public static class AdminInfrastructureExtensions
     public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // RNF01 (ADR-0024) — auditoría mínima de configuración: acceso a IP/usuario de la
+        // petición (sin acoplar Application a HTTP) + writer de fallos en scope independiente.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
+        services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();

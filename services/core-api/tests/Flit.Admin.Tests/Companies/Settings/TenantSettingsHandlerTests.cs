@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
@@ -38,7 +39,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -101,7 +102,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             // Solo cambia un campo (baúl de firmas); el resto es idéntico a lo sembrado.
             await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -130,7 +131,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -168,7 +169,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -198,7 +199,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC2_InvalidEnrutamientoSMTP_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -231,7 +232,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -249,7 +250,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC3_Get_ReturnsNull_WhenNoConfiguration()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
@@ -273,7 +274,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             // Resto idéntico a lo sembrado: solo cambian los 2 campos nuevos.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -317,7 +318,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_InvalidProviderKey_Returns422_AndPersistsNothing()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -343,7 +344,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_UnknownKind_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -368,7 +369,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_FailoverTimeoutOutOfRange_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -414,7 +415,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 

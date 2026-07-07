@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using System.Text.Json;
 using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
 using Flit.Admin.Domain.Companies.TransitOffices;
@@ -27,7 +28,7 @@ public sealed class SetTransitOfficeTenantStatusHandlerTests
         await SeedOtTenant(db, tenantId, isActive: true);
 
         await using var ctx = NewContext(db);
-        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx));
+        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(
             new SetTransitOfficeTenantStatusCommand
@@ -73,7 +74,7 @@ public sealed class SetTransitOfficeTenantStatusHandlerTests
         await SeedOtTenant(db, tenantId, isActive: true);
 
         await using var ctx = NewContext(db);
-        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx));
+        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance));
 
         var first = await handler.HandleAsync(
             new SetTransitOfficeTenantStatusCommand { TenantId = tenantId, EstadoActivo = false },
@@ -99,7 +100,7 @@ public sealed class SetTransitOfficeTenantStatusHandlerTests
         await SeedOtTenant(db, tenantId, isActive: false);
 
         await using var ctx = NewContext(db);
-        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx));
+        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(
             new SetTransitOfficeTenantStatusCommand { TenantId = tenantId, EstadoActivo = true },
@@ -117,7 +118,7 @@ public sealed class SetTransitOfficeTenantStatusHandlerTests
     {
         var db = NewDbName();
         await using var ctx = NewContext(db);
-        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx));
+        var handler = new SetTransitOfficeTenantStatusHandler(new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(
             new SetTransitOfficeTenantStatusCommand { TenantId = Guid.NewGuid(), EstadoActivo = false },

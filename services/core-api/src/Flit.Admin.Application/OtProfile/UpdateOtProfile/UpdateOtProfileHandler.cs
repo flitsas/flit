@@ -8,6 +8,12 @@ namespace Flit.Admin.Application.OtProfile.UpdateOtProfile;
 /// </summary>
 public sealed class UpdateOtProfileHandler
 {
+    /// <summary>
+    /// Código de error estable (RF05, ADR-0024) al intentar modificar campos oficiales RUNT.
+    /// También lo usa la auditoría de fallo como <c>error_code</c>.
+    /// </summary>
+    public const string OfficialFieldsImmutableCode = "campos_oficiales_no_editables";
+
     private readonly IOtProfileRepository _profileRepository;
 
     public UpdateOtProfileHandler(IOtProfileRepository profileRepository)
@@ -23,6 +29,18 @@ public sealed class UpdateOtProfileHandler
         ArgumentNullException.ThrowIfNull(command.Request);
 
         var request = command.Request;
+
+        // RF05: los campos oficiales RUNT son inmutables. Si el payload los trae —aunque sea
+        // por un DTO ampliado a futuro— se rechaza sin escribir nada (guardia explícita).
+        if (HasOfficialFieldChange(request))
+        {
+            return UpdateOtProfileResult.Invalid([
+                new OtProfileValidationError(
+                    OfficialFieldsImmutableCode,
+                    "Los campos oficiales RUNT (razón social, NIT, código) no son editables."),
+            ]);
+        }
+
         var errors = new List<OtProfileValidationError>();
 
         if (request.OperationMode is not null && !OtOperationModes.IsValid(request.OperationMode))
@@ -53,6 +71,13 @@ public sealed class UpdateOtProfileHandler
 
         return UpdateOtProfileResult.Success(OtProfileMapper.ToResponse(saved));
     }
+
+    /// <summary>
+    /// True si el payload intenta fijar cualquier campo oficial RUNT (razón social, NIT, código).
+    /// Un string vacío/espacios también cuenta como intento explícito de escritura.
+    /// </summary>
+    private static bool HasOfficialFieldChange(UpdateOtProfileRequest request) =>
+        request.LegalName is not null || request.TaxId is not null || request.Code is not null;
 
     internal static bool ResolveQuipuxReadOnly(
         string operationMode,

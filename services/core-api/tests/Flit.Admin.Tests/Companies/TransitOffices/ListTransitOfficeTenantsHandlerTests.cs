@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -71,7 +72,7 @@ public sealed class ListTransitOfficeTenantsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new ListTransitOfficeTenantsHandler(new TransitOfficeTenantWriteRepository(ctx));
+        var handler = new ListTransitOfficeTenantsHandler(new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(
             new ListTransitOfficeTenantsQuery(), TestContext.Current.CancellationToken);
