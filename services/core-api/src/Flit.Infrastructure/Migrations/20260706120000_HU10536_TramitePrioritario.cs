@@ -1,3 +1,5 @@
+using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -12,7 +14,13 @@ namespace Flit.Infrastructure.Migrations
     /// y bandeja del OT); no altera el ciclo de vida. La tabla está <c>ExcludeFromMigrations</c> (DDL
     /// gestionado por SQL crudo, HU #10150), por eso el diff EF queda vacío y la columna + índice se
     /// agregan con SQL idempotente.
+    ///
+    /// Migración hand-authored: atributos <c>[DbContext]</c> + <c>[Migration]</c> inline y sin Designer
+    /// (patrón N03 / HU #10198). Sin estos atributos EF NO descubre la migración (queda fuera de
+    /// <c>GetPendingMigrations</c>) y <c>Migrate()</c> nunca la aplica en los despliegues.
     /// </remarks>
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260706120000_HU10536_TramitePrioritario")]
     public partial class HU10536_TramitePrioritario : Migration
     {
         /// <inheritdoc />
