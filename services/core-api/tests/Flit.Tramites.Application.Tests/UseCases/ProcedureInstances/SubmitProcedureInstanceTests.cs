@@ -24,16 +24,20 @@ public sealed class SubmitProcedureInstanceTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IProcedureTypeRepository _typeRepo = Substitute.For<IProcedureTypeRepository>();
     private readonly ITransitOfficeGrantGate _grantGate = Substitute.For<ITransitOfficeGrantGate>();
+    private readonly IOtOperabilityGate _operabilityGate = Substitute.For<IOtOperabilityGate>();
     private readonly RecordingTransitionRecorder _recorder = new();
     private readonly RecordingTransitionPublisher _publisher = new();
     private readonly SubmitProcedureInstanceHandler _sut;
 
     public SubmitProcedureInstanceTests()
     {
-        // Por defecto, cualquier OT se considera habilitado (la restricción se ejercita
-        // explícitamente en los tests que la cubren) y el commit no encuentra conflicto.
+        // Por defecto, cualquier OT se considera habilitado y operativo (las restricciones se
+        // ejercitan explícitamente en los tests que las cubren) y el commit no encuentra conflicto.
         _grantGate
             .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _operabilityGate
+            .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
 
@@ -41,6 +45,7 @@ public sealed class SubmitProcedureInstanceTests
             _repo,
             _typeRepo,
             _grantGate,
+            _operabilityGate,
             NullOtRuleGate.Instance,
             _recorder,
             _publisher);
@@ -251,6 +256,29 @@ public sealed class SubmitProcedureInstanceTests
         instance.Status.Should().Be(TramiteEstado.Preparado);
         _recorder.Records.Should().ContainSingle(r => r.ToStatus == TramiteEstado.Preparado);
         await _repo.Received(1).SaveChangesWithConcurrencyGuardAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OrganismoConGrantPeroNoOperable_QuedaEnPreparadoSinEntregar()
+    {
+        // HU #10518 — OT con grant pero desactivado a nivel plataforma bloquea la radicación.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        Wire(instance, ct);
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(true); // grant vigente...
+        _operabilityGate.IsOperableAsync(BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(false); // ...pero el OT no está operativo
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().Be("organismo_no_operable");
+        result.Should().BeNull();
+        instance.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().ContainSingle(r => r.ToStatus == TramiteEstado.Preparado);
     }
 
     [Fact]
