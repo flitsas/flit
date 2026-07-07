@@ -179,6 +179,8 @@ internal static class ProcedureInstanceEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
+                // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
+                TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite modificar la prenda."),
                 _ => Results.Ok(result)
             };
         }).WithName("PutProcedureInstancePrenda");

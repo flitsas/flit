@@ -49,7 +49,7 @@ public sealed class PrendaHandlerTests
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
-    private void InstanceExists(Guid id, Guid tenantId) =>
+    private void InstanceExists(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         _instances.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(new ProcedureInstance
             {
@@ -57,7 +57,7 @@ public sealed class PrendaHandlerTests
                 TenantId = tenantId,
                 ProcedureTypeId = Guid.NewGuid(),
                 ReferenceNumber = "TRM-2026-000001",
-                Status = TramiteEstado.Borrador,
+                Status = status,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 
@@ -155,5 +155,43 @@ public sealed class PrendaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var vigente = await _get.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
         vigente.Should().BeNull();
+    }
+
+    // ── R17 (HU #10599) — modificación post-registro versionada + auditoría ──────
+
+    [Fact]
+    public async Task Modificar_post_registro_versiona_y_audita()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        InstanceExists(id, tenant, TramiteEstado.Entregado); // ya registrado, no final
+
+        await _registrar.HandleAsync(id, tenant, new RegistrarPrendaInput("sin_prenda"), null, ct);
+        var (result, error) = await _registrar.HandleAsync(id, tenant, new RegistrarPrendaInput("registrar", "Banco XYZ"), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be("registrar");
+        _prendas.Rows.Count(r => r.Estado == PrendaEstado.Vigente).Should().Be(1);
+
+        // La modificación (segunda llamada, con vigente previa) registra el evento de auditoría.
+        await _instances.Received(1).AddEventAsync(
+            Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "prenda_modificada" && e.ProcedureInstanceId == id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Modificar_en_estado_final_se_bloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        InstanceExists(id, tenant, TramiteEstado.Aprobado); // estado final
+
+        var (result, error) = await _registrar.HandleAsync(id, tenant, new RegistrarPrendaInput("registrar"), null, ct);
+
+        error.Should().Be(TramiteEstadoErrores.EstadoFinal);
+        result.Should().BeNull();
+        _prendas.Rows.Should().BeEmpty();
     }
 }
