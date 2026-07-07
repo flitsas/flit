@@ -273,6 +273,9 @@ internal static class ProcedureInstanceEndpoints
                 "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
+                // R10 (HU #10597) — gate de prenda del traspaso.
+                TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
+                TramiteEstadoErrores.PrendaDocumentoRequerido => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequerido, detail: "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
                 _ => Results.Ok(result)
             };
         }).WithName("SubmitProcedureInstance");
@@ -304,6 +307,9 @@ internal static class ProcedureInstanceEndpoints
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: errorDetail ?? "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
+                // R10 (HU #10597) — gate de prenda del traspaso (409, subsanable con la decisión/documento).
+                TramiteEstadoErrores.PrendaDecisionRequerida or TramiteEstadoErrores.PrendaDocumentoRequerido =>
+                    Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
                 _ => Results.Problem(
                     statusCode: 422, title: errorCode,
                     detail: errorDetail ?? "La transición solicitada no es válida."),
