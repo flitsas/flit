@@ -28,15 +28,28 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
         if (credential is null)
             return null;
 
-        var assignment = await (
+        // HU #10506: soporte multi-rol — se traen TODAS las asignaciones ACTIVAS del usuario
+        // (no solo la primera), filtrando además que el rol siga activo en el catálogo global
+        // (HU #10505 / ADR-0023: un rol puede desactivarse sin borrar la asignación).
+        var assignments = await (
             from a in db.UserRoleAssignments.AsNoTracking()
             join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
-            where a.UserId == user.Id && a.DeletedAt == null
+            where a.UserId == user.Id && a.DeletedAt == null && r.DeletedAt == null && r.IsActive
             select new { a.TenantId, a.RoleId, RoleCode = r.Code }
-        ).FirstOrDefaultAsync(cancellationToken);
+        ).ToListAsync(cancellationToken);
 
-        // Users without a role assignment can still log in if they have a home tenant
-        var tenantId = assignment?.TenantId ?? user.HomeTenantId;
+        // HU #10507: conteo TOTAL de asignaciones que el usuario tuvo alguna vez activas
+        // (UserRoleAssignment.DeletedAt == null), SIN filtrar por si el Role referenciado sigue
+        // activo. La diferencia con assignments.Count distingue "nunca tuvo rol" (AC3) de
+        // "tuvo roles, pero todos fueron desactivados" (AC2).
+        var totalAssignedRolesCount = await db.UserRoleAssignments
+            .AsNoTracking()
+            .CountAsync(a => a.UserId == user.Id && a.DeletedAt == null, cancellationToken);
+
+        // Users without an active role assignment can still log in if they have a home tenant
+        // (HU #10507 bloquea el caso de "todos los roles inactivos" en el LoginHandler; aquí solo
+        // se resuelve el tenant para poder construir el snapshot).
+        var tenantId = assignments.Count > 0 ? assignments[0].TenantId : user.HomeTenantId;
         if (tenantId is null)
             return null;
 
@@ -57,16 +70,22 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
                      && s.EndsAt >= now,
                 cancellationToken);
 
-        var permissionSlugs = new List<string>();
-        if (assignment is not null)
-        {
-            permissionSlugs = await (
+        // permissionSlugs = UNIÓN distinct de permisos de TODOS los roles activos (antes solo
+        // del primero) — HU #10506: multi-rol implica que los permisos efectivos son la unión.
+        var roleIds = assignments.Select(a => a.RoleId).Distinct().ToList();
+        var permissionSlugs = roleIds.Count == 0
+            ? []
+            : await (
                 from rp in db.RoleGrants.AsNoTracking()
                 join p in db.RbacActions.AsNoTracking() on rp.PermissionId equals p.Id
-                where rp.RoleId == assignment.RoleId && p.IsActive
+                where roleIds.Contains(rp.RoleId) && p.IsActive
                 select p.Slug
-            ).ToListAsync(cancellationToken);
-        }
+            ).Distinct().ToListAsync(cancellationToken);
+
+        var activeRoles = assignments
+            .Select(a => new UserRoleSnapshot(a.RoleId, a.RoleCode))
+            .DistinctBy(r => r.Id)
+            .ToList();
 
         return new UserAuthSnapshot
         {
@@ -77,8 +96,8 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             MustChangePassword = credential.MustChangePassword,
             TenantId = tenantId.Value,
             TenantName = tenantName,
-            RoleId = assignment?.RoleId ?? Guid.Empty,
-            RoleCode = assignment?.RoleCode ?? string.Empty,
+            ActiveRoles = activeRoles,
+            TotalAssignedRolesCount = totalAssignedRolesCount,
             PermissionSlugs = permissionSlugs,
             IsTemporarilySuspended = isSuspended,
         };

@@ -30,6 +30,10 @@ public sealed class TransitGrantHandlerTests
     private static readonly StaticTransitOfficeCatalog Catalog = new StaticTransitOfficeCatalog();
     private static Guid KnownOfficeId => Catalog.All[0].Id;
 
+    /// <summary>Reader que reporta cualquier OT como operativo (tenant activo) — HU #10518.</summary>
+    private static StubTransitOfficeOperationalStatusReader OperableReader =>
+        new() { DefaultOperable = true };
+
     // ---------- AC2: alta + auditoría ----------
 
     [Fact]
@@ -40,7 +44,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(act));
+            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(act));
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -77,7 +81,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(act));
+            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(act));
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -102,7 +106,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var first = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(first));
+            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(first));
             (await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -113,7 +117,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var second = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, new TransitGrantRepository(second));
+            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(second));
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -128,6 +132,89 @@ public sealed class TransitGrantHandlerTests
         await using var verify = NewContext(db);
         (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
         (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
+    }
+
+    // ---------- HU #10518: bloqueo de grant si el OT no es operativo ----------
+
+    [Fact]
+    public async Task HU10518_OtSinAlta_ReturnsInvalid_AndPersistsNothing()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+        // OT en catálogo pero sin tenant OT dado de alta.
+        var reader = new StubTransitOfficeOperationalStatusReader().Set(KnownOfficeId, hasTenant: false, estadoActivo: null);
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act));
+            var result = await handler.HandleAsync(new AddTransitGrantCommand
+            {
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                CreatedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainSingle(e =>
+                e.Field == "transitOfficeId" && e.Message == AddTransitGrantHandler.SinAltaMessage);
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU10518_OtInactivo_ReturnsInvalid_AndPersistsNothing()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+        // OT con tenant OT pero inactivo (is_active=false).
+        var reader = new StubTransitOfficeOperationalStatusReader().Set(KnownOfficeId, hasTenant: true, estadoActivo: false);
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act));
+            var result = await handler.HandleAsync(new AddTransitGrantCommand
+            {
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                CreatedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainSingle(e =>
+                e.Field == "transitOfficeId" && e.Message == AddTransitGrantHandler.InactivoMessage);
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU10518_OtActivo_AddsGrant_LikeBefore()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+        var reader = new StubTransitOfficeOperationalStatusReader().Set(KnownOfficeId, hasTenant: true, estadoActivo: true);
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act));
+            var result = await handler.HandleAsync(new AddTransitGrantCommand
+            {
+                TenantId = tenantId,
+                TransitOfficeId = KnownOfficeId,
+                CreatedBy = ChangedBy,
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Added.Should().BeTrue();
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.TenantTransitOfficeGrants.CountAsync(g => g.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     // ---------- AC3: baja + auditoría / 404 ----------

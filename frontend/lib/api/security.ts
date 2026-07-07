@@ -56,12 +56,15 @@ export interface RoleDetail {
   permissions: { id: string; slug: string; name: string }[];
 }
 
-/** POST /api/v1/security/invitations → 201 | 404 (rol) | 409 (pending duplicado).
- *  SuperAdmin puede pasar targetTenantId para invitar a otro tenant. */
+/** POST /api/v1/security/invitations → 201 | 400 (NO_ROLES_SELECTED) | 404 (rol) | 409 (pending duplicado).
+ *  SuperAdmin puede pasar targetTenantId para invitar a otro tenant (en ese caso el rol de
+ *  sistema lo resuelve el backend y `roleIds` se ignora — se puede enviar `[]`).
+ *  HU #10510: `roleIds` reemplaza el `roleId?` singular — selección múltiple, mínimo 1 rol
+ *  para AdminCompany/OtAdmin (el backend rechaza con NO_ROLES_SELECTED si viene vacío). */
 export async function createInvitation(
   email: string,
   fullName: string,
-  roleId?: string,
+  roleIds: string[],
   targetTenantId?: string,
 ): Promise<InvitationCreatedResult> {
   try {
@@ -70,7 +73,7 @@ export async function createInvitation(
       body: {
         email,
         fullName,
-        roleId: roleId || undefined,
+        roleIds,
         targetTenantId: targetTenantId || undefined,
       },
     });
@@ -98,9 +101,18 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
   });
 }
 
-/** GET /api/v1/security/modules → módulos accesibles según permisos del caller. */
-export async function getAccessibleModules(): Promise<AccessibleModule[]> {
-  return apiFetch<AccessibleModule[]>("/api/v1/security/modules");
+/** Tipo de entidad objetivo para filtrar el catálogo de módulos (HU #10504). */
+export type ModulesTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
+
+/** GET /api/v1/security/modules → módulos accesibles según permisos del caller.
+ *  Si se pasa `targetEntityType`, el backend excluye los módulos scoped (vía Empresas)
+ *  únicamente al otro tipo de entidad — los módulos sin scope configurado siempre aparecen. */
+export async function getAccessibleModules(
+  targetEntityType?: ModulesTargetEntityType,
+): Promise<AccessibleModule[]> {
+  return apiFetch<AccessibleModule[]>("/api/v1/security/modules", {
+    query: { targetEntityType },
+  });
 }
 
 /** POST /api/v1/security/roles → AdminCompany crea rol en su empresa. */

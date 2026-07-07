@@ -45,6 +45,13 @@ public static class AuthEndpoints
                     new ErrorResponse("ACCOUNT_TEMPORARILY_BLOCKED", "La cuenta está bloqueada temporalmente."),
                     statusCode: StatusCodes.Status403Forbidden);
             }
+            catch (AllRolesInactiveException)
+            {
+                // HU #10507 AC2 — todos los roles asignados al usuario están inactivos.
+                return Results.Json(
+                    new ErrorResponse("ALL_ROLES_INACTIVE", "Todos los roles asignados al usuario están inactivos."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
         });
 
         // HU #10169 AC1/AC2 — solicitud de recuperación. Siempre 202 genérico (anti-enumeración).

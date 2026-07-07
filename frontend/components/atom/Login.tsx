@@ -77,12 +77,14 @@ export function Login({
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
+  const [roleDeactivated, setRoleDeactivated] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function submitCreds(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setBlocked(false);
+    setRoleDeactivated(false);
 
     if (!email.trim() || !pass) {
       setError("Ingresa tu correo y contraseña.");
@@ -96,8 +98,12 @@ export function Login({
       rememberEmail(email.trim());
       onAuthenticated();
     } catch (err) {
-      const status = (err as { status?: number }).status;
-      if (status === 403) {
+      const apiErr = err as { status?: number; body?: { code?: string } };
+      if (apiErr.body?.code === "ALL_ROLES_INACTIVE") {
+        // HU #10511 — todos los roles del usuario fueron desactivados: mensaje
+        // distinto al de bloqueo temporal (HU #10170), para no confundir la causa.
+        setRoleDeactivated(true);
+      } else if (apiErr.status === 403) {
         // Cuenta bloqueada temporalmente (HU #10170): panel de acceso restringido.
         setBlocked(true);
       } else {
@@ -148,6 +154,22 @@ export function Login({
                 <button
                   type="button"
                   onClick={() => setBlocked(false)}
+                  className="text-xs mt-3 font-semibold transition hover:opacity-80"
+                  style={{ color: "#557eff" }}
+                >
+                  ← Volver a intentar
+                </button>
+              </div>
+            </div>
+          ) : roleDeactivated ? (
+            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "#ff4e00", background: "rgba(255,78,0,0.06)" }} role="alert">
+              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#ff4e00" }} />
+              <div className="text-sm">
+                <p className="font-semibold" style={{ color: "#ff4e00" }}>Acceso Restringido</p>
+                <p className="text-slate-600 text-xs mt-1">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
+                <button
+                  type="button"
+                  onClick={() => setRoleDeactivated(false)}
                   className="text-xs mt-3 font-semibold transition hover:opacity-80"
                   style={{ color: "#557eff" }}
                 >

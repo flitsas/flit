@@ -8,8 +8,9 @@ public sealed class ListAccessibleModulesHandler(ISecurityModuleRepository repos
         IReadOnlyList<string> callerPermissionSlugs,
         bool isSuperAdmin,
         Guid? tenantId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? targetEntityType = null)
     {
-        return await repository.ListAccessibleAsync(callerPermissionSlugs, isSuperAdmin, tenantId, ct);
+        return await repository.ListAccessibleAsync(callerPermissionSlugs, isSuperAdmin, tenantId, targetEntityType, ct);
     }
 }
