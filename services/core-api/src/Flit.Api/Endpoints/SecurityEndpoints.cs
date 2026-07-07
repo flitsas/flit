@@ -1,9 +1,10 @@
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.UserManagement.SuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
@@ -492,7 +493,7 @@ public static class SecurityEndpoints
                     u.Status == "active" ? "active" : "inactive",
                     null,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                        && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
                     null,
                     u.RowVersion)
@@ -513,7 +514,7 @@ public static class SecurityEndpoints
                     u.Status == "active" ? "active" : "inactive",
                     null,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                        && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                        && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
                     null,
                     u.RowVersion)
@@ -541,102 +542,99 @@ public static class SecurityEndpoints
             return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
         });
 
-        // POST /security/users/{userId}/suspend — AdminCompany bloquea usuario temporalmente
+        // POST /security/users/{userId}/suspend — AdminCompany/SuperAdmin suspende (temporal, con
+        // EndsAt) o desactiva indefinidamente (sin EndsAt) a un usuario (HU #10619).
         group.MapPost("/users/{userId:guid}/suspend", async (
             Guid userId,
             [FromBody] SuspendUserRequest request,
             ClaimsPrincipal caller,
-            FlitDbContext db,
+            SuspendUserHandler handler,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
-            _ = Guid.TryParse(subClaim, out var callerId);
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
 
-            if (callerId == userId)
-                return Results.BadRequest(new ErrorResponse("SELF_SUSPEND", "No puedes suspenderte a ti mismo."));
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
-            var userExistsInTenant = await db.Users.AsNoTracking()
-                .AnyAsync(u => u.Id == userId && u.DeletedAt == null
-                    && (db.UserRoleAssignments.Any(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)
-                        || u.HomeTenantId == tenantId),
-                    cancellationToken);
-
-            if (!userExistsInTenant)
-                return Results.NotFound(new ErrorResponse("USER_NOT_FOUND", "El usuario no existe en este tenant."));
-
-            var targetIsSuperAdmin = await db.UserRoleAssignments.AsNoTracking()
-                .AnyAsync(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null
-                    && db.Roles.Any(r => r.Id == a.RoleId && r.Code == AdminAuthorization.SuperAdminRole),
-                    cancellationToken);
-
-            if (targetIsSuperAdmin)
-                return Results.Conflict(new ErrorResponse("CANNOT_SUSPEND_ADMIN", "No es posible suspender a un SuperAdmin."));
-
-            var now = DateTimeOffset.UtcNow;
-
-            var existing = await db.UserTempSuspensions
-                .Where(s => s.UserId == userId && s.TenantId == tenantId
-                         && s.DeletedAt == null && s.EndsAt >= now)
-                .ToListAsync(cancellationToken);
-
-            foreach (var s in existing)
+            try
             {
-                s.DeletedAt = now;
-                s.DeletedBy = callerId == Guid.Empty ? null : callerId;
+                var suspensionId = await handler.HandleAsync(
+                    new SuspendUserCommand(callerTenantId, userId, request.Reason, request.EndsAt, callerId, callerIsSuperAdmin),
+                    cancellationToken);
+
+                return Results.Created($"/api/v1/security/users/{userId}/suspend", new { id = suspensionId });
             }
-
-            var suspension = new UserTempSuspension
+            catch (TargetUserNotFoundException)
             {
-                TenantId = tenantId,
-                UserId = userId,
-                StartsAt = now,
-                EndsAt = request.EndsAt.ToUniversalTime(),
-                Reason = request.Reason,
-                CreatedAt = now,
-                CreatedBy = callerId == Guid.Empty ? null : callerId,
-            };
-
-            db.UserTempSuspensions.Add(suspension);
-            await db.SaveChangesAsync(cancellationToken);
-
-            return Results.Created($"/api/v1/security/users/{userId}/suspend", new { id = suspension.Id });
+                return Results.NotFound(new ErrorResponse("USER_NOT_FOUND", "El usuario no existe en este tenant."));
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (SelfSuspensionException)
+            {
+                return Results.BadRequest(new ErrorResponse("SELF_SUSPEND", "No puedes suspenderte a ti mismo."));
+            }
+            catch (LastActiveAdminException)
+            {
+                return Results.Conflict(new ErrorResponse(
+                    "LAST_ACTIVE_ADMIN", "No es posible suspender/desactivar al último administrador activo."));
+            }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
-        // DELETE /security/users/{userId}/suspend — levanta la suspensión activa
+        // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa
         group.MapDelete("/users/{userId:guid}/suspend", async (
             Guid userId,
             ClaimsPrincipal caller,
-            FlitDbContext db,
+            UnsuspendUserHandler handler,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
-            _ = Guid.TryParse(subClaim, out var callerId);
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
 
-            var now = DateTimeOffset.UtcNow;
-            var active = await db.UserTempSuspensions
-                .Where(s => s.UserId == userId && s.TenantId == tenantId
-                         && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now)
-                .ToListAsync(cancellationToken);
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
-            if (active.Count == 0)
-                return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
-
-            foreach (var s in active)
+            try
             {
-                s.DeletedAt = now;
-                s.DeletedBy = callerId == Guid.Empty ? null : callerId;
-            }
+                await handler.HandleAsync(
+                    new UnsuspendUserCommand(callerTenantId, userId, callerId, callerIsSuperAdmin),
+                    cancellationToken);
 
-            await db.SaveChangesAsync(cancellationToken);
-            return Results.NoContent();
+                return Results.NoContent();
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.NotFound(new ErrorResponse("USER_NOT_FOUND", "El usuario no existe en este tenant."));
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (NoActiveSuspensionException)
+            {
+                return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
+            }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         return app;
@@ -648,7 +646,8 @@ public static class SecurityEndpoints
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de TenantUserDto.RowVersion).
     private sealed record UpdateUserRequest(string? DisplayName, string? Email, long RowVersion);
 
-    private sealed record SuspendUserRequest(string Reason, DateTimeOffset EndsAt);
+    // HU #10619 AC1: EndsAt nulo = desactivación indefinida (sin fecha de fin).
+    private sealed record SuspendUserRequest(string Reason, DateTimeOffset? EndsAt);
 
     private sealed record CreateInvitationRequest(string Email, string? FullName, Guid[]? RoleIds, Guid? TargetTenantId);
 
