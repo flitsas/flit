@@ -8,6 +8,7 @@ import {
   fetchMandateSigners,
   fetchOtCompanies,
   inactivateMandateSigner,
+  reactivateMandateSigner,
   updateMandateSigner,
   type MandateSigner,
   type MandateSignerInput,
@@ -92,6 +93,19 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
     }
   };
 
+  const handleReactivate = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      await reactivateMandateSigner(transitOfficeId, signer.id);
+      show(`Mandatario ${signer.fullName} reactivado. Asígnale compañías con «Editar».`, "success");
+      await load();
+    } catch {
+      show("No se pudo reactivar el mandatario.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const emptyCta = (
     <button
       type="button"
@@ -147,39 +161,67 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
           <tbody>
             {signers.map((signer) => (
               <tr key={signer.id} className="bg-white dark:bg-[#0B0F14]">
-                <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
-                  {signer.fullName}
+                <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+                  <span className="font-semibold">{signer.fullName}</span>
+                  {!signer.isActive && (
+                    <span
+                      className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ color: "#6b7280", borderColor: "#d1d5db", background: "#f3f4f6" }}
+                    >
+                      Inactivo
+                    </span>
+                  )}
                 </td>
-                <td className="border-y px-4 py-3 font-mono">{maskDocument(signer.documentNumber)}</td>
-                <td className="border-y px-4 py-3">
+                <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}>
+                  {maskDocument(signer.documentNumber)}
+                </td>
+                <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
                   {signer.companyTenantIds.length === 0
                     ? "—"
                     : signer.companyTenantIds
                         .map((id) => companyNameById.get(id) ?? id)
                         .join(", ")}
                 </td>
-                <td className="border-y px-4 py-3 font-mono opacity-70" title={signer.integrityHash}>
+                <td
+                  className={`border-y px-4 py-3 font-mono opacity-70 ${signer.isActive ? "" : "opacity-40"}`}
+                  title={signer.integrityHash}
+                >
                   {signer.integrityHash.slice(0, 10)}…
                 </td>
                 <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
-                      onClick={() => openEdit(signer)}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ color: "#FF4E00", borderColor: "#f0c38e" }}
-                      disabled={busyId === signer.id}
-                      aria-label={`Inactivar mandatario ${signer.fullName}`}
-                      onClick={() => void handleInactivate(signer)}
-                    >
-                      Inactivar
-                    </button>
+                    {signer.isActive ? (
+                      <>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
+                          onClick={() => openEdit(signer)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                          style={{ color: "#FF4E00", borderColor: "#f0c38e" }}
+                          disabled={busyId === signer.id}
+                          aria-label={`Inactivar mandatario ${signer.fullName}`}
+                          onClick={() => void handleInactivate(signer)}
+                        >
+                          Inactivar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                        style={{ background: "#557EFF", borderColor: "#557EFF" }}
+                        disabled={busyId === signer.id}
+                        aria-label={`Reactivar mandatario ${signer.fullName}`}
+                        onClick={() => void handleReactivate(signer)}
+                      >
+                        Reactivar
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

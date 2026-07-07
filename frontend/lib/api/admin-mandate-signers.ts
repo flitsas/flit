@@ -91,3 +91,13 @@ export function inactivateMandateSigner(
     method: "POST",
   });
 }
+
+/** POST /{signerId}/reactivate — reactiva un mandatario inactivado (sin compañías). */
+export function reactivateMandateSigner(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}/reactivate`, {
+    method: "POST",
+  });
+}

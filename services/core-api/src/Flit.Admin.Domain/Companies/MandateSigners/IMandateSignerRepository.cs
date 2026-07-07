@@ -28,6 +28,15 @@ public interface IMandateSignerRepository
     Task<bool> InactivateAsync(
         InactivateMandateSignerData data,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reactiva un mandatario inactivado: vuelve a marcarlo activo <b>sin</b> restaurar
+    /// compañías (se liberaron al inactivar y deben reasignarse). <c>false</c> si no existe o
+    /// ya estaba activo (idempotente).
+    /// </summary>
+    Task<bool> ReactivateAsync(
+        ReactivateMandateSignerData data,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Datos de alta de un mandatario. <c>DocumentNumber</c> es PII: no loguear.</summary>
@@ -55,6 +64,13 @@ public sealed record UpdateMandateSignerData(
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(
+    Guid MandateSignerId,
+    Guid OtTenantId,
+    Guid? ChangedBy,
+    Guid? CorrelationId);
+
+/// <summary>Datos de reactivación.</summary>
+public sealed record ReactivateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     Guid? ChangedBy,

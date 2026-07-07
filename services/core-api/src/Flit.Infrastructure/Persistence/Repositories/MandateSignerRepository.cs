@@ -60,6 +60,17 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             cancellationToken);
     }
 
+    public Task<bool> ReactivateAsync(
+        ReactivateMandateSignerData data,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        return ExecuteInTenantScopeAsync(
+            data.OtTenantId,
+            () => PersistReactivateAsync(data, cancellationToken),
+            cancellationToken);
+    }
+
     private async Task<Guid> PersistCreateAsync(
         CreateMandateSignerData data,
         CancellationToken cancellationToken)
@@ -195,6 +206,40 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             fieldName: "is_active",
             oldValue: JsonSerializer.Serialize(true),
             newValue: JsonSerializer.Serialize(false),
+            changedAt: now,
+            changedBy: data.ChangedBy,
+            correlationId: data.CorrelationId);
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> PersistReactivateAsync(
+        ReactivateMandateSignerData data,
+        CancellationToken cancellationToken)
+    {
+        var signer = await _context.MandateSigners
+            .FirstOrDefaultAsync(s => s.Id == data.MandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Idempotente: 404 si no existe o ya estaba activo.
+        if (signer is null || signer.IsActive)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Vuelve activo SIN restaurar compañías: las liberadas al inactivar se reasignan a mano.
+        signer.IsActive = true;
+        signer.UpdatedAt = now;
+        signer.UpdatedBy = data.ChangedBy;
+
+        AddAudit(
+            data.OtTenantId,
+            fieldName: "is_active",
+            oldValue: JsonSerializer.Serialize(false),
+            newValue: JsonSerializer.Serialize(true),
             changedAt: now,
             changedBy: data.ChangedBy,
             correlationId: data.CorrelationId);

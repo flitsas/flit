@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
+using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -64,6 +65,15 @@ public static class AdminMandateSignersEndpoints
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateAsync)
             .WithName("AdminMandateSignersInactivate")
             .WithSummary("Inactiva un mandatario y libera sus compañías")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // POST /{signerId}/reactivate — reactiva un mandatario inactivado (sin compañías).
+        group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateAsync)
+            .WithName("AdminMandateSignersReactivate")
+            .WithSummary("Reactiva un mandatario inactivado (se reasignan sus compañías)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -168,6 +178,27 @@ public static class AdminMandateSignersEndpoints
         var outcome = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
 
         return outcome == InactivateMandateSignerOutcome.Inactivated
+            ? Results.NoContent()
+            : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
+    }
+
+    private static async Task<IResult> ReactivateAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromServices] ReactivateMandateSignerHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new ReactivateMandateSignerCommand
+        {
+            TransitOfficeId = transitOfficeId,
+            MandateSignerId = mandateSignerId,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var outcome = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return outcome == ReactivateMandateSignerOutcome.Reactivated
             ? Results.NoContent()
             : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
     }

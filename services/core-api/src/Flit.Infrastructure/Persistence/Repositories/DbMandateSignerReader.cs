@@ -21,16 +21,19 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    public Task<IReadOnlyList<MandateSignerItem>> ListActiveByOtAsync(
+    public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
             {
+                // Activos e inactivos (baja lógica): los inactivados siguen visibles para
+                // poder reactivarlos. Se muestran primero los activos, luego por nombre.
                 var signers = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => s.TransitOfficeId == transitOfficeId && s.IsActive)
-                    .OrderBy(s => s.FullName)
+                    .Where(s => s.TransitOfficeId == transitOfficeId)
+                    .OrderByDescending(s => s.IsActive)
+                    .ThenBy(s => s.FullName)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 

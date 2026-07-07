@@ -14,6 +14,7 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   createMandateSigner: vi.fn(),
   updateMandateSigner: vi.fn(),
   inactivateMandateSigner: vi.fn(),
+  reactivateMandateSigner: vi.fn(),
 }));
 
 import {
@@ -21,6 +22,7 @@ import {
   fetchOtCompanies,
   createMandateSigner,
   inactivateMandateSigner,
+  reactivateMandateSigner,
 } from "@/lib/api/admin-mandate-signers";
 
 const companies: OtCompany[] = [
@@ -168,6 +170,24 @@ describe("MandatariosSection (ADR-0023)", () => {
     await user.click(screen.getByRole("button", { name: /Inactivar mandatario Samuel Cárdenas/i }));
     await waitFor(() =>
       expect(inactivateMandateSigner).toHaveBeenCalledWith("ot-1", "signer-1"),
+    );
+  });
+
+  it("un mandatario inactivo sigue visible con badge y acción Reactivar", async () => {
+    const inactivo: MandateSigner = { ...samuel, isActive: false, companyTenantIds: [] };
+    vi.mocked(fetchMandateSigners).mockResolvedValue([inactivo]);
+    vi.mocked(reactivateMandateSigner).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    // Sigue en la tabla, marcado como inactivo y sin acciones de editar/inactivar.
+    expect(screen.getByText("Inactivo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Inactivar mandatario/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Reactivar mandatario Samuel Cárdenas/i }));
+    await waitFor(() =>
+      expect(reactivateMandateSigner).toHaveBeenCalledWith("ot-1", "signer-1"),
     );
   });
 });

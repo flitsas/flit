@@ -10,10 +10,11 @@ namespace Flit.Admin.Domain.Companies.MandateSigners;
 public interface IMandateSignerReader
 {
     /// <summary>
-    /// Mandatarios <b>activos</b> del OT con sus compañías asignadas, ordenados por nombre.
-    /// Los mandatarios inactivados (baja lógica) no aparecen y sus compañías quedan libres.
+    /// Mandatarios del OT (activos e inactivos) con sus compañías <b>activas</b> asignadas,
+    /// ordenados primero los activos y luego por nombre. Los inactivados (baja lógica) siguen
+    /// visibles para poder reactivarlos, pero sus compañías ya quedaron liberadas.
     /// </summary>
-    Task<IReadOnlyList<MandateSignerItem>> ListActiveByOtAsync(
+    Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken = default);
 

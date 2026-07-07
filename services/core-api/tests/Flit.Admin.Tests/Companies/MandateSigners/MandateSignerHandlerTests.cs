@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -34,7 +35,7 @@ public sealed class MandateSignerHandlerTests
     public async Task Create_HappyPath_PersistsSignerHashAndCompanies()
     {
         await using var ctx = NewSeededContext();
-        var (create, _, _, list) = CrudHandlers(ctx);
+        var (create, _, _, _, list) = CrudHandlers(ctx);
 
         var result = await create.HandleAsync(NewCreate("Samuel Cárdenas", "123456", [CompanyA, CompanyB]), Ct);
 
@@ -52,10 +53,10 @@ public sealed class MandateSignerHandlerTests
     public async Task Create_RejectsCompanyAlreadyTakenByAnotherSigner_Exclusivity()
     {
         await using var ctx = NewSeededContext();
-        var (create, _, _, _) = CrudHandlers(ctx);
+        var (create, _, _, _, _) = CrudHandlers(ctx);
 
-        var first = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
-        first.IsValid.Should().BeTrue();
+        var firstCreate = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
+        firstCreate.IsValid.Should().BeTrue();
 
         // Daniel NO puede tomar A (ya es de Samuel).
         var second = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA, CompanyB]), Ct);
@@ -68,10 +69,10 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Inactivate_FreesCompaniesForReassignment_SoftDelete()
+    public async Task Inactivate_FreesCompanies_ButKeepsSignerVisible_SoftDelete()
     {
         await using var ctx = NewSeededContext();
-        var (create, _, inactivate, list) = CrudHandlers(ctx);
+        var (create, _, inactivate, _, list) = CrudHandlers(ctx);
 
         var samuel = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
 
@@ -87,9 +88,11 @@ public sealed class MandateSignerHandlerTests
         }, Ct);
         outcome.Should().Be(InactivateMandateSignerOutcome.Inactivated);
 
-        // Samuel desaparece del listado (baja lógica).
+        // Samuel SIGUE visible en el listado, pero inactivo y sin compañías (liberadas).
         var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
-        signers.Should().NotContain(s => s.Id == samuel.MandateSignerId);
+        var samuelRow = signers.Single(s => s.Id == samuel.MandateSignerId);
+        samuelRow.IsActive.Should().BeFalse();
+        samuelRow.CompanyTenantIds.Should().BeEmpty();
 
         // Ahora A queda libre → Daniel sí puede tomarla.
         var freed = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA]), Ct);
@@ -97,10 +100,48 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
+    public async Task Reactivate_BringsSignerBackActive_WithoutCompanies()
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, inactivate, reactivate, list) = CrudHandlers(ctx);
+
+        var samuel = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
+        await inactivate.HandleAsync(new InactivateMandateSignerCommand
+        {
+            TransitOfficeId = Office,
+            MandateSignerId = samuel.MandateSignerId!.Value,
+            ChangedBy = Operator,
+        }, Ct);
+
+        var outcome = await reactivate.HandleAsync(new ReactivateMandateSignerCommand
+        {
+            TransitOfficeId = Office,
+            MandateSignerId = samuel.MandateSignerId!.Value,
+            ChangedBy = Operator,
+        }, Ct);
+        outcome.Should().Be(ReactivateMandateSignerOutcome.Reactivated);
+
+        // Vuelve activo pero sin compañías (se liberaron y no se restauran).
+        var row = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct))
+            .Single(s => s.Id == samuel.MandateSignerId);
+        row.IsActive.Should().BeTrue();
+        row.CompanyTenantIds.Should().BeEmpty();
+
+        // Reactivar de nuevo es idempotente (ya activo) → NotFound.
+        var again = await reactivate.HandleAsync(new ReactivateMandateSignerCommand
+        {
+            TransitOfficeId = Office,
+            MandateSignerId = samuel.MandateSignerId!.Value,
+            ChangedBy = Operator,
+        }, Ct);
+        again.Should().Be(ReactivateMandateSignerOutcome.NotFound);
+    }
+
+    [Fact]
     public async Task Update_RegeneratesHash_AndKeepsRegisteredAt()
     {
         await using var ctx = NewSeededContext();
-        var (create, update, _, list) = CrudHandlers(ctx);
+        var (create, update, _, _, list) = CrudHandlers(ctx);
 
         var created = await create.HandleAsync(NewCreate("Samuel", "123456", [CompanyA]), Ct);
         var before = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct)).Single();
@@ -127,7 +168,7 @@ public sealed class MandateSignerHandlerTests
     public async Task Update_AllowsKeepingOwnCompany_NotAConflict()
     {
         await using var ctx = NewSeededContext();
-        var (create, update, _, _) = CrudHandlers(ctx);
+        var (create, update, _, _, _) = CrudHandlers(ctx);
 
         var created = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
 
@@ -152,7 +193,7 @@ public sealed class MandateSignerHandlerTests
         ctx.Tenants.Single(t => t.Id == OtTenant).IsActive = false; // OT inactivo en FLIT.
         await ctx.SaveChangesAsync(Ct);
 
-        var (create, _, _, _) = CrudHandlers(ctx);
+        var (create, _, _, _, _) = CrudHandlers(ctx);
 
         var result = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
 
@@ -179,6 +220,7 @@ public sealed class MandateSignerHandlerTests
         CreateMandateSignerHandler Create,
         UpdateMandateSignerHandler Update,
         InactivateMandateSignerHandler Inactivate,
+        ReactivateMandateSignerHandler Reactivate,
         ListMandateSignersHandler List) CrudHandlers(FlitDbContext ctx)
     {
         var otStatus = new DbTransitOfficeOperationalStatusReader(ctx);
@@ -188,6 +230,7 @@ public sealed class MandateSignerHandlerTests
             new CreateMandateSignerHandler(otStatus, reader, repo),
             new UpdateMandateSignerHandler(otStatus, reader, repo),
             new InactivateMandateSignerHandler(otStatus, reader, repo),
+            new ReactivateMandateSignerHandler(otStatus, reader, repo),
             new ListMandateSignersHandler(reader));
     }
 
