@@ -8,6 +8,7 @@ using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
@@ -126,6 +127,7 @@ public static class DependencyInjection
         services.AddScoped<UpdateMandateSignerHandler>();
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ListMandateSignersHandler>();
+        services.AddScoped<ListOtCompaniesHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,14 @@ public static class AdminMandateSignersEndpoints
         group.MapGet("", ListAsync)
             .WithName("AdminMandateSignersList")
             .WithSummary("Lista los mandatarios activos de un organismo de tránsito")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /companies — compañías del OT con su mandatario resuelto (RF34 + multiselect).
+        group.MapGet("/companies", ListCompaniesAsync)
+            .WithName("AdminMandateSignersCompanies")
+            .WithSummary("Lista las compañías del OT con su mandatario asignado (vista consolidada)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -70,6 +79,18 @@ public static class AdminMandateSignersEndpoints
     {
         var result = await handler
             .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(new { data = result });
+    }
+
+    private static async Task<IResult> ListCompaniesAsync(
+        Guid transitOfficeId,
+        [FromServices] ListOtCompaniesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new ListOtCompaniesQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(new { data = result });
