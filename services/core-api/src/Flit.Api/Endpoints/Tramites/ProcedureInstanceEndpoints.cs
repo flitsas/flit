@@ -181,6 +181,26 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("FinalizeDraftProcedureInstance");
 
+        // HU #10536 — marcar/desmarcar el trámite como prioritario para que el OT lo revise con
+        // primacía. No cambia el estado del ciclo de vida; solo el flag de ordenamiento de los
+        // listados. Disponible en cualquier estado (el trámite ya radicado también puede priorizarse
+        // para la bandeja del OT).
+        group.MapPatch("/instances/{id:guid}/priority", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            SetPriorityRequest request,
+            SetPriorityProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request.Prioritario, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("SetProcedureInstancePriority");
+
         group.MapPost("/instances/{id:guid}/submit", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -289,3 +309,6 @@ internal sealed record TransitOfficeOptionDto(Guid Id, string Code, string Name,
 
 /// <summary>Body de POST /instances/{id}/transition (N 03). reason es obligatorio para anulado/rechazado.</summary>
 internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, string? Reason);
+
+/// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
+internal sealed record SetPriorityRequest(bool Prioritario);

@@ -25,6 +25,13 @@ public sealed class ProcedureInstance
     /// </summary>
     public DateTimeOffset? DraftFinalizedAt { get; set; }
 
+    /// <summary>
+    /// HU #10536 — el gestor marca el trámite como prioritario para que el OT lo revise con primacía.
+    /// Solo afecta el ordenamiento de los listados (operación y bandeja del OT); NO altera el ciclo de
+    /// vida ni los gates. Default false. Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public bool Prioritario { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

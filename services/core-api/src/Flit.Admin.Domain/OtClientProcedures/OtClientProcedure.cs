@@ -22,4 +22,7 @@ public sealed class OtClientProcedure
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? SubmittedAt { get; init; }
+
+    /// <summary>HU #10536 — trámite marcado como prioritario: se ordena con primacía en la bandeja del OT.</summary>
+    public bool Prioritario { get; init; }
 }
