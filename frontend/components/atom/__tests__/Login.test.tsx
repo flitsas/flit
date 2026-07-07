@@ -55,4 +55,31 @@ describe("Login (Feature #10113 — login real)", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/acceso restringido/i));
   });
+
+  // HU #10511 AC1 — todos los roles del usuario están inactivos.
+  it("todos los roles desactivados (403 ALL_ROLES_INACTIVE) → mensaje específico de rol desactivado", async () => {
+    loginMock.mockRejectedValue(
+      Object.assign(new Error("403"), { status: 403, body: { code: "ALL_ROLES_INACTIVE" } }),
+    );
+    render(<Login onAuthenticated={vi.fn()} />);
+
+    fillCreds();
+    fireEvent.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/rol ha sido desactivado/i),
+    );
+  });
+
+  // HU #10511 AC2 — el bloqueo temporal (sin ese code) no debe mostrar el mensaje de rol desactivado.
+  it("cuenta bloqueada temporalmente sin ALL_ROLES_INACTIVE → sigue mostrando el mensaje de bloqueo, no el de rol", async () => {
+    loginMock.mockRejectedValue(Object.assign(new Error("403"), { status: 403, body: { code: "ACCOUNT_TEMPORARILY_BLOCKED" } }));
+    render(<Login onAuthenticated={vi.fn()} />);
+
+    fillCreds();
+    fireEvent.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/acceso restringido/i));
+    expect(screen.queryByText(/rol ha sido desactivado/i)).not.toBeInTheDocument();
+  });
 });
