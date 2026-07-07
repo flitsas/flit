@@ -26,6 +26,21 @@ export interface TransitOfficeTenantPagedResult {
   pageSize: number;
 }
 
+/**
+ * Estado operativo de un OT del catálogo (RF01). Una fila por oficina;
+ * `tenantId`/`estadoActivo`/`operationMode` son `null` cuando no tiene tenant (sin alta).
+ */
+export interface TransitOfficeOperationalStatus {
+  id: string;
+  code: string;
+  name: string;
+  departmentCode: string;
+  hasTenant: boolean;
+  tenantId: string | null;
+  estadoActivo: boolean | null;
+  operationMode: TransitOfficeTenantOperationMode | null;
+}
+
 export interface TransitOfficeTenantsIndexParams {
   legalName?: string;
   estadoActivo?: boolean;
@@ -49,6 +64,19 @@ export function fetchTransitOfficeTenants(
   signal?: AbortSignal,
 ): Promise<TransitOfficeTenantPagedResult> {
   return apiFetch<TransitOfficeTenantPagedResult>(`${base}/index`, { query: { ...params }, signal });
+}
+
+/**
+ * GET /api/v1/admin/transit-offices/operational-status — estado operativo por OT
+ * (RF01, SuperAdmin). Por cada oficina del catálogo indica si tiene tenant y su estado.
+ */
+export function fetchTransitOfficesOperationalStatus(
+  signal?: AbortSignal,
+): Promise<TransitOfficeOperationalStatus[]> {
+  return apiFetch<TransitOfficeOperationalStatus[]>(
+    "/api/v1/admin/transit-offices/operational-status",
+    { signal },
+  );
 }
 
 /** POST — alta de tenant OT. Lanza ApiValidationError en 422. */
