@@ -201,4 +201,30 @@ describe('validateFile — unidad', () => {
       /20 MB/,
     );
   });
+
+  // HU #10524 (RF08/09/10) — validación por tipo con respaldo a los límites globales.
+  it('límite por tipo más estricto de MIME rechaza un formato antes permitido', () => {
+    // Un tipo restringido a solo PDF rechaza un PNG (que globalmente sí se acepta).
+    expect(validateFile(pngFile('foto.png', 1000), { allowedMimes: ['application/pdf'] }))
+      .toMatch(/no permitido/);
+  });
+
+  it('límite por tipo más estricto de tamaño rechaza por encima del máximo del tipo', () => {
+    const msg = validateFile(pngFile('grande.png', 2_000_000), { maxSizeBytes: 1_000_000 });
+    expect(msg).toMatch(/supera el máximo/);
+  });
+
+  it('límites por tipo vacíos ⇒ respaldo a los globales', () => {
+    expect(validateFile(pngFile('ok.png', 1000), {})).toBeNull();
+    expect(validateFile(pngFile('ok.png', 1000), { allowedMimes: [] })).toBeNull();
+  });
+
+  it('acepta dentro de un límite por tipo permisivo', () => {
+    expect(
+      validateFile(pngFile('ok.png', 1500), {
+        allowedMimes: ['image/png', 'application/pdf'],
+        maxSizeBytes: 5_000_000,
+      }),
+    ).toBeNull();
+  });
 });
