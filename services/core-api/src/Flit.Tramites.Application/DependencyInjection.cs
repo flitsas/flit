@@ -44,6 +44,9 @@ public static class DependencyInjection
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
+        // HU #10520 — validación de carga por tipo (MIME/tamaño) con respaldo global. El catálogo
+        // (IDocumentTypeCatalog) se registra en Infraestructura; aquí solo el validador que lo consume.
+        services.AddScoped<AttachmentValidator>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();

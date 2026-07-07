@@ -2939,6 +2939,198 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
+  /api/v1/tramites/instances/{id}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Subir un adjunto (multipart)
+      description: >
+        Sube el binario de un documento del trámite (solo en estado borrador). Valida tipo,
+        MIME y tamaño; si el tipo existe en el catálogo document_types se aplican sus reglas
+        (mime_types_allowed/max_size_bytes), con respaldo a los límites globales (pdf/jpeg/png/webp, 20 MB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [tipo, file]
+              properties:
+                tipo: { type: string, example: factura }
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Adjunto creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "tipo/MIME/tamaño inválido o archivo faltante." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Listar adjuntos del trámite
+      responses:
+        "200":
+          description: Lista de adjuntos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttachmentDto" }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/tramites/instances/{id}/attachments/presign:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Abrir subida directa a S3 (presigned POST)
+      description: >
+        Valida tipo/MIME/tamaño y estado borrador y devuelve una política presigned POST para
+        subir el binario directo a S3, sin crear aún la fila del adjunto (se registra luego).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PresignAttachmentRequest" }
+      responses:
+        "200":
+          description: Política presigned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storagePath: { type: string }
+                  url: { type: string, format: uri }
+                  fields:
+                    type: object
+                    additionalProperties: { type: string }
+        "400": { description: "tipo/MIME/tamaño inválido." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/attachments/register:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Registrar la metadata de un adjunto ya subido a S3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterAttachmentRequest" }
+      responses:
+        "201":
+          description: Adjunto registrado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "tipo/MIME/tamaño/storagePath/sha256 inválido." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Descargar el binario de un adjunto
+      responses:
+        "200":
+          description: Binario del adjunto.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { description: "Trámite o adjunto no encontrado, o binario perdido." }
+
+  /api/v1/tramites/instances/{id}/attachments/{attachmentId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Trámites · Documentos]
+      summary: Borrar un adjunto (solo en borrador)
+      responses:
+        "204": { description: "Adjunto borrado." }
+        "404": { description: "Trámite o adjunto no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/checklist:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Checklist documental computado del trámite
+      responses:
+        "200":
+          description: Checklist con estado de cada ítem.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChecklistResponse" }
+        "404": { description: "Trámite no encontrado." }
+        "422": { description: "La tipología del trámite no está configurada." }
+
+  /api/v1/tramites/instances/{id}/consolidado:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Generar el PDF consolidado del expediente
+      description: >
+        Fusiona el FUR y los adjuntos del trámite en un PDF único y lo adjunta como
+        tipo "consolidado". Requiere FUR generado y documentos obligatorios completos.
+      responses:
+        "201":
+          description: Consolidado generado (adjunto tipo "consolidado").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2946,7 +3138,65 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    # HU #10520 (RNF01) — header de tenant reutilizable por los endpoints operativos de documentos.
+    TenantIdHeader:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: Identificador del tenant (compañía) dueño del trámite.
+
   schemas:
+    # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
+    AttachmentDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+        sha256: { type: string }
+        source: { type: string, example: user }
+        uploadedAt: { type: string, format: date-time }
+    PresignAttachmentRequest:
+      type: object
+      required: [tipo, filename, mimetype, sizeBytes]
+      properties:
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+    RegisterAttachmentRequest:
+      type: object
+      required: [tipo, filename, mimetype, sizeBytes, sha256, storagePath]
+      properties:
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+        sha256: { type: string }
+        storagePath: { type: string }
+    ChecklistItemDto:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        obligatorio: { type: boolean }
+        satisfied: { type: boolean }
+        docTipo: { type: string, nullable: true }
+    ChecklistResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ChecklistItemDto" }
+        faltanObligatorios:
+          type: array
+          items: { type: string }
+        completo: { type: boolean }
+
     LoginRequest:
       type: object
       required: [email, password]

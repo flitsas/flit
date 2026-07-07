@@ -69,6 +69,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
