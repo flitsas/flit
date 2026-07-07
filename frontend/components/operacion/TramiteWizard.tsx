@@ -29,6 +29,7 @@ import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import { PrendaForm } from './PrendaForm';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -1372,12 +1373,20 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist
-          instanceId={instanceId}
-          onChanged={onRefresh}
-          hideHeader
-          modalidad={modalidad}
-        />
+        <div className="space-y-4">
+          <DocumentChecklist
+            instanceId={instanceId}
+            onChanged={onRefresh}
+            hideHeader
+            modalidad={modalidad}
+          />
+          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
+              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
+              comercial (HU #10598), no en documentos. */}
+          {modalidad !== 'traspaso' && (
+            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
+          )}
+        </div>
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma

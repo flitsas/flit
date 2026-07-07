@@ -425,6 +425,33 @@ export interface CommercialData {
   metodoPago: CommercialMetodoPago | null;
 }
 
+// ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
+//   PUT /api/v1/tramites/instances/{id}/prenda -> PrendaData
+//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData | null
+export type PrendaDecision =
+  | 'solicitar'
+  | 'registrar'
+  | 'levantar'
+  | 'omitir'
+  | 'sin_prenda';
+
+/** Decisión de prenda vigente del trámite (o null si no se ha registrado ninguna). */
+export interface PrendaData {
+  id: string;
+  decision: PrendaDecision;
+  estado: 'vigente' | 'reemplazada';
+  acreedorNombre: string | null;
+  acreedorDocumento: string | null;
+  createdAt: string;
+}
+
+/** Payload de PUT /prenda. */
+export interface PrendaInput {
+  decision: PrendaDecision;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
+}
+
 // ── Biométrica (Slice 6) ────────────────────────────────────────────
 // Contrato FIJO acordado con backend:
 //   POST /api/v1/tramites/instances/{id}/biometric  -> IniciarBiometriaResult (201)

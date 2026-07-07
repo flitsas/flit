@@ -21,6 +21,8 @@ import type {
   GenerarConsolidadoResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
+  PrendaData,
+  PrendaInput,
   InstanceSummary,
   InstancesResponse,
   TransitOfficeOption,
@@ -649,6 +651,23 @@ export const tramitesClient = {
   ) =>
     request<CommercialData>(
       `/api/v1/tramites/instances/${instanceId}/commercial`,
+      {
+        method: 'PUT',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(data),
+      },
+    ),
+
+  // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
+  getPrenda: (instanceId: string, tenantId?: string) =>
+    request<PrendaData | null>(
+      `/api/v1/tramites/instances/${instanceId}/prenda`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  putPrenda: (instanceId: string, data: PrendaInput, tenantId?: string) =>
+    request<PrendaData>(
+      `/api/v1/tramites/instances/${instanceId}/prenda`,
       {
         method: 'PUT',
         headers: tenantHeader(tenantId),
