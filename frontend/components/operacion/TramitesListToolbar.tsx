@@ -1,6 +1,6 @@
 'use client';
 
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, Star, X } from 'lucide-react';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -19,6 +19,9 @@ interface Props {
   hasActiveFilters: boolean;
   totalCount: number;
   filteredCount: number;
+  /** HU #10536 — filtro "solo prioritarios". */
+  soloPrioritarios: boolean;
+  onPrioritariosChange: (v: boolean) => void;
 }
 
 const MODALIDAD_CHIPS: { value: '' | WizardModalidad; label: string }[] = [
@@ -63,6 +66,8 @@ export function TramitesListToolbar({
   hasActiveFilters,
   totalCount,
   filteredCount,
+  soloPrioritarios,
+  onPrioritariosChange,
 }: Props) {
   const counterLabel =
     filteredCount === 0
@@ -89,6 +94,22 @@ export function TramitesListToolbar({
               {c.label}
             </FilterChip>
           ))}
+        </div>
+        {/* HU #10536 — filtro "solo prioritarios". */}
+        <div className="flex items-center gap-1.5" role="group" aria-label="Filtrar por prioridad">
+          <FilterChip
+            active={soloPrioritarios}
+            onClick={() => onPrioritariosChange(!soloPrioritarios)}
+          >
+            <span className="inline-flex items-center gap-1">
+              <Star
+                className="h-3 w-3"
+                style={soloPrioritarios ? { fill: 'currentColor' } : undefined}
+                aria-hidden="true"
+              />
+              Prioritarios
+            </span>
+          </FilterChip>
         </div>
         <button
           type="button"

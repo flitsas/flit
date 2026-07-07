@@ -290,8 +290,21 @@ export const tramitesClient = {
       identityValidationStatus: item.identityValidationStatus ?? null,
       signaturePending: item.signaturePending ?? false,
       canSubmit: item.canSubmit ?? false,
+      prioritario: item.prioritario ?? false,
     }));
   },
+
+  // HU #10536 — marca/desmarca el trámite como prioritario (el OT lo revisa con primacía).
+  // No cambia el estado del ciclo de vida; solo el flag de ordenamiento de los listados.
+  setPriority: (id: string, prioritario: boolean, tenantId?: string) =>
+    request<{ id: string; prioritario: boolean }>(
+      `/api/v1/tramites/instances/${id}/priority`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ prioritario }),
+      },
+    ),
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
