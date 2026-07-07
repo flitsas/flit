@@ -67,6 +67,26 @@ public sealed class PermissionAuthorizationHandlerTests
         context.HasSucceeded.Should().BeTrue("el bypass SuperAdmin es case-insensitive");
     }
 
+    // Fix post-review #10504 — multi-rol (HU #10506): el JWT emite un claim "role_code" POR
+    // CADA rol activo, en orden no determinístico. FindFirstValue (usado antes del fix) solo
+    // evalúa el PRIMERO, así que si SuperAdmin no queda primero el bypass se perdía.
+    [Fact]
+    public async Task Fix10504_MultiRole_SuperAdminNotFirstClaim_StillSucceeds()
+    {
+        var user = BuildPrincipal(
+            new Claim("sub", Guid.NewGuid().ToString()),
+            new Claim("role_code", "Radicador"),
+            new Claim("role_code", "SuperAdmin"));
+
+        var requirement = new PermissionRequirement("tramites.read");
+        var context = BuildContext(user, requirement);
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue(
+            "el bypass SuperAdmin debe evaluar TODOS los claims 'role_code', no solo el primero");
+    }
+
     // ── AC2: permiso presente en JWT ─────────────────────────────────────────
 
     [Fact]

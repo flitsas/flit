@@ -23,8 +23,14 @@ public sealed class TramiteLifecycleService(
     IOtOperabilityGate otOperabilityGate,
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
-    ITramiteTransitionPublisher publisher) : ITramiteLifecycleService
+    ITramiteTransitionPublisher publisher,
+    IIdentityValidationPolicy? identityPolicy = null) : ITramiteLifecycleService
 {
+    // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
+    // Default permisivo (siempre exige) cuando no hay política cableada (tests).
+    private readonly IIdentityValidationPolicy _identityPolicy =
+        identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
         CancellationToken ct = default)
@@ -68,6 +74,14 @@ public sealed class TramiteLifecycleService(
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
                 repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+
+            // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
+            // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
+            var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
+                instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
+            if (!identityRequired)
+                identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
+
             var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
@@ -130,11 +144,12 @@ public sealed class TramiteLifecycleService(
     {
         var procedureType = await typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).ConfigureAwait(false);
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
-            return ("not_published", "El tipo de trámite no está publicado.");
+            return (TramiteEstadoErrores.TipoNoPublicado, "El tipo de trámite no está publicado.");
 
-        // #2 — el OT elegido en el FUR (transit_office_id en field_values) debe estar HABILITADO
-        // para la empresa. Se promueve a la columna TransitOfficeId para que el motor de reglas OT
-        // y los listados operen sobre el id real.
+        // #2 (R09) — el OT elegido en el FUR (transit_office_id en field_values) debe estar
+        // HABILITADO para la empresa. Se promueve a la columna TransitOfficeId para que el motor de
+        // reglas OT y la bandeja del OT operen sobre el id real; sin el grant el trámite entregado
+        // NO aparecería en ninguna bandeja (el diagnóstico operativo lo da el endpoint /health).
         var selectedOfficeId = TransitOfficeIdFromFieldValues(instance);
         if (selectedOfficeId is { } officeId)
         {
@@ -142,8 +157,10 @@ public sealed class TramiteLifecycleService(
                 .IsEnabledForTenantAsync(instance.TenantId, officeId, ct)
                 .ConfigureAwait(false);
             if (!enabled)
-                return ("organismo_no_habilitado",
-                    "El organismo de tránsito seleccionado no está habilitado para la compañía.");
+                return (TramiteEstadoErrores.OrganismoNoHabilitado,
+                    $"El organismo de tránsito seleccionado ({officeId}) no está habilitado para la " +
+                    "compañía. Solicite el grant OT↔empresa: sin él, el trámite entregado no llegaría " +
+                    "a la bandeja del organismo.");
 
             // HU #10518 — con grant, pero el OT debe estar OPERATIVO en la plataforma:
             // catálogo activo + tenant OT existente y activo. Desactivar el OT (is_active=false)
@@ -165,7 +182,7 @@ public sealed class TramiteLifecycleService(
             ct).ConfigureAwait(false);
 
         if (ruleResult.IsBlocked)
-            return (ruleResult.ErrorCode ?? "ot_rule_blocked",
+            return (ruleResult.ErrorCode ?? TramiteEstadoErrores.ReglaOtBloquea,
                 "El trámite está bloqueado por una regla OT activa.");
 
         return (null, null);
@@ -176,6 +193,18 @@ public sealed class TramiteLifecycleService(
     /// <c>transit_office_id</c> (lo persiste el wizard al seleccionar). <c>null</c> si no hay
     /// selección o no es un GUID válido (p. ej. instancias previas a la persistencia del id).
     /// </summary>
+    /// <summary>
+    /// Marca la identidad de ambas partes (comprador y vendedor) como satisfecha, uniéndolas al set
+    /// aprobado. Se usa cuando el OT destino deshabilita la validación de identidad (HU #10548): así
+    /// el <see cref="SubmitGate"/> no exige identidad sin tocar su firma.
+    /// </summary>
+    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
+        new(approved, StringComparer.OrdinalIgnoreCase)
+        {
+            BiometricRules.ParteComprador,
+            BiometricRules.ParteVendedor,
+        };
+
     private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
     {
         var raw = instance.FieldValues.FirstOrDefault(f =>

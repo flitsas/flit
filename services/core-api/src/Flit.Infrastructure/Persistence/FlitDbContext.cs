@@ -41,6 +41,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
 
+    // HU #10506 — soporte multi-rol: tabla puente N:M invitación-roles.
+    public DbSet<InvitationRole> InvitationRoles => Set<InvitationRole>();
+
     public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
 
     public DbSet<TenantConfigAuditLog> TenantConfigAuditLogs => Set<TenantConfigAuditLog>();
@@ -60,6 +63,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 
     public DbSet<OtFeatureFlagEntity> OtFeatureFlags => Set<OtFeatureFlagEntity>();
+
+    // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
+    public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 
     public DbSet<OtWebhookSubscriptionEntity> OtWebhookSubscriptions => Set<OtWebhookSubscriptionEntity>();
 

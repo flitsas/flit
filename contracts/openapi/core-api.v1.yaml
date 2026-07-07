@@ -77,6 +77,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: >
+            Cuenta bloqueada temporalmente (código `ACCOUNT_TEMPORARILY_BLOCKED`, HU #10170 AC2)
+            o todos los roles asignados al usuario están inactivos (código `ALL_ROLES_INACTIVE`,
+            HU #10507 AC2).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/auth/me:
     get:
       operationId: authGetCurrentUser

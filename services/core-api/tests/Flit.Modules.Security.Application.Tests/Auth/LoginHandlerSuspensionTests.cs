@@ -29,8 +29,7 @@ public sealed class LoginHandlerSuspensionTests
                 Status = "active",
                 PasswordHash = "hash",
                 TenantId = Guid.NewGuid(),
-                RoleId = Guid.NewGuid(),
-                RoleCode = "demo_admin",
+                ActiveRoles = [new UserRoleSnapshot(Guid.NewGuid(), "demo_admin")],
                 IsTemporarilySuspended = true,
             });
         _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
@@ -39,6 +38,6 @@ public sealed class LoginHandlerSuspensionTests
             .Should().ThrowAsync<AccountSuspendedException>();
 
         _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default!, default, default!, default!);
+            default, default!, default, default!, default!, default!);
     }
 }

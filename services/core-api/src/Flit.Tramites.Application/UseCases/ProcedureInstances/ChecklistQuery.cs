@@ -31,7 +31,7 @@ public sealed class GetChecklistHandler(IProcedureInstanceRepository repo)
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithActorsAndAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -40,7 +40,12 @@ public sealed class GetChecklistHandler(IProcedureInstanceRepository repo)
 
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
 
-        var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
+        // HU #10542: para persona natural el documento de identidad se incorpora desde la
+        // validación biométrica, así que el ítem de cédula no se ofrece como carga manual.
+        var personTypeOverride = ChecklistPersonTypeRules.BuildOverride(
+            instance.Actors.Select(a => a.PersonType).ToList());
+
+        var computed = ChecklistEngine.ComputeWithOverride(codigo, manual, docTipos, personTypeOverride);
         if (computed is null)
             return (null, "tipologia_not_found");
 

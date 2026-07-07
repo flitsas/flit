@@ -4,8 +4,6 @@ public sealed class RoleGrant
 {
     public Guid Id { get; set; }
 
-    public Guid TenantId { get; set; }
-
     public Guid RoleId { get; set; }
 
     public Guid PermissionId { get; set; }

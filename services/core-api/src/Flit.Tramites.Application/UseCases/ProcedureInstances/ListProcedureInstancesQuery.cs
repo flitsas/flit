@@ -34,7 +34,8 @@ public sealed record InstanceSummaryDto(
     DateTimeOffset? DraftFinalizedAt = null,
     string? IdentityValidationStatus = null,  // aprobado | en_proceso | rechazado | null (sin iniciar)
     bool SignaturePending = false,            // traspaso: compraventa de alguna parte sin firmar
-    bool CanSubmit = false);                  // gates de radicación satisfechos (mismo cómputo que el wizard)
+    bool CanSubmit = false,                   // gates de radicación satisfechos (mismo cómputo que el wizard)
+    bool Prioritario = false);                // HU #10536 — marcado prioritario (ordenamiento con primacía)
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -116,7 +117,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.DraftFinalizedAt,
             DeriveIdentityStatus(e, modalidad, identidadAprobadaPartes),
             DeriveSignaturePending(e, modalidad),
-            state.CanSubmit);
+            state.CanSubmit,
+            e.Prioritario);
     }
 
     /// <summary>Partes que llevan validación de identidad por modalidad (matrícula = solo comprador).</summary>

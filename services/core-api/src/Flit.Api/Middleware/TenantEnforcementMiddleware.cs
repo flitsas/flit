@@ -19,8 +19,9 @@ namespace Flit.Api.Middleware;
 /// </list>
 /// El tenant resuelto (o <c>null</c> = todos, solo superadmin) y <c>isSuperAdmin</c> quedan en
 /// <see cref="HttpContext.Items"/> para el create (que toma el tenant del body) y otros consumidores.
-/// NO aplica a la parametrización (<c>/api/v1/tramites/procedure-types</c>, etc.), que usa otro
-/// modelo de auth (stub <c>X-Flit-SuperAdmin</c>), ni al portal público (<c>/api/v1/public/*</c>).
+/// NO aplica a la parametrización (<c>/api/v1/tramites/procedure-types</c>, etc.), que usa la
+/// policy <c>SuperAdmin</c> unificada por rol JWT (HU #10508), ni al portal público
+/// (<c>/api/v1/public/*</c>).
 /// </summary>
 public sealed class TenantEnforcementMiddleware(RequestDelegate next)
 {
@@ -48,10 +49,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
             return;
         }
 
-        var role = user.FindFirstValue(AdminAuthorization.RoleClaimType)
-            ?? user.FindFirstValue("role_code")
-            ?? string.Empty;
-        var isSuperAdmin = string.Equals(role, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase);
+        // Multi-rol (HU #10506): el JWT emite un claim POR CADA rol activo, en orden no
+        // determinístico — FindFirstValue solo evalúa el primero. Se evalúan TODOS los claims
+        // de los tipos relevantes (fix post-review #10504).
+        var roleValues = user.Claims
+            .Where(c => c.Type == AdminAuthorization.RoleClaimType || c.Type == "role_code")
+            .Select(c => c.Value);
+        var isSuperAdmin = roleValues.Any(r => string.Equals(r, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
         if (isSuperAdmin)
         {

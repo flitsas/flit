@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
@@ -5,6 +6,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -52,6 +54,9 @@ public sealed class RunPreflightHandler(
     private const string ProviderVerifikSimit = "verifik_simit";
     private const string ProviderVerifikRnmc = "verifik_rnmc";
     private const string ConsultationSource = "consultation";
+    private const string SystemSource = "system";
+    private const string FieldVinConflictoTraspaso = "vin_conflicto_traspaso";
+    private const string CheckVinMatricula = "vin_matricula";
 
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -99,6 +104,8 @@ public sealed class RunPreflightHandler(
         {
             // Matrícula inicial: vehículo por VIN (primera matrícula, sin propietario previo).
             vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
+            // R3 (HU #10538): si el VIN ya tiene una matrícula previa en el tenant, informar y ofrecer traspaso.
+            await DetectVinConflictoTraspasoAsync(checks, instance, tenantId, vin, ct);
         }
 
         // Una sola consulta a Verifik alimenta AMBAS secciones: el proveedor del vehículo ya
@@ -334,6 +341,100 @@ public sealed class RunPreflightHandler(
                 "No fue posible verificar la información en este momento. Vuelve a intentarlo en unos minutos."));
             return [];
         }
+    }
+
+    /// <summary>
+    /// R3 (HU #10538) — en MATRÍCULA INICIAL detecta si el VIN ya tiene una matrícula previa en el mismo
+    /// tenant (invariante <see cref="VinPolicyEvaluator"/>). Si hay conflicto: agrega el check informativo
+    /// <see cref="CheckVinMatricula"/> (<c>warn</c>, con secretaría + fecha del registro previo) e hidrata
+    /// la señal <see cref="FieldVinConflictoTraspaso"/> = <c>true</c> en field_values para que el front
+    /// ofrezca la ruta de traspaso. Sin previas o con la única previa en estado <c>rechazado</c> no hay
+    /// conflicto (AC2/AC3): en ese caso la señal previa se limpia (idempotencia entre corridas si el
+    /// gestor cambió el VIN). El estado <c>warn</c> mantiene el preflight informativo (nunca bloquea rojo).
+    /// </summary>
+    private async Task DetectVinConflictoTraspasoAsync(
+        List<PreflightCheckDto> checks,
+        ProcedureInstance instance,
+        Guid tenantId,
+        string? vin,
+        CancellationToken ct)
+    {
+        var vinNorm = VinNormalizer.Normalize(vin);
+        var conflicto = vinNorm is null
+            ? null
+            : VinPolicyEvaluator.EvaluarConflicto(
+                await repo.FindTramitesByVinAsync(tenantId, vinNorm, instance.Id, ct));
+
+        if (conflicto is null)
+        {
+            // Sin conflicto: si una corrida anterior dejó la señal en true (p. ej. el gestor corrigió el
+            // VIN), bajarla a false para que el front no siga ofreciendo el traspaso.
+            SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "false", createIfMissing: false);
+            return;
+        }
+
+        var previo = conflicto.ExistingTramite;
+        var secretaria = string.IsNullOrWhiteSpace(previo.Secretaria) ? "otra secretaría" : previo.Secretaria!;
+        var fecha = previo.FechaRegistro?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var cuando = fecha is null ? string.Empty : $" el {fecha}";
+
+        checks.Add(new PreflightCheckDto(
+            CheckVinMatricula,
+            "VIN ya matriculado",
+            "warn",
+            SystemSource,
+            $"Este VIN ya tiene una matrícula registrada en {secretaria}{cuando}. " +
+            "Puede iniciar un traspaso de este vehículo en lugar de una nueva matrícula."));
+
+        SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "true", createIfMissing: true);
+    }
+
+    /// <summary>
+    /// Upsert idempotente de una señal booleana server-driven en field_values (Source="system"). Mismo
+    /// mecanismo de INSERT explícito (PK store-generated) que <see cref="UpsertHydratedFields"/>, pero
+    /// para una señal derivada del preflight. Con <paramref name="createIfMissing"/>=false solo actualiza
+    /// una señal ya existente (para bajarla a false sin crear filas innecesarias). No-op si el valor no
+    /// cambia. Se persiste en el flush de <see cref="HandleAsync"/>.
+    /// </summary>
+    private void SetSignalIfChanged(
+        ProcedureInstance instance,
+        Guid tenantId,
+        string fieldKey,
+        string value,
+        bool createIfMissing)
+    {
+        var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == fieldKey);
+        var now = DateTimeOffset.UtcNow;
+
+        if (existing is not null)
+        {
+            if (existing.ValueText == value && existing.Source == SystemSource)
+                return;
+            existing.ValueText = value;
+            existing.ValueJson = null;
+            existing.Source = SystemSource;
+            existing.UpdatedAt = now;
+            return;
+        }
+
+        if (!createIfMissing)
+            return;
+
+        var fieldValue = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instance.Id,
+            FormFieldId = null,
+            FieldKey = fieldKey,
+            ValueText = value,
+            ValueJson = null,
+            Source = SystemSource,
+            CreatedAt = now,
+        };
+        instance.FieldValues.Add(fieldValue);
+        // PK store-generated con Id asignado: marcar Added explícito para forzar INSERT (ver UpsertHydratedFields).
+        repo.Add(fieldValue);
     }
 
     /// <summary>
