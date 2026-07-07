@@ -27,6 +27,7 @@ using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
 using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
@@ -61,7 +62,10 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // RNF01/RF05 (ADR-0024): audita como failure los intentos fallidos de escribir el
+        // perfil OT (p. ej. campos oficiales RUNT o modo inválido) en scope independiente.
         group.MapPatch("/profile", UpdateProfileAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("transit_office_profile", "update"))
             .WithName("AdminOtUpdateProfile")
             .WithSummary("Actualiza el perfil OT del tenant autenticado")
             .Produces(StatusCodes.Status200OK)
@@ -70,6 +74,7 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPatch("/feature-flags/{id:guid}", UpdateFeatureFlagAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("ot_feature_flags", "update"))
             .WithName("AdminOtUpdateFeatureFlag")
             .WithSummary("Activa o desactiva un feature flag OT")
             .Produces(StatusCodes.Status200OK)
@@ -85,6 +90,7 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPut("/requirements", UpdateRequirementsAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
             .WithName("AdminOtUpdateRequirements")
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
@@ -363,6 +369,13 @@ public static class AdminOtEndpoints
 
         if (!result.IsValid)
         {
+            // Código estable para la auditoría de fallo (ADR-0024): el campo del primer error
+            // (p. ej. campos_oficiales_no_editables u operation_mode), nunca el valor enviado.
+            if (result.Errors.Count > 0)
+            {
+                ConfigAuditFailureContext.SetErrorCode(httpContext, result.Errors[0].Field);
+            }
+
             return Results.Json(
                 new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity);

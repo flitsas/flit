@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Tests.TestDoubles;
 using Flit.Infrastructure.Persistence;
@@ -36,7 +37,7 @@ public sealed class CreateTransitOfficeHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new CreateTransitOfficeHandler(
-                new TransitOfficeTenantWriteRepository(act), new StaticTransitOfficeCatalog());
+                new TransitOfficeTenantWriteRepository(act, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
             var result = await handler.HandleAsync(new CreateTransitOfficeCommand
             {
@@ -107,7 +108,7 @@ public sealed class CreateTransitOfficeHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new CreateTransitOfficeHandler(
-                new TransitOfficeTenantWriteRepository(act), new StaticTransitOfficeCatalog());
+                new TransitOfficeTenantWriteRepository(act, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
             var result = await handler.HandleAsync(new CreateTransitOfficeCommand
             {
@@ -133,7 +134,7 @@ public sealed class CreateTransitOfficeHandlerTests
     {
         await using var ctx = NewContext(NewDbName());
         var handler = new CreateTransitOfficeHandler(
-            new TransitOfficeTenantWriteRepository(ctx), new StaticTransitOfficeCatalog());
+            new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
         var result = await handler.HandleAsync(new CreateTransitOfficeCommand
         {
@@ -154,7 +155,7 @@ public sealed class CreateTransitOfficeHandlerTests
     {
         await using var ctx = NewContext(NewDbName());
         var handler = new CreateTransitOfficeHandler(
-            new TransitOfficeTenantWriteRepository(ctx), new StaticTransitOfficeCatalog());
+            new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
         var result = await handler.HandleAsync(new CreateTransitOfficeCommand
         {
@@ -175,7 +176,7 @@ public sealed class CreateTransitOfficeHandlerTests
     {
         await using var ctx = NewContext(NewDbName());
         var handler = new CreateTransitOfficeHandler(
-            new TransitOfficeTenantWriteRepository(ctx), new StaticTransitOfficeCatalog());
+            new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
         var result = await handler.HandleAsync(new CreateTransitOfficeCommand
         {
@@ -197,7 +198,7 @@ public sealed class CreateTransitOfficeHandlerTests
         var db = NewDbName();
         await using var ctx = NewContext(db);
         var handler = new CreateTransitOfficeHandler(
-            new TransitOfficeTenantWriteRepository(ctx), new StaticTransitOfficeCatalog());
+            new TransitOfficeTenantWriteRepository(ctx, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
         var result = await handler.HandleAsync(new CreateTransitOfficeCommand
         {
@@ -238,7 +239,7 @@ public sealed class CreateTransitOfficeHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new CreateTransitOfficeHandler(
-                new TransitOfficeTenantWriteRepository(act), new StaticTransitOfficeCatalog());
+                new TransitOfficeTenantWriteRepository(act, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
             var result = await handler.HandleAsync(new CreateTransitOfficeCommand
             {
