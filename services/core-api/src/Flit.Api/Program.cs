@@ -209,6 +209,7 @@ app.MapTramitesStatusHistoryEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
+app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 app.Run();
