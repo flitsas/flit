@@ -36,6 +36,9 @@ public sealed class CreateProcedureInstanceHandler(
         {
             [TramiteModalidadEntradaCodes.MatriculaInicial] = "MATRICULA_NUEVA",
             [TramiteModalidadEntradaCodes.Traspaso] = "TRASPASO_STANDARD",
+            // Traspaso unilateral (HU #10590): comparte family=TRASPASO con el estándar; se resuelve por
+            // su code canónico propio para que la derivación no colapse a traspaso_standard.
+            [TramiteModalidadEntradaCodes.TraspasoUnilateral] = TipologiaResolver.CodeTraspasoUnilateral,
         };
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
@@ -73,9 +76,10 @@ public sealed class CreateProcedureInstanceHandler(
         var now = DateTimeOffset.UtcNow;
         var year = now.Year;
 
-        // Slice 4b: deriva modalidad/tipología desde la familia del tipo elegido para que el
-        // wizard y el gating de documentos apliquen la modalidad correcta en runtime.
-        var (modalidad, tipologia) = TipologiaResolver.FromFamily(procedureType.Family);
+        // Slice 4b + HU #10590: deriva modalidad/tipología desde el CODE y la familia del tipo elegido
+        // para que el wizard y el gating de documentos apliquen la modalidad correcta en runtime. El code
+        // distingue el traspaso unilateral (family=TRASPASO compartida con el estándar) antes de la familia.
+        var (modalidad, tipologia) = TipologiaResolver.FromType(procedureType.Code, procedureType.Family);
 
         var instance = new ProcedureInstance
         {

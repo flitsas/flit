@@ -17,6 +17,7 @@ public static class TramiteTipologiaCatalog
 {
     public const string CodigoMatriculaInicial = "matricula_inicial";
     public const string CodigoTraspasoStandard = "traspaso_standard";
+    public const string CodigoTraspasoUnilateral = "traspaso_unilateral";
 
     private static readonly IReadOnlyList<TramiteTipologia> Tipologias =
     [
@@ -79,6 +80,38 @@ public static class TramiteTipologiaCatalog
                     Obligatorio: false,
                     DocTipo: "cert_tradicion",
                     Ayuda: "Recomendado para verificar prendas/embargos antes de radicar."),
+            ]),
+        new TramiteTipologia(
+            CodigoTraspasoUnilateral,
+            "Traspaso unilateral",
+            "Traspaso de leasing/arrendamiento donde la compañía arrendadora transfiere la propiedad "
+                + "amparada en el contrato, sin comparecencia del locatario (placa-first).",
+            [
+                new ChecklistItem(
+                    "paz_salvo_locatario",
+                    "Paz y salvo del locatario",
+                    Obligatorio: true,
+                    DocTipo: "paz_salvo_locatario",
+                    Ayuda: "Paz y salvo del locatario frente a la compañía de leasing/arrendamiento."),
+                new ChecklistItem(
+                    "doc_locatario",
+                    "Documento del locatario",
+                    Obligatorio: true,
+                    DocTipo: "doc_locatario",
+                    Ayuda: "Si el locatario es NIT, adjunta cámara de comercio y cédula del representante "
+                        + "legal en un solo archivo."),
+                new ChecklistItem(
+                    "contrato_leasing",
+                    "Contrato de leasing",
+                    Obligatorio: true,
+                    DocTipo: "contrato_leasing",
+                    Ayuda: "Contrato de leasing/arrendamiento financiero que ampara la transferencia unilateral."),
+                new ChecklistItem(
+                    "declaracion_arrendadora",
+                    "Declaración de la arrendadora",
+                    Obligatorio: true,
+                    DocTipo: "declaracion_arrendadora",
+                    Ayuda: "Declaración de la compañía arrendadora para el traspaso unilateral."),
             ]),
     ];
 

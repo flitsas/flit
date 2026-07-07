@@ -55,6 +55,54 @@ public sealed class TipologiaMatrizCatalogTests
     [Fact]
     public void DriftIssues_CatalogoSano()
     {
+        // Cubre TODOS los journeys, incluido el traspaso unilateral (HU #10590): sin desincronización
+        // entre el catálogo de checklist, las partes/adquirente y el nº de pasos esperado por modalidad.
         TipologiaMatrizCatalog.DriftIssues().Should().BeEmpty();
+    }
+
+    // ── HU #10590 — Traspaso unilateral ───────────────────────────────────────
+
+    [Fact]
+    public void TraspasoUnilateral_JourneyExisteConModalidadPropia()
+    {
+        var journey = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoUnilateral);
+
+        journey.Should().NotBeNull();
+        journey!.Modalidad.Should().Be(TramiteModalidadEntrada.TraspasoUnilateral);
+        journey.VendedorRequerido.Should().BeFalse(); // no es compraventa directa
+        journey.Pasos.Should().HaveCount(5);
+    }
+
+    [Fact]
+    public void TraspasoUnilateral_PartesArrendadoraYLocatario()
+    {
+        var partes = TipologiaMatrizCatalog.GetPartesRequeridas(TramiteTipologiaCatalog.CodigoTraspasoUnilateral);
+
+        partes.Should().Contain(p => p.Rol == ParteRol.Arrendadora && p.Obligatorio);
+        partes.Should().Contain(p => p.Rol == ParteRol.Locatario && p.Obligatorio);
+        partes.Should().NotContain(p => p.Rol == ParteRol.Vendedor);
+    }
+
+    [Fact]
+    public void TraspasoUnilateral_ChecklistExigeLosCuatroDocumentos()
+    {
+        var tip = TramiteTipologiaCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoUnilateral);
+        tip.Should().NotBeNull();
+
+        var obligatorios = tip!.Checklist.Where(i => i.Obligatorio).Select(i => i.DocTipo).ToList();
+        obligatorios.Should().BeEquivalentTo(new[]
+        {
+            "paz_salvo_locatario", "doc_locatario", "contrato_leasing", "declaracion_arrendadora",
+        });
+    }
+
+    [Fact]
+    public void TraspasoUnilateral_DocLocatarioAyudaMencionaNit()
+    {
+        var tip = TramiteTipologiaCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoUnilateral);
+        var docLocatario = tip!.Checklist.Single(i => i.Id == "doc_locatario");
+
+        docLocatario.Ayuda.Should().Contain("NIT");
+        docLocatario.Ayuda.Should().Contain("un solo archivo");
     }
 }

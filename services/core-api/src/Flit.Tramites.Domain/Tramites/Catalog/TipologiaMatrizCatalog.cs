@@ -25,6 +25,26 @@ public static class TipologiaMatrizCatalog
         Obligatorio: true,
         Ayuda: "Titular saliente que transfiere la propiedad (compraventa directa).");
 
+    /// <summary>
+    /// Traspaso unilateral (HU #10590): compañía arrendadora que TRANSFIERE la propiedad amparada en el
+    /// contrato de leasing. Es la parte que VALIDA IDENTIDAD (vía su representante legal, D3).
+    /// </summary>
+    private static readonly ParteRequerida Arrendadora = new(
+        ParteRol.Arrendadora,
+        "Arrendadora",
+        Obligatorio: true,
+        Ayuda: "Compañía de leasing/arrendamiento que transfiere la propiedad; valida identidad vía su representante legal.");
+
+    /// <summary>
+    /// Traspaso unilateral (HU #10590): locatario que RECIBE el vehículo. Participa de forma DOCUMENTAL
+    /// (paz y salvo + documento del locatario), sin validación biométrica (D3).
+    /// </summary>
+    private static readonly ParteRequerida Locatario = new(
+        ParteRol.Locatario,
+        "Locatario",
+        Obligatorio: true,
+        Ayuda: "Parte que recibe el vehículo; participa por documentos, sin validación biométrica.");
+
     /// <summary>Adquirente por defecto cuando no hay tipología (preserva el flujo "comprador").</summary>
     private static readonly AdquirenteConfig DefaultAdquirente = new(
         ParteRol.Comprador,
@@ -63,6 +83,23 @@ public static class TipologiaMatrizCatalog
                 new PasoTipologia(4, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),
                 new PasoTipologia(5, "Datos comerciales", Aplica: true, Nota: "Valor de venta > 0."),
                 new PasoTipologia(6, "Generar FUR", Aplica: true, Nota: "FUR de traspaso → envío a tránsito."),
+            ]),
+        new TipologiaJourney(
+            Codigo: TramiteTipologiaCatalog.CodigoTraspasoUnilateral,
+            Nombre: "Traspaso unilateral",
+            Modalidad: TramiteModalidadEntrada.TraspasoUnilateral,
+            // Adquirente = locatario (parte entrante que recibe el vehículo). La arrendadora es la parte
+            // saliente que transfiere y valida identidad; no requiere "vendedor" (no es compraventa directa).
+            Adquirente: new AdquirenteConfig(ParteRol.Locatario, "Locatario", "Adquirente / titular entrante (locatario)."),
+            VendedorRequerido: false,
+            Partes: [Arrendadora, Locatario],
+            Pasos:
+            [
+                new PasoTipologia(1, "Consulta del vehículo", Aplica: true, Nota: "Pre-vuelo SOAT/SIMIT/RUNT del vehículo por placa."),
+                new PasoTipologia(2, "Documentos", Aplica: true, Nota: "Paz y salvo + documento del locatario, contrato de leasing y declaración de la arrendadora."),
+                new PasoTipologia(3, "Arrendadora", Aplica: true, Nota: "Parte que transfiere; valida identidad vía su representante legal."),
+                new PasoTipologia(4, "Locatario", Aplica: true, Nota: "Parte que recibe; participa por documentos, sin validación biométrica."),
+                new PasoTipologia(5, "Generar FUR", Aplica: true, Nota: "FUR de traspaso unilateral → envío a tránsito."),
             ]),
     ];
 
@@ -115,7 +152,7 @@ public static class TipologiaMatrizCatalog
             if (!j.Partes.Any(p => p.Rol == j.Adquirente.Rol))
                 issues.Add($"journey '{j.Codigo}' no incluye su adquirente '{j.Adquirente.Rol}' en partes");
 
-            int esperados = j.Modalidad == TramiteModalidadEntrada.Traspaso ? 6 : 5;
+            int esperados = PasosEsperados(j.Modalidad, j.Pasos.Count);
             if (j.Pasos.Count != esperados)
                 issues.Add($"journey '{j.Codigo}' debe tener {esperados} pasos (tiene {j.Pasos.Count})");
         }
@@ -128,4 +165,18 @@ public static class TipologiaMatrizCatalog
 
         return issues;
     }
+
+    /// <summary>
+    /// Nº de pasos que se espera para cada modalidad (reemplaza el literal <c>traspaso→6/resto→5</c>):
+    /// matrícula inicial = 5, traspaso estándar = 6, traspaso unilateral = 5 (sin paso de datos
+    /// comerciales; la transferencia se ampara en el contrato de leasing). Una modalidad futura no
+    /// mapeada cae a su propio conteo (no genera falso drift hasta que se defina su journey esperado).
+    /// </summary>
+    private static int PasosEsperados(TramiteModalidadEntrada modalidad, int pasosActuales) => modalidad switch
+    {
+        TramiteModalidadEntrada.MatriculaInicial => 5,
+        TramiteModalidadEntrada.Traspaso => 6,
+        TramiteModalidadEntrada.TraspasoUnilateral => 5,
+        _ => pasosActuales,
+    };
 }

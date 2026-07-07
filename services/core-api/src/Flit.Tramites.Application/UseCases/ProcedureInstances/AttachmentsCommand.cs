@@ -44,6 +44,8 @@ public static class AttachmentRules
         // Documentos del checklist de traspaso (antes sin DocTipo → el front subía con el `key`,
         // que no estaba en este set → 400 "tipo inválido").
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
+        // Documentos del checklist de traspaso unilateral (HU #10590).
+        "paz_salvo_locatario", "doc_locatario", "contrato_leasing", "declaracion_arrendadora",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
