@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies;
+using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -15,6 +16,8 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Application.Auditing;
+using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Domain.Integration;
@@ -33,6 +36,12 @@ public static class AdminInfrastructureExtensions
     public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // RNF01 (ADR-0024) — auditoría mínima de configuración: acceso a IP/usuario de la
+        // petición (sin acoplar Application a HTTP) + writer de fallos en scope independiente.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
+        services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
@@ -54,6 +63,11 @@ public static class AdminInfrastructureExtensions
         // RF01 — estado operativo del catálogo OT (catálogo LEFT JOIN perfil + tenant),
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
+
+        // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
+        // escritura con auditoría atómica (RF22–RF28).
+        services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
+        services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.Whitelist;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
@@ -25,10 +26,12 @@ internal sealed class WhitelistRepository : IWhitelistRepository
     private const string FieldName = "email";
 
     private readonly FlitDbContext _context;
+    private readonly IAuditContextAccessor _auditContext;
 
-    public WhitelistRepository(FlitDbContext context)
+    public WhitelistRepository(FlitDbContext context, IAuditContextAccessor auditContext)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public async Task<bool> IsEmailWhitelistedAsync(
@@ -106,6 +109,7 @@ internal sealed class WhitelistRepository : IWhitelistRepository
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var clientIp = _auditContext.ClientIp;
 
         var existing = await _context.TenantWhitelistUsers
             .Where(w => w.TenantId == tenantId)
@@ -148,6 +152,10 @@ internal sealed class WhitelistRepository : IWhitelistRepository
                 ChangedAt = now,
                 ChangedBy = addedBy,
                 CorrelationId = correlationId,
+                // RNF01 (ADR-0024): alta de correo en lista blanca = create, exitosa.
+                ClientIp = clientIp,
+                Operation = AuditVocabulary.Operations.Create,
+                Result = AuditVocabulary.Results.Success,
             });
 
             added.Add(email);

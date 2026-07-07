@@ -6,7 +6,8 @@ export type OtHubTabId =
   | "rules"
   | "documents"
   | "requirements"
-  | "usuarios";
+  | "usuarios"
+  | "mandatarios";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -22,6 +23,7 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
+  { id: "mandatarios", label: "Mandatario", segment: "mandatarios" },
 ];
 
 export function otHubModulePath(transitOfficeId: string, tab: OtHubTabId): string {
