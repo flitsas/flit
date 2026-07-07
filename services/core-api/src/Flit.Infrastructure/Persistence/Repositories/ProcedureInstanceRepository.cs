@@ -116,7 +116,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x => x.TenantId == tid);
 
         return await query
-            .OrderByDescending(x => x.CreatedAt)
+            // HU #10536 — los prioritarios se listan con primacía; dentro de cada grupo, por recencia.
+            .OrderByDescending(x => x.Prioritario)
+            .ThenByDescending(x => x.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
     }

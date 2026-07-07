@@ -7,6 +7,7 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  setPriority: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -47,6 +48,7 @@ function makeInstances(n: number): InstanceSummary[] {
       identityValidationStatus: null,
       signaturePending: false,
       canSubmit: false,
+      prioritario: false,
       tenantId: '11111111-1111-1111-1111-111111111111',
       companiaNombre: null,
     } satisfies InstanceSummary;
@@ -217,6 +219,48 @@ describe('TramitesTable — organismo de tránsito', () => {
   });
 });
 
+// ── HU #10536 — trámite prioritario: estrella (toggle) + filtro "Prioritarios" ──
+describe('TramitesTable — HU #10536 prioridad', () => {
+  const [base] = makeInstances(1);
+
+  it('la estrella marca prioritario: llama a setPriority y refleja el estado (optimista)', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'p1', placa: 'PRI001', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'p1', prioritario: true });
+    render(<TramitesTable />);
+
+    const star = await screen.findByRole('button', {
+      name: /Marcar como prioritario el trámite/,
+    });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(star);
+
+    expect(mocks.setPriority).toHaveBeenCalledWith('p1', true, undefined);
+    // Optimista: la fila pasa a ofrecer "Quitar prioridad" sin esperar un refetch.
+    expect(
+      await screen.findByRole('button', { name: /Quitar prioridad al trámite/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('el filtro "Prioritarios" muestra solo los trámites prioritarios', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'a', placa: 'PRIO01', prioritario: true },
+      { ...base, id: 'b', placa: 'NORM01', prioritario: false },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('PRIO01');
+    expect(screen.getByText('NORM01')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Prioritarios' }));
+
+    expect(screen.getByText('PRIO01')).toBeInTheDocument();
+    expect(screen.queryByText('NORM01')).not.toBeInTheDocument();
+  });
+});
+
 // ── #1 — SuperAdmin: columna + filtro Compañía + abrir con ?t= ──────────────
 function superAdminToken(): string {
   const b64 = (o: unknown) =>
@@ -231,7 +275,7 @@ function instance(over: Partial<InstanceSummary>): InstanceSummary {
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
     draftFinalizedAt: null, identityValidationStatus: null,
-    signaturePending: false, canSubmit: false,
+    signaturePending: false, canSubmit: false, prioritario: false,
     tenantId: 't', companiaNombre: null, ...over,
   };
 }

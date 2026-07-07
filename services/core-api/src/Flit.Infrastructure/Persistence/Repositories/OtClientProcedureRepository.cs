@@ -65,7 +65,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
 
                         var items = await query
-                            .OrderByDescending(p => p.CreatedAt)
+                            // HU #10536 — los trámites prioritarios se revisan con primacía en la bandeja del OT.
+                            .OrderByDescending(p => p.Prioritario)
+                            .ThenByDescending(p => p.CreatedAt)
                             .ThenByDescending(p => p.Id)
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
@@ -79,6 +81,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
+                                Prioritario = p.Prioritario,
                             })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
@@ -461,6 +464,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,
+        Prioritario = entity.Prioritario,
     };
 
     private async Task<IReadOnlyList<OtClientProcedure>> EnrichDisplayNamesAsync(

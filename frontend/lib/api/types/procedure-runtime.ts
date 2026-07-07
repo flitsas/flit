@@ -86,6 +86,8 @@ export interface InstanceSummary {
   signaturePending: boolean;
   /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
   canSubmit: boolean;
+  /** HU #10536 — marcado prioritario por el gestor: el OT lo revisa con primacía (ordenamiento). */
+  prioritario: boolean;
   /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
