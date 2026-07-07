@@ -195,6 +195,7 @@ public static class InfrastructureExtensions
             o.VerifikSimitMode = Cfg("Consultations:VerifikSimitMode", "VERIFIK_SIMIT_MODE") ?? "mock";
             o.VerifikRnmcMode = Cfg("Consultations:VerifikRnmcMode", "VERIFIK_RNMC_MODE") ?? "mock";
             o.VerifikConductorMode = Cfg("Consultations:VerifikConductorMode", "VERIFIK_CONDUCTOR_MODE") ?? "mock";
+            o.VerifikRuesMode = Cfg("Consultations:VerifikRuesMode", "VERIFIK_RUES_MODE") ?? "mock";
             o.IntempoMode = Cfg("Consultations:IntempoMode", "INTEMPO_MODE") ?? "mock";
         });
 
@@ -244,6 +245,13 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        services.AddHttpClient<VerifikRuesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<VerifikOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         services.AddHttpClient<IntempoConsultationProvider>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<IntempoOptions>>().Value;
@@ -267,6 +275,7 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikSimitConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikRnmcConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikConductorConsultationProvider>());
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikRuesConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
         services.AddTransient<IConsultationProvider, KyverumRuntVehicleConsultationProvider>();
         services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();

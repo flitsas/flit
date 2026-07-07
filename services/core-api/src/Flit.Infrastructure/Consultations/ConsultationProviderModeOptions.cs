@@ -5,7 +5,7 @@ namespace Flit.Infrastructure.Consultations;
 /// "real" → llama al endpoint HTTP documentado.
 /// "mock" (default) → devuelve JSON canónico con la misma forma del contrato.
 /// Seleccionable por proveedor: VERIFIK_VEHICLE_MODE, VERIFIK_SIMIT_MODE,
-/// VERIFIK_RNMC_MODE, VERIFIK_CONDUCTOR_MODE, INTEMPO_MODE.
+/// VERIFIK_RNMC_MODE, VERIFIK_CONDUCTOR_MODE, VERIFIK_RUES_MODE, INTEMPO_MODE.
 /// </summary>
 public sealed class ConsultationProviderModeOptions
 {
@@ -15,6 +15,7 @@ public sealed class ConsultationProviderModeOptions
     public string VerifikSimitMode { get; set; } = "mock";
     public string VerifikRnmcMode { get; set; } = "mock";
     public string VerifikConductorMode { get; set; } = "mock";
+    public string VerifikRuesMode { get; set; } = "mock";
     public string IntempoMode { get; set; } = "mock";
 
     public static bool IsMock(string mode) =>
