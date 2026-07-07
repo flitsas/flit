@@ -12,9 +12,12 @@ import type {
 // ── OCR de documentos ────────────────────────────────────────────────
 // Tipos que pasan por OCR semántico antes de subir al expediente, por modalidad.
 // Matrícula: factura + aduana + impronta + soat. Traspaso: sólo impronta + soat.
+// HU #10591 — el traspaso unilateral (paz y salvo, doc. locatario, contrato de
+// leasing, declaración de la arrendadora) es documentación jurídica sin OCR: [].
 export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
   matricula_inicial: ['factura', 'aduana', 'impronta', 'soat'],
   traspaso: ['impronta', 'soat'],
+  traspaso_unilateral: [],
 };
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */

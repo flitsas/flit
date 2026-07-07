@@ -79,6 +79,24 @@ type Props = {
   | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined }
 );
 
+/**
+ * Etiqueta de la modalidad para el encabezado del wizard. HU #10591 — al añadir
+ * `traspaso_unilateral`, estos `Record<WizardModalidad, ...>` obligan (TS) a cubrir
+ * las tres modalidades, evitando que caiga al fallback binario "Matrícula inicial".
+ * `TITULO` = título largo (hero); `NOMBRE` = etiqueta corta del subtítulo "· N pasos".
+ */
+const MODALIDAD_TITULO: Record<WizardModalidad, string> = {
+  matricula_inicial: 'Matrícula inicial',
+  traspaso: 'Traspaso estándar',
+  traspaso_unilateral: 'Traspaso unilateral',
+};
+
+const MODALIDAD_NOMBRE: Record<WizardModalidad, string> = {
+  matricula_inicial: 'Matrícula inicial',
+  traspaso: 'Traspaso',
+  traspaso_unilateral: 'Traspaso unilateral',
+};
+
 const STATUS_BADGE: Record<
   WizardStepStatus,
   { bg: string; color: string }
@@ -268,10 +286,7 @@ export function TramiteWizard(props: Props) {
 
   // Header: por modalidad usamos `title`; legacy usa configuration.name; con
   // instancia existente derivamos la etiqueta de la modalidad server-driven.
-  const headerTitle =
-    title ??
-    configuration?.name ??
-    (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
+  const headerTitle = title ?? configuration?.name ?? MODALIDAD_TITULO[modalidad];
 
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
@@ -490,8 +505,7 @@ export function TramiteWizard(props: Props) {
           <h1 className="text-xl font-bold">{headerTitle}</h1>
           {wizard && (
             <p className="text-[11px] opacity-60 mt-0.5">
-              {modalidad === 'traspaso' ? 'Traspaso' : 'Matrícula inicial'} ·{' '}
-              {steps.length} pasos
+              {MODALIDAD_NOMBRE[modalidad]} · {steps.length} pasos
             </p>
           )}
         </div>

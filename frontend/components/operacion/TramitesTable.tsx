@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
+import { ArrowLeftRight, Car, FileSignature, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -98,6 +98,7 @@ function vehiculo(item: InstanceSummary): string {
 const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
   matricula_inicial: 'Matrícula',
   traspaso: 'Traspaso',
+  traspaso_unilateral: 'T. unilateral',
 };
 
 /**
@@ -122,6 +123,16 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
     'Datos comerciales',
     'Generar FUR',
   ],
+  // HU #10591 — journey del unilateral (TipologiaMatrizCatalog, #10590): 5 pasos
+  // placa-first. La arrendadora transfiere (valida identidad); el locatario recibe
+  // (participa por documentos).
+  traspaso_unilateral: [
+    'Consulta del vehículo',
+    'Documentos',
+    'Arrendadora',
+    'Locatario',
+    'Generar FUR',
+  ],
 };
 
 function stepLabel(item: InstanceSummary): string {
@@ -139,6 +150,8 @@ const PAGE_SIZE = 10;
 const NEW_TRAMITE_ACTIONS: { id: WizardModalidad; label: string; icon: typeof Car }[] = [
   { id: 'matricula_inicial', label: 'Matrícula inicial', icon: Car },
   { id: 'traspaso', label: 'Traspaso estándar', icon: ArrowLeftRight },
+  // HU #10591 — arranque del traspaso unilateral (leasing/arrendamiento).
+  { id: 'traspaso_unilateral', label: 'Traspaso unilateral', icon: FileSignature },
 ];
 
 interface TramitesTableProps {

@@ -19,7 +19,14 @@ export default function NuevoTramitePage() {
   const params = useParams<{ modalidad: string }>();
   const modalidad = params.modalidad;
 
-  if (modalidad !== 'matricula_inicial' && modalidad !== 'traspaso') {
+  // HU #10591 — modalidades válidas del wizard (incluye el traspaso unilateral).
+  // TS no fuerza este guard (compara strings); sin `traspaso_unilateral` la ruta
+  // /tramites/nuevo/traspaso_unilateral daría 404.
+  if (
+    modalidad !== 'matricula_inicial' &&
+    modalidad !== 'traspaso' &&
+    modalidad !== 'traspaso_unilateral'
+  ) {
     notFound();
   }
 

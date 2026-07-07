@@ -357,10 +357,19 @@ export interface ChecklistView {
 // Contrato FIJO acordado con backend:
 //   GET /api/v1/tramites/instances/{id}/wizard -> WizardState
 // El backend manda el orden, status y razones de cada paso por modalidad
-// (matrícula 5 pasos VIN-first / traspaso 6 pasos placa-first). La shell
-// pinta lo que el backend decide; no recalcula gates en el cliente.
+// (matrícula 5 pasos VIN-first / traspaso 6 pasos placa-first / traspaso
+// unilateral 5 pasos placa-first). La shell pinta lo que el backend decide;
+// no recalcula gates en el cliente.
 
-export type WizardModalidad = 'matricula_inicial' | 'traspaso';
+// HU #10591 (Feature #10584) — `traspaso_unilateral`: leasing/arrendamiento
+// donde la arrendadora transfiere amparada en el contrato (checklist propio de 4
+// docs + journey de 5 pasos). Añadirla aquí obliga a completar todos los
+// `Record<WizardModalidad, ...>` exhaustivos del FE (MODALIDAD_SHORT, STEP_LABELS,
+// OCR_TIPOS); el backend deriva la tipología, el FE solo pasa el string.
+export type WizardModalidad =
+  | 'matricula_inicial'
+  | 'traspaso'
+  | 'traspaso_unilateral';
 
 export type WizardStepStatus = 'complete' | 'incomplete' | 'locked';
 

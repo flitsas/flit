@@ -28,6 +28,8 @@ const MODALIDAD_CHIPS: { value: '' | WizardModalidad; label: string }[] = [
   { value: '', label: 'Todos' },
   { value: 'matricula_inicial', label: 'Matrícula inicial' },
   { value: 'traspaso', label: 'Traspaso' },
+  // HU #10591 — filtro por la modalidad de traspaso unilateral.
+  { value: 'traspaso_unilateral', label: 'Traspaso unilateral' },
 ];
 
 /** Chip toggle outline/filled reutilizado por ambos filtros. */
