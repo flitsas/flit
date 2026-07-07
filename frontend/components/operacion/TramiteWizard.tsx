@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   Building2,
@@ -966,6 +967,7 @@ function ConsultaStep({
 }) {
   const isVin = step.key === 'consulta_vin';
   const readOnly = useWizardReadOnly();
+  const router = useRouter();
   // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
@@ -1141,6 +1143,21 @@ function ConsultaStep({
     }
   };
 
+  // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
+  // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
+  // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
+  const handleIniciarTraspaso = () => {
+    const byKeyFv = (key: string) =>
+      fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+    const seedVin = (vin || byKeyFv('vin')).trim();
+    const seedPlaca = (plate || byKeyFv('plate')).trim();
+    const params = new URLSearchParams();
+    if (seedVin) params.set('seedVin', seedVin);
+    if (seedPlaca) params.set('seedPlaca', seedPlaca);
+    const qs = params.toString();
+    router.push(`/tramites/nuevo/traspaso${qs ? `?${qs}` : ''}`);
+  };
+
   // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
   // (unificación de estilos pedida). Disparo único de la consulta.
   const consultButton = (
@@ -1292,6 +1309,7 @@ function ConsultaStep({
         onToggleRiesgo={(v) => void handleRiesgo(v)}
         saving={riesgoSaving}
         showRunButton={false}
+        onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
       />
     </div>
   );
