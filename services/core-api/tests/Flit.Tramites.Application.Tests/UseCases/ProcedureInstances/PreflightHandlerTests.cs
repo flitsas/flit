@@ -7,6 +7,7 @@ using FluentAssertions;
 using NSubstitute;
 using Xunit;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -418,5 +419,78 @@ public sealed class PreflightHandlerTests
         error.Should().BeNull();
         result!.Checks.Should().ContainSingle(c => c.Status == "error");
         result.Overall.Should().Be("red");
+    }
+
+    // ── HU #10538 (R3): VIN ya matriculado → check informativo + señal de traspaso ─────────────
+
+    private RunPreflightHandler VehiculoOkHandler() =>
+        HandlerWith(("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+    [Fact]
+    public async Task Post_Matricula_VinYaMatriculado_AgregaCheckInformativoYSenalTraspaso()
+    {
+        // AC1: un VIN con matrícula previa registrada en el mismo tenant → check informativo
+        // (warn) con secretaría + fecha, y señal vin_conflicto_traspaso = true en field_values.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: "XYZ789",
+                    Vin: "1HGCM82633A004352", Secretaria: "Secretaría de Movilidad de Bogotá",
+                    FechaRegistro: new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
+            });
+
+        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        var check = result!.Checks.Should().ContainSingle(c => c.Key == "vin_matricula").Subject;
+        check.Status.Should().Be("warn");
+        check.Message.Should().Contain("Secretaría de Movilidad de Bogotá").And.Contain("2026-01-15");
+        result.Overall.Should().Be("yellow"); // informativo: nunca bloquea en rojo.
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vin_conflicto_traspaso" && f.ValueText == "true" && f.Source == "system");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_UnicaPreviaRechazada_NoMarcaConflicto()
+    {
+        // AC2: si la única matrícula previa del VIN está rechazada, no hay conflicto (se permite
+        // reintentar) → sin check vin_matricula ni señal de traspaso.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Rechazado, Paso: 3, Placa: null,
+                    Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
+        result.Overall.Should().Be("green");
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_SinMatriculaPrevia_NoAgregaCheck()
+    {
+        // AC3: un VIN sin matrículas previas → no se agrega el check de conflicto ni la señal.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>());
+
+        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
+        result.Overall.Should().Be("green");
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
     }
 }

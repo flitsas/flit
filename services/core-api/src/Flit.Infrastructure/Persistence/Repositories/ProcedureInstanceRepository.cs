@@ -3,7 +3,9 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -14,6 +16,61 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
+    // HU #10538 (R3) — invariante "un VIN → una matrícula": busca otras matrículas iniciales del tenant
+    // con el mismo VIN para ofrecer la ruta de traspaso. El VIN se guarda en field_values (no columna),
+    // así que se compara la variante almacenada trim+upper contra el VIN ya normalizado por el caller
+    // (VinNormalizer). La secretaría (nombre del OT) y la fecha del registro previo se resuelven con
+    // subconsultas de proyección — mismo patrón que GetStatusHistoryPageAsync con identity.users.
+    public async Task<IReadOnlyList<VinTramiteExistente>> FindTramitesByVinAsync(
+        Guid tenantId, string vinNormalizado, Guid excludeInstanceId, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(vinNormalizado))
+            return [];
+
+        var rows = await db.ProcedureInstances
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId
+                && i.DeletedAt == null
+                && i.Id != excludeInstanceId
+                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.MatriculaInicial
+                && i.FieldValues.Any(f => f.FieldKey == "vin"
+                    && f.ValueText != null
+                    && f.ValueText.Trim().ToUpper() == vinNormalizado))
+            .Select(i => new
+            {
+                i.Id,
+                i.Status,
+                i.CompletedAt,
+                i.SubmittedAt,
+                i.CreatedAt,
+                Placa = i.FieldValues
+                    .Where(f => f.FieldKey == "plate")
+                    .Select(f => f.ValueText)
+                    .FirstOrDefault(),
+                Secretaria = i.TransitOfficeId == null
+                    ? null
+                    : db.TransitOffices
+                        .Where(o => o.Id == i.TransitOfficeId)
+                        .Select(o => o.Name)
+                        .FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+
+        // Orden por recencia (fecha del registro previo) desc en memoria: el primer bloqueante define el
+        // mensaje en VinPolicyEvaluator. El conjunto es pequeño (matrículas del mismo VIN en un tenant).
+        return rows
+            .OrderByDescending(r => r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt)
+            .Select(r => new VinTramiteExistente(
+                r.Id,
+                r.Status,
+                Paso: 0,
+                Placa: r.Placa,
+                Vin: vinNormalizado,
+                Secretaria: r.Secretaria,
+                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt))
+            .ToList();
+    }
 
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -116,7 +173,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x => x.TenantId == tid);
 
         return await query
-            .OrderByDescending(x => x.CreatedAt)
+            // HU #10536 — los prioritarios se listan con primacía; dentro de cada grupo, por recencia.
+            .OrderByDescending(x => x.Prioritario)
+            .ThenByDescending(x => x.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
     }

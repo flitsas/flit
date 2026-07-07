@@ -8,6 +8,7 @@ import type {
   CreateOtRuleRequest,
   OtApiLogsPagedResult,
   OtApiLogsParams,
+  OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
   OtClientProceduresParams,
@@ -16,6 +17,7 @@ import type {
   OtDocumentTagsListResult,
   OtFeatureFlag,
   OtProfile,
+  OtRequirements,
   OtRule,
   OtRulesListResult,
   OtWebhook,
@@ -24,6 +26,7 @@ import type {
   UpdateOtDocumentPrecedenceRequest,
   UpdateOtFeatureFlagRequest,
   UpdateOtProfileRequest,
+  UpdateOtRequirementsRequest,
   UpdateOtRuleRequest,
   UpdateOtWebhookRequest,
 } from "./types-ot";
@@ -48,6 +51,27 @@ export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile
   return apiFetch<OtProfile>(`${base}/profile`, { method: "PATCH", body });
 }
 
+export function fetchOtRequirements(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtRequirements> {
+  return apiFetch<OtRequirements>(`${base}/requirements`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+export function updateOtRequirements(
+  body: UpdateOtRequirementsRequest,
+  scope?: OtApiScope,
+): Promise<OtRequirements> {
+  return apiFetch<OtRequirements>(`${base}/requirements`, {
+    method: "PUT",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
 export function updateOtFeatureFlag(
   id: string,
   body: UpdateOtFeatureFlagRequest,
@@ -65,6 +89,17 @@ export function fetchOtClientProcedures(
       ...params,
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
     },
+    signal,
+  });
+}
+
+/** Diagnóstico de la bandeja OT (HU #10541 / R09): entregados con/sin grant vigente. */
+export function fetchOtBandejaHealth(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaHealth> {
+  return apiFetch<OtBandejaHealth>(`${base}/client-procedures/health`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }

@@ -86,6 +86,8 @@ export interface InstanceSummary {
   signaturePending: boolean;
   /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
   canSubmit: boolean;
+  /** HU #10536 — marcado prioritario por el gestor: el OT lo revisa con primacía (ordenamiento). */
+  prioritario: boolean;
   /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
@@ -398,6 +400,11 @@ export interface WizardState {
   status: InstanceStatus | string;
   /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
   allowedTransitions: string[];
+  /**
+   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
+   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   */
+  identityValidationEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
