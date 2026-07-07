@@ -8,6 +8,7 @@ using NSubstitute;
 using Xunit;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -101,6 +102,21 @@ public sealed class PreflightHandlerTests
             Email = "x@x.com",
         };
 
+    private static ProcedureInstanceActor ActorNit(string actorType, string doc) =>
+        new()
+        {
+            ActorType = actorType,
+            DocumentType = "NIT",
+            DocumentNumber = doc,
+            FullName = "EMPRESA X",
+            Email = "x@x.com",
+        };
+
+    // Check con la key del mapper RNMC ("medidas_correctivas"); con keyPrefix "rnmc_{rol}" queda
+    // "rnmc_{rol}_medidas_correctivas" en el snapshot.
+    private static ConsultationCheck RnmcCheck(string status) =>
+        new("medidas_correctivas", "Medidas correctivas (Policía)", status, "verifik_rnmc", null);
+
     private RunPreflightHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers) =>
         BuildHandler(null, providers);
 
@@ -109,9 +125,15 @@ public sealed class PreflightHandlerTests
         params (string key, IConsultationProvider provider)[] providers) =>
         BuildHandler(tenantOverride, providers);
 
+    private RunPreflightHandler HandlerWithRnmc(
+        bool rnmcRequired,
+        params (string key, IConsultationProvider provider)[] providers) =>
+        BuildHandler(null, providers, rnmcRequired);
+
     private RunPreflightHandler BuildHandler(
         ConsultationTenantOverride? tenantOverride,
-        (string key, IConsultationProvider provider)[] providers)
+        (string key, IConsultationProvider provider)[] providers,
+        bool rnmcRequired = false)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
         var registry = new StaticRegistry(dict);
@@ -119,7 +141,13 @@ public sealed class PreflightHandlerTests
         IConsultationTenantOverrideProvider overrideProvider = tenantOverride is null
             ? new NullOverrideProvider()
             : new FixedOverrideProvider(tenantOverride);
-        return new RunPreflightHandler(_repo, registry, resolver, overrideProvider);
+        return new RunPreflightHandler(_repo, registry, resolver, overrideProvider, new StubRnmcPolicy(rnmcRequired));
+    }
+
+    private sealed class StubRnmcPolicy(bool required) : IRnmcRequirementPolicy
+    {
+        public Task<bool> IsRnmcRequiredAsync(Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(required);
     }
 
     // ── 404 / 409 ────────────────────────────────────────────────────────────
@@ -318,24 +346,101 @@ public sealed class PreflightHandlerTests
     }
 
     [Fact]
-    public async Task Post_Traspaso_RunsVehiculoSimitBothAndRnmc()
+    public async Task Post_Traspaso_RnmcRequerido_CorreParaCompradorYVendedorPN()
     {
+        // HU #10602: con OT que exige RNMC, se consulta por cada actor persona natural (comprador+vendedor).
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWith(
+        var handler = HandlerWithRnmc(true,
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
 
         var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.Provider.Should().Contain("verifik");
-        result.Provider.Should().Contain("verifik_simit");
-        result.Provider.Should().Contain("verifik_rnmc");
-        // vehiculo + simit comprador + simit vendedor + rnmc = 4 checks.
-        result.Checks.Should().HaveCount(4);
+        result!.Provider.Should().Contain("verifik_rnmc");
+        // vehiculo + simit comprador + simit vendedor + rnmc comprador + rnmc vendedor = 5 checks.
+        result.Checks.Should().HaveCount(5);
+        result.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
+        result.Checks.Should().Contain(c => c.Key == "rnmc_vendedor_medidas_correctivas");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RnmcNoRequerido_NoCorreRnmc()
+    {
+        // OT sin requires_rnmc (default) → no se consulta RNMC ni aparece el check.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWithRnmc(false,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().NotContain("verifik_rnmc");
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("rnmc_"));
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RnmcRequerido_ActorJuridicoNIT_NoConsultaRnmc()
+    {
+        // El actor jurídico (NIT) nunca consulta RNMC; el comprador PN sí.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), ActorNit("vendedor", "900123456")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWithRnmc(true,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
+        result.Checks.Should().NotContain(c => c.Key == "rnmc_vendedor_medidas_correctivas");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_RnmcRequerido_CorreParaComprador()
+    {
+        // R18: RNMC también corre en matrícula (antes solo en traspaso).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWithRnmc(true,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
+    }
+
+    [Fact]
+    public async Task Post_Rnmc_ContextIncludesDocumentIssueDate()
+    {
+        // El contexto RNMC lleva document_issue_date (por rol o genérico) para el modo real.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "comprador_document_issue_date", ValueText = "01/02/2010", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var rnmc = new CapturingProvider("verifik_rnmc", Result("green", RnmcCheck("ok")));
+        var handler = HandlerWithRnmc(true,
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_rnmc", rnmc));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        rnmc.LastContext.Should().NotBeNull();
+        rnmc.LastContext!.FieldValues.Should().Contain("owner_document_number", "111");
+        rnmc.LastContext.FieldValues.Should().Contain("document_issue_date", "01/02/2010");
     }
 
     [Fact]
