@@ -30,9 +30,11 @@ public sealed record PermissionSlug(Guid Id, string Slug, string Name);
 
 public sealed record RoleSummary(
     Guid Id,
+    string TargetEntityType,
     string Code,
     string Name,
     string? Description,
     bool IsSystem,
+    bool IsActive,
     int PermissionCount,
     DateTimeOffset CreatedAt);

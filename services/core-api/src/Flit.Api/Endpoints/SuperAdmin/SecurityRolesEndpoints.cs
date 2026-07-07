@@ -21,6 +21,24 @@ internal static class SecurityRolesEndpoints
             return Results.Ok(items);
         }).WithName("ListRoles");
 
+        // Detalle de un rol puntual (permisos + is_active exactos) — complementa el listado
+        // resumido, que ya no basta para saber con certeza el estado tras un refresh de UI.
+        group.MapGet("/roles/{id:guid}", async (
+            Guid id,
+            GetRoleHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var detail = await handler.HandleAsync(id, ct);
+                return Results.Ok(detail);
+            }
+            catch (RoleNotFoundException)
+            {
+                return Results.NotFound();
+            }
+        }).WithName("GetRole");
+
         // AC1 — POST /roles → 201 con id del nuevo rol
         group.MapPost("/roles", async (
             CreateRoleRequest request,
