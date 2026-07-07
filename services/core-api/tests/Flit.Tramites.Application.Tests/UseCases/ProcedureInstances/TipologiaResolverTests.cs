@@ -50,4 +50,38 @@ public sealed class TipologiaResolverTests
         TipologiaResolver.ResolveCodigo(null, "modalidad_desconocida")
             .Should().BeNull();
     }
+
+    // ── HU #10590 — Traspaso unilateral ───────────────────────────────────────
+
+    [Theory]
+    // El code canónico del unilateral distingue por CODE (family=TRASPASO compartida con el estándar).
+    [InlineData("TRASPASO_UNILATERAL", ProcedureFamily.Traspaso, "traspaso_unilateral", "traspaso_unilateral")]
+    [InlineData("traspaso_unilateral", ProcedureFamily.Traspaso, "traspaso_unilateral", "traspaso_unilateral")] // case-insensitive
+    // Sin el code unilateral, cae al mapeo por familia (comportamiento previo intacto).
+    [InlineData("TRASPASO_STANDARD", ProcedureFamily.Traspaso, "traspaso", "traspaso_standard")]
+    [InlineData(null, ProcedureFamily.Traspaso, "traspaso", "traspaso_standard")]
+    [InlineData("MATRICULA_NUEVA", ProcedureFamily.Matriculas, "matricula_inicial", "matricula_inicial")]
+    [InlineData("X", "anything-else", "matricula_inicial", "matricula_inicial")]
+    public void FromType_DistinguishesUnilateralByCodeBeforeFamily(
+        string? code, string? family, string expectedModalidad, string expectedTipologia)
+    {
+        var (modalidad, tipologia) = TipologiaResolver.FromType(code, family);
+
+        modalidad.Should().Be(expectedModalidad);
+        tipologia.Should().Be(expectedTipologia);
+    }
+
+    [Theory]
+    // tipologia_codigo persistido válido tiene prioridad.
+    [InlineData("traspaso_unilateral", "traspaso_unilateral", "traspaso_unilateral")]
+    // tipologia_codigo null → derivado de la modalidad unilateral.
+    [InlineData(null, "traspaso_unilateral", "traspaso_unilateral")]
+    [InlineData("", "traspaso_unilateral", "traspaso_unilateral")]
+    // tipologia_codigo inválido → cae al de la modalidad.
+    [InlineData("no_existe", "traspaso_unilateral", "traspaso_unilateral")]
+    public void ResolveCodigo_ResolvesTraspasoUnilateral(
+        string? tipologiaCodigo, string? modalidad, string expected)
+    {
+        TipologiaResolver.ResolveCodigo(tipologiaCodigo, modalidad).Should().Be(expected);
+    }
 }

@@ -25,6 +25,30 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public static class TipologiaResolver
 {
     /// <summary>
+    /// Code canónico del <c>procedure_type</c> del traspaso unilateral (HU #10590). Comparte
+    /// <c>family=TRASPASO</c> con el estándar, así que la derivación al crear NO puede distinguirlo por
+    /// familia: se distingue por este code (ver <see cref="FromType"/>).
+    /// </summary>
+    public const string CodeTraspasoUnilateral = "TRASPASO_UNILATERAL";
+
+    /// <summary>
+    /// Deriva <c>(modalidad_entrada, tipologia_codigo)</c> desde el <b>code y la familia</b> del
+    /// procedure_type. El traspaso unilateral se distingue por su code canónico
+    /// (<see cref="CodeTraspasoUnilateral"/>) ANTES de caer al mapeo por familia, porque comparte
+    /// <c>family=TRASPASO</c> con el estándar (colapsaría a <c>traspaso_standard</c> con solo la familia).
+    /// El resto delega en <see cref="FromFamily"/>.
+    /// </summary>
+    public static (string ModalidadEntrada, string TipologiaCodigo) FromType(string? code, string? family)
+    {
+        if (string.Equals(code, CodeTraspasoUnilateral, StringComparison.OrdinalIgnoreCase))
+        {
+            return (TramiteModalidadEntradaCodes.TraspasoUnilateral, TramiteTipologiaCatalog.CodigoTraspasoUnilateral);
+        }
+
+        return FromFamily(family);
+    }
+
+    /// <summary>
     /// Deriva <c>(modalidad_entrada, tipologia_codigo)</c> desde la familia del procedure_type.
     /// Case-insensitive sobre <see cref="ProcedureFamily"/>.
     /// </summary>
@@ -56,6 +80,7 @@ public static class TipologiaResolver
         return modalidad switch
         {
             TramiteModalidadEntrada.Traspaso => TramiteTipologiaCatalog.CodigoTraspasoStandard,
+            TramiteModalidadEntrada.TraspasoUnilateral => TramiteTipologiaCatalog.CodigoTraspasoUnilateral,
             TramiteModalidadEntrada.MatriculaInicial => TramiteTipologiaCatalog.CodigoMatriculaInicial,
             // Modalidad no canónica: último intento por si el código persistido coincide con el catálogo.
             _ => TramiteTipologiaCatalog.IsValid(modalidadEntrada) ? modalidadEntrada : null,

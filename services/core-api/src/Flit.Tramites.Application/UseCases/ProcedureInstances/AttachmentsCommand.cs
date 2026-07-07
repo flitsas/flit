@@ -48,6 +48,8 @@ public static class AttachmentRules
         "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
         // HU #10604 (R19) — paz y salvo RNMC que desbloquea el envío al OT tras "Imponer Medida".
         "paz_salvo_rnmc",
+        // Documentos del checklist de traspaso unilateral (HU #10590).
+        "paz_salvo_locatario", "doc_locatario", "contrato_leasing", "declaracion_arrendadora",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

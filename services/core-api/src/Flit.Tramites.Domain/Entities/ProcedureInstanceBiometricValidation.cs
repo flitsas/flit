@@ -193,6 +193,18 @@ public static class BiometricRules
     public const string ParteVendedor = "vendedor";
 
     /// <summary>
+    /// Traspaso unilateral (HU #10590): parte que TRANSFIERE y valida identidad (compañía arrendadora,
+    /// vía su representante legal). El gate de identidad del unilateral se implementa en HU #10592.
+    /// </summary>
+    public const string ParteArrendadora = "arrendadora";
+
+    /// <summary>
+    /// Traspaso unilateral (HU #10590): parte que RECIBE el vehículo (locatario). Documental — NO valida
+    /// identidad biométrica.
+    /// </summary>
+    public const string ParteLocatario = "locatario";
+
+    /// <summary>
     /// Vigencia (días CALENDARIO) de una validación de identidad APROBADA, contada desde la fecha de
     /// aprobación (<c>ValidadoAt</c>). El día de aprobación es el día 1; vence en el día 31, es decir,
     /// el día <c>ValidadoAt + 30 días</c> ya NO es vigente. Pasada la vigencia hay que revalidar

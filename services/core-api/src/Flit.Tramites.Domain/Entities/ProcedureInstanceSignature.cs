@@ -65,4 +65,10 @@ public static class SignatureRules
 {
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
+
+    /// <summary>Traspaso unilateral (HU #10590): parte arrendadora (transfiere). Firma se define en HU #10592.</summary>
+    public const string ParteArrendadora = "arrendadora";
+
+    /// <summary>Traspaso unilateral (HU #10590): parte locatario (recibe). Documental, sin firma requerida.</summary>
+    public const string ParteLocatario = "locatario";
 }
