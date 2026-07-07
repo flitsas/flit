@@ -17,7 +17,8 @@ internal sealed class UserTempSuspensionConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.UserId).IsRequired();
         builder.Property(x => x.StartsAt).IsRequired();
-        builder.Property(x => x.EndsAt).IsRequired();
+        // HU #10619 AC1: nullable = desactivación indefinida (sin fecha de fin, hasta reactivación manual).
+        builder.Property(x => x.EndsAt).IsRequired(false);
         builder.Property(x => x.Reason).HasMaxLength(500).IsRequired();
 
         builder.Property(x => x.CreatedAt).IsRequired();
