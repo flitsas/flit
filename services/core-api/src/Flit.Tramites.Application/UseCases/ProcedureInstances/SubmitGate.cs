@@ -17,6 +17,13 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// documentos obligatorios completos, ambas biométricas aprobadas+vigentes, firma de compraventa de
 /// comprador y vendedor, FUR generado y organismo de tránsito seleccionado.</para>
 ///
+/// <para><b>Traspaso unilateral</b> (HU #10592, R12) exige: documentos obligatorios completos, identidad
+/// aprobada+vigente SOLO de la arrendadora (parte que transfiere, vía su representante legal — D3), FUR
+/// generado y organismo seleccionado. NO exige firma de compraventa (no es compraventa directa) ni
+/// impronta salvo que la tipología la incluya en su checklist. El locatario participa de forma DOCUMENTAL
+/// (paz y salvo + documento del locatario), NO por validación biométrica: por eso NO entra al gate de
+/// identidad.</para>
+///
 /// Devuelve la lista de códigos de error (vacía = puede prepararse). Códigos (contrato
 /// <see cref="TramiteEstadoErrores"/>): <c>documentos_incompletos</c>, <c>identidad_no_aprobada</c>,
 /// más los propios del traspaso: <c>firma_compraventa_requerida</c>, <c>fur_requerido</c>,
@@ -43,9 +50,12 @@ public static class SubmitGate
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
-        return modalidad == TramiteModalidadEntrada.Traspaso
-            ? EvaluateTraspaso(instance, identidadAprobadaPartes)
-            : EvaluateMatricula(instance, identidadAprobadaPartes);
+        return modalidad switch
+        {
+            TramiteModalidadEntrada.Traspaso => EvaluateTraspaso(instance, identidadAprobadaPartes),
+            TramiteModalidadEntrada.TraspasoUnilateral => EvaluateTraspasoUnilateral(instance, identidadAprobadaPartes),
+            _ => EvaluateMatricula(instance, identidadAprobadaPartes),
+        };
     }
 
     private static List<string> EvaluateMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
@@ -84,6 +94,35 @@ public static class SubmitGate
             errors.Add(FurRequerido);
         if (!OrganismoSeleccionado(instance))
             errors.Add(OrganismoRequerido);
+        if (!ImprontaGenerada(instance))
+            errors.Add(ImprontaRequerida);
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Gate de traspaso unilateral (HU #10592, R12): documentos obligatorios completos + identidad
+    /// aprobada-vigente de la ARRENDADORA (única parte que valida identidad, D3) + FUR generado + organismo
+    /// seleccionado. NO exige firma de compraventa (el unilateral no es compraventa directa) ni impronta,
+    /// salvo que la tipología la incluya en su checklist (<see cref="ImprontaGenerada"/> se autoexime cuando
+    /// la tipología no la lista). El LOCATARIO es documental: NO se comprueba su identidad. Devuelve todos
+    /// los códigos incumplidos; lista vacía = puede prepararse/radicar.
+    /// </summary>
+    private static List<string> EvaluateTraspasoUnilateral(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    {
+        var errors = new List<string>(4);
+
+        if (!DocumentosObligatoriosCompletos(instance))
+            errors.Add(DocumentosIncompletos);
+        // Identidad PER-PERSONA de la ARRENDADORA (rep. legal). El locatario NO valida identidad (documental).
+        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteArrendadora))
+            errors.Add(IdentidadNoAprobada);
+        if (!FurGenerado(instance))
+            errors.Add(FurRequerido);
+        if (!OrganismoSeleccionado(instance))
+            errors.Add(OrganismoRequerido);
+        // Sin firma de compraventa. Impronta solo si el checklist de la tipología unilateral la incluye
+        // (hoy no la incluye → ImprontaGenerada devuelve true y no bloquea).
         if (!ImprontaGenerada(instance))
             errors.Add(ImprontaRequerida);
 

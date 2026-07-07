@@ -1,10 +1,14 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
-/// Resuelve qué partes (comprador/vendedor) de un trámite tienen la identidad APROBADA Y VIGENTE. Es
+/// Resuelve qué partes de un trámite tienen la identidad APROBADA Y VIGENTE. Las partes que llevan
+/// validación de identidad dependen de la MODALIDAD del trámite (ver <see cref="PartesParaModalidad"/>):
+/// matrícula → <c>[comprador]</c>; traspaso → <c>[comprador, vendedor]</c>; traspaso unilateral →
+/// <c>[arrendadora]</c> (el locatario es documental, HU #10592). Es
 /// HÍBRIDO: cuenta la validación PROPIA del trámite (fila local, como antes) O —si no la hay— la identidad
 /// vigente de la PERSONA (documento del actor) en otro trámite del tenant, referenciándola SIN clonar
 /// (HU #10350 rediseño: una persona valida una sola vez y sirve para N trámites hasta que venza). Fuente de
@@ -12,8 +16,24 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 internal static class IdentityApprovalResolver
 {
-    /// <summary>Partes que llevan validación de identidad (matrícula usa solo comprador).</summary>
-    private static readonly string[] Partes = ["comprador", "vendedor"];
+    /// <summary>
+    /// Partes que llevan validación de identidad según la MODALIDAD de entrada del trámite:
+    /// <list type="bullet">
+    /// <item><c>matricula_inicial</c> → <c>[comprador]</c> (adquirente único).</item>
+    /// <item><c>traspaso</c> → <c>[comprador, vendedor]</c> (ambas partes validan).</item>
+    /// <item><c>traspaso_unilateral</c> → <c>[arrendadora]</c> (solo la parte que transfiere, vía rep.
+    /// legal; el locatario es documental — HU #10592, D3).</item>
+    /// </list>
+    /// Cualquier modalidad no reconocida cae al default de matrícula (<c>[comprador]</c>), consistente con
+    /// <see cref="SubmitGate.Evaluate"/>.
+    /// </summary>
+    private static IReadOnlyList<string> PartesParaModalidad(string? modalidadEntrada) =>
+        TramiteModalidadEntradaCodes.FromCode(modalidadEntrada) switch
+        {
+            TramiteModalidadEntrada.Traspaso => [BiometricRules.ParteComprador, BiometricRules.ParteVendedor],
+            TramiteModalidadEntrada.TraspasoUnilateral => [BiometricRules.ParteArrendadora],
+            _ => [BiometricRules.ParteComprador],
+        };
 
     /// <summary>
     /// Partes con identidad vigente aprobada, resueltas por CONSULTA directa (una instancia). Fila propia →
@@ -24,7 +44,7 @@ internal static class IdentityApprovalResolver
         IProcedureInstanceRepository repo, ProcedureInstance instance, DateTimeOffset now, CancellationToken ct)
     {
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parte in Partes)
+        foreach (var parte in PartesParaModalidad(instance.ModalidadEntrada))
         {
             var (tipoDoc, documento) = ActorDoc(instance, parte);
 
@@ -59,7 +79,7 @@ internal static class IdentityApprovalResolver
         ProcedureInstance instance, IReadOnlySet<string> approvedKeys, DateTimeOffset now)
     {
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parte in Partes)
+        foreach (var parte in PartesParaModalidad(instance.ModalidadEntrada))
         {
             var (tipoDoc, documento) = ActorDoc(instance, parte);
 
