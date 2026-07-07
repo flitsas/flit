@@ -168,7 +168,11 @@ export function Usuarios() {
                 const badge = STATUS_BADGE[u.status];
                 return (
                   <div
-                    key={u.id}
+                    // GET /api/v1/security/users hace JOIN vía UserRoleAssignments: un usuario
+                    // con N roles activos produce N filas con el mismo u.id (una por asignación
+                    // de rol). u.id solo no es único — se compone con u.roleId para evitar el
+                    // warning de React "two children with the same key".
+                    key={`${u.id}-${u.roleId ?? "sin-rol"}`}
                     className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
                       gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",

@@ -78,4 +78,25 @@ public sealed class CreateRoleHandlerTests
             Arg.Is<CreateRoleData>(d => d.TargetEntityType == otherTargetEntityType && d.Code == Code),
             Arg.Any<CancellationToken>());
     }
+
+    // Fix post-review #10504 — TargetEntityType fuera de {COMPANY, TRANSIT_OFFICE} debe rechazarse
+    // con una excepción de dominio (400 limpio en el endpoint) en vez de dejar que el CHECK
+    // constraint de Postgres burbujee como 500. No debe ni siquiera consultar CodeExistsAsync.
+    [Theory]
+    [InlineData("INVALID")]
+    [InlineData("company")]
+    [InlineData("")]
+    public async Task HandleAsync_InvalidTargetEntityType_ThrowsInvalidTargetEntityType(string invalidTargetEntityType)
+    {
+        await _handler
+            .Invoking(h => h.HandleAsync(
+                new CreateRoleCommand(invalidTargetEntityType, Code, Name, null),
+                CancellationToken.None))
+            .Should().ThrowAsync<InvalidTargetEntityTypeException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CodeExistsAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(
+            Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>());
+    }
 }

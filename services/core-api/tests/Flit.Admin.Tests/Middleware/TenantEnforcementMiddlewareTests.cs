@@ -99,6 +99,28 @@ public sealed class TenantEnforcementMiddlewareTests
         ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().BeNull();
     }
 
+    // Fix post-review #10504 — multi-rol (HU #10506): el JWT emite un claim POR CADA rol
+    // activo, en orden no determinístico. FindFirstValue (usado antes del fix) solo evalúa el
+    // PRIMERO, así que un SuperAdmin con otro rol emitido antes perdía el bypass multi-tenant.
+    [Fact]
+    public async Task SuperAdmin_MultiRoleNotFirstClaim_SigueSiendoReconocido()
+    {
+        var claims = new List<Claim>
+        {
+            new("role", "Radicador"),
+            new("role", "SuperAdmin"),
+        };
+        var user = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "test"));
+
+        var ctx = Context("/api/v1/tramites/instances", user);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(true,
+            "deben evaluarse TODOS los claims 'role', no solo el primero");
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().BeNull();
+    }
+
     [Fact]
     public async Task SuperAdmin_ConHeader_AcotaAEsaCompania()
     {

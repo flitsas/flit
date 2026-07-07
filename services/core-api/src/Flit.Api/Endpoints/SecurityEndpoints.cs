@@ -39,8 +39,11 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(subClaim, out var invitedBy))
                 return Results.Unauthorized();
 
-            var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
             Guid targetTenantId;
             IReadOnlyList<Guid> roleIds;
@@ -140,8 +143,11 @@ public static class SecurityEndpoints
             ListAccessibleModulesHandler handler,
             CancellationToken ct) =>
         {
-            var roleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = roleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
             Guid? tenantId = Guid.TryParse(caller.FindFirstValue("tenant_id"), out var tid) ? tid : null;
 
@@ -168,7 +174,13 @@ public static class SecurityEndpoints
                 .AnyAsync(p => p.TenantId == tenantId, cancellationToken);
             var targetEntityType = isOtTenant ? "TRANSIT_OFFICE" : "COMPANY";
 
-            var roles = await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken);
+            // Fix 1 (post-review #10504): este endpoint es tenant-facing (checklist de invitación
+            // de AdminCompany/OtAdmin) y NO debe listar roles inactivos ni el rol de sistema
+            // SuperAdmin. NO tocar ListByTargetEntityTypeAsync ni ListRolesHandler — ese mismo
+            // método lo usa la pantalla RBAC de SuperAdmin, que sí necesita ver TODOS los roles.
+            var roles = (await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken))
+                .Where(r => r.IsActive && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             return Results.Ok(roles);
         });
 
@@ -246,7 +258,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        });
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // HU #10506 AC3 — DELETE /users/{userId}/roles/{roleId} — quita un rol puntual sin
         // afectar los demás roles activos del usuario (modelo aditivo).
@@ -277,7 +289,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("ROLE_ASSIGNMENT_NOT_FOUND", "El usuario no tiene ese rol asignado activamente."),
                     statusCode: StatusCodes.Status404NotFound);
             }
-        });
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // GET /users — lista usuarios activos + invitaciones pendientes
         // SuperAdmin ve todos los usuarios de todas las compañías (excluye su propio tenant interno)
@@ -290,8 +302,11 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(tenantClaim, out var callerTenantId))
                 return Results.Unauthorized();
 
-            var callerRoleCode = caller.FindFirstValue(AdminAuthorization.RoleClaimType) ?? string.Empty;
-            var isSuperAdmin = callerRoleCode == AdminAuthorization.SuperAdminRole;
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             var now = DateTimeOffset.UtcNow;
 
             if (isSuperAdmin)
