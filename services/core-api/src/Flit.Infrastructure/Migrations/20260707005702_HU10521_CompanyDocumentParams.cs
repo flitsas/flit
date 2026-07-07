@@ -1,4 +1,4 @@
-﻿using Flit.Infrastructure.Persistence.Sql;
+using Flit.Infrastructure.Persistence.Sql;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
