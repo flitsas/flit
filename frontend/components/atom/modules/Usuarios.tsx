@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide-react";
+import Link from "next/link";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
@@ -68,8 +69,16 @@ export function Usuarios() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUsers();
-    loadRoles();
-  }, []);
+    // AC4 (HU #10509): GET /api/v1/security/roles resuelve el tipo de entidad por el tenant
+    // del caller — para el SuperAdmin (tenant interno) no aporta información útil, y el CRUD
+    // de roles ya vive exclusivamente en RbacAdmin (HU #10508). Se evita la llamada y se
+    // muestra en su lugar un atajo al módulo RBAC (ver tab "roles" más abajo).
+    if (!isSuperAdmin) {
+      loadRoles();
+    } else {
+      setRolesLoading(false);
+    }
+  }, [isSuperAdmin]);
 
   function handleInviteSuccess() {
     loadUsers();
@@ -225,8 +234,37 @@ export function Usuarios() {
         </>
       )}
 
-      {tab === "roles" && (
+      {tab === "roles" && isSuperAdmin && (
+        // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);
+        // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
+        <div className="flex flex-col items-center gap-3 py-14 text-center">
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(85,126,255,0.10)" }}>
+            <Shield className="h-5 w-5" style={{ color: "#557EFF" }} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">La gestión de roles del sistema vive en el módulo RBAC</p>
+            <p className="text-xs opacity-60 mt-0.5">
+              Crea, edita, activa/desactiva o elimina roles de Compañía y de Organismo de Tránsito.
+            </p>
+          </div>
+          <Link
+            href="/?m=rbac"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            Ir a Roles y permisos (RBAC)
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      )}
+
+      {tab === "roles" && !isSuperAdmin && (
         <div className="flex flex-col gap-3">
+          {/* AC4 (HU #10509) — modo SOLO LECTURA para AdminCompany/OtAdmin: sin botones de
+              crear/editar/eliminar/desactivar. La gobernanza de roles es exclusiva de SuperAdmin. */}
+          <p className="text-xs opacity-60">
+            Roles disponibles para tu empresa. Solo el Super Admin puede crear, editar o desactivar roles.
+          </p>
           {rolesLoading ? (
             <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
           ) : roles.length === 0 ? (
