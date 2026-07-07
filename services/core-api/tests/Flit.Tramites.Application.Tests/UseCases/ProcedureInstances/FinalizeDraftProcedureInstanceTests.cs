@@ -31,6 +31,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             _repo,
             typeRepo,
             grantGate,
+            NullOtOperabilityGate.Instance,
             NullOtRuleGate.Instance,
             new NullTramiteTransitionRecorder(),
             new NullTramiteTransitionPublisher());
