@@ -311,7 +311,7 @@ function DocumentosTask({
                 {uploadingTipo === d.tipo ? 'Subiendo…' : d.subido ? 'Reemplazar' : 'Subir'}
                 <input
                   type="file"
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  accept="application/pdf,.pdf"
                   className="hidden"
                   aria-label={`Subir ${d.label}`}
                   onChange={(e) => {

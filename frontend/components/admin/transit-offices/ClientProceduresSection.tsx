@@ -340,7 +340,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               Licencia de Tránsito (LT) — opcional
               <input
                 type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
+                accept="application/pdf,.pdf"
                 aria-label="Licencia de Tránsito (LT)"
                 className={`mt-1 ${OT_INPUT_CLS}`}
                 onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
@@ -432,7 +432,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <p className="mt-2 text-sm opacity-80">{ltTarget.referenceNumber}</p>
             <input
               type="file"
-              accept="application/pdf,image/jpeg,image/png,image/webp"
+              accept="application/pdf,.pdf"
               aria-label="Archivo de la Licencia de Tránsito"
               className={`mt-4 ${OT_INPUT_CLS}`}
               onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}

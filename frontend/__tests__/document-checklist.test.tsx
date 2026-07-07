@@ -63,6 +63,13 @@ function pngFile(name = 'doc.png', size = 1000): File {
   return file;
 }
 
+// C8 (ADR-0026): el único tipo válido es PDF; las imágenes ahora se rechazan.
+function pdfFile(name = 'doc.pdf', size = 1000): File {
+  const file = new File(['x'], name, { type: 'application/pdf' });
+  Object.defineProperty(file, 'size', { value: size });
+  return file;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getChecklist.mockResolvedValue(CHECKLIST);
@@ -137,7 +144,7 @@ describe('DocumentChecklist — upload', () => {
 
     await screen.findByText('Cédula del comprador');
     const input = screen.getByLabelText('Subir Cédula del comprador');
-    await user.upload(input, pngFile());
+    await user.upload(input, pdfFile());
 
     await waitFor(() =>
       expect(mocks.uploadAttachment).toHaveBeenCalledTimes(1),
@@ -158,26 +165,23 @@ describe('DocumentChecklist — upload', () => {
 
     await screen.findByText('Cédula del comprador');
     const input = screen.getByLabelText('Subir Cédula del comprador');
-    await user.upload(input, pngFile('big.png', MAX_SIZE_BYTES + 1));
+    await user.upload(input, pdfFile('big.pdf', MAX_SIZE_BYTES + 1));
 
     expect(mocks.uploadAttachment).not.toHaveBeenCalled();
     expect(await screen.findByText(/supera el máximo de 20 MB/)).toBeInTheDocument();
   });
 
-  it('rechaza por mime no permitido sin llamar al cliente', async () => {
+  it('rechaza una imagen (C8: solo PDF) sin llamar al cliente', async () => {
     render(<DocumentChecklist instanceId={INSTANCE} />);
 
     await screen.findByText('Cédula del comprador');
     const input = screen.getByLabelText(
       'Subir Cédula del comprador',
     ) as HTMLInputElement;
-    const exe = new File(['x'], 'virus.exe', {
-      type: 'application/octet-stream',
-    });
     // fireEvent en vez de userEvent.upload: este último respeta el atributo
     // `accept` del input y descarta el archivo antes del onChange, lo que
     // impediría ejercitar la guarda client-side del componente.
-    fireEvent.change(input, { target: { files: [exe] } });
+    fireEvent.change(input, { target: { files: [pngFile('cedula.png')] } });
 
     expect(mocks.uploadAttachment).not.toHaveBeenCalled();
     expect(
@@ -187,8 +191,12 @@ describe('DocumentChecklist — upload', () => {
 });
 
 describe('validateFile — unidad', () => {
-  it('acepta un png dentro del límite', () => {
-    expect(validateFile(pngFile('ok.png', 1000))).toBeNull();
+  it('acepta un pdf dentro del límite', () => {
+    expect(validateFile(pdfFile('ok.pdf', 1000))).toBeNull();
+  });
+
+  it('rechaza una imagen (C8: solo PDF)', () => {
+    expect(validateFile(pngFile('foto.png', 1000))).toMatch(/no permitido/);
   });
 
   it('rechaza tipo no permitido', () => {
@@ -197,7 +205,7 @@ describe('validateFile — unidad', () => {
   });
 
   it('rechaza tamaño excesivo', () => {
-    expect(validateFile(pngFile('big.png', MAX_SIZE_BYTES + 1))).toMatch(
+    expect(validateFile(pdfFile('big.pdf', MAX_SIZE_BYTES + 1))).toMatch(
       /20 MB/,
     );
   });

@@ -154,6 +154,23 @@ public sealed class LicenciaTransitoHandlerTests
         result.Should().BeNull();
     }
 
+    // C8 (ADR-0026): la Licencia de Tránsito también acepta SOLO PDF; una imagen se rechaza.
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/png")]
+    [InlineData("image/webp")]
+    public async Task AdjuntarLt_Imagen_Rechaza(string imageMime)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var input = new UploadAttachmentInput(
+            AdjuntarLicenciaTransitoHandler.Tipo, "lt.jpg", imageMime, 10, new MemoryStream([1, 2]));
+
+        var (result, error) = await _adjuntar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), input, null, ct);
+
+        error.Should().Be("invalid_mime");
+        result.Should().BeNull();
+    }
+
     [Fact]
     public async Task AdjuntarLt_UsuarioInexistente_RegistraUploadedByNull()
     {

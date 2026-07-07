@@ -266,6 +266,22 @@ public sealed class PortalHandlerTests
         error.Should().Be("invalid_tipo");
     }
 
+    // C8 (ADR-0026): el portal público también acepta SOLO PDF; una imagen se rechaza.
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/png")]
+    [InlineData("image/webp")]
+    public async Task Upload_Imagen_Rejected(string imageMime)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, token) = Seed(consent: true);
+
+        var (_, error) = await _upload.HandleAsync(
+            token, new SubirDocumentoPortalInput("soat", "s.jpg", imageMime, 4, Doc()), ct);
+
+        error.Should().Be("invalid_mime");
+    }
+
     // ── Finalizar (uso único) ──────────────────────────────────────────────────
 
     [Fact]

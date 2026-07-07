@@ -975,7 +975,7 @@ public static class AdminOtEndpoints
         return error switch
         {
             "missing_file" => Results.BadRequest(new { error = "missing_file", message = "Falta el archivo (file)." }),
-            "invalid_mime" => Results.BadRequest(new { error = "invalid_mime", message = "Tipo MIME no permitido (use pdf/jpeg/png/webp)." }),
+            "invalid_mime" => Results.BadRequest(new { error = "invalid_mime", message = "Solo se admite PDF." }),
             "file_too_large" => Results.BadRequest(new { error = "file_too_large", message = "El archivo excede el máximo de 20 MB." }),
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),

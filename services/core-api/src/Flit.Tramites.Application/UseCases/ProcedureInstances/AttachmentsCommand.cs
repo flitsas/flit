@@ -50,9 +50,14 @@ public static class AttachmentRules
         "paz_salvo_rnmc",
     };
 
+    // C8 (ADR-0026): el cargue de documentos de trámite acepta SOLO PDF. Antes toleraba
+    // imágenes (jpeg/png/webp); el negocio exige PDF. Fuente de verdad server-side —
+    // consumida por la subida multipart, el presigned, el portal y la licencia de tránsito.
+    // (No confundir con IsMergeableMime del consolidado, que sigue tolerando imágenes
+    // históricas al fusionar expedientes ya cargados).
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "application/pdf", "image/jpeg", "image/png", "image/webp",
+        "application/pdf",
     };
 
     /// <summary>

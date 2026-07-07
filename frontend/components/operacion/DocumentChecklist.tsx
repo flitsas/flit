@@ -29,18 +29,17 @@ interface Props {
   modalidad?: WizardModalidad;
 }
 
-/** MIME permitidos por el contrato. */
-export const ALLOWED_MIME = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-] as const;
+/**
+ * MIME permitidos por el contrato. C8 (ADR-0026): solo PDF — el negocio exige PDF y el
+ * backend rechaza cualquier otro MIME (validación autoritativa). El front lo restringe
+ * para feedback inmediato de UX.
+ */
+export const ALLOWED_MIME = ['application/pdf'] as const;
 
 /** Tamaño máximo: 20 MB. */
 export const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 
-const ALLOWED_LABEL = 'PDF, JPG, PNG o WEBP';
+const ALLOWED_LABEL = 'PDF';
 
 /**
  * Valida mime y tamaño antes de subir. Pura y testeable de forma aislada.

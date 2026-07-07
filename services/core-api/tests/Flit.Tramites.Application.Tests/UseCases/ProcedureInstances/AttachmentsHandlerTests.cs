@@ -127,6 +127,32 @@ public sealed class AttachmentsHandlerTests
         _storage.Saved.Should().BeEmpty();
     }
 
+    // C8 (ADR-0026): el cargue de documentos acepta SOLO PDF. Las imágenes, que antes se
+    // admitían, ahora deben rechazarse con invalid_mime (regla central de AttachmentRules).
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/png")]
+    [InlineData("image/webp")]
+    public async Task Upload_ImageMime_IsRejected(string imageMime)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, error) = await _upload.HandleAsync(
+            Guid.NewGuid(), Guid.NewGuid(), Pdf(mime: imageMime), null, ct);
+
+        error.Should().Be("invalid_mime");
+        _storage.Saved.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("image/jpeg", "invalid_mime")]
+    [InlineData("image/png", "invalid_mime")]
+    [InlineData("image/webp", "invalid_mime")]
+    [InlineData("application/pdf", null)]
+    public void AttachmentRules_SoloPdf(string mime, string? expected)
+    {
+        AttachmentRules.Validate("factura", mime, 100).Should().Be(expected);
+    }
+
     [Fact]
     public async Task Upload_TooLarge_ReturnsError()
     {
