@@ -14,10 +14,17 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
     public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken) =>
         db.Users.AnyAsync(u => u.Email == email && u.DeletedAt == null, cancellationToken);
 
-    public Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken) =>
-        db.Roles.AnyAsync(
-            x => x.TenantId == tenantId && x.Id == roleId && x.DeletedAt == null,
+    public Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken)
+    {
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id). El rol
+        // asignable en una invitación ya no se valida contra el tenant, sino contra el catálogo
+        // global (existe, activo, no borrado). tenantId se conserva en la firma de
+        // IInvitationRepository para no romper otros consumidores fuera de esta HU.
+        _ = tenantId;
+        return db.Roles.AnyAsync(
+            x => x.Id == roleId && x.IsActive && x.DeletedAt == null,
             cancellationToken);
+    }
 
     public async Task<Guid> CreateAsync(UserInvitationData invitation, CancellationToken cancellationToken)
     {

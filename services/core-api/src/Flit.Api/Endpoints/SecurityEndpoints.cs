@@ -74,9 +74,12 @@ public static class SecurityEndpoints
                     ? AdminAuthorization.OtAdminRole
                     : AdminAuthorization.AdminCompanyRole;
 
+                // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id),
+                // así que el rol de sistema se resuelve por Code únicamente (una sola fila por
+                // (code, target_entity_type) en todo el sistema).
                 var adminRole = await db.Roles
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.TenantId == targetTenantId && r.Code == targetRoleCode, cancellationToken);
+                    .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
 
                 if (adminRole is null)
                     return Results.Json(
@@ -140,21 +143,31 @@ public static class SecurityEndpoints
             return Results.Ok(modules);
         }).WithName("ListAccessibleModules");
 
-        // AC5 — GET /roles — lista roles activos del tenant del caller (HU #10164)
+        // AC5 — GET /roles — lista roles del catálogo global aplicable al tenant del caller
+        // (HU #10164 original; HU #10505 lo migra a filtrar por target_entity_type en vez de
+        // tenant_id — security.roles ya no tiene esa columna). Se resuelve COMPANY | TRANSIT_OFFICE
+        // igual que en /invitations: por presencia de TransitOfficeProfile en el tenant del caller.
         group.MapGet("/roles", async (
             ClaimsPrincipal caller,
             IRoleRepository roleRepo,
+            FlitDbContext db,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
             if (!Guid.TryParse(tenantClaim, out var tenantId))
                 return Results.Unauthorized();
 
-            var roles = await roleRepo.ListByTenantAsync(tenantId, cancellationToken);
+            var isOtTenant = await db.TransitOfficeProfiles
+                .AsNoTracking()
+                .AnyAsync(p => p.TenantId == tenantId, cancellationToken);
+            var targetEntityType = isOtTenant ? "TRANSIT_OFFICE" : "COMPANY";
+
+            var roles = await roleRepo.ListByTargetEntityTypeAsync(targetEntityType, cancellationToken);
             return Results.Ok(roles);
         });
 
-        // POST /security/roles — AdminCompany crea rol en su tenant (Fase 2)
+        // POST /security/roles — AdminCompany crea rol custom (Fase 2). Endpoint restringido a
+        // AdminCompanyPolicy, así que el catálogo global de destino es siempre COMPANY (HU #10505).
         group.MapPost("/roles", async (
             [FromBody] CreateRoleRequest request,
             ClaimsPrincipal caller,
@@ -162,7 +175,7 @@ public static class SecurityEndpoints
             CancellationToken ct) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!Guid.TryParse(tenantClaim, out _))
                 return Results.Unauthorized();
 
             if (ReservedRoleCodes.Contains(request.Code, StringComparer.OrdinalIgnoreCase))
@@ -173,13 +186,13 @@ public static class SecurityEndpoints
             try
             {
                 var id = await handler.HandleAsync(
-                    new CreateRoleCommand(tenantId, request.Code, request.Name, request.Description),
+                    new CreateRoleCommand("COMPANY", request.Code, request.Name, request.Description),
                     ct);
                 return Results.Created($"/api/v1/security/roles/{id}", new { id });
             }
             catch (RoleCodeDuplicateException)
             {
-                return Results.Conflict(new ErrorResponse("ROLE_CODE_DUPLICATE", "Ya existe un rol con ese código en tu empresa."));
+                return Results.Conflict(new ErrorResponse("ROLE_CODE_DUPLICATE", "Ya existe un rol con ese código en el catálogo."));
             }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .WithName("CreateTenantRole");
@@ -227,11 +240,14 @@ public static class SecurityEndpoints
             CancellationToken ct) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!Guid.TryParse(tenantClaim, out _))
                 return Results.Unauthorized();
 
+            // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así
+            // que ya no se valida "el rol pertenece a mi tenant" — solo su existencia. La
+            // gobernanza fina de quién puede borrar qué rol global es HU #10508.
             var role = await roleRepository.GetByIdAsync(id, ct);
-            if (role is null || role.TenantId != tenantId)
+            if (role is null)
                 return Results.NotFound();
 
             try

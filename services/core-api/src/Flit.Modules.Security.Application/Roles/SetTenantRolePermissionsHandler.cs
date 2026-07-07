@@ -9,8 +9,14 @@ public sealed class SetTenantRolePermissionsHandler(
 {
     public async Task<RoleDetail> HandleAsync(SetTenantRolePermissionsCommand command, CancellationToken ct)
     {
+        // HU #10505 / ADR-0023: security.roles es ahora un catálogo GLOBAL (sin tenant_id), así
+        // que ya no existe una relación rol-tenant que validar aquí. command.CallerTenantId se
+        // conserva en la firma (no se toca el endpoint que lo alimenta, fuera de alcance de esta
+        // HU) pero deja de usarse para la verificación de propiedad del rol. El re-diseño de la
+        // gobernanza de este endpoint (quién puede delegar permisos sobre un rol global) es HU
+        // #10508.
         var role = await roleRepository.GetByIdAsync(command.RoleId, ct);
-        if (role is null || role.TenantId != command.CallerTenantId)
+        if (role is null)
             throw new RoleNotFoundException();
 
         var callerPermissionIds = await permissionRepository.ResolveActiveSlugIdsAsync(
@@ -21,8 +27,7 @@ public sealed class SetTenantRolePermissionsHandler(
         if (unauthorized.Count > 0)
             throw new InsufficientPermissionsForDelegationException();
 
-        await roleRepository.SetPermissionsAsync(
-            command.RoleId, command.CallerTenantId, command.PermissionIds, ct);
+        await roleRepository.SetPermissionsAsync(command.RoleId, command.PermissionIds, ct);
 
         var updated = await roleRepository.GetByIdAsync(command.RoleId, ct);
         return updated!;

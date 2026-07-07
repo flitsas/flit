@@ -4,8 +4,8 @@ namespace Flit.Modules.Security.Application.Roles;
 
 public sealed class ListRolesHandler(IRoleRepository repository)
 {
-    public async Task<IReadOnlyList<RoleSummary>> HandleAsync(Guid tenantId, CancellationToken ct)
+    public async Task<IReadOnlyList<RoleSummary>> HandleAsync(string targetEntityType, CancellationToken ct)
     {
-        return await repository.ListByTenantAsync(tenantId, ct);
+        return await repository.ListByTargetEntityTypeAsync(targetEntityType, ct);
     }
 }

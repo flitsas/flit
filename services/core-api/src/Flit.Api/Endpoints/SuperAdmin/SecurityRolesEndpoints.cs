@@ -10,13 +10,14 @@ internal static class SecurityRolesEndpoints
 {
     internal static void Map(RouteGroupBuilder group)
     {
-        // AC2 — GET /roles?tenantId={guid} → lista de roles con permissionCount
+        // AC2 — GET /roles?targetEntityType={COMPANY|TRANSIT_OFFICE} → catálogo global de roles
+        // (HU #10505: ya no filtra por tenantId — security.roles no tiene esa columna).
         group.MapGet("/roles", async (
-            Guid tenantId,
+            string targetEntityType,
             ListRolesHandler handler,
             CancellationToken ct) =>
         {
-            var items = await handler.HandleAsync(tenantId, ct);
+            var items = await handler.HandleAsync(targetEntityType, ct);
             return Results.Ok(items);
         }).WithName("ListRoles");
 
@@ -29,7 +30,7 @@ internal static class SecurityRolesEndpoints
             try
             {
                 var id = await handler.HandleAsync(
-                    new CreateRoleCommand(request.TenantId, request.Code, request.Name, request.Description),
+                    new CreateRoleCommand(request.TargetEntityType, request.Code, request.Name, request.Description),
                     ct);
                 return Results.Created($"/api/v1/superadmin/roles/{id}", new { id });
             }
@@ -49,7 +50,7 @@ internal static class SecurityRolesEndpoints
             try
             {
                 var detail = await handler.HandleAsync(
-                    new SetRolePermissionsCommand(id, request.TenantId, request.PermissionIds),
+                    new SetRolePermissionsCommand(id, request.PermissionIds),
                     ct);
                 return Results.Ok(detail);
             }
@@ -58,6 +59,10 @@ internal static class SecurityRolesEndpoints
                 return Results.NotFound();
             }
         }).WithName("SetRolePermissions");
+
+        // Nota (HU #10505): SetRoleActiveHandler queda listo en la capa de aplicación (registrado
+        // en DI) pero SIN endpoint HTTP todavía — la gobernanza SuperAdmin de activar/desactivar
+        // roles del catálogo global es HU #10508, fuera de alcance de esta HU.
 
         // AC3, AC4, AC5 — DELETE /roles/{id}
         group.MapDelete("/roles/{id:guid}", async (
@@ -85,7 +90,7 @@ internal static class SecurityRolesEndpoints
         }).WithName("DeleteRole");
     }
 
-    private sealed record CreateRoleRequest(Guid TenantId, string Code, string Name, string? Description);
+    private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description);
 
-    private sealed record SetPermissionsRequest(Guid TenantId, List<Guid> PermissionIds);
+    private sealed record SetPermissionsRequest(List<Guid> PermissionIds);
 }

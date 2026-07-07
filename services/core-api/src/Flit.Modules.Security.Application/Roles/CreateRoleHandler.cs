@@ -6,12 +6,12 @@ public sealed class CreateRoleHandler(IRoleRepository repository)
 {
     public async Task<Guid> HandleAsync(CreateRoleCommand command, CancellationToken ct)
     {
-        var codeExists = await repository.CodeExistsInTenantAsync(command.TenantId, command.Code, ct);
+        var codeExists = await repository.CodeExistsAsync(command.TargetEntityType, command.Code, ct);
         if (codeExists)
             throw new RoleCodeDuplicateException();
 
         var id = await repository.CreateAsync(
-            new CreateRoleData(command.TenantId, command.Code, command.Name, command.Description),
+            new CreateRoleData(command.TargetEntityType, command.Code, command.Name, command.Description),
             ct);
 
         return id;

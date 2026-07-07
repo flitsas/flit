@@ -14,8 +14,11 @@ namespace Flit.Admin.Tests.Companies.TransitOffices;
 /// Tests del alta de tenants Organismo de Tránsito (refactor adminOT). Ejercitan el
 /// handler real sobre <see cref="TransitOfficeTenantWriteRepository"/> con proveedor
 /// InMemory: validación 422 sin persistir, la regla de negocio nueva "una oficina =
-/// un solo tenant OT", el alta compuesta (tenant + rol ot_admin SIN RoleGrants +
-/// perfil OT) y el TenantType fijo en RENTING.
+/// un solo tenant OT", el alta compuesta (tenant + perfil OT) y el TenantType fijo en
+/// RENTING. HU #10505: "ot_admin" es ahora un rol del catálogo GLOBAL
+/// (security.roles sin tenant_id) — el alta de un OT ya NO crea una fila de rol por
+/// tenant (violaría UNIQUE(code, target_entity_type)); esa fila global se siembra por
+/// migración/seed y se resuelve por Code en la invitación del primer admin del OT.
 /// </summary>
 public sealed class CreateTransitOfficeHandlerTests
 {
@@ -26,7 +29,7 @@ public sealed class CreateTransitOfficeHandlerTests
     private static readonly Guid MedellinOfficeId = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000002");
 
     [Fact]
-    public async Task ValidInput_CreatesTenantRoleAndProfile_WithoutRoleGrants()
+    public async Task ValidInput_CreatesTenantAndProfile_WithoutCreatingPerTenantRole()
     {
         var db = NewDbName();
 
@@ -61,13 +64,10 @@ public sealed class CreateTransitOfficeHandlerTests
         tenant.TenantType.Should().Be("RENTING");
         tenant.CreatedBy.Should().Be(Operator);
 
-        var role = await verify.Roles.SingleAsync(
-            r => r.TenantId == tenant.Id, cancellationToken: TestContext.Current.CancellationToken);
-        role.Code.Should().Be("ot_admin");
-        role.IsSystem.Should().BeTrue();
-
-        (await verify.RoleGrants.CountAsync(g => g.RoleId == role.Id, cancellationToken: TestContext.Current.CancellationToken))
-            .Should().Be(0, "el SuperAdmin cura los permisos después vía RBAC Admin — el rol nace sin grants");
+        // HU #10505: el catálogo de roles es GLOBAL — el alta de un OT ya no crea ninguna fila
+        // en security.roles (la fila "ot_admin" es global, sembrada por migración/seed).
+        (await verify.Roles.CountAsync(cancellationToken: TestContext.Current.CancellationToken))
+            .Should().Be(0, "el rol ot_admin es global (HU #10505) — el alta de un OT no crea filas en security.roles");
 
         var profile = await verify.TransitOfficeProfiles.SingleAsync(
             p => p.TenantId == tenant.Id, cancellationToken: TestContext.Current.CancellationToken);
