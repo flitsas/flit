@@ -14,6 +14,7 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   suspendOtUser: vi.fn(),
   unsuspendOtUser: vi.fn(),
   updateOtUser: vi.fn(),
+  deleteOtUser: vi.fn(),
 }));
 
 function renderSection() {

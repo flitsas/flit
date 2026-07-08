@@ -183,3 +183,26 @@ export async function updateUser(userId: string, request: UpdateUserRequest): Pr
     body: request,
   });
 }
+
+/** DELETE /api/v1/security/users/{userId} — elimina (soft-delete reversible) a un usuario
+ *  dentro del alcance del caller (AdminCompany su propio tenant, SuperAdmin cualquiera) —
+ *  HU #10623. `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+ *  `TenantUser.rowVersion`). Errores mapeados por el backend: 400 SELF_DELETE, 409
+ *  LAST_ACTIVE_ADMIN | CONCURRENCY_CONFLICT, 404 si el usuario ya no existe. NO toca roles
+ *  ni suspensiones: restaurar (`restoreUser`, SOLO SuperAdmin) recupera el mismo estado. */
+export async function deleteUser(userId: string, rowVersion: number): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/users/${userId}`, {
+    method: "DELETE",
+    body: { rowVersion },
+  });
+}
+
+/** POST /api/v1/superadmin/users/{userId}/restore — restaura (deshace el soft-delete) a un
+ *  usuario eliminado (HU #10623). SOLO SuperAdmin. No toca roles ni suspensiones: el usuario
+ *  recupera exactamente el mismo estado que tenía al eliminarse. 409 USER_NOT_DELETED si el
+ *  usuario no estaba eliminado; 404 si no existe. */
+export async function restoreUser(userId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/superadmin/users/${userId}/restore`, {
+    method: "POST",
+  });
+}

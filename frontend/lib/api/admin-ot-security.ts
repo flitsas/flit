@@ -49,6 +49,11 @@ export interface UpdateOtUserRequest {
   rowVersion: number;
 }
 
+/** HU #10623: payload de eliminación — rowVersion obligatorio (concurrencia optimista). */
+export interface DeleteOtUserRequest {
+  rowVersion: number;
+}
+
 function scopeQuery(scope?: OtApiScope) {
   return scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined;
 }
@@ -101,6 +106,22 @@ export function updateOtUser(
 ): Promise<void> {
   return apiFetch<void>(`${base}/users/${userId}`, {
     method: "PATCH",
+    body,
+    query: scopeQuery(scope),
+  });
+}
+
+/** DELETE /api/v1/admin/ot/users/{userId} — elimina (soft-delete reversible) a un usuario del
+ *  tenant OT resuelto (HU #10623). `rowVersion` obligatorio (concurrencia optimista). Errores
+ *  mapeados por el backend con el campo `error` (no `code`, a diferencia de security.ts):
+ *  400 SELF_DELETE, 409 LAST_ACTIVE_ADMIN | CONCURRENCY_CONFLICT, 404 si ya no existe. */
+export function deleteOtUser(
+  userId: string,
+  body: DeleteOtUserRequest,
+  scope?: OtApiScope,
+): Promise<void> {
+  return apiFetch<void>(`${base}/users/${userId}`, {
+    method: "DELETE",
     body,
     query: scopeQuery(scope),
   });

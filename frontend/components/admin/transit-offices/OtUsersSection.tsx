@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, Pencil, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, Pencil, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -10,10 +10,13 @@ import {
   suspendOtUser,
   unsuspendOtUser,
   updateOtUser,
+  deleteOtUser,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
+import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
+import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -27,11 +30,16 @@ export interface OtUsersSectionProps {
  */
 export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const { show } = useToast();
+  const { isSuperAdmin, userId: currentUserId } = usePermissions();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<OtUserItem | null>(null);
   const [editTarget, setEditTarget] = useState<OtUserItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<OtUserItem | null>(null);
+  // HU #10623 (AC3/AC4): "Ver eliminados" es exclusivo de SuperAdmin — este hub no tiene tabs
+  // (a diferencia de Usuarios.tsx), así que se ofrece como toggle en el header.
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -105,6 +113,12 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return updateOtUser(userId, payload, { transitOfficeId });
   }
 
+  // HU #10623 — Inyectado a DeleteUserDialog, mismo patrón que handleUpdateUser: liga el
+  // scope OT a deleteOtUser. El diálogo mapea los errores 400/409 (AC1 defensa en profundidad).
+  function handleDeleteUser(userId: string, rowVersion: number) {
+    return deleteOtUser(userId, { rowVersion }, { transitOfficeId });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -116,16 +130,56 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             Invita colaboradores a este organismo de tránsito y gestiona su acceso.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          Invitar usuario
-        </button>
+        <div className="flex items-center gap-2">
+          {/* AC4 (HU #10623): "Ver eliminados" es exclusivo de SuperAdmin — ot_admin nunca lo ve. */}
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowDeleted((v) => !v)}
+              aria-pressed={showDeleted}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              style={{ color: "#557EFF" }}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            Invitar usuario
+          </button>
+        </div>
       </div>
 
+      {showDeleted && isSuperAdmin && (
+        // HU #10623 (AC3) — BLOQUEADO: GET /api/v1/admin/ot/users (fetchOtUsers) excluye
+        // incondicionalmente DeletedAt != null y no expone un parámetro para listar SOLO
+        // eliminados. No se inventa un endpoint: se reporta como bloqueante hasta que el
+        // architecture/backend-agent agregue el soporte necesario. DeleteUserDialog/restoreUser
+        // ya están listos para conectarse en cuanto exista el listado.
+        <div className="flex flex-col items-center gap-3 rounded-xl border p-8 text-center" role="status">
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(249,172,0,0.14)" }}>
+            <Trash2 className="h-5 w-5" style={{ color: "#F9AC00" }} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "#162744" }}>
+              Usuarios eliminados de este organismo de tránsito
+            </p>
+            <p className="text-xs opacity-60 mt-0.5 max-w-md">
+              Pendiente de soporte de backend: <code>GET /api/v1/admin/ot/users</code> excluye
+              siempre a los usuarios con <code>deletedAt</code> y hoy no expone un parámetro para
+              listar solo eliminados. En cuanto el backend lo soporte, esta vista listará los
+              usuarios eliminados y permitirá restaurarlos con un clic de confirmación.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!showDeleted && (
       <UiStateBoundary
         status={status}
         emptyMessage="No hay usuarios en este organismo de tránsito todavía."
@@ -216,6 +270,20 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                             <Ban className="h-4 w-4" />
                           </button>
                         ))}
+                      {/* AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
+                          puede auto-eliminarse. */}
+                      {u.status !== "pending" && u.id !== currentUserId && (
+                        <button
+                          type="button"
+                          title="Eliminar usuario"
+                          aria-label={`Eliminar usuario ${u.fullName}`}
+                          onClick={() => setDeleteTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -224,6 +292,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           </table>
         </div>
       </UiStateBoundary>
+      )}
 
       {inviteOpen && (
         <OtInviteUserDialog onConfirm={handleInvite} onClose={() => setInviteOpen(false)} />
@@ -250,6 +319,23 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             void load();
           }}
           onUpdate={handleUpdateUser}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteUserDialog
+          user={{
+            id: deleteTarget.id,
+            fullName: deleteTarget.fullName,
+            email: deleteTarget.email,
+            rowVersion: deleteTarget.rowVersion,
+          }}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setDeleteTarget(null);
+            show("Usuario eliminado correctamente.", "success");
+            void load();
+          }}
+          onDelete={handleDeleteUser}
         />
       )}
     </div>

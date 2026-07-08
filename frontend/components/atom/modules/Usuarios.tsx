@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, TenantUser, TenantRole } from "@/lib/api/security";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2 } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { EditUserModal } from "./users/EditUserModal";
+import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -13,12 +14,15 @@ import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/a
 import type { CompanyListItem } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const TABS = [
+// HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin — AdminCompany/OtAdmin ven
+// "Eliminar" (AC1) pero nunca la vista de restauración, exclusiva de SuperAdmin.
+const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
+  { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof ALL_TABS)[number]["id"];
 
 // Chips tintados (HU #10494 · decisión D1). Mismo vocabulario (Activo/Inactivo/Pendiente),
 // convención tintada: fondo translúcido + texto de color legible + borde.
@@ -32,7 +36,7 @@ const STATUS_BADGE: Record<
 };
 
 export function Usuarios() {
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, userId: currentUserId } = usePermissions();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -42,6 +46,10 @@ export function Usuarios() {
   const [rolesLoading, setRolesLoading] = useState(true);
   const [suspendTarget, setSuspendTarget] = useState<TenantUser | null>(null);
   const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+
+  // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin.
+  const tabs = isSuperAdmin ? ALL_TABS : ALL_TABS.filter((t) => t.id !== "eliminados");
 
   async function loadUsers() {
     setLoading(true);
@@ -96,6 +104,12 @@ export function Usuarios() {
     loadUsers();
   }
 
+  // HU #10623 — AC1: la confirmación (con el aviso de que solo un SuperAdmin puede restaurar)
+  // vive en DeleteUserDialog; aquí solo se persiste. Errores 400/409 los mapea el propio diálogo.
+  async function handleDelete(userId: string, rowVersion: number) {
+    return deleteUser(userId, rowVersion);
+  }
+
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
@@ -111,7 +125,7 @@ export function Usuarios() {
       />
 
       <div className="flex items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
           return (
@@ -239,6 +253,19 @@ export function Usuarios() {
                           </button>
                         )
                       )}
+                      {/* AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
+                          nunca puede auto-eliminarse. */}
+                      {u.status !== "pending" && !isSuperAdmin && u.id !== currentUserId && (
+                        <button
+                          title="Eliminar usuario"
+                          aria-label={`Eliminar usuario ${u.fullName}`}
+                          onClick={() => setDeleteTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -251,6 +278,31 @@ export function Usuarios() {
             )}
           </div>
         </>
+      )}
+
+      {tab === "eliminados" && isSuperAdmin && (
+        // HU #10623 (AC3) — BLOQUEADO: GET /api/v1/security/users excluye incondicionalmente
+        // DeletedAt != null (SecurityEndpoints.cs) y no expone ningún parámetro para listar SOLO
+        // eliminados (p. ej. `?onlyDeleted=true`). No se inventa un endpoint ni se filtra en el
+        // cliente sobre una lista que el backend ya depuró — se reporta como bloqueante hasta que
+        // el architecture/backend-agent agregue el soporte necesario. La confirmación de
+        // restauración (RestoreUserDialog + restoreUser) ya está lista para conectarse en cuanto
+        // exista el listado.
+        <div className="flex flex-col items-center gap-3 py-14 text-center" role="status">
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(249,172,0,0.14)" }}>
+            <Trash2 className="h-5 w-5" style={{ color: "#F9AC00" }} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Usuarios eliminados de cualquier compañía u organismo</p>
+            <p className="text-xs opacity-60 mt-0.5 max-w-md">
+              Pendiente de soporte de backend: <code>GET /api/v1/security/users</code> excluye
+              siempre a los usuarios con <code>deletedAt</code> y hoy no expone un parámetro para
+              listar solo eliminados (por ejemplo <code>?onlyDeleted=true</code>). En cuanto el
+              backend lo soporte, esta vista listará los usuarios eliminados de cualquier tenant y
+              permitirá restaurarlos con un clic de confirmación.
+            </p>
+          </div>
+        </div>
       )}
 
       {tab === "roles" && isSuperAdmin && (
@@ -338,6 +390,22 @@ export function Usuarios() {
             loadUsers();
           }}
           onUpdate={updateUser}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteUserDialog
+          user={{
+            id: deleteTarget.id,
+            fullName: deleteTarget.fullName,
+            email: deleteTarget.email,
+            rowVersion: deleteTarget.rowVersion,
+          }}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setDeleteTarget(null);
+            loadUsers();
+          }}
+          onDelete={handleDelete}
         />
       )}
     </div>
