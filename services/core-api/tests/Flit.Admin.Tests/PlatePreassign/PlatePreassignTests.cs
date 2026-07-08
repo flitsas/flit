@@ -295,6 +295,36 @@ public sealed class PlatePreassignTests
         (await repo.IsAssignmentAllowedAsync(Guid.NewGuid(), office, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
+    // ---------- Reserva de placa (Flujo A) ----------
+
+    [Fact]
+    public async Task TryReservePlate_ReservaDisponibleYEsIdempotente()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var a = NewContext(db))
+        {
+            await new PlateRangeRepository(a).CreateRangeAsync(company, office, "ABC", 100, 102, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var b = NewContext(db);
+        var repo = new PlateRangeRepository(b);
+        (await repo.TryReservePlateAsync(company, office, "ABC100", instance, TestContext.Current.CancellationToken)).Should().BeTrue();
+        // Idempotente: misma placa, mismo trámite.
+        (await repo.TryReservePlateAsync(company, office, "ABC100", instance, TestContext.Current.CancellationToken)).Should().BeTrue();
+        // Tomada por otro trámite → false.
+        (await repo.TryReservePlateAsync(company, office, "ABC100", Guid.NewGuid(), TestContext.Current.CancellationToken)).Should().BeFalse();
+        // Placa inexistente → false.
+        (await repo.TryReservePlateAsync(company, office, "ZZZ999", instance, TestContext.Current.CancellationToken)).Should().BeFalse();
+
+        var detail = await b.PlateRangeDetails.FirstAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
+        detail.State.Should().Be(PlateState.Preasignada);
+        detail.ProcedureInstanceId.Should().Be(instance);
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-plate-{Guid.NewGuid()}";

@@ -138,6 +138,9 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
+        // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
+        services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

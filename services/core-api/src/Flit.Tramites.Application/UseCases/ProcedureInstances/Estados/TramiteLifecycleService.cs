@@ -114,6 +114,16 @@ public sealed class TramiteLifecycleService(
                 return TramiteTransitionOutcome.Fail(code, detail);
         }
 
+        // Feature #10587 — ruta de placa: al pasar a preasignado/asignado se promueve el OT elegido
+        // (transit_office_id del FUR) para que la bandeja del OT vea el trámite (la autorización de la
+        // ruta ya la validó IPlatePreassignPolicy en el submit).
+        if (command.ToStatus is TramiteEstado.Preasignado or TramiteEstado.Asignado)
+        {
+            var plateOfficeId = TransitOfficeIdFromFieldValues(instance);
+            if (plateOfficeId is { } pOffice)
+                instance.TransitOfficeId = pOffice;
+        }
+
         var now = DateTimeOffset.UtcNow;
         instance.Status = command.ToStatus;
         instance.UpdatedAt = now;

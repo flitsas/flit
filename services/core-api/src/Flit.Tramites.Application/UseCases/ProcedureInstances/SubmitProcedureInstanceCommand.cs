@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -14,8 +15,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
-    IProcedureInstanceRepository repo)
+    IProcedureInstanceRepository repo,
+    IPlatePreassignPolicy? platePreassignPolicy = null)
 {
+    private readonly IPlatePreassignPolicy _platePolicy = platePreassignPolicy ?? NullPlatePreassignPolicy.Instance;
+
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -39,14 +43,29 @@ public sealed class SubmitProcedureInstanceHandler(
                 return (null, preparado.ErrorCode);
         }
 
-        var entregado = await lifecycle.TransitionAsync(
-            new TramiteTransitionCommand(
-                id, tenantId, TramiteEstado.Entregado,
-                "Radicación: trámite entregado al organismo de tránsito.", changedBy),
-            ct).ConfigureAwait(false);
-        if (!entregado.Success)
-            return (null, entregado.ErrorCode);
+        // Feature #10587 — ruta de preasignación de placa (solo matrícula inicial con la ruta activa):
+        // Flujo A (placa elegida y reservada) → asignado; Flujo B (sin rango/placa) → preasignado.
+        // En cualquier otro caso, la ruta estándar de entrega al OT.
+        var decision = await _platePolicy.DecideAsync(tenantId, id, ct).ConfigureAwait(false);
+        var (targetStatus, reason) = decision switch
+        {
+            PlateRouteDecision.Asignado => (
+                TramiteEstado.Asignado,
+                "Radicación: placa preasignada seleccionada; trámite asignado."),
+            PlateRouteDecision.Preasignado => (
+                TramiteEstado.Preasignado,
+                "Radicación: sin rango de placa disponible; enviado al OT para preasignación."),
+            _ => (
+                TramiteEstado.Entregado,
+                "Radicación: trámite entregado al organismo de tránsito."),
+        };
 
-        return (CreateProcedureInstanceHandler.ToSummary(entregado.Instance!), null);
+        var final = await lifecycle.TransitionAsync(
+            new TramiteTransitionCommand(id, tenantId, targetStatus, reason, changedBy),
+            ct).ConfigureAwait(false);
+        if (!final.Success)
+            return (null, final.ErrorCode);
+
+        return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
     }
 }

@@ -99,4 +99,16 @@ public interface IPlateRangeRepository
         Guid plateDetailId,
         string targetState,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reserva una placa concreta para un trámite (disponible→preasignada) con guarda de concurrencia.
+    /// Idempotente: si ya está preasignada para el mismo trámite, devuelve <c>true</c>. <c>false</c> si
+    /// no existe o no está disponible (tomada por otro).
+    /// </summary>
+    Task<bool> TryReservePlateAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken = default);
 }

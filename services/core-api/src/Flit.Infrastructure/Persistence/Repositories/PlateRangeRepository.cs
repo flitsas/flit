@@ -328,6 +328,51 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
             },
             cancellationToken);
 
+    public Task<bool> TryReservePlateAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantScopeAsync(
+            companyTenantId,
+            async () =>
+            {
+                var normalized = plate?.Trim().ToUpperInvariant() ?? string.Empty;
+                var detail = await _context.PlateRangeDetails
+                    .FirstOrDefaultAsync(
+                        d => d.TenantId == companyTenantId
+                            && d.TransitOfficeId == transitOfficeId
+                            && d.Plate == normalized,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (detail is null)
+                {
+                    return false;
+                }
+
+                // Idempotencia: ya reservada para este mismo trámite.
+                if (detail.State == PlateState.Preasignada && detail.ProcedureInstanceId == procedureInstanceId)
+                {
+                    return true;
+                }
+
+                if (detail.State != PlateState.Disponible)
+                {
+                    return false;
+                }
+
+                detail.State = PlateState.Preasignada;
+                detail.ProcedureInstanceId = procedureInstanceId;
+                detail.ReservedAt = DateTimeOffset.UtcNow;
+                detail.UpdatedAt = detail.ReservedAt;
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken);
+
     private async Task<T> ExecuteInTenantScopeAsync<T>(
         Guid tenantId,
         Func<Task<T>> action,
