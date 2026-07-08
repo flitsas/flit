@@ -76,7 +76,7 @@ gateway
 # Runtime data
 *.pid
 *.seed
-storage/
+/storage/
 
 # Test artifacts
 playwright-report/
