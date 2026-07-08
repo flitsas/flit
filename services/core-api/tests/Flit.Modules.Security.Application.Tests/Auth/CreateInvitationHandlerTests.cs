@@ -1,5 +1,6 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserManagement;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -11,6 +12,7 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 public sealed class CreateInvitationHandlerTests
 {
     private readonly IInvitationRepository _repo = Substitute.For<IInvitationRepository>();
+    private readonly IUserManagementRepository _userManagementRepo = Substitute.For<IUserManagementRepository>();
     private readonly ISecureTokenGenerator _tokenGen = Substitute.For<ISecureTokenGenerator>();
     private readonly IEmailSender _email = Substitute.For<IEmailSender>();
     private readonly ILogger<CreateInvitationHandler> _logger = Substitute.For<ILogger<CreateInvitationHandler>>();
@@ -27,11 +29,15 @@ public sealed class CreateInvitationHandlerTests
 
     public CreateInvitationHandlerTests()
     {
-        _handler = new CreateInvitationHandler(_repo, _tokenGen, _email, _options, _logger);
+        _handler = new CreateInvitationHandler(_repo, _userManagementRepo, _tokenGen, _email, _options, _logger);
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-abc", "hash-abc"));
         _repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>())
             .Returns(InvitationId);
         _repo.RoleExistsInTenantAsync(TenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+        // Por defecto el correo no pertenece a ninguna cuenta (activa ni eliminada); los tests de
+        // HU #10623 AC4 sobreescriben este stub explícitamente.
+        _userManagementRepo.FindByEmailIncludingDeletedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((ExistingUserByEmail?)null);
     }
 
     // AC1 — email no registrado, un rol válido → crea invitación y envía email
@@ -144,6 +150,26 @@ public sealed class CreateInvitationHandlerTests
 
         result.InvitationId.Should().Be(InvitationId);
         await _repo.Received(1).CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted → mensaje claro, no un error
+    // crudo de constraint de BD; no se crea la invitación.
+    [Fact]
+    public async Task HandleAsync_EmailBelongsToDeletedAccount_ThrowsUserEmailBelongsToDeletedAccount()
+    {
+        _userManagementRepo.FindByEmailIncludingDeletedAsync(Email, Arg.Any<CancellationToken>())
+            .Returns(new ExistingUserByEmail(Guid.NewGuid(), IsDeleted: true));
+
+        await _handler
+            .Invoking(h => h.HandleAsync(
+                new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
+                CancellationToken.None))
+            .Should().ThrowAsync<UserEmailBelongsToDeletedAccountException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(
+            Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>());
+        await _email.DidNotReceiveWithAnyArgs().SendAsync(
+            Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
     // Rol no pertenece al tenant → RoleNotFoundException

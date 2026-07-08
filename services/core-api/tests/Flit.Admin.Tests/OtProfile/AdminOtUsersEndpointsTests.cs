@@ -8,6 +8,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -264,6 +265,506 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Error.Should().Be("USER_ALREADY_EXISTS");
     }
 
+    // HU #10619 AC1 — sin endsAt: desactivación indefinida (sin fecha de fin), hasta reactivación manual.
+    [Fact]
+    public async Task Suspend_WithoutEndsAt_CreatesIndefiniteSuspension()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            new { reason = "Desactivación indefinida de prueba" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using var db = CreateDbContext();
+        var suspension = await db.UserTempSuspensions.AsNoTracking()
+            .Where(s => s.UserId == _collaboratorUserId && s.TenantId == _otTenantId && s.DeletedAt == null)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstAsync(TestContext.Current.CancellationToken);
+
+        suspension.EndsAt.Should().BeNull();
+    }
+
+    // HU #10619 AC4 — suspender/desactivar al único ot_admin activo del tenant se rechaza (409),
+    // para no dejar el tenant sin ningún administrador disponible.
+    [Fact]
+    public async Task Suspend_TargetIsLastActiveOtAdmin_Returns409()
+    {
+        var soloTenantId = Guid.NewGuid();
+        var soloAdminUserId = Guid.NewGuid();
+        var soloTransitOfficeId = Guid.NewGuid();
+
+        await using (var db = CreateDbContext())
+        {
+            db.TransitOffices.Add(new TransitOffice
+            {
+                Id = soloTransitOfficeId,
+                Code = $"T{Guid.NewGuid():N}"[..10],
+                Name = "OT solo-admin tests",
+                DepartmentCode = "99",
+                CityCode = "99999",
+                IsActive = true,
+            });
+            db.Tenants.Add(new Tenant
+            {
+                Id = soloTenantId,
+                Code = $"OT-SOLO-{Guid.NewGuid():N}"[..20],
+                LegalName = "OT Solo Admin Tests",
+                TaxId = "900888888-8",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = soloAdminUserId,
+                Email = $"solo-admin-{soloAdminUserId:N}@flit.local",
+                DisplayName = "Solo AdminOT",
+                Status = "active",
+                HomeTenantId = soloTenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                TransitOfficeId = soloTransitOfficeId,
+                OperationMode = "dashboard",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                UserId = soloAdminUserId,
+                RoleId = _roleId,
+                AssignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            // SuperAdmin (no es el propio objetivo) intenta suspender al único ot_admin del tenant.
+            var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _client.PostAsJsonAsync(
+                $"/api/v1/admin/ot/users/{soloAdminUserId}/suspend?transitOfficeId={soloTransitOfficeId}",
+                new { reason = "Intento de dejar el tenant sin administradores" },
+                TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        }
+        finally
+        {
+            // Mismo orden de dependencia FK que Dispose(): hijos primero (su propio SaveChanges),
+            // padres después.
+            await using var db = CreateDbContext();
+            db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.TenantId == soloTenantId));
+            db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == soloTenantId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == soloAdminUserId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == soloTenantId));
+            db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == soloTransitOfficeId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #10619 AC5 — AuthUserRepository.FindByEmailAsync (usado por LoginHandler para rechazar
+    // el login, ver LoginHandlerSuspensionTests) debe reportar IsTemporarilySuspended = true
+    // cuando la suspensión activa tiene EndsAt nulo (desactivación indefinida, AC1), igual que
+    // con una suspensión temporal vigente. Seed/cleanup local, sin depender del factory-wide
+    // Dispose(), siguiendo el mismo patrón que Suspend_TargetIsLastActiveOtAdmin_Returns409.
+    [Fact]
+    public async Task FindByEmailAsync_WhenSuspensionHasNullEndsAt_ReportsTemporarilySuspended()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var email = $"indefinite-suspension-{userId:N}@flit.local";
+
+        await using (var db = CreateDbContext())
+        {
+            db.Tenants.Add(new Tenant
+            {
+                Id = tenantId,
+                Code = $"IND-SUSP-{Guid.NewGuid():N}"[..20],
+                LegalName = "Tenant suspensión indefinida (tests)",
+                TaxId = "900777777-7",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = userId,
+                Email = email,
+                DisplayName = "Usuario desactivado indefinidamente (tests)",
+                Status = "active",
+                HomeTenantId = tenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            // AuthUserRepository.FindByEmailAsync exige una fila de credenciales (join
+            // obligatorio); el hash no se valida en este test, solo se necesita que exista.
+            db.UserCredentials.Add(new UserCredential
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PasswordHash = "not-used-in-this-test",
+                MustChangePassword = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.UserTempSuspensions.Add(new UserTempSuspension
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                StartsAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                EndsAt = null,
+                Reason = "HU #10619 AC5 — desactivación indefinida (test)",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IAuthUserRepository>();
+
+            var snapshot = await repository.FindByEmailAsync(email, TestContext.Current.CancellationToken);
+
+            snapshot.Should().NotBeNull();
+            snapshot!.IsTemporarilySuspended.Should().BeTrue(
+                "una suspensión sin fecha de fin (desactivación indefinida, HU #10619 AC1) debe " +
+                "bloquear el login igual que una suspensión temporal vigente (AC5)");
+        }
+        finally
+        {
+            await using var db = CreateDbContext();
+            db.UserTempSuspensions.RemoveRange(db.UserTempSuspensions.Where(s => s.UserId == userId));
+            db.UserCredentials.RemoveRange(db.UserCredentials.Where(c => c.UserId == userId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == userId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == tenantId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #10623 AC1 — eliminar (soft-delete reversible) a un usuario del tenant OT: 204, se marca
+    // DeletedAt/DeletedBy y desaparece del listado activo (GET /users ya filtra DeletedAt == null).
+    [Fact]
+    public async Task DeleteUser_AsOtAdmin_WithinScope_Returns204AndSoftDeletes()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using var db2 = CreateDbContext();
+        var user = await db2.Users.AsNoTracking()
+            .SingleAsync(u => u.Id == _collaboratorUserId, TestContext.Current.CancellationToken);
+        user.DeletedAt.Should().NotBeNull();
+        user.DeletedBy.Should().Be(_otAdminUserId);
+
+        var listResponse = await _client.GetAsync("/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
+        var body = await listResponse.Content.ReadFromJsonAsync<ListUsersBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Data.Should().NotContain(u => u.Id == _collaboratorUserId.ToString());
+    }
+
+    // HU #10623 AC2 — un usuario no puede eliminarse a sí mismo → 400 SELF_DELETE.
+    [Fact]
+    public async Task DeleteUser_SelfDeletion_Returns400()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _otAdminUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_otAdminUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("SELF_DELETE");
+    }
+
+    // HU #10623 AC2 — eliminar al único ot_admin activo del tenant se rechaza (409), para no dejar
+    // el tenant sin ningún administrador disponible (mismo criterio que Suspend_TargetIsLastActiveOtAdmin_Returns409).
+    [Fact]
+    public async Task DeleteUser_TargetIsLastActiveOtAdmin_Returns409()
+    {
+        var soloTenantId = Guid.NewGuid();
+        var soloAdminUserId = Guid.NewGuid();
+        var soloTransitOfficeId = Guid.NewGuid();
+
+        await using (var db = CreateDbContext())
+        {
+            db.TransitOffices.Add(new TransitOffice
+            {
+                Id = soloTransitOfficeId,
+                Code = $"T{Guid.NewGuid():N}"[..10],
+                Name = "OT solo-admin delete tests",
+                DepartmentCode = "99",
+                CityCode = "99999",
+                IsActive = true,
+            });
+            db.Tenants.Add(new Tenant
+            {
+                Id = soloTenantId,
+                Code = $"OT-SOLO-DEL-{Guid.NewGuid():N}"[..20],
+                LegalName = "OT Solo Admin Delete Tests",
+                TaxId = "900888887-8",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = soloAdminUserId,
+                Email = $"solo-admin-del-{soloAdminUserId:N}@flit.local",
+                DisplayName = "Solo AdminOT Delete",
+                Status = "active",
+                HomeTenantId = soloTenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                TransitOfficeId = soloTransitOfficeId,
+                OperationMode = "dashboard",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                UserId = soloAdminUserId,
+                RoleId = _roleId,
+                AssignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            // SuperAdmin (no es el propio objetivo) intenta eliminar al único ot_admin del tenant.
+            var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _client.SendAsync(
+                new HttpRequestMessage(
+                    HttpMethod.Delete,
+                    $"/api/v1/admin/ot/users/{soloAdminUserId}?transitOfficeId={soloTransitOfficeId}")
+                {
+                    Content = JsonContent.Create(new { rowVersion = 0L }),
+                },
+                TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
+                cancellationToken: TestContext.Current.CancellationToken);
+            body!.Error.Should().Be("LAST_ACTIVE_ADMIN");
+        }
+        finally
+        {
+            await using var db = CreateDbContext();
+            db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.TenantId == soloTenantId));
+            db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == soloTenantId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == soloAdminUserId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == soloTenantId));
+            db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == soloTransitOfficeId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #10623 AC3 — un SuperAdmin restaura a un usuario eliminado y recupera EXACTAMENTE los
+    // mismos roles y el mismo estado de suspensión que tenía al momento de eliminarse (porque
+    // DeleteUserHandler nunca toca UserRoleAssignment ni UserTempSuspension).
+    [Fact]
+    public async Task Restore_AfterDelete_RecoversExactSameRolesAndSuspensionState()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Deja al colaborador con una suspensión activa antes de eliminarlo.
+        var suspendResponse = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            new { reason = "HU #10623 AC3 — estado previo a eliminar", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
+            TestContext.Current.CancellationToken);
+        suspendResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Snapshot ANTES de restaurar: roles activos + suspensión activa deben seguir intactos.
+        List<Guid> roleAssignmentIdsBefore;
+        List<Guid> suspensionIdsBefore;
+        await using (var db = CreateDbContext())
+        {
+            roleAssignmentIdsBefore = await db.UserRoleAssignments.AsNoTracking()
+                .Where(a => a.UserId == _collaboratorUserId && a.DeletedAt == null)
+                .Select(a => a.Id)
+                .ToListAsync(TestContext.Current.CancellationToken);
+            suspensionIdsBefore = await db.UserTempSuspensions.AsNoTracking()
+                .Where(s => s.UserId == _collaboratorUserId && s.DeletedAt == null)
+                .Select(s => s.Id)
+                .ToListAsync(TestContext.Current.CancellationToken);
+        }
+        roleAssignmentIdsBefore.Should().NotBeEmpty();
+        suspensionIdsBefore.Should().NotBeEmpty();
+
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var restoreResponse = await _client.PostAsync(
+            $"/api/v1/superadmin/users/{_collaboratorUserId}/restore",
+            content: null,
+            TestContext.Current.CancellationToken);
+        restoreResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db2 = CreateDbContext();
+        var restoredUser = await db2.Users.AsNoTracking()
+            .SingleAsync(u => u.Id == _collaboratorUserId, TestContext.Current.CancellationToken);
+        restoredUser.DeletedAt.Should().BeNull();
+        restoredUser.DeletedBy.Should().BeNull();
+
+        var roleAssignmentIdsAfter = await db2.UserRoleAssignments.AsNoTracking()
+            .Where(a => a.UserId == _collaboratorUserId && a.DeletedAt == null)
+            .Select(a => a.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        var suspensionIdsAfter = await db2.UserTempSuspensions.AsNoTracking()
+            .Where(s => s.UserId == _collaboratorUserId && s.DeletedAt == null)
+            .Select(s => s.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        roleAssignmentIdsAfter.Should().BeEquivalentTo(roleAssignmentIdsBefore,
+            "AC3: eliminar/restaurar nunca toca UserRoleAssignment");
+        suspensionIdsAfter.Should().BeEquivalentTo(suspensionIdsBefore,
+            "AC3: eliminar/restaurar nunca toca UserTempSuspension");
+    }
+
+    // HU #10623 AC5 — restaurar un usuario que NO está eliminado se rechaza explícitamente (409),
+    // no es un no-op silencioso.
+    [Fact]
+    public async Task Restore_WhenUserIsNotDeleted_Returns409()
+    {
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/superadmin/users/{_collaboratorUserId}/restore",
+            content: null,
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<SuperAdminErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("USER_NOT_DELETED");
+    }
+
+    // HU #10623 AC4 — invitar de nuevo con el correo de un usuario eliminado recibe un mensaje
+    // claro (no un error crudo de constraint de BD).
+    [Fact]
+    public async Task InviteUser_WithEmailOfDeletedAccount_Returns409EmailBelongsToDeletedUser()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        string collaboratorEmail;
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            var target = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => new { u.Email, u.RowVersion })
+                .SingleAsync(TestContext.Current.CancellationToken);
+            collaboratorEmail = target.Email;
+            rowVersion = target.RowVersion;
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var inviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email = collaboratorEmail, fullName = "Reintento de invitación" },
+            TestContext.Current.CancellationToken);
+
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("EMAIL_BELONGS_TO_DELETED_USER");
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();
@@ -363,6 +864,19 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
+        // HU #10619 AC4 — la guarda de "último administrador activo" exige que exista un rol
+        // ot_admin ACTIVO persistido (no solo el claim del JWT) para que suspender al
+        // colaborador no lo deje como único ot_admin del tenant.
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _otTenantId,
+            UserId = _otAdminUserId,
+            RoleId = _roleId,
+            AssignedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {
             Id = Guid.NewGuid(),
@@ -428,4 +942,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     private sealed record ListUserItem(string Id, string FullName, string Email, string Status);
 
     private sealed record ErrorBody(string Error, string? Message);
+
+    // SecurityUsersEndpoints (SuperAdmin) usa "code" en vez de "error" para el campo de código.
+    private sealed record SuperAdminErrorBody(string Code, string? Message);
 }

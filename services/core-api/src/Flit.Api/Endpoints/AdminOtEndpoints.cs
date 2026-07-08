@@ -29,8 +29,10 @@ using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.UserManagement.DeleteUser;
+using Flit.Modules.Security.Application.UserManagement.SuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
@@ -316,6 +318,19 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        // HU #10623 — DELETE /users/{userId} — elimina (soft-delete reversible) a un usuario del
+        // tenant OT resuelto. Restaurar es EXCLUSIVO de SuperAdmin — ver
+        // POST /api/v1/superadmin/users/{userId}/restore.
+        group.MapDelete("/users/{userId:guid}", DeleteUserAsync)
+            .WithName("AdminOtDeleteUser")
+            .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -1267,6 +1282,13 @@ public static class AdminOtEndpoints
                 new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
                 statusCode: StatusCodes.Status409Conflict);
         }
+        catch (UserEmailBelongsToDeletedAccountException ex)
+        {
+            // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+            return Results.Json(
+                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     private static async Task<IResult> ListUsersAsync(
@@ -1299,7 +1321,7 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                    && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                 u.RowVersion)
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1318,7 +1340,7 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now),
+                    && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                 u.RowVersion)
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1405,6 +1427,7 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         SuspendOtUserRequest request,
         FlitDbContext db,
+        SuspendUserHandler handler,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -1415,58 +1438,88 @@ public static class AdminOtEndpoints
             return scopeError;
         }
 
-        var callerId = ResolveUserId(httpContext.User);
-        if (callerId == userId)
-        {
-            return Results.BadRequest(new { error = "SELF_SUSPEND", message = "No puedes suspenderte a ti mismo." });
-        }
+        var callerId = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var callerIsSuperAdmin = IsSuperAdmin(httpContext.User);
 
-        // El scope ya garantiza que ot_admin solo puede resolver su propio tenant (no
-        // recibe transitOfficeId de otro OT); este chequeo evita además que se
-        // suspenda a un usuario que no pertenece al tenant resuelto.
-        var userExistsInTenant = await db.Users.AsNoTracking()
-            .AnyAsync(u => u.Id == userId && u.DeletedAt == null
-                && (db.UserRoleAssignments.Any(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)
-                    || u.HomeTenantId == tenantId),
+        try
+        {
+            var suspensionId = await handler.HandleAsync(
+                new SuspendUserCommand(tenantId, userId, request.Reason, request.EndsAt, callerId, callerIsSuperAdmin),
                 cancellationToken).ConfigureAwait(false);
 
-        if (!userExistsInTenant)
+            return Results.Created($"/api/v1/admin/ot/users/{userId}/suspend", new { id = suspensionId });
+        }
+        catch (TargetUserNotFoundException)
         {
             return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
         }
-
-        var now = DateTimeOffset.UtcNow;
-
-        var existing = await db.UserTempSuspensions
-            .Where(s => s.UserId == userId && s.TenantId == tenantId && s.DeletedAt == null && s.EndsAt >= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        foreach (var s in existing)
+        catch (UserOutOfScopeException)
         {
-            s.DeletedAt = now;
-            s.DeletedBy = callerId;
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "No tiene ámbito sobre este usuario." },
+                statusCode: StatusCodes.Status403Forbidden);
         }
-
-        var suspension = new UserTempSuspension
+        catch (SelfSuspensionException)
         {
-            TenantId = tenantId,
-            UserId = userId,
-            StartsAt = now,
-            EndsAt = request.EndsAt.ToUniversalTime(),
-            Reason = request.Reason,
-            CreatedAt = now,
-            CreatedBy = callerId,
-        };
-
-        db.UserTempSuspensions.Add(suspension);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        return Results.Created($"/api/v1/admin/ot/users/{userId}/suspend", new { id = suspension.Id });
+            return Results.BadRequest(new { error = "SELF_SUSPEND", message = "No puedes suspenderte a ti mismo." });
+        }
+        catch (LastActiveAdminException)
+        {
+            return Results.Conflict(new
+            {
+                error = "LAST_ACTIVE_ADMIN",
+                message = "No es posible suspender/desactivar al último administrador activo.",
+            });
+        }
     }
 
     private static async Task<IResult> UnsuspendUserAsync(
         Guid userId,
         HttpContext httpContext,
+        FlitDbContext db,
+        UnsuspendUserHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var callerId = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var callerIsSuperAdmin = IsSuperAdmin(httpContext.User);
+
+        try
+        {
+            await handler.HandleAsync(
+                new UnsuspendUserCommand(tenantId, userId, callerId, callerIsSuperAdmin),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.NoContent();
+        }
+        catch (TargetUserNotFoundException)
+        {
+            return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
+        }
+        catch (UserOutOfScopeException)
+        {
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "No tiene ámbito sobre este usuario." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (NoActiveSuspensionException)
+        {
+            return Results.NotFound(new { error = "NO_ACTIVE_SUSPENSION", message = "El usuario no tiene una suspensión activa." });
+        }
+    }
+
+    private static async Task<IResult> DeleteUserAsync(
+        Guid userId,
+        HttpContext httpContext,
+        [FromBody] DeleteOtUserRequest request,
+        DeleteUserHandler handler,
         FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
@@ -1478,27 +1531,45 @@ public static class AdminOtEndpoints
             return scopeError;
         }
 
-        var callerId = ResolveUserId(httpContext.User);
-        var now = DateTimeOffset.UtcNow;
+        var callerId = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var callerIsSuperAdmin = IsSuperAdmin(httpContext.User);
 
-        var active = await db.UserTempSuspensions
-            .Where(s => s.UserId == userId && s.TenantId == tenantId
-                     && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        if (active.Count == 0)
+        try
         {
-            return Results.NotFound(new { error = "NO_ACTIVE_SUSPENSION", message = "El usuario no tiene una suspensión activa." });
-        }
+            await handler.HandleAsync(
+                new DeleteUserCommand(tenantId, userId, request.RowVersion, callerId, callerIsSuperAdmin),
+                cancellationToken).ConfigureAwait(false);
 
-        foreach (var s in active)
+            return Results.NoContent();
+        }
+        catch (TargetUserNotFoundException)
         {
-            s.DeletedAt = now;
-            s.DeletedBy = callerId;
+            return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
         }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return Results.NoContent();
+        catch (UserOutOfScopeException)
+        {
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "No tiene ámbito sobre este usuario." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (SelfDeletionException)
+        {
+            return Results.BadRequest(new { error = "SELF_DELETE", message = "No puedes eliminarte a ti mismo." });
+        }
+        catch (LastActiveAdminException)
+        {
+            return Results.Conflict(new
+            {
+                error = "LAST_ACTIVE_ADMIN",
+                message = "No es posible eliminar al último administrador activo.",
+            });
+        }
+        catch (UserProfileConcurrencyException ex)
+        {
+            return Results.Json(
+                new { error = "CONCURRENCY_CONFLICT", message = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
@@ -1558,7 +1629,12 @@ public static class AdminOtEndpoints
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).
     private sealed record UpdateOtUserRequest(string? DisplayName, string? Email, long RowVersion);
 
-    private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset EndsAt);
+    // HU #10619 AC1: EndsAt nulo = desactivación indefinida (sin fecha de fin).
+    private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset? EndsAt);
+
+    // HU #10623 — RowVersion obligatorio (concurrencia optimista, igual que UpdateOtUserRequest —
+    // el valor leído de OtUserDto.RowVersion).
+    private sealed record DeleteOtUserRequest(long RowVersion);
 
     private sealed record OtUserDto(
         string Id,

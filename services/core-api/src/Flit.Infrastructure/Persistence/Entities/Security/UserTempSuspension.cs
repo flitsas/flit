@@ -6,7 +6,11 @@ public sealed class UserTempSuspension : Entities.Common.TenantAuditableEntity
 
     public DateTimeOffset StartsAt { get; set; }
 
-    public DateTimeOffset EndsAt { get; set; }
+    /// <summary>
+    /// Fin de la suspensión, o <c>null</c> para desactivación indefinida (HU #10619 AC1):
+    /// el usuario queda bloqueado hasta que un administrador lo reactive explícitamente.
+    /// </summary>
+    public DateTimeOffset? EndsAt { get; set; }
 
     public string Reason { get; set; } = string.Empty;
 
