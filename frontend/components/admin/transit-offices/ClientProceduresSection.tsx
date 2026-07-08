@@ -19,6 +19,7 @@ import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/ty
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import { assignPlateToProcedure, revokeProcedurePlate } from "@/lib/api/admin-plate-ranges";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
 const PAGE_SIZE = 20;
@@ -44,6 +45,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
+  // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
+  const [assignTarget, setAssignTarget] = useState<OtClientProcedure | null>(null);
+  const [plateInput, setPlateInput] = useState("");
+  const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
+  const [revokePlateReason, setRevokePlateReason] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
@@ -146,6 +152,42 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch {
       show("No se pudo aprobar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmAssignPlate = async () => {
+    if (!assignTarget || !plateInput.trim()) return;
+    setActing(true);
+    try {
+      await assignPlateToProcedure(assignTarget.id, plateInput.trim().toUpperCase());
+      setRows((prev) =>
+        prev.map((r) => (r.id === assignTarget.id ? { ...r, status: "asignado" } : r)),
+      );
+      setAssignTarget(null);
+      setPlateInput("");
+      show("Placa asignada al trámite.", "success");
+    } catch {
+      show("No se pudo asignar la placa.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmRevokePlate = async () => {
+    if (!revokeTarget || !revokePlateReason.trim()) return;
+    setActing(true);
+    try {
+      await revokeProcedurePlate(revokeTarget.id, revokePlateReason.trim());
+      setRows((prev) =>
+        prev.map((r) => (r.id === revokeTarget.id ? { ...r, status: "preasignado" } : r)),
+      );
+      setRevokeTarget(null);
+      setRevokePlateReason("");
+      show("Preasignación revocada.", "success");
+    } catch {
+      show("No se pudo revocar la preasignación.", "error");
     } finally {
       setActing(false);
     }
@@ -306,6 +348,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             setApproveTarget(row);
           }}
           onReject={setRejectTarget}
+          onAssignPlate={!isReadOnly && !superAdmin ? (row) => { setPlateInput(""); setAssignTarget(row); } : undefined}
+          onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
           showApprovalActions={!isReadOnly && !superAdmin}
           onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
           onVerConsolidado={handleVerConsolidado}
@@ -367,6 +411,61 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               >
                 {acting ? "Procesando…" : "Confirmar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assignTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Asignar placa"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
+            <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+              Placa
+              <input
+                type="text"
+                value={plateInput}
+                onChange={(e) => setPlateInput(e.target.value)}
+                placeholder="ABC123"
+                aria-label="Placa"
+                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
+              />
+            </label>
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revokeTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Revocar preasignación"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Revocar preasignación</h2>
+            <p className="mt-2 text-sm opacity-80">{revokeTarget.referenceNumber}</p>
+            <textarea
+              className={`mt-3 ${OT_INPUT_CLS}`}
+              rows={3}
+              value={revokePlateReason}
+              onChange={(e) => setRevokePlateReason(e.target.value)}
+              placeholder="Motivo de la revocación…"
+              aria-label="Motivo de la revocación"
+            />
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Procesando…" : "Revocar"}</button>
             </div>
           </div>
         </div>

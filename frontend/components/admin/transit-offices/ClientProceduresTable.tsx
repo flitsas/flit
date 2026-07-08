@@ -22,6 +22,10 @@ export interface ClientProceduresTableProps {
   onVerConsolidado?: (row: OtClientProcedure) => void;
   /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — asignar placa a un trámite en preasignado (Flujo B). */
+  onAssignPlate?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — revocar la preasignación de un trámite. */
+  onRevoke?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
 }
@@ -39,6 +43,8 @@ export function ClientProceduresTable({
   onGenerarConsolidado,
   onVerConsolidado,
   onAdjuntarLt,
+  onAssignPlate,
+  onRevoke,
   consolidadoActingId = null,
 }: ClientProceduresTableProps) {
   return (
@@ -99,7 +105,7 @@ export function ClientProceduresTable({
               </td>
               <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  {row.status === "entregado" && showApprovalActions && (
+                  {(row.status === "entregado" || row.status === "asignado") && showApprovalActions && (
                     <RowActions
                       actions={[
                         {
@@ -117,6 +123,29 @@ export function ClientProceduresTable({
                       ]}
                     />
                   )}
+                  {/* Feature #10587 — ruta de placa: asignar (preasignado) y revocar (preasignado/asignado). */}
+                  {row.status === "preasignado" && showApprovalActions && onAssignPlate && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                      onClick={() => onAssignPlate(row)}
+                    >
+                      Asignar placa
+                    </button>
+                  )}
+                  {(row.status === "preasignado" || row.status === "asignado") &&
+                    showApprovalActions &&
+                    onRevoke && (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "#fca5a5", color: "#b91c1c" }}
+                        onClick={() => onRevoke(row)}
+                      >
+                        Revocar
+                      </button>
+                    )}
                   {row.status === "aprobado" && onAdjuntarLt && (
                     <button
                       type="button"
