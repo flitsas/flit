@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
@@ -68,6 +69,10 @@ public static class AdminInfrastructureExtensions
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+
+        // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
+        services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();
+        services.AddScoped<ISignatureVaultRepository, SignatureVaultRepository>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
