@@ -378,27 +378,40 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
         Func<Task<T>> action,
         CancellationToken cancellationToken)
     {
-        if (_context.Database.IsRelational())
+        if (!_context.Database.IsRelational())
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
-            {
-                var transaction = await _context.Database
-                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-                await using (transaction.ConfigureAwait(false))
-                {
-                    await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
-                        cancellationToken).ConfigureAwait(false);
-
-                    var result = await action().ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return result;
-                }
-            }).ConfigureAwait(false);
+            return await action().ConfigureAwait(false);
         }
 
-        return await action().ConfigureAwait(false);
+        // Si ya hay una transacción ambiente (p.ej. este repo se invoca DENTRO del scope de otro,
+        // como OtClientProcedureRepository.AssignPlateAsync — Flujo B), NO abrir otra: abrir una
+        // segunda transacción sobre la misma conexión lanza "connection is already in a transaction".
+        // Nos unimos a la existente, fijamos el tenant (SET LOCAL) y ejecutamos; el commit lo hace el
+        // scope externo. Tampoco se usa ExecutionStrategy aquí (ya la aporta el scope externo).
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                cancellationToken).ConfigureAwait(false);
+            return await action().ConfigureAwait(false);
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            var transaction = await _context.Database
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (transaction.ConfigureAwait(false))
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                    cancellationToken).ConfigureAwait(false);
+
+                var result = await action().ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+        }).ConfigureAwait(false);
     }
 }
