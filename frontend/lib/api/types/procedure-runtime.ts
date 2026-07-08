@@ -357,6 +357,10 @@ export interface ChecklistItemView {
   obligatorio: boolean;
   docTipo?: string;
   satisfied: boolean;
+  /** RF09 — tamaño máximo por tipo (bytes). Ausente ⇒ usar el límite global. */
+  maxSizeBytes?: number;
+  /** RF08 — formatos MIME permitidos por tipo. Ausente/vacío ⇒ formatos globales. */
+  mimeTypesAllowed?: string[];
 }
 
 /** Respuesta de GET /instances/{id}/checklist. */

@@ -82,14 +82,18 @@ public sealed class WizardStateHandlerTests
     /// Identidad del comprador aprobada y vigente (N 03, RF03): el gate borrador→preparado y el
     /// blocker <c>identidad_no_aprobada</c> del wizard exigen biométrica del documento del actor.
     /// </summary>
-    private static void AprobarIdentidadComprador(ProcedureInstance instance, string doc = "123")
+    private static void AprobarIdentidadComprador(ProcedureInstance instance, string doc = "123") =>
+        AprobarIdentidad(instance, "comprador", doc);
+
+    /// <summary>Agrega una validación biométrica PROPIA aprobada+vigente para la parte y documento dados.</summary>
+    private static void AprobarIdentidad(ProcedureInstance instance, string parte, string doc)
     {
         instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
             Id = Guid.NewGuid(),
             TenantId = instance.TenantId,
             ProcedureInstanceId = instance.Id,
-            PartyRole = "comprador",
+            PartyRole = parte,
             Status = BiometricEstados.Aprobado,
             Name = "Persona",
             DocumentType = "CC",
@@ -240,10 +244,11 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_Traspaso_FurReachable_DefersBiometricAndFirma()
+    public async Task Get_Traspaso_FurReachable_DefersBiometric()
     {
-        // Pasos 1-5 completos → FUR (6) alcanzable. Sin biométrica/firma/FUR generado →
-        // incomplete con las razones diferidas (biométrica + firma).
+        // Pasos 1-5 completos → FUR (6) alcanzable. Sin biométrica/FUR generado → incomplete con la
+        // razón diferida de biométrica. B12 (HU #10661, ADR-0028): la firma de compraventa YA NO
+        // aporta `pendiente_firma` ni condiciona el completado del paso 6.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
@@ -259,7 +264,35 @@ public sealed class WizardStateHandlerTests
         var fur = result!.Steps.Single(s => s.Index == 6);
         fur.Status.Should().Be("incomplete");
         fur.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
-        fur.Reasons.Should().Contain(GetWizardStateHandler.PendienteFirma);
+        // B12: la firma ya no es una razón de incompletitud del paso 6.
+        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_BiometriaYFurSinFirma_Step6CompleteAndCanSubmit()
+    {
+        // B12 (HU #10661, ADR-0028) AC1/AC4: con biométrica de AMBAS partes + FUR generado pero SIN
+        // firma de compraventa, el paso 6 completa y el trámite puede radicarse (canSubmit=true).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "transit_office_code", ValueText = "11001000", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        CompletarDocsTraspaso(instance);
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+        AprobarIdentidad(instance, "comprador", "666");
+        AprobarIdentidad(instance, "vendedor", "555");
+        instance.Attachments.Add(Attachment("fur")); // FUR generado; NO se agrega ninguna firma.
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var fur = result!.Steps.Single(s => s.Index == 6);
+        fur.Status.Should().Be("complete");
+        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
+        result.CanSubmit.Should().BeTrue();
     }
 
     // ── Mapeo persistencia → GateContext (pasos completan al llenarlos) ───────

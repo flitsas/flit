@@ -22,12 +22,6 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 ///   operador persistidas como field_values <c>es_leasing</c> / <c>cambio_carroceria</c>
 ///   (mismo canal que <c>vehicle_service</c>); en producción v1.0 son un checkbox/selector del
 ///   paso de vehículo.</item>
-///   <item><b>Prenda</b> (RF37): field_value <c>accion_prenda</c> (<c>registrar|levantar|omitir</c>);
-///   solo <c>registrar</c> exige los documentos de prenda. La presencia automática desde la
-///   consulta RUNT (<c>guaranteeMobiliary</c>) queda pendiente de que el DTO de consulta la pueble.</item>
-///   <item><b>Importado</b> (RF33): bandera manual del operador persistida como field_value
-///   <c>es_importado</c> (checkbox del paso de vehículo en matrícula inicial); dispara pedir el
-///   documento de Aduana.</item>
 /// </list>
 /// </summary>
 public static class TramiteDocumentContextMapper
@@ -36,11 +30,8 @@ public static class TramiteDocumentContextMapper
     private const string OwnerDocumentTypeFieldKey = "owner_document_type";
     private const string VehicleServiceFieldKey = "vehicle_service";
     private const string ServicioEspecialMarker = "ESPECIAL";
-    private const string ImportadoFieldKey = "es_importado";
     private const string LeasingFieldKey = "es_leasing";
     private const string CambioCarroceriaFieldKey = "cambio_carroceria";
-    private const string AccionPrendaFieldKey = "accion_prenda";
-    private const string AccionPrendaRegistrar = "registrar";
 
     /// <summary>
     /// Construye el contexto documental a partir de la instancia (con sus colecciones cargadas:
@@ -79,19 +70,19 @@ public static class TramiteDocumentContextMapper
             string.Equals(p.Rol, ParticipantRoles.Mandatario, StringComparison.OrdinalIgnoreCase));
 
         // Banderas manuales del paso de vehículo (persistidas como field_values por el wizard).
-        var esImportado = LeerBool(fieldValues, ImportadoFieldKey);
         var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
         var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
-        // Prenda: solo "registrar" exige inscripción/paz y salvo; "levantar"/"omitir" no.
-        var accionPrenda = LeerTexto(fieldValues, AccionPrendaFieldKey);
-        var tienePrenda = string.Equals(accionPrenda, AccionPrendaRegistrar, StringComparison.OrdinalIgnoreCase);
 
         return new TramiteDocumentContext(
-            EsImportado: esImportado,
+            // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se
+            // condiciona a una bandera del operador, así que EsImportado queda siempre false.
+            EsImportado: false,
             EsPersonaNatural: esPersonaNatural,
             EsNit: esNit,
             TieneLeasing: tieneLeasing,
-            TienePrenda: tienePrenda,
+            // La prenda se gestiona en su propio agregado (ProcedureInstancePrenda / PrendaGate,
+            // Feature #10585), no desde el checklist condicional; aquí siempre false.
+            TienePrenda: false,
             TieneTramitador: tieneTramitador,
             CambioCarroceria: cambioCarroceria,
             ServicioEspecial: servicioEspecial);

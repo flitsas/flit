@@ -215,4 +215,95 @@ public sealed class PatchFieldValuesTests
         // Actualizar un value EXISTENTE (ya trackeado) NO debe marcar Added: queda como UPDATE.
         _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceFieldValue>());
     }
+
+    // ── B11 (HU #10659): OT inmutable en traspaso ─────────────────────────────
+
+    private static ProcedureInstance TraspasoInstance(Guid id, Guid tenantId, string status)
+    {
+        var instance = Instance(id, tenantId, status);
+        instance.ModalidadEntrada = "traspaso";
+        instance.TipologiaCodigo = "traspaso_standard";
+        return instance;
+    }
+
+    [Theory]
+    [InlineData("transit_office_id")]
+    [InlineData("transit_office_code")]
+    [InlineData("transit_office_name")]
+    [InlineData("transit_office_city")]
+    public async Task HandleAsync_Traspaso_TransitOfficeChange_Rejected(string fieldKey)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(TraspasoInstance(id, tenantId, TramiteEstado.Borrador));
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, fieldKey, "cualquier valor", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().Be("ot_traspaso_no_modificable");
+        result.Should().BeNull();
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Traspaso_Submitted_TransitOfficeChange_StillRejected()
+    {
+        // La excepción post-submit (IsPostSubmitTransitOfficeKey) NO aplica en traspaso.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(TraspasoInstance(id, tenantId, TramiteEstado.Entregado));
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "transit_office_code", "11001000", null)]);
+
+        var (_, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().Be("ot_traspaso_no_modificable");
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Traspaso_NonTransitField_Allowed()
+    {
+        // El bloqueo es específico de claves transit_office_*: otros campos siguen editables en borrador.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId, TramiteEstado.Borrador);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(Guid.NewGuid(), "plate", "ABC123", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Matricula_TransitOfficeChange_Allowed()
+    {
+        // Matrícula: sin cambios — el operador elige/cambia el OT libremente.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador); // modalidad matrícula por defecto.
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "transit_office_id", Guid.NewGuid().ToString(), null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "transit_office_id");
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
 }

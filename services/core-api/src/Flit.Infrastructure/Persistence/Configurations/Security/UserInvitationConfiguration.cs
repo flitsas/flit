@@ -16,6 +16,7 @@ internal sealed class UserInvitationConfiguration : IEntityTypeConfiguration<Use
         builder.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();
         builder.Property(x => x.RoleId).IsRequired(false);
+        builder.Property(x => x.LastSentAt).IsRequired(false);
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
     }
 }

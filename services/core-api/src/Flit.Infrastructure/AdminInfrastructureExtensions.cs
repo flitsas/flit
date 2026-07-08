@@ -141,6 +141,10 @@ public static class AdminInfrastructureExtensions
         // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
         services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
 
+        // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
+        // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
+        services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

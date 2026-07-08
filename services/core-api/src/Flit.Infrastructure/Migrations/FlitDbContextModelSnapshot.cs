@@ -2058,43 +2058,6 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("modules", "security");
                 });
 
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("GrantedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("granted_at");
-
-                    b.Property<Guid?>("GrantedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("granted_by");
-
-                    b.Property<Guid>("ModuleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("module_id");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_tenant_module_grants");
-
-                    b.HasIndex("ModuleId")
-                        .HasDatabaseName("ix_tenant_module_grants_module_id");
-
-                    b.HasIndex("TenantId", "ModuleId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_tenant_module_grants_tenant_id_module_id");
-
-                    b.ToTable("tenant_module_grants", "security");
-                });
-
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.UserCredential", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2199,6 +2162,10 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("InvitedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("invited_by");
+
+                    b.Property<DateTimeOffset?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sent_at");
 
                     b.Property<Guid?>("RoleId")
                         .HasColumnType("uuid")
@@ -2331,7 +2298,7 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
-                    b.Property<DateTimeOffset>("EndsAt")
+                    b.Property<DateTimeOffset?>("EndsAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ends_at");
 
@@ -4750,18 +4717,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Navigation("Action");
 
                     b.Navigation("Role");
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant", b =>
-                {
-                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.SecurityModule", "Module")
-                        .WithMany()
-                        .HasForeignKey("ModuleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_tenant_module_grants_security_modules_module_id");
-
-                    b.Navigation("Module");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.UserCredential", b =>

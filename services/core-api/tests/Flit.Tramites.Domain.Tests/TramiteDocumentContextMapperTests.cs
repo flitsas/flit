@@ -108,16 +108,7 @@ public sealed class TramiteDocumentContextMapperTests
             .TieneTramitador.Should().BeFalse();
     }
 
-    // ── Banderas manuales del paso de vehículo (RF33/37/38) ──────────────────
-
-    [Fact]
-    public void EsImportadoTrue_DesdeCampo_EsImportado()
-    {
-        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_importado", "true")]))
-            .EsImportado.Should().BeTrue();
-        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_importado", "false")]))
-            .EsImportado.Should().BeFalse();
-    }
+    // ── Banderas manuales del paso de vehículo (RF33/38) ──────────────────
 
     [Fact]
     public void EsLeasingTrue_DesdeCampo_TieneLeasing()
@@ -135,16 +126,6 @@ public sealed class TramiteDocumentContextMapperTests
             .CambioCarroceria.Should().BeTrue();
         TramiteDocumentContextMapper.From(InstanceWith(fields: [("cambio_carroceria", "false")]))
             .CambioCarroceria.Should().BeFalse();
-    }
-
-    [Theory]
-    [InlineData("registrar", true)]
-    [InlineData("levantar", false)]
-    [InlineData("omitir", false)]
-    public void AccionPrenda_SoloRegistrar_TienePrenda(string accion, bool esperado)
-    {
-        TramiteDocumentContextMapper.From(InstanceWith(fields: [("accion_prenda", accion)]))
-            .TienePrenda.Should().Be(esperado);
     }
 
     [Fact]

@@ -65,21 +65,6 @@ internal sealed class RoleGrantConfiguration : IEntityTypeConfiguration<RoleGran
     }
 }
 
-internal sealed class TenantModuleGrantConfiguration : IEntityTypeConfiguration<TenantModuleGrant>
-{
-    public void Configure(EntityTypeBuilder<TenantModuleGrant> builder)
-    {
-        builder.ToTable("tenant_module_grants", SchemaNames.Security);
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
-        builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.ModuleId).IsRequired();
-        builder.Property(x => x.GrantedAt).IsRequired();
-        builder.HasIndex(x => new { x.TenantId, x.ModuleId }).IsUnique();
-        builder.HasOne(x => x.Module).WithMany().HasForeignKey(x => x.ModuleId).OnDelete(DeleteBehavior.Cascade);
-    }
-}
-
 internal sealed class UserRoleAssignmentConfiguration : IEntityTypeConfiguration<UserRoleAssignment>
 {
     public void Configure(EntityTypeBuilder<UserRoleAssignment> builder)

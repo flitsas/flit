@@ -26,6 +26,10 @@ vi.mock("@/lib/api/security", () => ({
   assignRole: vi.fn(),
   blockUser: vi.fn(),
   unblockUser: vi.fn(),
+  updateUser: vi.fn(),
+  deleteUser: vi.fn(),
+  restoreUser: vi.fn(),
+  resendInvitation: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
