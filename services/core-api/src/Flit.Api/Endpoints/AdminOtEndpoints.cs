@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
@@ -30,6 +31,7 @@ using Flit.Api.Authorization;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
@@ -333,6 +335,23 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // HU #10625 — reenviar invitación pendiente del tenant OT: SIEMPRE regenera el token
+        // de activación (el enlace anterior queda invalidado) y reenvía el correo. Mismo alcance
+        // que /users/invite: ot_admin solo su propio tenant, SuperAdmin vía ?transitOfficeId=.
+        group.MapPost("/invitations/{invitationId:guid}/resend", ResendInvitationAsync)
+            .WithName("AdminOtResendInvitation")
+            .WithSummary("Reenvía una invitación pendiente del tenant OT")
+            .WithDescription("Regenera el token de activación (el enlace anterior deja de ser válido) y reenvía el "
+                + "correo. 409 si la invitación ya no está pendiente, 429 si no ha pasado el cooldown anti-abuso "
+                + "desde el último envío.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         return app;
     }
@@ -1631,6 +1650,62 @@ public static class AdminOtEndpoints
             return Results.Json(
                 new { error = "CONCURRENCY_CONFLICT", message = ex.Message },
                 statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+
+    private static async Task<IResult> ResendInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        ResendInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var resentBy = ResolveUserId(httpContext.User);
+        if (resentBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new ResendInvitationCommand(invitationId, tenantId, resentBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece al tenant OT resuelto." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotPendingException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_PENDING", message = "La invitación ya no está pendiente (fue aceptada o cancelada)." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ResendCooldownActiveException ex)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.Json(
+                new
+                {
+                    error = "RESEND_COOLDOWN_ACTIVE",
+                    message = $"Debes esperar antes de reenviar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                    retryAfterSeconds,
+                },
+                statusCode: StatusCodes.Status429TooManyRequests);
         }
     }
 
