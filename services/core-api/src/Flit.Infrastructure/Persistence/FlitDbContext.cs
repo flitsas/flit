@@ -37,8 +37,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<UserRoleAssignment> UserRoleAssignments => Set<UserRoleAssignment>();
 
-    public DbSet<TenantModuleGrant> TenantModuleGrants => Set<TenantModuleGrant>();
-
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
 
     // HU #10506 — soporte multi-rol: tabla puente N:M invitación-roles.
@@ -86,6 +84,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
 
     public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
+
+    // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+    public DbSet<Entities.Admin.CompanyDocumentParamEntity> CompanyDocumentParams => Set<Entities.Admin.CompanyDocumentParamEntity>();
 
     // Snapshot documental inmutable (HU #10197). Ancla a la instancia canónica del runtime.
     public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();

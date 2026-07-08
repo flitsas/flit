@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil } from "lucide-react";
 import {
   superadminClient,
@@ -9,11 +9,8 @@ import {
   RbacRole,
   RbacRoleDetail,
   RoleTargetEntityType,
-  CompanyItem,
-  TenantModuleGrantItem,
 } from "@/lib/api/superadmin-client";
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
-import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
@@ -36,7 +33,6 @@ export function RbacAdmin() {
   const [permissions, setPermissions] = useState<Record<string, RbacPermission[]>>({});
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [createPermissionForModule, setCreatePermissionForModule] = useState<RbacModule | null>(null);
-  const [grantsForModule, setGrantsForModule] = useState<RbacModule | null>(null);
 
   async function loadModules() {
     setLoading(true);
@@ -157,7 +153,7 @@ export function RbacAdmin() {
         <div
           className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
           style={{
-            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
+            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
             background: "#DFE5ED",
             color: "#162744",
           }}
@@ -168,7 +164,6 @@ export function RbacAdmin() {
           <div>Descripción</div>
           <div className="text-center">Permisos</div>
           <div className="text-center">Activo</div>
-          <div className="text-center">Empresas</div>
           <div className="text-right">Acciones</div>
         </div>
 
@@ -192,7 +187,7 @@ export function RbacAdmin() {
               <div
                 className="grid items-center px-4 py-3 border-b text-xs"
                 style={{
-                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
+                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
                   }}
               >
                 <button
@@ -219,16 +214,6 @@ export function RbacAdmin() {
                   >
                     {mod.isActive ? "Activo" : "Inactivo"}
                   </span>
-                </div>
-                <div className="flex justify-center">
-                  <button
-                    onClick={() => setGrantsForModule(mod)}
-                    aria-label="Gestionar empresas"
-                    className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                    style={{ color: "#557EFF" }}
-                  >
-                    <Building2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
                 <div className="flex justify-end gap-1">
                   {mod.isActive ? (
@@ -312,14 +297,6 @@ export function RbacAdmin() {
             setShowCreateModule(false);
             loadModules();
           }}
-        />
-      )}
-
-      {/* Modal gestión empresas (grants) */}
-      {grantsForModule && (
-        <ModuleGrantsModal
-          module={grantsForModule}
-          onClose={() => setGrantsForModule(null)}
         />
       )}
 
@@ -624,23 +601,20 @@ function ModulePermissionsChecklist({
   );
 }
 
-/** HU #10504 — el catálogo de módulos respeta el `targetEntityType` (Compañía / OT) cuando
- * se provee; re-dispara el fetch cada vez que cambia (p. ej. al cambiar el select en
- * `CreateRoleModal`). */
-function useModulesCatalog(targetEntityType?: RoleTargetEntityType) {
+/** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
+ * El catálogo se carga una sola vez y es el mismo para cualquier rol. */
+function useModulesCatalog() {
   const [modules, setModules] = useState<AccessibleModule[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    getAccessibleModules(targetEntityType)
+    getAccessibleModules()
       .then((m) => { if (active) setModules(m); })
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [targetEntityType]);
+  }, []);
 
   return { modules, loading };
 }
@@ -655,28 +629,10 @@ function CreateRoleModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
-  const { modules, loading: modulesLoading } = useModulesCatalog(targetEntityType);
+  const { modules, loading: modulesLoading } = useModulesCatalog();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // HU #10504 AC — al cambiar el tipo de entidad, el catálogo de módulos se refiltra
-  // (useModulesCatalog re-dispara el fetch); si alguna acción marcada pertenecía a un
-  // módulo que dejó de estar visible para el nuevo tipo, se desmarca automáticamente.
-  useEffect(() => {
-    if (modulesLoading) return;
-    const validActionIds = new Set(modules.flatMap((m) => m.actions.map((a) => a.id)));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelected((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      prev.forEach((id) => {
-        if (validActionIds.has(id)) next.add(id);
-        else changed = true;
-      });
-      return changed ? next : prev;
-    });
-  }, [modules, modulesLoading]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -699,6 +655,11 @@ function CreateRoleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // HU #10664 AC2 — un rol debe otorgar acceso a al menos un permiso (mínimo uno por módulo).
+    if (selected.size === 0) {
+      setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -708,9 +669,7 @@ function CreateRoleModal({
         name: name.trim(),
         description: description.trim() || undefined,
       });
-      if (selected.size > 0) {
-        await superadminClient.setRolePermissions(id, [...selected]);
-      }
+      await superadminClient.setRolePermissions(id, [...selected]);
       onCreated(targetEntityType);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
@@ -775,9 +734,8 @@ function EditRolePermissionsModal({
   onClose: () => void;
   onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
 }) {
-  // El targetEntityType del rol ya existente es fijo (no cambia al editar) — el checklist
-  // de edición respeta ese scoping.
-  const { modules, loading: modulesLoading } = useModulesCatalog(role.targetEntityType);
+  // HU #10664 — RBAC puro: el checklist muestra todos los módulos (transversal).
+  const { modules, loading: modulesLoading } = useModulesCatalog();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -823,6 +781,11 @@ function EditRolePermissionsModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // HU #10664 AC2 — un rol debe conservar acceso a al menos un permiso (mínimo uno por módulo).
+    if (selected.size === 0) {
+      setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -975,277 +938,6 @@ function CreateModuleModal({
             {loading ? "Creando…" : "Crear módulo"}
           </button>
         </form>
-    </Modal>
-  );
-}
-
-/** Fila normalizada del picker de grants — compañía u organismo de tránsito (HU #10504). */
-interface GrantTenantRow {
-  id: string;
-  name: string;
-  subtitle: string;
-}
-
-type TenantGroupKey = "COMPANY" | "TRANSIT_OFFICE";
-
-/** Checkbox de 3 estados (marcado/indeterminado/vacío) — patrón React estándar vía ref
- * para el atributo DOM `indeterminate` (no expresable solo con props). */
-function TriStateCheckbox({
-  id,
-  label,
-  checked,
-  indeterminate,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  indeterminate: boolean;
-  disabled?: boolean;
-  onChange: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <label htmlFor={id} className="flex items-center gap-2 cursor-pointer select-none">
-      <input
-        id={id}
-        ref={ref}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-        className="h-4 w-4 accent-[#557EFF]"
-      />
-      <span className="text-xs font-semibold whitespace-nowrap">{label}</span>
-    </label>
-  );
-}
-
-function groupGrantState(rows: GrantTenantRow[], grantedIds: Set<string>) {
-  const allGranted = rows.length > 0 && rows.every((r) => grantedIds.has(r.id));
-  const someGranted = rows.some((r) => grantedIds.has(r.id));
-  return { allGranted, indeterminate: someGranted && !allGranted };
-}
-
-function ModuleGrantsModal({
-  module,
-  onClose,
-}: {
-  module: RbacModule;
-  onClose: () => void;
-}) {
-  const [companies, setCompanies] = useState<CompanyItem[]>([]);
-  const [otTenants, setOtTenants] = useState<TransitOfficeTenantItem[]>([]);
-  const [grants, setGrants] = useState<TenantModuleGrantItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<TenantGroupKey, boolean>>({
-    COMPANY: true,
-    TRANSIT_OFFICE: true,
-  });
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      setLoading(true);
-      try {
-        const [c, ot, g] = await Promise.all([
-          superadminClient.listCompanies().then((r) => r.data),
-          fetchTransitOfficeTenants().then((r) => r.data),
-          superadminClient.listModuleGrants(module.id),
-        ]);
-        if (active) {
-          setCompanies(c);
-          setOtTenants(ot);
-          setGrants(g);
-        }
-      } catch {
-        // ignore
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    load();
-    return () => { active = false; };
-  }, [module.id]);
-
-  const grantedIds = new Set(grants.map((g) => g.tenantId));
-
-  // GET /api/v1/admin/companies/index (HU #10189) no excluye tenants que en realidad son
-  // Organismos de Tránsito (no hay filtro contra TransitOfficeProfiles en CompanyReadRepository),
-  // así que un tenant OT puede venir tanto en `companies` como en `otTenants`. Deduplicamos aquí
-  // en vez de depender de ese endpoint — la causa raíz queda pendiente como fix aparte.
-  const otTenantIds = new Set(otTenants.map((t) => t.id));
-  const companyRows: GrantTenantRow[] = companies
-    .filter((c) => !otTenantIds.has(c.id))
-    .map((c) => ({ id: c.id, name: c.razonSocial, subtitle: c.nit }));
-  const otRows: GrantTenantRow[] = otTenants.map((t) => ({ id: t.id, name: t.legalName, subtitle: t.taxId }));
-  const allRows: GrantTenantRow[] = [...companyRows, ...otRows];
-
-  async function refreshGrants() {
-    try {
-      const g = await superadminClient.listModuleGrants(module.id);
-      setGrants(g);
-    } catch {
-      /* silent */
-    }
-  }
-
-  async function handleToggleOne(row: GrantTenantRow, isGranted: boolean) {
-    setBusy((b) => ({ ...b, [row.id]: true }));
-    try {
-      if (isGranted) {
-        await superadminClient.revokeModuleFromTenant(module.id, row.id);
-        setGrants((g) => g.filter((x) => x.tenantId !== row.id));
-      } else {
-        await superadminClient.grantModuleToTenant(module.id, row.id);
-        setGrants((g) => [...g, { tenantId: row.id, tenantName: row.name }]);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setBusy((b) => ({ ...b, [row.id]: false }));
-    }
-  }
-
-  /** Otorga/revoca en bloque sobre `rows` (Todos / Todas las compañías / Todas las OT).
-   * Toggle completo: si ya estaba todo otorgado, revoca todo; si no, otorga lo faltante. */
-  async function handleBulkToggle(rows: GrantTenantRow[]) {
-    if (rows.length === 0 || bulkBusy) return;
-    const { allGranted } = groupGrantState(rows, grantedIds);
-    setBulkBusy(true);
-    try {
-      if (allGranted) {
-        await Promise.all(rows.map((r) => superadminClient.revokeModuleFromTenant(module.id, r.id)));
-      } else {
-        const toGrant = rows.filter((r) => !grantedIds.has(r.id));
-        await Promise.all(toGrant.map((r) => superadminClient.grantModuleToTenant(module.id, r.id)));
-      }
-      await refreshGrants();
-    } catch {
-      /* silent */
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  function toggleGroupExpanded(group: TenantGroupKey) {
-    setExpandedGroups((s) => ({ ...s, [group]: !s[group] }));
-  }
-
-  function renderRow(row: GrantTenantRow) {
-    const granted = grantedIds.has(row.id);
-    return (
-      <label
-        key={row.id}
-        className="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFF] border"
-        style={{ borderColor: granted ? "#00DBD5" : "#DFE5ED" }}
-      >
-        <input
-          type="checkbox"
-          checked={granted}
-          disabled={bulkBusy || busy[row.id]}
-          onChange={() => handleToggleOne(row, granted)}
-          className="h-4 w-4 accent-[#557EFF]"
-        />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{row.name}</p>
-          <p className="text-[11px] opacity-60">{row.subtitle}</p>
-        </div>
-        {busy[row.id] && <span className="ml-auto text-[10px] opacity-50">…</span>}
-      </label>
-    );
-  }
-
-  function renderGroupSection(group: TenantGroupKey, title: string, rows: GrantTenantRow[], quickLabel: string) {
-    const { allGranted, indeterminate } = groupGrantState(rows, grantedIds);
-    return (
-      <div>
-        <div className="flex items-center justify-between gap-2 py-1">
-          <button
-            type="button"
-            onClick={() => toggleGroupExpanded(group)}
-            aria-label={expandedGroups[group] ? `Colapsar ${title}` : `Expandir ${title}`}
-            className="flex items-center gap-1.5 opacity-80 hover:opacity-100"
-          >
-            {expandedGroups[group] ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-            <span className="text-xs font-bold">{title}</span>
-          </button>
-          <TriStateCheckbox
-            id={`grants-all-${group}`}
-            label={quickLabel}
-            checked={allGranted}
-            indeterminate={indeterminate}
-            disabled={bulkBusy || rows.length === 0}
-            onChange={() => handleBulkToggle(rows)}
-          />
-        </div>
-        {expandedGroups[group] && (
-          <div className="mt-1.5 ml-5 space-y-1.5">
-            {rows.length === 0 ? (
-              <p className="text-xs opacity-60">Sin registros.</p>
-            ) : (
-              rows.map(renderRow)
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const allState = groupGrantState(allRows, grantedIds);
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      busy={bulkBusy}
-      size="sm"
-      title="Empresas y organismos con acceso"
-      titleClassName="text-lg font-bold text-[#162744] dark:text-white"
-    >
-        <p className="text-xs opacity-60 mb-4">
-          Módulo: <strong>{module.name}</strong> ({module.code})
-        </p>
-        {loading ? (
-          <div className="py-8 text-center text-sm opacity-60">Cargando…</div>
-        ) : allRows.length === 0 ? (
-          <div className="py-8 text-center text-sm opacity-60">
-            No hay compañías ni organismos de tránsito registrados.
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-            <div className="pb-2 border-b" style={{ borderColor: "#DFE5ED" }}>
-              <TriStateCheckbox
-                id="grants-all"
-                label="Todos"
-                checked={allState.allGranted}
-                indeterminate={allState.indeterminate}
-                disabled={bulkBusy || allRows.length === 0}
-                onChange={() => handleBulkToggle(allRows)}
-              />
-            </div>
-            {renderGroupSection("COMPANY", "Compañías", companyRows, "Todas las compañías")}
-            {renderGroupSection("TRANSIT_OFFICE", "Organismos de Tránsito", otRows, "Todas las OT")}
-          </div>
-        )}
-        <button
-          onClick={onClose}
-          disabled={bulkBusy}
-          className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          Listo
-        </button>
     </Modal>
   );
 }

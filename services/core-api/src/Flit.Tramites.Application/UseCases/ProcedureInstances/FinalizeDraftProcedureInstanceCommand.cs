@@ -23,7 +23,11 @@ public static class FinalizeDraftGate
     public const string OrganismoRequerido = "organismo_requerido";
 
     /// <summary>Evalúa el gate. La instancia debe traer cargado el grafo del wizard. Lista vacía = puede finalizar.</summary>
-    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance)
+    /// <param name="documentosCompletosOverride">
+    /// HU #10522 (RF17/RF22): completitud documental resuelta desde la matriz del gestor; <c>null</c>
+    /// ⇒ se usa el gate actual del catálogo (flag OFF o sin matriz), sin regresión.
+    /// </param>
+    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance, bool? documentosCompletosOverride = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
 
@@ -35,7 +39,7 @@ public static class FinalizeDraftGate
 
         if (!ActoresCompletos(instance, esTraspaso))
             errors.Add(ActoresIncompletos);
-        if (!SubmitGate.DocumentosObligatoriosCompletos(instance))
+        if (!(documentosCompletosOverride ?? SubmitGate.DocumentosObligatoriosCompletos(instance)))
             errors.Add(DocumentosIncompletos);
         if (!SubmitGate.OrganismoSeleccionado(instance))
             errors.Add(OrganismoRequerido);
@@ -68,7 +72,9 @@ public static class FinalizeDraftGate
 /// (sin identidad ni FUR) vía <see cref="FinalizeDraftGate"/> y registra el evento <c>draft_finalizado</c>
 /// en la bitácora. Idempotente: si el borrador ya estaba finalizado, devuelve el resumen sin re-sellar.
 /// </summary>
-public sealed class FinalizeDraftProcedureInstanceHandler(IProcedureInstanceRepository repo)
+public sealed class FinalizeDraftProcedureInstanceHandler(
+    IProcedureInstanceRepository repo,
+    ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -86,7 +92,11 @@ public sealed class FinalizeDraftProcedureInstanceHandler(IProcedureInstanceRepo
         if (instance.DraftFinalizedAt is not null)
             return (CreateProcedureInstanceHandler.ToSummary(instance), null);
 
-        var gateErrors = FinalizeDraftGate.Evaluate(instance);
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
+        var gateErrors = FinalizeDraftGate.Evaluate(instance, docsCompletos);
         if (gateErrors.Count > 0)
             return (null, gateErrors[0]);
 

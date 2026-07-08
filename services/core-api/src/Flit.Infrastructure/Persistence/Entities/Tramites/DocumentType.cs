@@ -5,8 +5,9 @@ namespace Flit.Infrastructure.Persistence.Entities.Tramites;
 /// (DDL HU #10155, gestionado por la API en HU #10193). Catálogo global SuperAdmin
 /// (sin RLS). Soft-delete vía <see cref="IsActive"/>.
 ///
-/// Las columnas <c>mime_types_allowed</c>, <c>max_size_bytes</c> y <c>external_refs</c>
-/// no se mapean: se gestionan por defaults de la BD y no las toca esta HU.
+/// HU #10520: se mapean <c>mime_types_allowed</c> y <c>max_size_bytes</c> para la
+/// validación de carga por tipo (con respaldo a los límites globales). La columna
+/// <c>external_refs</c> sigue sin mapearse (default de BD).
 /// </summary>
 public sealed class DocumentType
 {
@@ -17,6 +18,12 @@ public sealed class DocumentType
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    /// <summary>MIME permitidos para este tipo (jsonb). Vacío ⇒ se aplican los defaults globales.</summary>
+    public List<string> MimeTypesAllowed { get; set; } = [];
+
+    /// <summary>Tamaño máximo en bytes para este tipo. <c>0</c> ⇒ se aplica el default global.</summary>
+    public long MaxSizeBytes { get; set; }
 
     public bool IsActive { get; set; } = true;
 

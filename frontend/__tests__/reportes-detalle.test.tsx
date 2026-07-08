@@ -7,28 +7,35 @@ import type {
   TopProducer,
   TopProducersResponse,
 } from "@/lib/api/types";
+import type { LiveOverviewResponse } from "@/lib/api/analytics-v2";
 
-// ── Mocks de la capa de datos y del rol ────────────────────────────────────
+// ── Mocks de la capa de datos y de permisos ─────────────────────────────────
 const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
+  fetchMonthlyTrend: vi.fn(),
   fetchTopProducers: vi.fn(),
   fetchProcedureDetails: vi.fn(),
+  exportAnalyticsExcel: vi.fn(),
+  exportExecutivePdf: vi.fn(),
+  fetchLiveOverview: vi.fn(),
   fetchCompaniesIndex: vi.fn(),
-  getToken: vi.fn(() => "token"),
-  isSuperAdmin: vi.fn(() => false),
+  usePermissions: vi.fn(),
 }));
 
 vi.mock("@/lib/api/analytics", () => ({
   fetchAnalyticsOverview: mocks.fetchAnalyticsOverview,
+  fetchMonthlyTrend: mocks.fetchMonthlyTrend,
   fetchTopProducers: mocks.fetchTopProducers,
   fetchProcedureDetails: mocks.fetchProcedureDetails,
+  exportAnalyticsExcel: mocks.exportAnalyticsExcel,
+  exportExecutivePdf: mocks.exportExecutivePdf,
 }));
+vi.mock("@/lib/api/analytics-v2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/analytics-v2")>();
+  return { ...actual, fetchLiveOverview: mocks.fetchLiveOverview };
+});
 vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
-vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
-vi.mock("@/lib/auth/jwt", () => ({
-  decodeJwtPayload: () => ({ role: "x" }),
-  isSuperAdmin: mocks.isSuperAdmin,
-}));
+vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 import { Reportes } from "@/components/atom/modules/Reportes";
 import { ProductivityCards } from "@/components/atom/modules/_reportes/ProductivityCards";
@@ -42,6 +49,15 @@ const OVERVIEW: AnalyticsOverviewResponse = {
     { category: "traspasos", total: 30, byStatus: [{ status: "submitted", count: 30 }] },
     { category: "otros", total: 0, byStatus: [] },
   ],
+};
+
+const LIVE: LiveOverviewResponse = {
+  generatedAt: "2026-07-07T14:03:22Z",
+  today: { creados: 2, byStatus: [], entregados: 1, aprobados: 0, rechazados: 0 },
+  stuckCount: 0,
+  pendingIdentityValidations: 0,
+  integrationsLastHour: { calls: 0, errors: 0, avgDurationMs: 0 },
+  lastActivityAt: null,
 };
 
 const PRODUCERS: TopProducer[] = [
@@ -71,9 +87,19 @@ const DETAIL_PAGE: ProcedureDetailsPage = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getToken.mockReturnValue("token");
-  mocks.isSuperAdmin.mockReturnValue(false);
+  mocks.usePermissions.mockReturnValue({
+    permissions: ["reportes.read"],
+    isSuperAdmin: false,
+    isAdminCompany: false,
+    isOtAdmin: false,
+    tenantId: null,
+    userId: null,
+    roleId: null,
+    roleCode: null,
+  });
   mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+  mocks.fetchMonthlyTrend.mockResolvedValue({ items: [] });
+  mocks.fetchLiveOverview.mockResolvedValue(LIVE);
   mocks.fetchTopProducers.mockResolvedValue(PRODUCERS_RESPONSE);
   mocks.fetchProcedureDetails.mockResolvedValue(DETAIL_PAGE);
   mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 100 });

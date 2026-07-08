@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Schemas;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Flit.Infrastructure.Persistence.Configurations.Tramites;
@@ -25,6 +27,21 @@ internal sealed class DocumentTypeConfiguration : IEntityTypeConfiguration<Docum
         builder.Property(x => x.Description).HasMaxLength(500);
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(x => x.CreatedAt).IsRequired();
+
+        // HU #10520 — validación de carga por tipo. La columna es jsonb (DDL HU #10155); se
+        // (de)serializa la lista de MIME con un value converter + comparer (colección mutable).
+        var mimeComparer = new ValueComparer<List<string>>(
+            (a, b) => a!.SequenceEqual(b!),
+            v => v.Aggregate(0, (acc, s) => HashCode.Combine(acc, s.GetHashCode(StringComparison.Ordinal))),
+            v => v.ToList());
+        builder.Property(x => x.MimeTypesAllowed)
+            .HasColumnName("mime_types_allowed")
+            .HasColumnType("jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+            .Metadata.SetValueComparer(mimeComparer);
+        builder.Property(x => x.MaxSizeBytes).HasColumnName("max_size_bytes");
 
         builder.HasIndex(x => x.Code)
             .IsUnique()

@@ -17,6 +17,10 @@ servers:
 tags:
   - name: Auth
     description: Autenticación y sesión (login, perfil del usuario).
+  - name: Security · Invitaciones
+    description: >
+      Reenvío de invitaciones pendientes (rol SuperAdmin cualquier tenant, o
+      AdminCompany/ot_admin solo su propio tenant).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
   - name: Admin · Tenants OT
@@ -157,6 +161,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/security/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Security · Invitaciones]
+      operationId: securityResendInvitation
+      summary: Reenvía una invitación pendiente (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo. SuperAdmin puede reenviar
+        cualquier invitación del sistema; AdminCompany solo las de su propio tenant
+        (mismo alcance que `POST /api/v1/security/invitations`). Rechaza el reenvío si
+        la invitación ya no está pendiente (409) o si no ha pasado el cooldown
+        anti-abuso (~2 minutos, configurable) desde el último envío (429).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
+
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -861,6 +916,10 @@ paths:
         Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto
         (propio para ot_admin, o el indicado por `?transitOfficeId=` para
         SuperAdmin). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        Con `?onlyDeleted=true` (#10624) lista en su lugar los usuarios
+        eliminados (soft-delete, `deletedAt != null`) de ese mismo tenant OT
+        resuelto — EXCLUSIVO de SuperAdmin (403 para ot_admin). Sin este
+        parámetro el comportamiento es exactamente el de antes.
       security:
         - bearerAuth: []
       parameters:
@@ -868,9 +927,17 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados del tenant OT
+            resuelto (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
       responses:
         "200":
-          description: Usuarios del tenant OT resuelto.
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del tenant OT resuelto.
           content:
             application/json:
               schema:
@@ -878,13 +945,131 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: >
+            Sin rol SuperAdmin u ot_admin, o `onlyDeleted=true` solicitado por
+            un caller distinto de SuperAdmin.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Admin · OT]
+      operationId: adminOtUpdateUser
+      summary: Edita nombre y/o correo de un usuario del tenant OT (#10621)
+      description: >
+        Edita displayName y/o email de un usuario dentro del alcance del caller
+        (propio tenant para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). `rowVersion` es obligatorio (concurrencia optimista: el valor
+        leído de `OtUserItem.rowVersion`). No invalida sesiones activas — el cambio
+        de correo solo aplica en el próximo login. Requiere JWT con rol SuperAdmin
+        u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOtUserRequest"
+      responses:
+        "200":
+          description: Usuario actualizado.
+        "400":
+          description: Datos inválidos (longitud de nombre/correo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o el usuario no pertenece al tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El correo ya tiene una cuenta activa (`USER_ALREADY_EXISTS`), pertenece
+            a una cuenta eliminada (`EMAIL_BELONGS_TO_DELETED_USER`), o `rowVersion`
+            quedó desactualizado (`CONCURRENCY_CONFLICT` — otro admin ya modificó al
+            usuario). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtDeleteUser
+      summary: Elimina (soft-delete reversible) a un usuario del tenant OT (#10623)
+      description: >
+        Marca `deletedAt`/`deletedBy` en el usuario dentro del alcance del caller
+        (propio tenant para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin) — HU #10623. `rowVersion` es obligatorio (concurrencia optimista,
+        el valor leído de `OtUserItem.rowVersion`). NO toca roles ni suspensiones: al
+        restaurar (`POST /api/v1/superadmin/users/{userId}/restore`, SOLO SuperAdmin)
+        el usuario recupera exactamente el mismo estado. Se rechaza la
+        auto-eliminación y la eliminación del último administrador activo del
+        tenant/sistema. Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteOtUserRequest"
+      responses:
+        "204":
+          description: Usuario eliminado (soft-delete).
+        "400":
+          description: Auto-eliminación no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o el usuario no pertenece al tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (`LAST_ACTIVE_ADMIN`), o `rowVersion` quedó desactualizado
+            (`CONCURRENCY_CONFLICT`). No se persiste nada.
           content:
             application/json:
               schema:
@@ -903,12 +1088,14 @@ paths:
     post:
       tags: [Admin · OT]
       operationId: adminOtSuspendUser
-      summary: Suspende temporalmente a un usuario del tenant OT (self-service, refactor adminOT)
+      summary: Suspende o desactiva indefinidamente a un usuario del tenant OT (self-service, refactor adminOT)
       description: >
-        Suspende a un usuario del tenant OT resuelto (propio para ot_admin, o el
-        indicado por `?transitOfficeId=` para SuperAdmin). El usuario debe
-        pertenecer al tenant resuelto (no se puede suspender usuarios de otro OT).
-        Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        Suspende temporalmente (con `endsAt`) o desactiva indefinidamente (sin
+        `endsAt`) a un usuario del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin) — HU #10619. SuperAdmin
+        aplica la acción sobre el tenant REAL del usuario objetivo. Se rechaza si
+        el usuario intenta auto-suspenderse o si dejaría al tenant/sistema sin
+        ningún administrador activo (último SuperAdmin/AdminCompany/ot_admin).
       security:
         - bearerAuth: []
       requestBody:
@@ -919,7 +1106,7 @@ paths:
               $ref: "#/components/schemas/SuspendOtUserRequest"
       responses:
         "201":
-          description: Suspensión creada.
+          description: Suspensión/desactivación creada.
         "400":
           description: Auto-suspensión no permitida.
           content:
@@ -929,7 +1116,7 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: Sin rol SuperAdmin u ot_admin, o sin ámbito sobre el usuario objetivo.
           content:
             application/json:
               schema:
@@ -940,15 +1127,216 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (último SuperAdmin/AdminCompany/ot_admin disponible).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags: [Admin · OT]
       operationId: adminOtUnsuspendUser
-      summary: Levanta la suspensión activa de un usuario del tenant OT (self-service, refactor adminOT)
+      summary: Levanta la suspensión/desactivación activa de un usuario del tenant OT (self-service, refactor adminOT)
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: Suspensión levantada.
+          description: Suspensión/desactivación levantada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o sin ámbito sobre el usuario objetivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe en el tenant OT resuelto, o no tiene una suspensión activa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/users:
+    get:
+      tags: [Security]
+      operationId: securityListUsers
+      summary: Lista usuarios activos e invitaciones pendientes del alcance del caller
+      description: >
+        AdminCompany ve solo su propio tenant; SuperAdmin ve los usuarios de
+        todas las compañías (excepto su propio tenant interno). Con
+        `?onlyDeleted=true` (#10624) lista en su lugar los usuarios eliminados
+        (soft-delete, `deletedAt != null`) de CUALQUIER tenant — EXCLUSIVO de
+        SuperAdmin (403 en otro caso, incluido AdminCompany), ya que solo
+        SuperAdmin puede restaurar (`POST /api/v1/superadmin/users/{userId}/restore`).
+        Sin este parámetro el comportamiento es exactamente el de antes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados de cualquier
+            tenant (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del alcance del caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TenantUserItem"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: "`onlyDeleted=true` solicitado por un caller distinto de SuperAdmin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Security]
+      operationId: securityDeleteUser
+      summary: Elimina (soft-delete reversible) a un usuario del alcance del caller (#10623)
+      description: >
+        Marca `deletedAt`/`deletedBy` en el usuario dentro del alcance del caller
+        (AdminCompany solo su propio tenant, SuperAdmin cualquiera) — HU #10623.
+        `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+        `TenantUserDto.rowVersion`). NO toca roles ni suspensiones: al restaurar
+        (`POST /api/v1/superadmin/users/{userId}/restore`, SOLO SuperAdmin) el
+        usuario recupera exactamente el mismo estado. Se rechaza la
+        auto-eliminación y la eliminación del último administrador activo del
+        tenant/sistema. Requiere JWT con rol SuperAdmin o AdminCompany
+        (AdminCompanyPolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteUserRequest"
+      responses:
+        "204":
+          description: Usuario eliminado (soft-delete).
+        "400":
+          description: Auto-eliminación no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin o AdminCompany, o sin ámbito sobre el usuario objetivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe en este tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (`LAST_ACTIVE_ADMIN`), o `rowVersion` quedó desactualizado
+            (`CONCURRENCY_CONFLICT`). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/superadmin/users/{userId}/restore:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Super Admin]
+      operationId: restoreUser
+      summary: Restaura (deshace el soft-delete) a un usuario eliminado (#10623)
+      description: >
+        SOLO SuperAdmin. NO toca `UserRoleAssignment` ni `UserTempSuspension` —
+        como `DELETE` nunca los modificó, el usuario recupera exactamente los
+        mismos roles y el mismo estado de suspensión que tenía al momento de
+        eliminarse (AC3). Restaurar un usuario que NO está eliminado se rechaza
+        explícitamente (AC5, no es un no-op silencioso). Requiere JWT con rol
+        SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Usuario restaurado.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin.
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtResendInvitation
+      summary: Reenvía una invitación pendiente del tenant OT (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo, para la invitación del tenant
+        OT resuelto (propio para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). Rechaza el reenvío si la invitación ya no está pendiente (409) o
+        si no ha pasado el cooldown anti-abuso (~2 minutos, configurable) desde el
+        último envío (429). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
@@ -958,7 +1346,111 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: El usuario no tiene una suspensión activa en el tenant OT resuelto.
+          description: >
+            La invitación no existe o no pertenece al tenant OT resuelto (o no existe
+            un tenant OT vinculado al transitOfficeId indicado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
+
+  /api/v1/security/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Security]
+      operationId: securityCancelInvitation
+      summary: Cancela una invitación pendiente (HU #10627)
+      description: >
+        Anula una invitación pendiente (distinto de reenviarla, HU #10625): el enlace de
+        activación anterior deja de funcionar y el email queda disponible de nuevo para una
+        nueva invitación. Mismo alcance que POST /security/invitations — SuperAdmin puede
+        cancelar la invitación de cualquier empresa; AdminCompany solo las de su propio tenant.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin o AdminCompany.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtCancelInvitation
+      summary: Cancela una invitación pendiente del tenant OT (HU #10627)
+      description: >
+        Anula una invitación pendiente del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin). El enlace de activación anterior
+        deja de funcionar y el email queda disponible para una nueva invitación. Requiere JWT
+        con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
           content:
             application/json:
               schema:
@@ -2893,6 +3385,766 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/ot-metrics:
+    get:
+      tags: [Analytics · Métricas (Reportes 2.0)]
+      operationId: analyticsOtMetrics
+      summary: Métricas del Organismo de Tránsito (rechazos, tiempos de decisión, reincidencia, ranking y atascados)
+      description: >
+        Reportes 2.0 (HU-B). Calcula sobre `procedure_instance_status_history` los KPIs de la
+        pestaña OT del periodo [from, to]: transiciones a entregado/aprobado/rechazado, tasa de
+        rechazo (global, por OT, por causal y por tipo de trámite), tiempos entregado→decisión
+        (avg/p50/p90 en horas), reincidencia (rechazado→borrador), ranking de agilidad de OTs y
+        trámites atascados (> `stuckDays` días sin transición en estado no final). Lectura abierta
+        a cualquier autenticado del tenant (claim `tenant_id`). NO hay vista global: el SuperAdmin
+        DEBE indicar `tenantId` por query (sin él → 400 en español). Con `compareWith` la
+        respuesta envuelve además la ventana anterior (`previous`) y su metadato (`comparison`);
+        la variación porcentual la calcula el frontend (el backend no manda deltas).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha inicial inclusiva (YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha final inclusiva (YYYY-MM-DD).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él (no hay vista global en métricas).
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por Organismo de Tránsito.
+        - name: procedureTypeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por tipo de trámite.
+        - name: operatorUserId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por usuario radicador/operador.
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EstadoTramiteN03"
+          description: Filtra por estado N03 del trámite.
+        - name: reason
+          in: query
+          required: false
+          schema: { type: string }
+          description: Substring (case-insensitive, ILIKE) sobre la causal de la transición a rechazado.
+        - name: compareWith
+          in: query
+          required: false
+          schema: { type: string, enum: [previous_period, previous_year] }
+          description: >
+            Ventana de comparación: `previous_period` = misma duración inmediatamente anterior a
+            `from`; `previous_year` = mismas fechas un año atrás. Ausente = sin comparación
+            (`previous` y `comparison` en null).
+        - name: stuckDays
+          in: query
+          required: false
+          schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
+          description: Días sin transición para considerar un trámite atascado.
+      responses:
+        "200":
+          description: Métricas OT del periodo (con `previous`/`comparison` si se pidió `compareWith`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtMetricsResponse"
+        "400":
+          description: Rango inválido, `compareWith`/`stuckDays` inválidos o falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin consultando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/funnel:
+    get:
+      tags: [Analytics · Métricas (Reportes 2.0)]
+      operationId: analyticsFunnel
+      summary: Funnel de estados del trámite y pasos del wizard en el periodo
+      description: >
+        Reportes 2.0 (HU-B). Cuenta instancias DISTINTAS (por `created_at` dentro del rango) que
+        ALCANZARON cada etapa borrador→preparado→entregado→aprobado, con porcentajes sobre la
+        primera etapa y sobre la anterior; añade anulados, rechazados vigentes (estado actual
+        rechazado) y las métricas por paso del wizard (telemetría HU-A; `wizardSteps` vacío si
+        no hay telemetría). Mismo modelo de tenant que `ot-metrics` (SuperAdmin DEBE indicar
+        `tenantId`; sin vista global) y misma envoltura de comparación con `compareWith`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha inicial inclusiva (YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha final inclusiva (YYYY-MM-DD).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él (no hay vista global en métricas).
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por Organismo de Tránsito.
+        - name: procedureTypeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por tipo de trámite.
+        - name: operatorUserId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por usuario radicador/operador.
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EstadoTramiteN03"
+          description: Filtra por estado N03 del trámite.
+        - name: reason
+          in: query
+          required: false
+          schema: { type: string }
+          description: Substring (case-insensitive, ILIKE) sobre la causal de la transición a rechazado.
+        - name: compareWith
+          in: query
+          required: false
+          schema: { type: string, enum: [previous_period, previous_year] }
+          description: Ventana de comparación (ausente = sin comparación).
+      responses:
+        "200":
+          description: Funnel del periodo (con `previous`/`comparison` si se pidió `compareWith`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: Rango inválido, `compareWith` inválido o falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin consultando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/usage:
+    get:
+      tags: [Analytics · Métricas (Reportes 2.0)]
+      operationId: analyticsUsage
+      summary: Uso del aplicativo (módulos, wizard, horas pico, reemplazos de documentos e integraciones)
+      description: >
+        Reportes 2.0 (HU-B). Agrega la telemetría de `analytics.app_usage_events` (uso por
+        módulo, métricas por paso del wizard, heatmap de horas pico en hora America/Bogota y
+        duración total del wizard), los reemplazos de documentos (filas adicionales por
+        (instancia, tipo) en attachments) y las llamadas a integraciones externas de
+        `admin.ot_api_call_logs` (errores = `response_code >= 400` o `error_message` no nulo).
+        Mismo modelo de tenant que `ot-metrics` (SuperAdmin DEBE indicar `tenantId`; sin vista
+        global) y misma envoltura de comparación con `compareWith`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha inicial inclusiva (YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Fecha final inclusiva (YYYY-MM-DD).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él (no hay vista global en métricas).
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por Organismo de Tránsito.
+        - name: procedureTypeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por tipo de trámite.
+        - name: operatorUserId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por usuario radicador/operador.
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EstadoTramiteN03"
+          description: Filtra por estado N03 del trámite.
+        - name: reason
+          in: query
+          required: false
+          schema: { type: string }
+          description: Substring (case-insensitive, ILIKE) sobre la causal de la transición a rechazado.
+        - name: compareWith
+          in: query
+          required: false
+          schema: { type: string, enum: [previous_period, previous_year] }
+          description: Ventana de comparación (ausente = sin comparación).
+      responses:
+        "200":
+          description: Métricas de uso del periodo (con `previous`/`comparison` si se pidió `compareWith`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageResponse"
+        "400":
+          description: Rango inválido, `compareWith` inválido o falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin consultando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/live-overview:
+    get:
+      tags: [Analytics · Métricas (Reportes 2.0)]
+      operationId: analyticsLiveOverview
+      summary: Panorama en vivo del tenant (actividad de hoy, atascados, validaciones pendientes e integraciones)
+      description: >
+        Reportes 2.0 (HU-B). Snapshot "en vivo" del tenant, pensado para polling de 30–60 s
+        (< 300 ms, una sola ronda de queries): actividad de HOY en hora America/Bogota (creados,
+        estado actual de instancias activas, transiciones a entregado/aprobado/rechazado),
+        trámites atascados, validaciones de identidad pendientes/en proceso, integraciones de la
+        última hora y el timestamp de la última actividad. `from`/`to` y `compareWith` NO
+        aplican. Mismo modelo de tenant que `ot-metrics` (SuperAdmin DEBE indicar `tenantId`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él (no hay vista global en métricas).
+        - name: stuckDays
+          in: query
+          required: false
+          schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
+          description: Días sin transición para considerar un trámite atascado.
+      responses:
+        "200":
+          description: Snapshot en vivo del tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveOverviewResponse"
+        "400":
+          description: "`stuckDays` inválido o falta tenant (SuperAdmin sin `tenantId`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Tenant Admin consultando métricas de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/events:
+    post:
+      tags: [Analytics · Telemetría]
+      operationId: analyticsUsageEventsBatch
+      summary: Recibe un lote (máx. 50) de eventos de telemetría de uso del frontend
+      description: >
+        Reportes 2.0 (HU-A, §4.6 del contrato). Encola en memoria (escritura asíncrona por
+        lotes en `analytics.app_usage_events`) los eventos de uso emitidos por el frontend.
+        El tenant y el userId salen SIEMPRE del JWT (claims `tenant_id` y `sub`), nunca del
+        body. La taxonomía de `eventType` es CERRADA: los eventos con tipo desconocido se
+        descartan silenciosamente y solo se cuenta lo aceptado. `metadata` NO debe contener
+        PII (nombres, documentos, emails, placas, VIN). Best-effort: nunca responde 5xx por
+        errores de persistencia ni saturación de la cola (se degrada a 202 con menos aceptados);
+        lote de más de 50 eventos → 400 en español.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageEventBatchRequest"
+      responses:
+        "202":
+          description: Lote encolado; `accepted` = eventos aceptados (los fuera de taxonomía se descartan).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageEventBatchAcceptedResponse"
+        "400":
+          description: El lote supera el máximo de 50 eventos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+
+  /api/v1/analytics/report-schedules:
+    get:
+      tags: [Analytics · Informes programados (Reportes 2.0)]
+      operationId: analyticsReportSchedulesList
+      summary: Lista los informes programados del tenant
+      description: >
+        Reportes 2.0 (HU-D, §4.7 del contrato). Requiere policy AdminCompany (rol de empresa o
+        SuperAdmin). Tenant del claim JWT `tenant_id`; el SuperAdmin DEBE indicar `tenantId`
+        por query (sin vista global → 400 en español). No incluye los eliminados lógicamente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "200":
+          description: Informes programados del tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSchedulesListResponse"
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Analytics · Informes programados (Reportes 2.0)]
+      operationId: analyticsReportSchedulesCreate
+      summary: Crea un informe programado
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Crea un informe periódico
+        (daily/weekly/monthly, hora America/Bogota) que el scheduler envía por correo con el
+        resumen HTML de KPIs del periodo vencido. Validaciones de negocio → 400 con detalle en
+        español (nombre obligatorio, día según periodicidad, 1..10 destinatarios válidos, etc.).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportScheduleInput"
+      responses:
+        "201":
+          description: Informe programado creado (header `Location` con su URL).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportScheduleDto"
+        "400":
+          description: Validación de negocio fallida (detalle en español) o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/report-schedules/{id}:
+    put:
+      tags: [Analytics · Informes programados (Reportes 2.0)]
+      operationId: analyticsReportSchedulesUpdate
+      summary: Actualiza un informe programado
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Reemplaza la definición completa del
+        informe (mismas validaciones que el alta). Un id inexistente O de otro tenant responde
+        404 (sin revelar existencia cross-tenant).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportScheduleInput"
+      responses:
+        "200":
+          description: Informe programado actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportScheduleDto"
+        "400":
+          description: Validación de negocio fallida (detalle en español) o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El informe programado no existe (o pertenece a otro tenant).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Analytics · Informes programados (Reportes 2.0)]
+      operationId: analyticsReportSchedulesDelete
+      summary: Elimina (lógicamente) un informe programado
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Borrado lógico (`deleted_at`): el
+        scheduler deja de evaluarlo. Un id inexistente O de otro tenant responde 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "204":
+          description: Informe programado eliminado.
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El informe programado no existe (o pertenece a otro tenant).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/alert-rules:
+    get:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertRulesList
+      summary: Lista las reglas de alerta del tenant
+      description: >
+        Reportes 2.0 (HU-D, §4.7 del contrato). Requiere policy AdminCompany. Mismo modelo de
+        tenant que los informes programados (SuperAdmin DEBE indicar `tenantId`). No incluye
+        las eliminadas lógicamente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "200":
+          description: Reglas de alerta del tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRulesListResponse"
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertRulesCreate
+      summary: Crea una regla de alerta
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. La regla se evalúa cada 60 s sobre su
+        ventana (`windowMinutes`); si el operador se cumple y el cooldown venció, se registra un
+        disparo en el historial y se notifica por correo a `recipients`. Validaciones de negocio
+        → 400 con detalle en español.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRuleInput"
+      responses:
+        "201":
+          description: Regla de alerta creada (header `Location` con su URL).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleDto"
+        "400":
+          description: Validación de negocio fallida (detalle en español) o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/alert-rules/{id}:
+    put:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertRulesUpdate
+      summary: Actualiza una regla de alerta
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Reemplaza la definición completa de
+        la regla (mismas validaciones que el alta). Un id inexistente O de otro tenant responde
+        404 (sin revelar existencia cross-tenant).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRuleInput"
+      responses:
+        "200":
+          description: Regla de alerta actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleDto"
+        "400":
+          description: Validación de negocio fallida (detalle en español) o falta tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La regla de alerta no existe (o pertenece a otro tenant).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertRulesDelete
+      summary: Elimina (lógicamente) una regla de alerta
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Borrado lógico (`deleted_at`): el
+        scheduler deja de evaluarla; su historial de disparos se conserva. Un id inexistente O
+        de otro tenant responde 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "204":
+          description: Regla de alerta eliminada.
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La regla de alerta no existe (o pertenece a otro tenant).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/alert-events:
+    get:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertEventsList
+      summary: Historial paginado de disparos de alertas (más recientes primero)
+      description: >
+        Reportes 2.0 (HU-D). Requiere policy AdminCompany. Devuelve los disparos registrados en
+        `analytics.alert_events` del tenant, ordenados por `triggeredAt` descendente, con
+        `totalCount` del universo filtrado. Filtrable por regla (`ruleId`). Mismo modelo de
+        tenant que el resto del CRUD (SuperAdmin DEBE indicar `tenantId`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por regla de alerta.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "200":
+          description: Página del historial de disparos (vacía con totalCount=0 si no hay).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEventsPageResponse"
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/improntas/generate:
     post:
       tags: [Admin · Improntas]
@@ -2948,6 +4200,222 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
+  /api/v1/tramites/instances/{id}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Subir un adjunto (multipart)
+      operationId: uploadProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
+      description: >
+        Sube el binario de un documento del trámite (solo en estado borrador). Valida tipo,
+        MIME y tamaño; si el tipo existe en el catálogo document_types se aplican sus reglas
+        (mime_types_allowed/max_size_bytes), con respaldo a los límites globales (pdf/jpeg/png/webp, 20 MB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [tipo, file]
+              properties:
+                tipo: { type: string, example: factura }
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Adjunto creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "tipo/MIME/tamaño inválido o archivo faltante." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Listar adjuntos del trámite
+      operationId: listProcedureInstanceAttachments
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de adjuntos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttachmentDto" }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/tramites/instances/{id}/attachments/presign:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Abrir subida directa a S3 (presigned POST)
+      operationId: presignProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
+      description: >
+        Valida tipo/MIME/tamaño y estado borrador y devuelve una política presigned POST para
+        subir el binario directo a S3, sin crear aún la fila del adjunto (se registra luego).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PresignAttachmentRequest" }
+      responses:
+        "200":
+          description: Política presigned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  storagePath: { type: string }
+                  url: { type: string, format: uri }
+                  fields:
+                    type: object
+                    additionalProperties: { type: string }
+        "400": { description: "tipo/MIME/tamaño inválido." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/attachments/register:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Registrar la metadata de un adjunto ya subido a S3
+      operationId: registerProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterAttachmentRequest" }
+      responses:
+        "201":
+          description: Adjunto registrado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "tipo/MIME/tamaño/storagePath/sha256 inválido." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Descargar el binario de un adjunto
+      operationId: downloadProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Binario del adjunto.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { description: "Trámite o adjunto no encontrado, o binario perdido." }
+
+  /api/v1/tramites/instances/{id}/attachments/{attachmentId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Trámites · Documentos]
+      summary: Borrar un adjunto (solo en borrador)
+      operationId: deleteProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
+      responses:
+        "204": { description: "Adjunto borrado." }
+        "404": { description: "Trámite o adjunto no encontrado." }
+        "409": { description: "El trámite no está en borrador." }
+
+  /api/v1/tramites/instances/{id}/checklist:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Checklist documental computado del trámite
+      operationId: getProcedureInstanceChecklist
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Checklist con estado de cada ítem.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChecklistResponse" }
+        "404": { description: "Trámite no encontrado." }
+        "422": { description: "La tipología del trámite no está configurada." }
+
+  /api/v1/tramites/instances/{id}/consolidado:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Trámites · Documentos]
+      summary: Generar el PDF consolidado del expediente
+      operationId: generarProcedureInstanceConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        Fusiona el FUR y los adjuntos del trámite en un PDF único y lo adjunta como
+        tipo "consolidado". Requiere FUR generado y documentos obligatorios completos.
+      responses:
+        "201":
+          description: Consolidado generado (adjunto tipo "consolidado").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2955,7 +4423,75 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    # HU #10520 (RNF01) — header de tenant reutilizable por los endpoints operativos de documentos.
+    TenantIdHeader:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: Identificador del tenant (compañía) dueño del trámite.
+
   schemas:
+    # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
+    AttachmentDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+        sha256: { type: string }
+        source: { type: string, example: user }
+        uploadedAt: { type: string, format: date-time }
+    PresignAttachmentRequest:
+      type: object
+      required: [tipo, filename, mimetype, sizeBytes]
+      properties:
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+    RegisterAttachmentRequest:
+      type: object
+      required: [tipo, filename, mimetype, sizeBytes, sha256, storagePath]
+      properties:
+        tipo: { type: string, example: factura }
+        filename: { type: string }
+        mimetype: { type: string, example: application/pdf }
+        sizeBytes: { type: integer, format: int64 }
+        sha256: { type: string }
+        storagePath: { type: string }
+    ChecklistItemDto:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        obligatorio: { type: boolean }
+        satisfied: { type: boolean }
+        docTipo: { type: string, nullable: true }
+        maxSizeBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: Tamaño máximo por tipo (RF09). null ⇒ usar el límite global.
+        mimeTypesAllowed:
+          type: array
+          nullable: true
+          items: { type: string }
+          description: Formatos MIME permitidos por tipo (RF08). null/vacío ⇒ formatos globales.
+    ChecklistResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ChecklistItemDto" }
+        faltanObligatorios:
+          type: array
+          items: { type: string }
+        completo: { type: boolean }
+
     LoginRequest:
       type: object
       required: [email, password]
@@ -2980,7 +4516,7 @@ components:
           example: Bearer
     CurrentUserResponse:
       type: object
-      required: [userId, email, tenantId, roleId, permissions]
+      required: [userId, email, tenantId, roles, permissions, companyName, companyNit, entityType]
       properties:
         userId:
           type: string
@@ -2990,15 +4526,37 @@ components:
         tenantId:
           type: string
           format: uuid
+        roles:
+          description: >
+            TODOS los roles activos del usuario (HU #10616 AC3) — antes solo se exponía el
+            primero.
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrentUserRole'
+        permissions:
+          description: Unión de permisos de todos los roles activos, igual que el JWT (HU #10616 AC3).
+          type: array
+          items:
+            type: string
+        companyName:
+          description: Nombre de la empresa u organismo de tránsito asociado al tenant (HU #10616 AC1/AC2).
+          type: string
+        companyNit:
+          description: NIT de la empresa/organismo de tránsito. Vacío si no está registrado (HU #10616 AC4).
+          type: string
+        entityType:
+          description: Tipo de entidad del tenant (HU #10616 AC1/AC2).
+          type: string
+          enum: [COMPANY, TRANSIT_OFFICE]
+    CurrentUserRole:
+      type: object
+      required: [roleId, roleCode]
+      properties:
         roleId:
           type: string
           format: uuid
         roleCode:
           type: string
-        permissions:
-          type: array
-          items:
-            type: string
     AuthErrorResponse:
       type: object
       required: [code, message]
@@ -3531,9 +5089,38 @@ components:
         emailSent: { type: boolean }
       required: [invitationId, email, emailSent]
 
+    ResendInvitationResponse:
+      type: object
+      description: >
+        Resultado de reenviar una invitación pendiente (HU #10625). Mismo shape en
+        `/api/v1/security/invitations/{invitationId}/resend` y
+        `/api/v1/admin/ot/invitations/{invitationId}/resend`.
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailSent: { type: boolean }
+      required: [invitationId, email, emailSent]
+
+    ResendCooldownErrorResponse:
+      type: object
+      description: >
+        Error 429 del cooldown anti-abuso de reenvío (HU #10625 AC2). El endpoint
+        Compañía usa `code`; el endpoint OT usa `error` — ambos incluyen `message` y
+        `retryAfterSeconds`.
+      properties:
+        code: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        error: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        message: { type: string }
+        retryAfterSeconds:
+          type: integer
+          description: Segundos hasta que se pueda reenviar de nuevo.
+      required: [message, retryAfterSeconds]
+
     OtUserItem:
       type: object
-      description: Usuario (activo, sin rol o invitación pendiente) del tenant OT.
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del tenant OT, o
+        usuario eliminado cuando se lista con `?onlyDeleted=true` (#10624).
       properties:
         id: { type: string }
         fullName: { type: string }
@@ -3546,7 +5133,41 @@ components:
           enum: [active, inactive, pending]
         createdAt: { type: string, format: date-time, nullable: true }
         isSuspended: { type: boolean }
-      required: [id, fullName, email, status, isSuspended]
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
+
+    UpdateOtUserRequest:
+      type: object
+      description: Edición de nombre/correo de un usuario del tenant OT (#10621).
+      properties:
+        displayName:
+          type: string
+          nullable: true
+          description: Nombre nuevo. Omitido o vacío = no se modifica.
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Correo nuevo. Omitido o vacío = no se modifica.
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista, AC4).
+      required: [rowVersion]
 
     OtUserListResponse:
       type: object
@@ -3559,10 +5180,78 @@ components:
 
     SuspendOtUserRequest:
       type: object
+      description: >
+        HU #10619: `endsAt` es opcional. Con valor, es una suspensión temporal que se
+        reactiva sola al vencer (comportamiento previo, sin cambios). Omitido/null,
+        es una desactivación indefinida: el usuario queda bloqueado hasta que un
+        administrador levante la restricción explícitamente (`DELETE .../suspend`).
       properties:
         reason: { type: string }
-        endsAt: { type: string, format: date-time }
-      required: [reason, endsAt]
+        endsAt: { type: string, format: date-time, nullable: true }
+      required: [reason]
+
+    DeleteOtUserRequest:
+      type: object
+      description: >
+        HU #10623: elimina (soft-delete reversible) a un usuario del tenant OT.
+        `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+        `OtUserItem.rowVersion`).
+      properties:
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista).
+      required: [rowVersion]
+
+    DeleteUserRequest:
+      type: object
+      description: >
+        HU #10623: elimina (soft-delete reversible) a un usuario. `rowVersion` es
+        obligatorio (concurrencia optimista, el valor leído de
+        `TenantUserDto.rowVersion`).
+      properties:
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista).
+      required: [rowVersion]
+
+    TenantUserItem:
+      type: object
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del alcance del
+        caller, o usuario eliminado cuando se lista con `?onlyDeleted=true`
+        (#10624).
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, nullable: true }
+        roleCode: { type: string, nullable: true }
+        roleId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        createdAt: { type: string, format: date-time, nullable: true }
+        isSuspended: { type: boolean }
+        tenantId: { type: string, format: uuid, nullable: true }
+        tenantName: { type: string, nullable: true }
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
 
     AuditLogEntry:
       type: object
@@ -4297,3 +5986,664 @@ components:
         orgCiudad: { type: string, nullable: true }
         operador: { type: string }
       required: [placa, documento, orgNombre, operador]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Reportes 2.0 — métricas (§4 del contrato docs/contratos-reportes-v2.md)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    EstadoTramiteN03:
+      type: string
+      description: Estado de negocio N03 del ciclo de vida del trámite (ADR-0022, vocabulario en español).
+      enum: [borrador, anulado, preparado, entregado, aprobado, rechazado]
+
+    ComparisonInfo:
+      type: object
+      description: >
+        Metadato de la ventana de comparación aplicada (`compareWith`): `previous_period` =
+        ventana de la misma duración inmediatamente anterior a `from`; `previous_year` = mismas
+        fechas un año atrás. La variación porcentual la calcula el frontend.
+      properties:
+        mode: { type: string, enum: [previous_period, previous_year] }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+      required: [mode, from, to]
+
+    OtMetricsSummary:
+      type: object
+      description: KPIs de cabecera de la pestaña Organismo de Tránsito.
+      properties:
+        entregados:
+          type: integer
+          description: Transiciones a `entregado` dentro del rango (por `changed_at`).
+        aprobados: { type: integer }
+        rechazados: { type: integer }
+        rejectionRatePct:
+          type: number
+          description: rechazados / (aprobados + rechazados) * 100.
+        avgApprovalHours:
+          type: number
+          nullable: true
+          description: >
+            Horas entre la ÚLTIMA transición a `entregado` y la siguiente decisión
+            (aprobado/rechazado) de la misma instancia, decidida dentro del rango. Null sin decididos.
+        p50ApprovalHours: { type: number, nullable: true }
+        p90ApprovalHours: { type: number, nullable: true }
+        reincidencePct:
+          type: number
+          description: Porcentaje de rechazados que volvieron a borrador.
+        stuckCount: { type: integer }
+      required: [entregados, aprobados, rechazados, rejectionRatePct, avgApprovalHours, p50ApprovalHours, p90ApprovalHours, reincidencePct, stuckCount]
+
+    RejectionByOfficeItem:
+      type: object
+      description: Tasa de rechazo por Organismo de Tránsito.
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeName: { type: string }
+        entregados: { type: integer }
+        aprobados: { type: integer }
+        rechazados: { type: integer }
+        rejectionRatePct: { type: number }
+      required: [transitOfficeId, transitOfficeName, entregados, aprobados, rechazados, rejectionRatePct]
+
+    RejectionByReasonItem:
+      type: object
+      description: Distribución de causales de rechazo (texto libre de `reason`).
+      properties:
+        reason: { type: string, example: Documento ilegible }
+        count: { type: integer }
+        pct: { type: number }
+      required: [reason, count, pct]
+
+    RejectionByTypeItem:
+      type: object
+      description: Tasa de rechazo por tipo de trámite.
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        procedureTypeName: { type: string }
+        entregados: { type: integer }
+        rechazados: { type: integer }
+        rejectionRatePct: { type: number }
+      required: [procedureTypeId, procedureTypeName, entregados, rechazados, rejectionRatePct]
+
+    ApprovalTimesByOfficeItem:
+      type: object
+      description: Tiempos entregado→decisión por OT (avg/p50/p90 en horas).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeName: { type: string }
+        decididos: { type: integer }
+        avgHours: { type: number, nullable: true }
+        p50Hours: { type: number, nullable: true }
+        p90Hours: { type: number, nullable: true }
+      required: [transitOfficeId, transitOfficeName, decididos, avgHours, p50Hours, p90Hours]
+
+    OfficeRankingItem:
+      type: object
+      description: >
+        Ranking de agilidad de OTs: orden por p50 de horas de decisión ascendente, desempate por
+        tasa de rechazo ascendente; solo OTs con al menos un trámite decidido.
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeName: { type: string }
+        rank: { type: integer, example: 1 }
+        p50Hours: { type: number }
+        rejectionRatePct: { type: number }
+        volumen: { type: integer }
+      required: [transitOfficeId, transitOfficeName, rank, p50Hours, rejectionRatePct, volumen]
+
+    ReincidenceInfo:
+      type: object
+      description: >
+        Reincidencia: instancias con transición rechazado→borrador; ciclos = veces que la
+        instancia pasó por `rechazado`.
+      properties:
+        rechazadas: { type: integer }
+        reintentadas: { type: integer }
+        avgCiclos: { type: number }
+        maxCiclos: { type: integer }
+      required: [rechazadas, reintentadas, avgCiclos, maxCiclos]
+
+    StuckItem:
+      type: object
+      description: Trámite atascado (más de `stuckDays` días sin transición en estado no final).
+      properties:
+        instanceId: { type: string, format: uuid }
+        referenceNumber: { type: string, example: "TRM-2026-000007" }
+        status:
+          $ref: "#/components/schemas/EstadoTramiteN03"
+        daysInStatus: { type: number, example: 12.3 }
+        transitOfficeName: { type: string, nullable: true }
+        procedureTypeName: { type: string }
+        createdByDisplayName: { type: string }
+      required: [instanceId, referenceNumber, status, daysInStatus, transitOfficeName, procedureTypeName, createdByDisplayName]
+
+    StuckInfo:
+      type: object
+      description: Atascados del universo filtrado; `items` trae el top 50 por días en el estado.
+      properties:
+        totalCount: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StuckItem"
+      required: [totalCount, items]
+
+    OtMetricsData:
+      type: object
+      description: Cuerpo de métricas OT de una ventana (current o previous).
+      properties:
+        summary:
+          $ref: "#/components/schemas/OtMetricsSummary"
+        rejectionByOffice:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectionByOfficeItem"
+        rejectionByReason:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectionByReasonItem"
+        rejectionByType:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectionByTypeItem"
+        approvalTimesByOffice:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalTimesByOfficeItem"
+        officeRanking:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfficeRankingItem"
+        reincidence:
+          $ref: "#/components/schemas/ReincidenceInfo"
+        stuck:
+          $ref: "#/components/schemas/StuckInfo"
+      required: [summary, rejectionByOffice, rejectionByReason, rejectionByType, approvalTimesByOffice, officeRanking, reincidence, stuck]
+
+    OtMetricsResponse:
+      type: object
+      description: >
+        Respuesta de `GET /analytics/ot-metrics` (§4.2). `previous` y `comparison` solo vienen
+        con `compareWith`; el backend NO manda deltas (los calcula el frontend).
+      properties:
+        current:
+          $ref: "#/components/schemas/OtMetricsData"
+        previous:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/OtMetricsData"
+          description: Misma forma que `current` sobre la ventana comparada; null sin `compareWith`.
+        comparison:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ComparisonInfo"
+      required: [current, previous, comparison]
+
+    WizardStepMetric:
+      type: object
+      description: >
+        Métrica agregada de un paso del wizard (telemetría HU-A). abandonmentPct =
+        (1 - completions/views) * 100 (0 si views = 0); duraciones desde `duration_ms` de
+        `wizard_step_complete`.
+      properties:
+        stepKey: { type: string, example: comprador }
+        views: { type: integer }
+        completions: { type: integer }
+        abandonmentPct: { type: number }
+        avgDurationMs: { type: number, nullable: true }
+        medianDurationMs: { type: number, nullable: true }
+      required: [stepKey, views, completions, abandonmentPct, avgDurationMs, medianDurationMs]
+
+    FunnelStage:
+      type: object
+      description: Etapa del funnel (instancias distintas que la alcanzaron dentro del rango).
+      properties:
+        stage:
+          $ref: "#/components/schemas/EstadoTramiteN03"
+        count: { type: integer }
+        pctOfFirst:
+          type: number
+          description: Porcentaje sobre la primera etapa (borrador).
+        pctOfPrev:
+          type: number
+          description: Porcentaje sobre la etapa anterior.
+      required: [stage, count, pctOfFirst, pctOfPrev]
+
+    FunnelData:
+      type: object
+      description: Cuerpo del funnel de una ventana (current o previous).
+      properties:
+        states:
+          type: array
+          description: Etapas borrador→preparado→entregado→aprobado (por `created_at` de la instancia).
+          items:
+            $ref: "#/components/schemas/FunnelStage"
+        anulados: { type: integer }
+        rechazadosVigentes:
+          type: integer
+          description: Rechazados cuyo estado ACTUAL sigue siendo rechazado.
+        wizardSteps:
+          type: array
+          description: Métricas por paso del wizard; vacío si no hay telemetría.
+          items:
+            $ref: "#/components/schemas/WizardStepMetric"
+      required: [states, anulados, rechazadosVigentes, wizardSteps]
+
+    FunnelResponse:
+      type: object
+      description: Respuesta de `GET /analytics/funnel` (§4.3), con la misma envoltura comparada que ot-metrics.
+      properties:
+        current:
+          $ref: "#/components/schemas/FunnelData"
+        previous:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/FunnelData"
+        comparison:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ComparisonInfo"
+      required: [current, previous, comparison]
+
+    ModuleUsageItem:
+      type: object
+      description: Uso agregado de un módulo del aplicativo (`module_view` + `api_module_access`).
+      properties:
+        module: { type: string, example: tramites }
+        events: { type: integer }
+        uniqueUsers: { type: integer }
+      required: [module, events, uniqueUsers]
+
+    PeakHourItem:
+      type: object
+      description: Celda del heatmap de horas pico (hora America/Bogota), sobre TODOS los eventos.
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: 0 = domingo … 6 = sábado.
+        hour: { type: integer, minimum: 0, maximum: 23 }
+        events: { type: integer }
+      required: [dayOfWeek, hour, events]
+
+    DocumentReplacementItem:
+      type: object
+      description: >
+        Reemplazos de documentos por tipo. "Reemplazo" = filas adicionales con el mismo
+        (instancia, tipo) en attachments más allá de la primera (orden por `uploaded_at`).
+      properties:
+        documentTipo: { type: string, example: cedula }
+        uploads: { type: integer }
+        replacements: { type: integer }
+      required: [documentTipo, uploads, replacements]
+
+    ExternalApiMetricItem:
+      type: object
+      description: >
+        Llamadas a integraciones externas desde `admin.ot_api_call_logs`; errores =
+        `response_code >= 400` o `error_message` no nulo.
+      properties:
+        endpoint: { type: string }
+        direction: { type: string, example: outbound }
+        calls: { type: integer }
+        errors: { type: integer }
+        errorRatePct: { type: number }
+        avgDurationMs: { type: number, nullable: true }
+        p90DurationMs: { type: number, nullable: true }
+      required: [endpoint, direction, calls, errors, errorRatePct, avgDurationMs, p90DurationMs]
+
+    UsageData:
+      type: object
+      description: Cuerpo de métricas de uso de una ventana (current o previous).
+      properties:
+        moduleUsage:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModuleUsageItem"
+        wizardSteps:
+          type: array
+          items:
+            $ref: "#/components/schemas/WizardStepMetric"
+        peakHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/PeakHourItem"
+        documentReplacements:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentReplacementItem"
+        externalApis:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExternalApiMetricItem"
+        avgWizardDurationMs:
+          type: number
+          nullable: true
+          description: Duración media del wizard completo (ms); null sin datos.
+        medianWizardDurationMs: { type: number, nullable: true }
+      required: [moduleUsage, wizardSteps, peakHours, documentReplacements, externalApis, avgWizardDurationMs, medianWizardDurationMs]
+
+    UsageResponse:
+      type: object
+      description: Respuesta de `GET /analytics/usage` (§4.4), con la misma envoltura comparada que ot-metrics.
+      properties:
+        current:
+          $ref: "#/components/schemas/UsageData"
+        previous:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/UsageData"
+        comparison:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ComparisonInfo"
+      required: [current, previous, comparison]
+
+    LiveStatusCount:
+      type: object
+      description: Conteo por estado ACTUAL de instancias activas (no finales) del tenant.
+      properties:
+        status:
+          $ref: "#/components/schemas/EstadoTramiteN03"
+        count: { type: integer }
+      required: [status, count]
+
+    LiveTodayInfo:
+      type: object
+      description: Actividad de HOY (día calendario America/Bogota).
+      properties:
+        creados: { type: integer }
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveStatusCount"
+        entregados:
+          type: integer
+          description: Transiciones de hoy a `entregado`.
+        aprobados: { type: integer }
+        rechazados: { type: integer }
+      required: [creados, byStatus, entregados, aprobados, rechazados]
+
+    IntegrationsLastHourInfo:
+      type: object
+      description: Integraciones externas de la última hora.
+      properties:
+        calls: { type: integer }
+        errors: { type: integer }
+        avgDurationMs: { type: number, nullable: true }
+      required: [calls, errors, avgDurationMs]
+
+    LiveOverviewResponse:
+      type: object
+      description: Respuesta de `GET /analytics/live-overview` (§4.5). Sin envoltura comparada.
+      properties:
+        generatedAt: { type: string, format: date-time }
+        today:
+          $ref: "#/components/schemas/LiveTodayInfo"
+        stuckCount: { type: integer }
+        pendingIdentityValidations:
+          type: integer
+          description: Validaciones biométricas con estado pendiente/en proceso.
+        integrationsLastHour:
+          $ref: "#/components/schemas/IntegrationsLastHourInfo"
+        lastActivityAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Último cambio de estado o evento de telemetría; null si no hay actividad.
+      required: [generatedAt, today, stuckCount, pendingIdentityValidations, integrationsLastHour, lastActivityAt]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Reportes 2.0 — telemetría de uso (§4.6/§7 del contrato)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    UsageEventType:
+      type: string
+      description: >
+        Taxonomía CERRADA de eventos de telemetría (§7): los tipos desconocidos se descartan
+        silenciosamente en el endpoint batch.
+      enum:
+        - module_view
+        - api_module_access
+        - wizard_server_view
+        - wizard_step_view
+        - wizard_step_complete
+        - wizard_step_exit
+        - wizard_abandon
+        - wizard_complete
+
+    UsageEventInput:
+      type: object
+      description: >
+        Evento individual del lote. Sin tenant ni userId: SIEMPRE salen del JWT. `metadata` es
+        un objeto JSON pequeño SIN PII (prohibido: nombres, documentos, emails, placas, VIN).
+      properties:
+        eventType:
+          $ref: "#/components/schemas/UsageEventType"
+        module: { type: string, nullable: true, maxLength: 40, example: tramites }
+        stepKey: { type: string, nullable: true, maxLength: 40, example: comprador }
+        procedureInstanceId: { type: string, format: uuid, nullable: true }
+        durationMs:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Duración asociada (ms); negativa se descarta a null.
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instante del evento; ausente = now() del servidor.
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: jsonb libre SIN PII; si no es un objeto (o es demasiado grande) colapsa a {}.
+      required: [eventType]
+
+    UsageEventBatchRequest:
+      type: object
+      description: Lote de eventos de telemetría del frontend (máx. 50; más → 400 en español).
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/UsageEventInput"
+      required: [events]
+
+    UsageEventBatchAcceptedResponse:
+      type: object
+      description: Resultado del encolado best-effort del lote de telemetría.
+      properties:
+        accepted:
+          type: integer
+          description: Eventos aceptados (los fuera de taxonomía o descartados por saturación no cuentan).
+          example: 3
+      required: [accepted]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Reportes 2.0 — informes programados y alertas (§4.7/§8 del contrato)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    ReportScheduleDto:
+      type: object
+      description: Informe programado (tabla `analytics.report_schedules`).
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 120, example: Informe semanal OT }
+        reportType:
+          type: string
+          enum: [resumen, operacion, ot, uso, productividad]
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly]
+        dayOfWeek:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 6
+          description: Solo weekly; 0 = domingo … 6 = sábado.
+        dayOfMonth:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 28
+          description: Solo monthly (1..28 para existir en todos los meses).
+        sendHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: Hora de envío (hora America/Bogota).
+        format:
+          type: string
+          enum: [excel, pdf]
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { type: string, format: email }
+        isActive: { type: boolean }
+        lastSentAt: { type: string, format: date-time, nullable: true }
+      required: [id, name, reportType, frequency, dayOfWeek, dayOfMonth, sendHour, format, recipients, isActive, lastSentAt]
+
+    ReportScheduleInput:
+      type: object
+      description: >
+        Alta/edición de un informe programado. Reglas: daily sin día; weekly requiere dayOfWeek
+        (0-6) y sin dayOfMonth; monthly requiere dayOfMonth (1-28) y sin dayOfWeek; 1..10
+        destinatarios válidos sin duplicados. Violaciones → 400 con detalle en español.
+      properties:
+        name: { type: string, maxLength: 120 }
+        reportType:
+          type: string
+          enum: [resumen, operacion, ot, uso, productividad]
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly]
+        dayOfWeek: { type: integer, nullable: true, minimum: 0, maximum: 6 }
+        dayOfMonth: { type: integer, nullable: true, minimum: 1, maximum: 28 }
+        sendHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          default: 7
+          description: Hora de envío (hora America/Bogota); ausente = 7.
+        format:
+          type: string
+          enum: [excel, pdf]
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { type: string, format: email }
+        isActive: { type: boolean, default: true }
+      required: [name, reportType, frequency, format, recipients]
+
+    ReportSchedulesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportScheduleDto"
+      required: [items]
+
+    AlertRuleDto:
+      type: object
+      description: Regla de alerta por umbral (tabla `analytics.alert_rules`).
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 120, example: Rechazo OT alto }
+        metric:
+          type: string
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte]
+        threshold: { type: number, example: 25.0 }
+        windowMinutes:
+          type: integer
+          minimum: 5
+          maximum: 43200
+          description: Ventana de evaluación de la métrica (minutos).
+        cooldownMinutes:
+          type: integer
+          minimum: 5
+          maximum: 10080
+          description: No re-disparar dentro del cooldown (minutos).
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { type: string, format: email }
+        isActive: { type: boolean }
+        lastTriggeredAt: { type: string, format: date-time, nullable: true }
+      required: [id, name, metric, operator, threshold, windowMinutes, cooldownMinutes, recipients, isActive, lastTriggeredAt]
+
+    AlertRuleInput:
+      type: object
+      description: >
+        Alta/edición de una regla de alerta. `windowMinutes` ausente = 1440; `cooldownMinutes`
+        ausente = 240; 1..10 destinatarios válidos. Violaciones → 400 con detalle en español.
+      properties:
+        name: { type: string, maxLength: 120 }
+        metric:
+          type: string
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte]
+        threshold: { type: number }
+        windowMinutes: { type: integer, minimum: 5, maximum: 43200, default: 1440 }
+        cooldownMinutes: { type: integer, minimum: 5, maximum: 10080, default: 240 }
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { type: string, format: email }
+        isActive: { type: boolean, default: true }
+      required: [name, metric, operator, threshold, recipients]
+
+    AlertRulesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRuleDto"
+      required: [items]
+
+    AlertEventDto:
+      type: object
+      description: Disparo registrado de una alerta (tabla `analytics.alert_events`).
+      properties:
+        id: { type: string, format: uuid }
+        alertRuleId: { type: string, format: uuid }
+        ruleName: { type: string }
+        triggeredAt: { type: string, format: date-time }
+        metricValue: { type: number, example: 31.2 }
+        threshold: { type: number, example: 25.0 }
+        notified:
+          type: boolean
+          description: true si el correo a los destinatarios se envió (best-effort).
+        message: { type: string, nullable: true }
+      required: [id, alertRuleId, ruleName, triggeredAt, metricValue, threshold, notified, message]
+
+    AlertEventsPageResponse:
+      type: object
+      description: Página del historial de disparos (más recientes primero).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertEventDto"
+        totalCount: { type: integer }
+      required: [items, totalCount]

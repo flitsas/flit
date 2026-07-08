@@ -17,9 +17,10 @@ import type { DocumentType, ProcedureDocumentRequirement } from "@/lib/api/types
 
 const ORDER_STEP = 10;
 
-// Tab de asociaciones documento ↔ trámite (HU #10198, AC2). Agregar (documentos
-// activos), reordenar (drag-and-drop o ↑/↓ → PUT ordenDefault), togglear
-// obligatoriedad y remover (DELETE, 409 si está en uso). 4 estados UI (AC7).
+// Tab de asociaciones documento ↔ trámite (HU #10198, AC2; RF22). Define QUÉ documentos
+// exige el trámite: agregar (documentos activos), togglear obligatoriedad y remover
+// (DELETE, 409 si está en uso). El ORDEN ya no se configura aquí — tras RF22 lo define
+// exclusivamente el Organismo de Tránsito (pestaña «Overrides OT»). 4 estados UI (AC7).
 export function RequirementsTab({ procedureTypeId }: { procedureTypeId: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -77,31 +78,6 @@ export function RequirementsTab({ procedureTypeId }: { procedureTypeId: string }
       show(`Documento «${created.documento.nombre}» asociado.`, "success");
     } catch {
       show("No se pudo asociar el documento.", "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Persiste el nuevo orden: PUT de cada ítem cuyo ordenDefault cambió (AC2).
-  const handleReorder = async (ordered: ProcedureDocumentRequirement[]) => {
-    const previous = items;
-    const renumbered = ordered.map((item, index) => ({ ...item, ordenDefault: (index + 1) * ORDER_STEP }));
-    setItems(renumbered); // optimista
-    setBusy(true);
-    try {
-      const changed = renumbered.filter((item, index) => item.ordenDefault !== previous[index]?.ordenDefault || item.id !== previous[index]?.id);
-      await Promise.all(
-        changed.map((item) =>
-          updateProcedureDocumentRequirement(item.id, {
-            ordenDefault: item.ordenDefault,
-            obligatorio: item.obligatorio,
-          }),
-        ),
-      );
-      show("Orden actualizado.", "success");
-    } catch {
-      setItems(previous); // revierte
-      show("No se pudo actualizar el orden.", "error");
     } finally {
       setBusy(false);
     }
@@ -177,7 +153,6 @@ export function RequirementsTab({ procedureTypeId }: { procedureTypeId: string }
       >
         <DocumentAssociationList
           items={items}
-          onReorder={handleReorder}
           onToggleObligatorio={handleToggleObligatorio}
           onRemove={handleRemove}
           busy={busy}

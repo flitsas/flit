@@ -13,6 +13,10 @@ export interface DocumentType {
   descripcion?: string | null;
   estado: DocumentTypeEstado;
   fechaCreacion: string;
+  /** RF08 — formatos MIME permitidos por tipo. Vacío/ausente ⇒ formatos globales por defecto. */
+  mimeTypesAllowed?: string[];
+  /** RF09 — tamaño máximo por tipo en bytes. 0/ausente ⇒ tamaño global por defecto. */
+  maxSizeBytes?: number;
 }
 
 export interface DocumentTypePagedResult {
@@ -33,6 +37,9 @@ export interface CreateDocumentTypeRequest {
   codigo: string;
   nombre: string;
   descripcion?: string | null;
+  /** RF08/09 — opcionales; omitidos ⇒ límites globales por defecto. */
+  mimeTypesAllowed?: string[] | null;
+  maxSizeBytes?: number | null;
 }
 
 /** Payload del PUT /api/v1/admin/document-types/{id} (edición de catálogo). */
@@ -40,6 +47,9 @@ export interface UpdateDocumentTypeRequest {
   codigo: string;
   nombre: string;
   descripcion?: string | null;
+  /** RF08/09 — opcionales; omitidos ⇒ no se modifican. */
+  mimeTypesAllowed?: string[] | null;
+  maxSizeBytes?: number | null;
 }
 
 // ── Asociaciones trámite ↔ documento (#10195, AC2) ──────────────────────────
@@ -91,13 +101,12 @@ export interface DocumentOrderOverride {
 
 /**
  * Payload del POST /api/v1/admin/document-order-overrides. El `scope` viaja como
- * query; según el scope se envía `transitOfficeId` (OT) o `clienteId` (CLIENTE).
+ * query; el override de orden se define por `transitOfficeId` (scope OT).
  */
 export interface CreateDocumentOrderOverrideRequest {
   procedureTypeId: string;
   documentTypeId: string;
   transitOfficeId?: string;
-  clienteId?: string;
   orden: number;
 }
 

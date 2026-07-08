@@ -52,12 +52,13 @@ public static class DevelopmentAuthSeeder
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
-        await SeedTenantModuleGrantsAsync(db, cancellationToken);
+        await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -721,51 +722,78 @@ public static class DevelopmentAuthSeeder
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SeedTenantModuleGrantsAsync(FlitDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Reportes 2.0 — permisos por pestaña + administración de programación/alertas
+    /// (docs/contratos-reportes-v2.md §3). Idempotente y separado de SeedBaseModulesAsync
+    /// (que hace early-return en BDs ya sembradas): agrega solo los slugs que falten al
+    /// módulo "reportes" y los concede a SuperAdmin y AdminCompany.
+    /// </summary>
+    private static async Task SeedReportesPermissionsAsync(FlitDbContext db, CancellationToken ct)
     {
+        var reportesModule = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes" && m.DeletedAt == null, ct);
+        if (reportesModule is null)
+            return;
+
         var now = DateTimeOffset.UtcNow;
 
-        var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
-        if (empresaTenant is not null)
+        var slugs = new (string Slug, string Name, string RoutePattern)[]
         {
-            // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
-            var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
-            await GrantModulesToTenantAsync(db, empresaTenant.Id, grantedCodes, now, ct);
-        }
+            ("reportes.resumen.read",        "Ver pestaña Resumen general",        "/api/v1/analytics/overview"),
+            ("reportes.operacion.read",      "Ver pestaña Operación/Trámites",     "/api/v1/analytics/funnel"),
+            ("reportes.ot.read",             "Ver pestaña Organismo de Tránsito",  "/api/v1/analytics/ot-metrics"),
+            ("reportes.uso.read",            "Ver pestaña Uso del aplicativo",     "/api/v1/analytics/usage"),
+            ("reportes.productividad.read",  "Ver pestaña Productividad",          "/api/v1/analytics/productivity/top"),
+            ("reportes.programacion.manage", "Administrar informes programados y alertas", "/api/v1/analytics/report-schedules"),
+        };
 
-        // HU #10504 — sin este grant hacia el tenant OT de desarrollo, el fix de scoping por tipo
-        // de entidad (ListAccessibleAsync con targetEntityType) ocultaría estos 4 módulos del
-        // constructor de roles para TRANSIT_OFFICE, ya que hoy solo tienen grant hacia la
-        // compañía demo. "validaciones" queda deliberadamente excluido para OT (decisión confirmada).
-        var otTenantExists = await db.Tenants.AnyAsync(t => t.Id == OtDevTenantId, ct);
-        if (otTenantExists)
-        {
-            var otGrantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes" };
-            await GrantModulesToTenantAsync(db, OtDevTenantId, otGrantedCodes, now, ct);
-        }
-    }
-
-    private static async Task GrantModulesToTenantAsync(
-        FlitDbContext db, Guid tenantId, string[] moduleCodes, DateTimeOffset now, CancellationToken ct)
-    {
-        var modules = await db.SecurityModules
-            .Where(m => moduleCodes.Contains(m.Code) && m.DeletedAt == null)
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == reportesModule.Id)
+            .Select(a => a.Slug)
             .ToListAsync(ct);
 
-        var existingModuleIds = await db.TenantModuleGrants
-            .Where(g => g.TenantId == tenantId)
-            .Select(g => g.ModuleId)
-            .ToListAsync(ct);
-
-        foreach (var m in modules.Where(m => !existingModuleIds.Contains(m.Id)))
-        {
-            db.TenantModuleGrants.Add(new Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
             {
-                TenantId = tenantId,
-                ModuleId = m.Id,
-                GrantedAt = now,
-            });
+                Id = Guid.CreateVersion7(),
+                ModuleId = reportesModule.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Slug.EndsWith(".manage", StringComparison.Ordinal) ? "POST" : "GET",
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length == 0)
+            return;
+
+        db.RbacActions.AddRange(newActions);
+        await db.SaveChangesAsync(ct);
+
+        // Grants: SuperAdmin y AdminCompany reciben todos los permisos nuevos de reportes.
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                db.RoleGrants.AddRange(newActions
+                    .Where(a => !existing.Contains(a.Id))
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    }));
+            }
         }
 
         await db.SaveChangesAsync(ct);

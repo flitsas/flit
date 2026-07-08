@@ -42,7 +42,14 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
     await user.click(screen.getByRole("button", { name: /crear documento/i }));
 
     await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith({ codigo: "RUNT", nombre: "Consulta RUNT", descripcion: null }),
+      // RF08/09 — sin formatos ni tamaño configurados ⇒ null (el backend aplica los globales).
+      expect(onSubmit).toHaveBeenCalledWith({
+        codigo: "RUNT",
+        nombre: "Consulta RUNT",
+        descripcion: null,
+        mimeTypesAllowed: null,
+        maxSizeBytes: null,
+      }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved, "create");
   });

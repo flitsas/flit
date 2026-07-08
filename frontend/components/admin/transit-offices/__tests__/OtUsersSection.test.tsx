@@ -6,12 +6,16 @@ import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
+import { ApiError } from "@/lib/api/types";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
   inviteOtUser: vi.fn(),
   suspendOtUser: vi.fn(),
   unsuspendOtUser: vi.fn(),
+  updateOtUser: vi.fn(),
+  deleteOtUser: vi.fn(),
+  resendOtInvitation: vi.fn(),
 }));
 
 import {
@@ -31,6 +35,7 @@ const activeUser: OtUserItem = {
   status: "active",
   createdAt: "2026-06-23T10:00:00Z",
   isSuspended: false,
+  rowVersion: 1,
 };
 
 const suspendedUser: OtUserItem = {
@@ -43,6 +48,7 @@ const suspendedUser: OtUserItem = {
   status: "active",
   createdAt: "2026-06-20T10:00:00Z",
   isSuspended: true,
+  rowVersion: 5,
 };
 
 function renderSection() {
@@ -117,20 +123,59 @@ describe("OtUsersSection — refactor adminOT", () => {
     );
   });
 
-  it("suspende a un usuario activo", async () => {
+  it("suspende temporalmente a un usuario activo", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(suspendOtUser).mockResolvedValue({ id: "sus-1" });
     const user = userEvent.setup();
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Suspender usuario Laura García/i }));
+    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
-    await user.click(screen.getByRole("button", { name: /^Suspender$/i }));
+    await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
 
     await waitFor(() => expect(suspendOtUser).toHaveBeenCalled());
     expect(vi.mocked(suspendOtUser).mock.calls[0]?.[0]).toBe("u-1");
+    expect(vi.mocked(suspendOtUser).mock.calls[0]?.[1]?.endsAt).not.toBeNull();
     expect(vi.mocked(suspendOtUser).mock.calls[0]?.[2]).toEqual({ transitOfficeId: "ot-1" });
+  });
+
+  it("desactiva indefinidamente a un usuario activo (AC1/AC4 — paridad con Compañía)", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(suspendOtUser).mockResolvedValue({ id: "sus-2" });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Desactivar indefinidamente a Laura García/i }));
+    expect(screen.queryByLabelText(/Suspendido hasta/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento grave");
+    await user.click(screen.getByRole("button", { name: /^Desactivar usuario$/i }));
+
+    await waitFor(() => expect(suspendOtUser).toHaveBeenCalled());
+    expect(vi.mocked(suspendOtUser).mock.calls[0]?.[0]).toBe("u-1");
+    expect(vi.mocked(suspendOtUser).mock.calls[0]?.[1]).toEqual({
+      reason: "Incumplimiento grave",
+      endsAt: null,
+    });
+  });
+
+  it("AC3 — mapea el error de último administrador activo a un mensaje claro en el modal", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(suspendOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "LAST_ACTIVE_ADMIN", message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
+    await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
+    await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /No puedes dejar este tenant sin administradores activos/i,
+    );
   });
 
   it("reactiva a un usuario suspendido", async () => {

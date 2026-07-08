@@ -31,6 +31,8 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
         string email,
         Guid tenantId,
         string tenantName,
+        string companyNit,
+        string entityType,
         IReadOnlyList<UserRoleSnapshot> roles,
         IReadOnlyList<string> permissionSlugs)
     {
@@ -44,6 +46,13 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new(JwtRegisteredClaimNames.Email, email),
             new("tenant_id", tenantId.ToString()),
             new("tenant_name", tenantName),
+            // HU #10616 (AC1/AC2/AC4) — nombre/NIT de la empresa u organismo de tránsito asociado
+            // al tenant y tipo de entidad ("COMPANY" | "TRANSIT_OFFICE"). "company_name" reutiliza
+            // el mismo valor que "tenant_name" (en este dominio el tenant ES la empresa/OT).
+            // "company_nit" se emite igual (incluso vacío, AC4) sin romper la emisión del token.
+            new("company_name", tenantName),
+            new("company_nit", companyNit),
+            new("entity_type", entityType),
         };
 
         // HU #10506 — multi-rol: un claim POR CADA rol activo (no uno solo), para que

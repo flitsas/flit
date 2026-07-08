@@ -43,15 +43,34 @@ export const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_LABEL = 'PDF, JPG, PNG o WEBP';
 
 /**
- * Valida mime y tamaño antes de subir. Pura y testeable de forma aislada.
+ * Límites de carga por tipo de documento (HU #10524, RF08/09/10). Cuando se omiten (o vienen
+ * vacíos) se aplican los límites globales actuales — misma validación que hoy, sin regresión.
+ * El backend (HU #10520) es la fuente de verdad: valida por tipo en la carga; este check cliente
+ * es un pre-filtro de UX.
+ */
+export interface FileTypeLimits {
+  allowedMimes?: readonly string[];
+  maxSizeBytes?: number;
+}
+
+/**
+ * Valida mime y tamaño antes de subir. Pura y testeable de forma aislada. Aplica los límites
+ * por tipo si se proveen (<paramref name="limits"/>), con respaldo a los globales.
  * Devuelve un mensaje de error claro, o null si el archivo es aceptable.
  */
-export function validateFile(file: File): string | null {
-  if (!(ALLOWED_MIME as readonly string[]).includes(file.type)) {
+export function validateFile(file: File, limits?: FileTypeLimits): string | null {
+  const allowed = (limits?.allowedMimes && limits.allowedMimes.length > 0
+    ? limits.allowedMimes
+    : ALLOWED_MIME) as readonly string[];
+  const maxSize = limits?.maxSizeBytes && limits.maxSizeBytes > 0 ? limits.maxSizeBytes : MAX_SIZE_BYTES;
+
+  if (!allowed.includes(file.type)) {
     return `Tipo de archivo no permitido. Usa ${ALLOWED_LABEL}.`;
   }
-  if (file.size > MAX_SIZE_BYTES) {
-    return 'El archivo supera el máximo de 20 MB.';
+  if (file.size > maxSize) {
+    return maxSize === MAX_SIZE_BYTES
+      ? 'El archivo supera el máximo de 20 MB.'
+      : `El archivo supera el máximo de ${formatSize(maxSize)}.`;
   }
   return null;
 }
@@ -292,7 +311,12 @@ function DocumentSlot({
     const file = e.target.files?.[0];
     e.target.value = ''; // permite re-seleccionar el mismo archivo
     if (!file) return;
-    const err = validateFile(file);
+    // Pre-validación cliente con los límites del tipo (RF08/09): así el error sale inline y con el
+    // límite real (no el global de 20 MB) y no llega al backend / cuadro global.
+    const err = validateFile(file, {
+      allowedMimes: item.mimeTypesAllowed,
+      maxSizeBytes: item.maxSizeBytes,
+    });
     setLocalError(err);
     if (err) return;
     onUpload(file);

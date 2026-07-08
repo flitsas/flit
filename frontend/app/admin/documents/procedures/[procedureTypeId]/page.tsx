@@ -5,11 +5,11 @@ import { ArrowLeft } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
 import { DocumentProcedureTabs } from "@/components/admin/documents/DocumentProcedureTabs";
-import { findProcedureType } from "@/lib/constants/procedure-types";
+import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 
 // Consola documental por trámite (HU #10198, AC2–AC5/AC7). Recibe el procedureTypeId
-// por la URL y orquesta las pestañas: documentos asociados, overrides OT, overrides
-// Cliente y matriz resuelta. El acceso SuperAdmin lo gobierna el middleware (AC6).
+// por la URL y orquesta las pestañas: documentos asociados, overrides OT y matriz
+// resuelta. El acceso SuperAdmin lo gobierna el middleware (AC6).
 export default function DocumentProcedurePage() {
   return (
     <ToastProvider>
@@ -22,7 +22,8 @@ function DocumentProcedureConsole() {
   const router = useRouter();
   const params = useParams<{ procedureTypeId: string }>();
   const procedureTypeId = params.procedureTypeId;
-  const procedureType = findProcedureType(procedureTypeId);
+  const { items } = useProcedureTypes();
+  const procedureType = items.find((p) => p.id === procedureTypeId);
 
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">

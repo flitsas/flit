@@ -97,6 +97,15 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    public Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstances
+            .AsSplitQuery()
+            .Include(x => x.Attachments)
+            .Include(x => x.Actors)
+            .Include(x => x.FieldValues)
+            .Include(x => x.Participants)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
     public Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .AsSplitQuery()
@@ -110,6 +119,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
+            // HU #10522 — Participants alimenta TieneTramitador (RF39) en el contexto del checklist:
+            // el gate "gestor manda" debe verlo igual que el display (GetByIdWithChecklistGraphAsync).
+            .Include(x => x.Participants)
             .Include(x => x.Commercial)
             .Include(x => x.PreflightSnapshots)
             .Include(x => x.BiometricValidations)

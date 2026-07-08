@@ -36,14 +36,15 @@ public sealed class CreateProcedureInstanceHandlerTests
         await SeedAsync(db);
         await using (var seed = NewContext(db))
         {
-            // Override CLIENTE sobre DocA → orden 1 nivel CLIENTE; DocB queda DEFAULT (20).
+            // RF22 — el OT es el único nivel que reordena: override OT sobre DocA → orden 1 nivel
+            // OT; DocB queda DEFAULT (20).
             seed.DocumentOrderOverrides.Add(new DocumentOrderOverride
             {
                 Id = Guid.NewGuid(),
                 ProcedureTypeId = ProcedureTypeId,
                 DocumentTypeId = DocA,
-                ScopeType = "CLIENTE",
-                ScopeRefId = ClienteId,
+                ScopeType = "OT",
+                ScopeRefId = TransitOfficeId,
                 SortOrder = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -85,7 +86,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         payload!.ProcedureTypeId.Should().Be(ProcedureTypeId);
         payload.ClienteId.Should().Be(ClienteId);
         payload.Documentos.Should().HaveCount(2);
-        payload.Documentos.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("CLIENTE");
+        payload.Documentos.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("OT");
         payload.Documentos.Single(d => d.DocumentTypeId == DocA).OrdenResuelto.Should().Be((short)1);
         payload.Documentos.Single(d => d.DocumentTypeId == DocB).NivelAplicado.Should().Be("DEFAULT");
     }
