@@ -30,9 +30,12 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.UserManagement.SuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserManagement;
+using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -1297,7 +1300,7 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                    && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)))
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var usersWithoutRole = await (
@@ -1315,7 +1318,7 @@ public static class AdminOtEndpoints
                 u.Status == "active" ? "active" : "inactive",
                 null,
                 db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
-                    && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now))
+                    && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)))
         ).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var pending = await db.UserInvitations
@@ -1334,6 +1337,7 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         SuspendOtUserRequest request,
         FlitDbContext db,
+        SuspendUserHandler handler,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -1344,59 +1348,46 @@ public static class AdminOtEndpoints
             return scopeError;
         }
 
-        var callerId = ResolveUserId(httpContext.User);
-        if (callerId == userId)
-        {
-            return Results.BadRequest(new { error = "SELF_SUSPEND", message = "No puedes suspenderte a ti mismo." });
-        }
+        var callerId = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var callerIsSuperAdmin = IsSuperAdmin(httpContext.User);
 
-        // El scope ya garantiza que ot_admin solo puede resolver su propio tenant (no
-        // recibe transitOfficeId de otro OT); este chequeo evita además que se
-        // suspenda a un usuario que no pertenece al tenant resuelto.
-        var userExistsInTenant = await db.Users.AsNoTracking()
-            .AnyAsync(u => u.Id == userId && u.DeletedAt == null
-                && (db.UserRoleAssignments.Any(a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)
-                    || u.HomeTenantId == tenantId),
+        try
+        {
+            var suspensionId = await handler.HandleAsync(
+                new SuspendUserCommand(tenantId, userId, request.Reason, request.EndsAt, callerId, callerIsSuperAdmin),
                 cancellationToken).ConfigureAwait(false);
 
-        if (!userExistsInTenant)
+            return Results.Created($"/api/v1/admin/ot/users/{userId}/suspend", new { id = suspensionId });
+        }
+        catch (TargetUserNotFoundException)
         {
             return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
         }
-
-        var now = DateTimeOffset.UtcNow;
-
-        var existing = await db.UserTempSuspensions
-            .Where(s => s.UserId == userId && s.TenantId == tenantId && s.DeletedAt == null && s.EndsAt >= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        foreach (var s in existing)
+        catch (UserOutOfScopeException)
         {
-            s.DeletedAt = now;
-            s.DeletedBy = callerId;
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "No tiene ámbito sobre este usuario." },
+                statusCode: StatusCodes.Status403Forbidden);
         }
-
-        var suspension = new UserTempSuspension
+        catch (SelfSuspensionException)
         {
-            TenantId = tenantId,
-            UserId = userId,
-            StartsAt = now,
-            EndsAt = request.EndsAt.ToUniversalTime(),
-            Reason = request.Reason,
-            CreatedAt = now,
-            CreatedBy = callerId,
-        };
-
-        db.UserTempSuspensions.Add(suspension);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        return Results.Created($"/api/v1/admin/ot/users/{userId}/suspend", new { id = suspension.Id });
+            return Results.BadRequest(new { error = "SELF_SUSPEND", message = "No puedes suspenderte a ti mismo." });
+        }
+        catch (LastActiveAdminException)
+        {
+            return Results.Conflict(new
+            {
+                error = "LAST_ACTIVE_ADMIN",
+                message = "No es posible suspender/desactivar al último administrador activo.",
+            });
+        }
     }
 
     private static async Task<IResult> UnsuspendUserAsync(
         Guid userId,
         HttpContext httpContext,
         FlitDbContext db,
+        UnsuspendUserHandler handler,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -1407,27 +1398,31 @@ public static class AdminOtEndpoints
             return scopeError;
         }
 
-        var callerId = ResolveUserId(httpContext.User);
-        var now = DateTimeOffset.UtcNow;
+        var callerId = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var callerIsSuperAdmin = IsSuperAdmin(httpContext.User);
 
-        var active = await db.UserTempSuspensions
-            .Where(s => s.UserId == userId && s.TenantId == tenantId
-                     && s.DeletedAt == null && s.StartsAt <= now && s.EndsAt >= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await handler.HandleAsync(
+                new UnsuspendUserCommand(tenantId, userId, callerId, callerIsSuperAdmin),
+                cancellationToken).ConfigureAwait(false);
 
-        if (active.Count == 0)
+            return Results.NoContent();
+        }
+        catch (TargetUserNotFoundException)
+        {
+            return Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no existe en este tenant OT." });
+        }
+        catch (UserOutOfScopeException)
+        {
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "No tiene ámbito sobre este usuario." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (NoActiveSuspensionException)
         {
             return Results.NotFound(new { error = "NO_ACTIVE_SUSPENSION", message = "El usuario no tiene una suspensión activa." });
         }
-
-        foreach (var s in active)
-        {
-            s.DeletedAt = now;
-            s.DeletedBy = callerId;
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return Results.NoContent();
     }
 
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
@@ -1483,7 +1478,8 @@ public static class AdminOtEndpoints
 
     private sealed record InviteOtUserRequest(string Email, string? FullName);
 
-    private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset EndsAt);
+    // HU #10619 AC1: EndsAt nulo = desactivación indefinida (sin fecha de fin).
+    private sealed record SuspendOtUserRequest(string Reason, DateTimeOffset? EndsAt);
 
     private sealed record OtUserDto(
         string Id,

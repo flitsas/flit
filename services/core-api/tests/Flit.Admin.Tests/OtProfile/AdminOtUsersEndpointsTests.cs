@@ -8,6 +8,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -176,6 +177,204 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // HU #10619 AC1 — sin endsAt: desactivación indefinida (sin fecha de fin), hasta reactivación manual.
+    [Fact]
+    public async Task Suspend_WithoutEndsAt_CreatesIndefiniteSuspension()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            new { reason = "Desactivación indefinida de prueba" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using var db = CreateDbContext();
+        var suspension = await db.UserTempSuspensions.AsNoTracking()
+            .Where(s => s.UserId == _collaboratorUserId && s.TenantId == _otTenantId && s.DeletedAt == null)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstAsync(TestContext.Current.CancellationToken);
+
+        suspension.EndsAt.Should().BeNull();
+    }
+
+    // HU #10619 AC4 — suspender/desactivar al único ot_admin activo del tenant se rechaza (409),
+    // para no dejar el tenant sin ningún administrador disponible.
+    [Fact]
+    public async Task Suspend_TargetIsLastActiveOtAdmin_Returns409()
+    {
+        var soloTenantId = Guid.NewGuid();
+        var soloAdminUserId = Guid.NewGuid();
+        var soloTransitOfficeId = Guid.NewGuid();
+
+        await using (var db = CreateDbContext())
+        {
+            db.TransitOffices.Add(new TransitOffice
+            {
+                Id = soloTransitOfficeId,
+                Code = $"T{Guid.NewGuid():N}"[..10],
+                Name = "OT solo-admin tests",
+                DepartmentCode = "99",
+                CityCode = "99999",
+                IsActive = true,
+            });
+            db.Tenants.Add(new Tenant
+            {
+                Id = soloTenantId,
+                Code = $"OT-SOLO-{Guid.NewGuid():N}"[..20],
+                LegalName = "OT Solo Admin Tests",
+                TaxId = "900888888-8",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = soloAdminUserId,
+                Email = $"solo-admin-{soloAdminUserId:N}@flit.local",
+                DisplayName = "Solo AdminOT",
+                Status = "active",
+                HomeTenantId = soloTenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                TransitOfficeId = soloTransitOfficeId,
+                OperationMode = "dashboard",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = soloTenantId,
+                UserId = soloAdminUserId,
+                RoleId = _roleId,
+                AssignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            // SuperAdmin (no es el propio objetivo) intenta suspender al único ot_admin del tenant.
+            var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _client.PostAsJsonAsync(
+                $"/api/v1/admin/ot/users/{soloAdminUserId}/suspend?transitOfficeId={soloTransitOfficeId}",
+                new { reason = "Intento de dejar el tenant sin administradores" },
+                TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        }
+        finally
+        {
+            // Mismo orden de dependencia FK que Dispose(): hijos primero (su propio SaveChanges),
+            // padres después.
+            await using var db = CreateDbContext();
+            db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.TenantId == soloTenantId));
+            db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == soloTenantId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == soloAdminUserId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == soloTenantId));
+            db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == soloTransitOfficeId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #10619 AC5 — AuthUserRepository.FindByEmailAsync (usado por LoginHandler para rechazar
+    // el login, ver LoginHandlerSuspensionTests) debe reportar IsTemporarilySuspended = true
+    // cuando la suspensión activa tiene EndsAt nulo (desactivación indefinida, AC1), igual que
+    // con una suspensión temporal vigente. Seed/cleanup local, sin depender del factory-wide
+    // Dispose(), siguiendo el mismo patrón que Suspend_TargetIsLastActiveOtAdmin_Returns409.
+    [Fact]
+    public async Task FindByEmailAsync_WhenSuspensionHasNullEndsAt_ReportsTemporarilySuspended()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var email = $"indefinite-suspension-{userId:N}@flit.local";
+
+        await using (var db = CreateDbContext())
+        {
+            db.Tenants.Add(new Tenant
+            {
+                Id = tenantId,
+                Code = $"IND-SUSP-{Guid.NewGuid():N}"[..20],
+                LegalName = "Tenant suspensión indefinida (tests)",
+                TaxId = "900777777-7",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.Users.Add(new User
+            {
+                Id = userId,
+                Email = email,
+                DisplayName = "Usuario desactivado indefinidamente (tests)",
+                Status = "active",
+                HomeTenantId = tenantId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            // AuthUserRepository.FindByEmailAsync exige una fila de credenciales (join
+            // obligatorio); el hash no se valida en este test, solo se necesita que exista.
+            db.UserCredentials.Add(new UserCredential
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PasswordHash = "not-used-in-this-test",
+                MustChangePassword = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            db.UserTempSuspensions.Add(new UserTempSuspension
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                StartsAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                EndsAt = null,
+                Reason = "HU #10619 AC5 — desactivación indefinida (test)",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IAuthUserRepository>();
+
+            var snapshot = await repository.FindByEmailAsync(email, TestContext.Current.CancellationToken);
+
+            snapshot.Should().NotBeNull();
+            snapshot!.IsTemporarilySuspended.Should().BeTrue(
+                "una suspensión sin fecha de fin (desactivación indefinida, HU #10619 AC1) debe " +
+                "bloquear el login igual que una suspensión temporal vigente (AC5)");
+        }
+        finally
+        {
+            await using var db = CreateDbContext();
+            db.UserTempSuspensions.RemoveRange(db.UserTempSuspensions.Where(s => s.UserId == userId));
+            db.UserCredentials.RemoveRange(db.UserCredentials.Where(c => c.UserId == userId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == userId));
+            db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == tenantId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();
@@ -274,6 +473,19 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         });
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // HU #10619 AC4 — la guarda de "último administrador activo" exige que exista un rol
+        // ot_admin ACTIVO persistido (no solo el claim del JWT) para que suspender al
+        // colaborador no lo deje como único ot_admin del tenant.
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _otTenantId,
+            UserId = _otAdminUserId,
+            RoleId = _roleId,
+            AssignedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
 
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {

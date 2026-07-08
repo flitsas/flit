@@ -69,6 +69,8 @@ public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepo
         var entityType = await userRoleAssignmentRepository.GetTenantTargetEntityTypeAsync(tenantId.Value, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
+        // HU #10619 AC1/AC5: EndsAt == null significa desactivación indefinida — bloquea el
+        // login igual que una suspensión temporal vigente, hasta que alguien la levante.
         var isSuspended = await db.UserTempSuspensions
             .AsNoTracking()
             .AnyAsync(
@@ -76,7 +78,7 @@ public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepo
                      && s.TenantId == tenantId
                      && s.DeletedAt == null
                      && s.StartsAt <= now
-                     && s.EndsAt >= now,
+                     && (s.EndsAt == null || s.EndsAt >= now),
                 cancellationToken);
 
         // permissionSlugs = UNIÓN distinct de permisos de TODOS los roles activos (antes solo

@@ -903,12 +903,14 @@ paths:
     post:
       tags: [Admin · OT]
       operationId: adminOtSuspendUser
-      summary: Suspende temporalmente a un usuario del tenant OT (self-service, refactor adminOT)
+      summary: Suspende o desactiva indefinidamente a un usuario del tenant OT (self-service, refactor adminOT)
       description: >
-        Suspende a un usuario del tenant OT resuelto (propio para ot_admin, o el
-        indicado por `?transitOfficeId=` para SuperAdmin). El usuario debe
-        pertenecer al tenant resuelto (no se puede suspender usuarios de otro OT).
-        Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        Suspende temporalmente (con `endsAt`) o desactiva indefinidamente (sin
+        `endsAt`) a un usuario del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin) — HU #10619. SuperAdmin
+        aplica la acción sobre el tenant REAL del usuario objetivo. Se rechaza si
+        el usuario intenta auto-suspenderse o si dejaría al tenant/sistema sin
+        ningún administrador activo (último SuperAdmin/AdminCompany/ot_admin).
       security:
         - bearerAuth: []
       requestBody:
@@ -919,7 +921,7 @@ paths:
               $ref: "#/components/schemas/SuspendOtUserRequest"
       responses:
         "201":
-          description: Suspensión creada.
+          description: Suspensión/desactivación creada.
         "400":
           description: Auto-suspensión no permitida.
           content:
@@ -929,7 +931,7 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: Sin rol SuperAdmin u ot_admin, o sin ámbito sobre el usuario objetivo.
           content:
             application/json:
               schema:
@@ -940,25 +942,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (último SuperAdmin/AdminCompany/ot_admin disponible).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags: [Admin · OT]
       operationId: adminOtUnsuspendUser
-      summary: Levanta la suspensión activa de un usuario del tenant OT (self-service, refactor adminOT)
+      summary: Levanta la suspensión/desactivación activa de un usuario del tenant OT (self-service, refactor adminOT)
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: Suspensión levantada.
+          description: Suspensión/desactivación levantada.
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: Sin rol SuperAdmin u ot_admin, o sin ámbito sobre el usuario objetivo.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: El usuario no tiene una suspensión activa en el tenant OT resuelto.
+          description: El usuario no existe en el tenant OT resuelto, o no tiene una suspensión activa.
           content:
             application/json:
               schema:
@@ -4625,10 +4635,15 @@ components:
 
     SuspendOtUserRequest:
       type: object
+      description: >
+        HU #10619: `endsAt` es opcional. Con valor, es una suspensión temporal que se
+        reactiva sola al vencer (comportamiento previo, sin cambios). Omitido/null,
+        es una desactivación indefinida: el usuario queda bloqueado hasta que un
+        administrador levante la restricción explícitamente (`DELETE .../suspend`).
       properties:
         reason: { type: string }
-        endsAt: { type: string, format: date-time }
-      required: [reason, endsAt]
+        endsAt: { type: string, format: date-time, nullable: true }
+      required: [reason]
 
     AuditLogEntry:
       type: object
