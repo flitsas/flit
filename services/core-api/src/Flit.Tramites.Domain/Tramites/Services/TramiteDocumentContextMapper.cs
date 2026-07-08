@@ -22,9 +22,6 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 ///   operador persistidas como field_values <c>es_leasing</c> / <c>cambio_carroceria</c>
 ///   (mismo canal que <c>vehicle_service</c>); en producción v1.0 son un checkbox/selector del
 ///   paso de vehículo.</item>
-///   <item><b>Importado</b> (RF33): bandera manual del operador persistida como field_value
-///   <c>es_importado</c> (checkbox del paso de vehículo en matrícula inicial); dispara pedir el
-///   documento de Aduana.</item>
 /// </list>
 /// </summary>
 public static class TramiteDocumentContextMapper
@@ -33,7 +30,6 @@ public static class TramiteDocumentContextMapper
     private const string OwnerDocumentTypeFieldKey = "owner_document_type";
     private const string VehicleServiceFieldKey = "vehicle_service";
     private const string ServicioEspecialMarker = "ESPECIAL";
-    private const string ImportadoFieldKey = "es_importado";
     private const string LeasingFieldKey = "es_leasing";
     private const string CambioCarroceriaFieldKey = "cambio_carroceria";
 
@@ -74,12 +70,13 @@ public static class TramiteDocumentContextMapper
             string.Equals(p.Rol, ParticipantRoles.Mandatario, StringComparison.OrdinalIgnoreCase));
 
         // Banderas manuales del paso de vehículo (persistidas como field_values por el wizard).
-        var esImportado = LeerBool(fieldValues, ImportadoFieldKey);
         var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
         var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
 
         return new TramiteDocumentContext(
-            EsImportado: esImportado,
+            // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se
+            // condiciona a una bandera del operador, así que EsImportado queda siempre false.
+            EsImportado: false,
             EsPersonaNatural: esPersonaNatural,
             EsNit: esNit,
             TieneLeasing: tieneLeasing,

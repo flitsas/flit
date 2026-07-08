@@ -13,7 +13,11 @@ public sealed record ChecklistItemDto(
     string Label,
     bool Obligatorio,
     string? DocTipo,
-    bool Satisfied);
+    bool Satisfied,
+    // Límites de carga por tipo (RF08/09) para que el front pre-valide inline con el límite real.
+    // null ⇒ el tipo no tiene regla propia ⇒ el front usa los defaults globales.
+    long? MaxSizeBytes = null,
+    IReadOnlyList<string>? MimeTypesAllowed = null);
 
 public sealed record ChecklistResponse(
     IReadOnlyList<ChecklistItemDto> Items,
@@ -41,7 +45,8 @@ public sealed record ChecklistResponse(
 public sealed class GetChecklistHandler(
     IProcedureInstanceRepository repo,
     IChecklistCompanyParamsProvider companyParams,
-    IResolvedChecklistMatrixProvider? matrixProvider = null)
+    IResolvedChecklistMatrixProvider? matrixProvider = null,
+    IDocumentTypeCatalog? documentTypes = null)
 {
     public async Task<(ChecklistResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -86,13 +91,39 @@ public sealed class GetChecklistHandler(
         if (computed is null)
             return (null, "tipologia_not_found");
 
+        // Límites por-tipo (MIME/tamaño, RF08/09): el front los usa para pre-validar inline con el
+        // límite real. Sin catálogo inyectado (tests) o tipo sin regla ⇒ límites null ⇒ default global.
+        var limitsByTipo = new Dictionary<string, DocumentTypeRule>(StringComparer.OrdinalIgnoreCase);
+        if (documentTypes is not null)
+        {
+            var tipos = computed.Items
+                .Select(i => i.Item.DocTipo)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => t!)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var tipo in tipos)
+            {
+                var rule = await documentTypes.GetRuleAsync(tipo, ct);
+                if (rule is not null)
+                    limitsByTipo[tipo] = rule;
+            }
+        }
+
         var items = computed.Items
-            .Select(i => new ChecklistItemDto(
-                i.Item.Id,
-                i.Item.Label,
-                i.Item.Obligatorio,
-                i.Item.DocTipo,
-                i.Satisfecho))
+            .Select(i =>
+            {
+                var rule = i.Item.DocTipo is not null && limitsByTipo.TryGetValue(i.Item.DocTipo, out var r)
+                    ? r
+                    : null;
+                return new ChecklistItemDto(
+                    i.Item.Id,
+                    i.Item.Label,
+                    i.Item.Obligatorio,
+                    i.Item.DocTipo,
+                    i.Satisfecho,
+                    rule is { MaxSizeBytes: > 0 } ? rule.MaxSizeBytes : null,
+                    rule is { MimeTypesAllowed.Count: > 0 } ? rule.MimeTypesAllowed : null);
+            })
             .ToList();
 
         return (new ChecklistResponse(items, computed.FaltanObligatorios, computed.Completo), null);

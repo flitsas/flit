@@ -164,6 +164,26 @@ describe('DocumentChecklist — upload', () => {
     expect(await screen.findByText(/supera el máximo de 20 MB/)).toBeInTheDocument();
   });
 
+  it('rechaza por tamaño usando el límite por-tipo (inline y dinámico, no 20 MB)', async () => {
+    // El tipo tiene un maxSizeBytes propio (1 MB): un archivo de 2 MB debe rechazarse en el
+    // cliente (inline) con el límite real formateado, sin llegar al backend ni al mensaje global.
+    mocks.getChecklist.mockResolvedValue({
+      ...CHECKLIST,
+      items: [{ ...CHECKLIST.items[0], maxSizeBytes: 1_000_000 }, CHECKLIST.items[1]],
+    });
+    const user = userEvent.setup();
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    await screen.findByText('Cédula del comprador');
+    const input = screen.getByLabelText('Subir Cédula del comprador');
+    await user.upload(input, pngFile('grande.png', 2_000_000));
+
+    expect(mocks.uploadAttachment).not.toHaveBeenCalled();
+    const msg = await screen.findByText(/supera el máximo/);
+    expect(msg.textContent).toMatch(/977 KB/);
+    expect(msg.textContent).not.toMatch(/20 MB/);
+  });
+
   it('rechaza por mime no permitido sin llamar al cliente', async () => {
     render(<DocumentChecklist instanceId={INSTANCE} />);
 

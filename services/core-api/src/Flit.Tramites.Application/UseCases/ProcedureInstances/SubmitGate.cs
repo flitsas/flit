@@ -90,8 +90,9 @@ public static class SubmitGate
         if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador)
             || !identidadAprobadaPartes.Contains(BiometricRules.ParteVendedor))
             errors.Add(IdentidadNoAprobada);
-        if (!FirmaCompraventaAmbas(instance))
-            errors.Add(FirmaCompraventaRequerida);
+        // B12 (HU #10661, ADR-0028): la firma de compraventa NO bloquea el traspaso — negocio aún no
+        // define la lógica ideal de firmas (ZapSign/baúl). Se omite el check FirmaCompraventaAmbas para
+        // desbloquear preparar/radicar; el modelo y los endpoints de firma se conservan intactos.
         if (!FurGenerado(instance))
             errors.Add(FurRequerido);
         if (!OrganismoSeleccionado(instance))

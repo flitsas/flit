@@ -108,13 +108,17 @@ public sealed class SubmitGateTraspasoTests
     }
 
     [Fact]
-    public void Gate_SinFirmaCompraventa_Bloquea()
+    public void Gate_SinFirmaCompraventa_NoBloquea()
     {
-        // AC2: falta la firma de compraventa → firma_compraventa_requerida.
+        // B12 (HU #10661, ADR-0028) AC1/AC4: la firma de compraventa YA NO bloquea el traspaso.
+        // Sin firmas, si el resto del gate está OK, la lista de errores queda vacía (puede radicar)
+        // y en particular NO aparece firma_compraventa_requerida.
         var instance = CompleteTraspaso();
         instance.Signatures.Clear();
 
-        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.FirmaCompraventaRequerida);
+        var errors = SubmitGate.Evaluate(instance, Aprobadas(instance));
+        errors.Should().NotContain(SubmitGate.FirmaCompraventaRequerida);
+        errors.Should().BeEmpty();
     }
 
     [Fact]

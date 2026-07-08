@@ -19,6 +19,7 @@ internal static class SuperAdminEndpointExtensions
         SecurityModulesEndpoints.Map(group);
         SecurityPermissionsEndpoints.Map(group);
         SecurityRolesEndpoints.Map(group);
+        SecurityUsersEndpoints.Map(group);
 
         return app;
     }

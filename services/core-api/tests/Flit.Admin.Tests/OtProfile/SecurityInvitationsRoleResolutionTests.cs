@@ -97,6 +97,189 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         invitation.RoleId.Should().Be(_otAdminRoleId);
     }
 
+    // HU #10625 AC1 — SuperAdmin puede reenviar CUALQUIER invitación del sistema (sin
+    // restricción de tenant), a diferencia de AdminCompany que solo puede su propio tenant.
+    [Fact]
+    public async Task Resend_AsSuperAdmin_InvitationOfAnotherTenant_Returns200()
+    {
+        var (invitationId, email) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        invitation.Email.Should().Be(email);
+        invitation.LastSentAt.Should().NotBeNull();
+    }
+
+    // HU #10625 AC1 — AdminCompany reenvía una invitación pendiente de su propio tenant
+    [Fact]
+    public async Task Resend_AsAdminCompany_OwnTenantInvitation_Returns200()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // HU #10625 AC2 — cooldown activo: reenviada hace menos de 2 minutos → 429 + Retry-After
+    [Fact]
+    public async Task Resend_AsAdminCompany_WithinCooldown_Returns429WithRetryAfterHeader()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _companyTenantId, lastSentAt: DateTimeOffset.UtcNow.AddSeconds(-30));
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    // HU #10625 AC3 — invitación ya cancelada → 409
+    [Fact]
+    public async Task Resend_AsAdminCompany_InvitationCancelled_Returns409()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _companyTenantId, lastSentAt: null, status: "cancelled");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // AdminCompany no puede reenviar una invitación de OTRO tenant → 404 (fuera de alcance)
+    [Fact]
+    public async Task Resend_AsAdminCompany_InvitationOfAnotherTenant_Returns404()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // AC1 (HU #10627) — cancelar una invitación pendiente de mi alcance: el enlace de
+    // activación deja de funcionar (Status ya no es "pending") y el email queda disponible
+    // para una nueva invitación.
+    [Fact]
+    public async Task CancelInvitation_AsSuperAdmin_PendingInvitation_CancelsAndAllowsNewInvitation()
+    {
+        var email = $"cancel-invite-{Guid.NewGuid():N}@flit.local";
+
+        var createResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+            var cancelResponse = await _client.DeleteAsync(
+                $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+            cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        await using (var db = CreateDbContext())
+        {
+            var cancelled = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            cancelled.Status.Should().Be("cancelled");
+            cancelled.DeletedAt.Should().NotBeNull();
+        }
+
+        // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
+        var reInviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    // AC2 (HU #10627) — cancelar una invitación ya cancelada previamente → 409, error explícito.
+    [Fact]
+    public async Task CancelInvitation_AlreadyCancelled_Returns409()
+    {
+        var email = $"cancel-twice-{Guid.NewGuid():N}@flit.local";
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Dos Veces", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+        var firstCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // Cancelar una invitación inexistente → 404.
+    [Fact]
+    public async Task CancelInvitation_NotFound_Returns404()
+    {
+        var response = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
+        Guid tenantId, DateTimeOffset? lastSentAt, string status = "pending")
+    {
+        await using var db = CreateDbContext();
+
+        var invitationId = Guid.NewGuid();
+        var email = $"resend-{Guid.NewGuid():N}@flit.local";
+
+        db.UserInvitations.Add(new UserInvitation
+        {
+            Id = invitationId,
+            TenantId = tenantId,
+            Email = email,
+            FullName = "Invitado Reenvío",
+            TokenHash = $"hash-{Guid.NewGuid():N}",
+            Status = status,
+            InvitedBy = _superAdminUserId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastSentAt = lastSentAt,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (invitationId, email);
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();

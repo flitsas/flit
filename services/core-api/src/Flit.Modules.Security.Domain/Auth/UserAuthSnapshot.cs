@@ -40,5 +40,19 @@ public sealed class UserAuthSnapshot
 
     public string TenantName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// NIT (<c>identity.tenants.tax_id</c>) del tenant asociado (HU #10616, AC1/AC2). Puede venir
+    /// vacío si el tenant no tiene NIT registrado (AC4) — el login debe completarse igual, sin
+    /// romper la emisión del JWT.
+    /// </summary>
+    public string TenantTaxId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Tipo de entidad de negocio del tenant: <c>"COMPANY"</c> u <c>"TRANSIT_OFFICE"</c> (HU #10616,
+    /// AC1/AC2). Mismo criterio ya usado por <see cref="Flit.Modules.Security.Domain.UserRoles.IUserRoleAssignmentRepository.GetTenantTargetEntityTypeAsync"/>:
+    /// un tenant con <c>TransitOfficeProfile</c> asociado es <c>TRANSIT_OFFICE</c>; el resto, <c>COMPANY</c>.
+    /// </summary>
+    public string EntityType { get; init; } = string.Empty;
+
     public bool IsTemporarilySuspended { get; init; }
 }
