@@ -31,6 +31,7 @@ public sealed class StateMachineTests
         (TramiteEstado.Asignado, TramiteEstado.Aprobado),
         (TramiteEstado.Asignado, TramiteEstado.Rechazado),
         (TramiteEstado.Asignado, TramiteEstado.Anulado),
+        (TramiteEstado.Asignado, TramiteEstado.Preasignado),
     ];
 
     [Theory]
@@ -49,6 +50,7 @@ public sealed class StateMachineTests
     [InlineData("asignado", "aprobado")]
     [InlineData("asignado", "rechazado")]
     [InlineData("asignado", "anulado")]
+    [InlineData("asignado", "preasignado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {
         TramiteStateMachine.IsValidTransition(from, to).Should().BeTrue();

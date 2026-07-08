@@ -79,4 +79,16 @@ public interface IOtClientProcedureRepository
         Guid? changedBy,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa
+    /// (preasignada→revocada) y devuelve el trámite a <c>preasignado</c> si estaba <c>asignado</c>.
+    /// </summary>
+    Task<OtClientProcedure?> RevokePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default);
 }

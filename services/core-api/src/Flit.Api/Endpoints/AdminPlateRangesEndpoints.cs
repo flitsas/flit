@@ -36,7 +36,31 @@ public static class AdminPlateRangesEndpoints
         group.MapPost("/procedures/{instanceId:guid}/assign-plate", AssignPlateToProcedureAsync)
             .WithName("AdminPlateAssignToProcedure");
 
+        // HU #10655 — el OT revoca la preasignación de un trámite.
+        group.MapPost("/procedures/{instanceId:guid}/revoke", RevokeProcedurePlateAsync)
+            .WithName("AdminPlateRevokeProcedure");
+
         return app;
+    }
+
+    private static async Task<IResult> RevokeProcedurePlateAsync(
+        Guid instanceId, RevokePlateRequest request, HttpContext http,
+        IOtClientProcedureRepository otRepo, CancellationToken ct)
+    {
+        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
+        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        {
+            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
+        }
+
+        var result = await otRepo.RevokePlateAsync(
+            otTenantId, instanceId, request.Reason, ResolveUserId(http.User), "ot_console", ct)
+            .ConfigureAwait(false);
+
+        return result is null
+            ? Results.Problem(statusCode: 422, title: "Unprocessable",
+                detail: "No se pudo revocar: el trámite no es accesible o no está en preasignado/asignado.")
+            : Results.Ok(result);
     }
 
     private static async Task<IResult> AssignPlateToProcedureAsync(
@@ -184,3 +208,6 @@ public sealed record EditPlateRangeRequest(string Prefix, int RangeFrom, int Ran
 
 /// <summary>Payload para asignar una placa a un trámite en preasignado (Flujo B).</summary>
 public sealed record AssignPlateToProcedureRequest(string Plate);
+
+/// <summary>Payload para revocar la preasignación de un trámite.</summary>
+public sealed record RevokePlateRequest(string Reason);

@@ -19,8 +19,9 @@ public static class TramiteStateMachine
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
             // Preasignado: el OT asigna la placa (→ asignado) o se anula.
             [TramiteEstado.Preasignado] = [TramiteEstado.Asignado, TramiteEstado.Anulado],
-            // Asignado: tras SOAT + recepción del OT, se aprueba o rechaza (o se anula).
-            [TramiteEstado.Asignado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Anulado],
+            // Asignado: tras SOAT + recepción del OT, se aprueba o rechaza (o se anula). Revocar la
+            // preasignación devuelve el trámite a preasignado para reasignar placa (Feature #10587).
+            [TramiteEstado.Asignado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Anulado, TramiteEstado.Preasignado],
             [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],

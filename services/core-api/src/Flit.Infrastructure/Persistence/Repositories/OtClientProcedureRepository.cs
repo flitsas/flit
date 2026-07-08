@@ -173,7 +173,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            TramiteEstado.Entregado,
             TramiteEstado.Aprobado,
             approvedBy,
             reason: null,
@@ -190,17 +189,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            TramiteEstado.Entregado,
             TramiteEstado.Rechazado,
             rejectedBy,
             reason,
             source,
             cancellationToken);
 
+    // La transición OT obedece la máquina de estados única sobre el estado ACTUAL del trámite: aprobar/
+    // rechazar aplican desde entregado (ruta estándar) o desde asignado (ruta de placa, Feature #10587).
     private async Task<OtClientProcedure?> TransitionAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
-        string expectedStatus,
         string targetStatus,
         Guid? changedBy,
         string? reason,
@@ -232,14 +231,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         cancellationToken)
                     .ConfigureAwait(false);
 
-                if (entity is null || entity.Status != expectedStatus)
+                if (entity is null)
                 {
                     return null;
                 }
 
-                // N 03 (ADR-0022): la decisión OT también obedece la máquina de estados única
-                // (entregado→aprobado|rechazado); un estado inesperado no transiciona.
-                if (!TramiteStateMachine.IsValidTransition(entity.Status, targetStatus))
+                var fromStatus = entity.Status;
+
+                // N 03 (ADR-0022): la decisión OT obedece la máquina de estados única sobre el estado
+                // ACTUAL (entregado→aprobado|rechazado o asignado→aprobado|rechazado); si no es válida,
+                // no transiciona.
+                if (!TramiteStateMachine.IsValidTransition(fromStatus, targetStatus))
                 {
                     return null;
                 }
@@ -251,13 +253,31 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
+                // Feature #10587 — al aprobar en RUNT un trámite de la ruta de placa, la placa reservada
+                // pasa a utilizada (terminal).
+                if (targetStatus == TramiteEstado.Aprobado)
+                {
+                    var plateDetail = await _context.PlateRangeDetails
+                        .FirstOrDefaultAsync(
+                            d => d.ProcedureInstanceId == procedureInstanceId
+                                && d.State == Flit.Admin.Domain.PlatePreassign.PlateState.Preasignada,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (plateDetail is not null)
+                    {
+                        plateDetail.State = Flit.Admin.Domain.PlatePreassign.PlateState.Utilizada;
+                        plateDetail.UsedAt = now;
+                        plateDetail.UpdatedAt = now;
+                    }
+                }
+
                 // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
                 // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).
                 await _transitionPublisher.EnqueueAsync(
                     new TramiteTransitionRecord(
                         accessible.ClientTenantId,
                         entity.Id,
-                        expectedStatus,
+                        fromStatus,
                         targetStatus,
                         reason,
                         resolvedChangedBy,
@@ -272,7 +292,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Id = Guid.NewGuid(),
                     TenantId = accessible.ClientTenantId,
                     ProcedureInstanceId = entity.Id,
-                    FromStatus = expectedStatus,
+                    FromStatus = fromStatus,
                     ToStatus = targetStatus,
                     ChangedAt = now,
                     ChangedBy = resolvedChangedBy,
@@ -396,6 +416,97 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Reason = $"Placa {normalizedPlate} asignada por el OT.",
                     Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, plate = normalizedPlate, source }),
                 });
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                var mapped = Map(entity);
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
+                return enriched[0];
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa (preasignada→revocada)
+    // y devuelve el trámite a preasignado para reasignar (si estaba asignado).
+    public async Task<OtClientProcedure?> RevokePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default)
+    {
+        var accessible = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeId => FindAccessibleProcedureAsync(transitOfficeId, procedureInstanceId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (accessible is null)
+        {
+            return null;
+        }
+
+        return await ExecuteInClientTenantScopeAsync(
+            accessible.ClientTenantId,
+            async () =>
+            {
+                var entity = await _context.ProcedureInstances
+                    .FirstOrDefaultAsync(
+                        p => p.Id == procedureInstanceId
+                            && p.TenantId == accessible.ClientTenantId
+                            && p.DeletedAt == null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null
+                    || entity.Status is not (TramiteEstado.Asignado or TramiteEstado.Preasignado))
+                {
+                    return null;
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken).ConfigureAwait(false);
+
+                var plateDetail = await _context.PlateRangeDetails
+                    .FirstOrDefaultAsync(
+                        d => d.ProcedureInstanceId == procedureInstanceId
+                            && d.State == Flit.Admin.Domain.PlatePreassign.PlateState.Preasignada,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (plateDetail is not null)
+                {
+                    plateDetail.State = Flit.Admin.Domain.PlatePreassign.PlateState.Revocada;
+                    plateDetail.ProcedureInstanceId = null;
+                    plateDetail.ReservedAt = null;
+                    plateDetail.UpdatedAt = now;
+                }
+
+                // Si estaba asignado, vuelve a preasignado para reasignar placa.
+                if (entity.Status == TramiteEstado.Asignado)
+                {
+                    var fromStatus = entity.Status;
+                    entity.Status = TramiteEstado.Preasignado;
+                    entity.UpdatedAt = now;
+                    entity.UpdatedBy = resolvedChangedBy;
+
+                    await _transitionPublisher.EnqueueAsync(
+                        new TramiteTransitionRecord(
+                            accessible.ClientTenantId, entity.Id, fromStatus, TramiteEstado.Preasignado,
+                            reason, resolvedChangedBy, now),
+                        cancellationToken).ConfigureAwait(false);
+
+                    _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = accessible.ClientTenantId,
+                        ProcedureInstanceId = entity.Id,
+                        FromStatus = fromStatus,
+                        ToStatus = TramiteEstado.Preasignado,
+                        ChangedAt = now,
+                        ChangedBy = resolvedChangedBy,
+                        Reason = reason,
+                        Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, revoked = true, source }),
+                    });
+                }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 var mapped = Map(entity);
