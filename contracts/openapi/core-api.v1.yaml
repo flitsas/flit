@@ -2959,6 +2959,9 @@ paths:
     post:
       tags: [Trámites · Documentos]
       summary: Subir un adjunto (multipart)
+      operationId: uploadProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
       description: >
         Sube el binario de un documento del trámite (solo en estado borrador). Valida tipo,
         MIME y tamaño; si el tipo existe en el catálogo document_types se aplican sus reglas
@@ -2985,6 +2988,9 @@ paths:
     get:
       tags: [Trámites · Documentos]
       summary: Listar adjuntos del trámite
+      operationId: listProcedureInstanceAttachments
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Lista de adjuntos.
@@ -3008,6 +3014,9 @@ paths:
     post:
       tags: [Trámites · Documentos]
       summary: Abrir subida directa a S3 (presigned POST)
+      operationId: presignProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
       description: >
         Valida tipo/MIME/tamaño y estado borrador y devuelve una política presigned POST para
         subir el binario directo a S3, sin crear aún la fila del adjunto (se registra luego).
@@ -3043,6 +3052,9 @@ paths:
     post:
       tags: [Trámites · Documentos]
       summary: Registrar la metadata de un adjunto ya subido a S3
+      operationId: registerProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -3072,6 +3084,9 @@ paths:
     get:
       tags: [Trámites · Documentos]
       summary: Descargar el binario de un adjunto
+      operationId: downloadProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Binario del adjunto.
@@ -3094,6 +3109,9 @@ paths:
     delete:
       tags: [Trámites · Documentos]
       summary: Borrar un adjunto (solo en borrador)
+      operationId: deleteProcedureInstanceAttachment
+      security:
+        - bearerAuth: []
       responses:
         "204": { description: "Adjunto borrado." }
         "404": { description: "Trámite o adjunto no encontrado." }
@@ -3109,6 +3127,9 @@ paths:
     get:
       tags: [Trámites · Documentos]
       summary: Checklist documental computado del trámite
+      operationId: getProcedureInstanceChecklist
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Checklist con estado de cada ítem.
@@ -3128,6 +3149,9 @@ paths:
     post:
       tags: [Trámites · Documentos]
       summary: Generar el PDF consolidado del expediente
+      operationId: generarProcedureInstanceConsolidado
+      security:
+        - bearerAuth: []
       description: >
         Fusiona el FUR y los adjuntos del trámite en un PDF único y lo adjunta como
         tipo "consolidado". Requiere FUR generado y documentos obligatorios completos.

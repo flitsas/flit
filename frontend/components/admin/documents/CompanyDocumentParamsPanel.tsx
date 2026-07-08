@@ -43,6 +43,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await (no síncronos)
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
