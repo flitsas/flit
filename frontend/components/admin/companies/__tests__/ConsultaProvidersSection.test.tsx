@@ -11,6 +11,7 @@ const baseSettings: TenantSettings = {
   tenantId: "t1",
   switchesMatricula: { allowInitialRegistration: true, allowMiscNewVehicles: true, onlyOwnVehicles: false },
   baulFirmasActivo: false,
+  preasignacionPlacaActiva: false,
   enrutamientoSMTP: "FLIT_SMTP",
   notificationTarget: "RADICADOR",
   metodosRecaudo: [],

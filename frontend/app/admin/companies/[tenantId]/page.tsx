@@ -132,6 +132,7 @@ function defaultSettings(tenantId: string): TenantSettings {
       onlyOwnVehicles: false,
     },
     baulFirmasActivo: false,
+    preasignacionPlacaActiva: false,
     enrutamientoSMTP: "FLIT_SMTP",
     notificationTarget: "NINGUNO",
     metodosRecaudo: [],

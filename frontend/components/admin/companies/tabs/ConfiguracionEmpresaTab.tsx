@@ -45,6 +45,14 @@ export function ConfiguracionEmpresaTab({
         onChange={(v) => onChange({ baulFirmasActivo: v })}
       />
 
+      <ToggleSwitch
+        id="preasignacionPlacaActiva"
+        label="Preasignación de placa activa"
+        description="Habilita la ruta de placa preasignada para matrícula inicial: los organismos de tránsito activos de esta compañía podrán asignarle rangos de placas, y al radicar se podrá seleccionar la placa del rango asignado."
+        checked={form.preasignacionPlacaActiva}
+        onChange={(v) => onChange({ preasignacionPlacaActiva: v })}
+      />
+
       <div>
         <label htmlFor="enrutamientoSMTP" className="mb-1 block text-xs font-semibold">
           Enrutamiento de notificaciones
