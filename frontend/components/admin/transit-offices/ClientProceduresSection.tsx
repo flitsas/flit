@@ -135,18 +135,29 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!approveTarget) return;
     setActing(true);
     try {
-      // Si el OT seleccionó la Licencia de Tránsito, se adjunta ANTES de aprobar
-      // (el backend la acepta en entregado/aprobado y el consolidado la incluirá).
+      // Se aprueba PRIMERO y luego se adjunta la LT: el gate de la LT exige el trámite en
+      // entregado/aprobado. En la ruta de placa (Feature #10587) el trámite llega a la aprobación
+      // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
+      // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
+      const updated = await approveOtClientProcedure(approveTarget.id);
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
       if (ltFile) {
         try {
           await adjuntarOtLicenciaTransito(approveTarget.id, ltFile, scope);
         } catch {
-          show("No se pudo adjuntar la Licencia de Tránsito. El trámite NO fue aprobado.", "error");
+          // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
+          // acción dedicada de Licencia de Tránsito.
+          setApproveTarget(null);
+          setLtFile(null);
+          show(
+            "Trámite aprobado, pero no se pudo adjuntar la Licencia de Tránsito. Reintenta la carga.",
+            "error",
+          );
           return;
         }
       }
-      const updated = await approveOtClientProcedure(approveTarget.id);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
       setApproveTarget(null);
       setLtFile(null);
       show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
