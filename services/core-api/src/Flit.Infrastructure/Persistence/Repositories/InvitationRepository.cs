@@ -124,4 +124,29 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public Task<InvitationStatusInfo?> FindByIdAsync(Guid invitationId, CancellationToken cancellationToken) =>
+        db.UserInvitations
+            .AsNoTracking()
+            .Where(x => x.Id == invitationId)
+            .Select(x => new InvitationStatusInfo(x.Id, x.TenantId, x.Status))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task CancelAsync(Guid invitationId, Guid cancelledBy, CancellationToken cancellationToken)
+    {
+        var entity = await db.UserInvitations
+            .FirstOrDefaultAsync(x => x.Id == invitationId, cancellationToken);
+
+        if (entity is null)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        entity.Status = "cancelled";
+        entity.UpdatedAt = now;
+        entity.UpdatedBy = cancelledBy;
+        entity.DeletedAt = now;
+        entity.DeletedBy = cancelledBy;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

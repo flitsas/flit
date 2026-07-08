@@ -179,6 +179,80 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // AC1 (HU #10627) — cancelar una invitación pendiente de mi alcance: el enlace de
+    // activación deja de funcionar (Status ya no es "pending") y el email queda disponible
+    // para una nueva invitación.
+    [Fact]
+    public async Task CancelInvitation_AsSuperAdmin_PendingInvitation_CancelsAndAllowsNewInvitation()
+    {
+        var email = $"cancel-invite-{Guid.NewGuid():N}@flit.local";
+
+        var createResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+            var cancelResponse = await _client.DeleteAsync(
+                $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+            cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        await using (var db = CreateDbContext())
+        {
+            var cancelled = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            cancelled.Status.Should().Be("cancelled");
+            cancelled.DeletedAt.Should().NotBeNull();
+        }
+
+        // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
+        var reInviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    // AC2 (HU #10627) — cancelar una invitación ya cancelada previamente → 409, error explícito.
+    [Fact]
+    public async Task CancelInvitation_AlreadyCancelled_Returns409()
+    {
+        var email = $"cancel-twice-{Guid.NewGuid():N}@flit.local";
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Dos Veces", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+        var firstCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // Cancelar una invitación inexistente → 404.
+    [Fact]
+    public async Task CancelInvitation_NotFound_Returns404()
+    {
+        var response = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
         Guid tenantId, DateTimeOffset? lastSentAt, string status = "pending")
     {

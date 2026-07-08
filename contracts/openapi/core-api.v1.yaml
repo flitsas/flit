@@ -1370,6 +1370,92 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResendCooldownErrorResponse"
 
+  /api/v1/security/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Security]
+      operationId: securityCancelInvitation
+      summary: Cancela una invitación pendiente (HU #10627)
+      description: >
+        Anula una invitación pendiente (distinto de reenviarla, HU #10625): el enlace de
+        activación anterior deja de funcionar y el email queda disponible de nuevo para una
+        nueva invitación. Mismo alcance que POST /security/invitations — SuperAdmin puede
+        cancelar la invitación de cualquier empresa; AdminCompany solo las de su propio tenant.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin o AdminCompany.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtCancelInvitation
+      summary: Cancela una invitación pendiente del tenant OT (HU #10627)
+      description: >
+        Anula una invitación pendiente del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin). El enlace de activación anterior
+        deja de funcionar y el email queda disponible para una nueva invitación. Requiere JWT
+        con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/integrations/ot/webhooks/{subscriptionId}/callback:
     post:
       tags: [OT Integrations]
