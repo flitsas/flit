@@ -21,6 +21,9 @@ export interface TenantUser {
   tenantName?: string | null;
   /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
   rowVersion: number;
+  /** HU #10623/#10624: fecha de soft-delete. `null`/ausente en el listado normal;
+   *  siempre poblado cuando se listó con `getUsers(true)` (onlyDeleted=true). */
+  deletedAt?: string | null;
 }
 
 /** HU #10621: payload de edición — displayName/email opcionales ("no tocar ese campo");
@@ -93,9 +96,14 @@ export async function createInvitation(
   }
 }
 
-/** GET /api/v1/security/users → lista de usuarios del tenant. */
-export async function getUsers(): Promise<TenantUser[]> {
-  return apiFetch<TenantUser[]>("/api/v1/security/users");
+/** GET /api/v1/security/users → lista de usuarios del tenant (AdminCompany) o de todas las
+ *  compañías (SuperAdmin, excepto su tenant interno). Con `onlyDeleted=true` (HU #10624) lista en
+ *  su lugar los usuarios eliminados (soft-delete) de CUALQUIER tenant — EXCLUSIVO de SuperAdmin
+ *  (403 en otro caso). Omitido o `false`: comportamiento normal, sin cambios. */
+export async function getUsers(onlyDeleted?: boolean): Promise<TenantUser[]> {
+  return apiFetch<TenantUser[]>("/api/v1/security/users", {
+    query: onlyDeleted ? { onlyDeleted: true } : undefined,
+  });
 }
 
 /** GET /api/v1/security/roles */

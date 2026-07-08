@@ -19,6 +19,9 @@ export interface OtUserItem {
   isSuspended: boolean;
   /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
   rowVersion: number;
+  /** HU #10623/#10624: fecha de soft-delete. `null`/ausente en el listado normal;
+   *  siempre poblado cuando se listó con `fetchOtUsers(scope, signal, true)` (onlyDeleted=true). */
+  deletedAt?: string | null;
 }
 
 export interface OtUserListResponse {
@@ -58,9 +61,19 @@ function scopeQuery(scope?: OtApiScope) {
   return scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined;
 }
 
-/** GET /api/v1/admin/ot/users — usuarios (activos/pendientes) del tenant OT resuelto. */
-export function fetchOtUsers(scope?: OtApiScope, signal?: AbortSignal): Promise<OtUserListResponse> {
-  return apiFetch<OtUserListResponse>(`${base}/users`, { query: scopeQuery(scope), signal });
+/** GET /api/v1/admin/ot/users — usuarios (activos/pendientes) del tenant OT resuelto. Con
+ *  `onlyDeleted=true` (HU #10624) lista en su lugar los usuarios eliminados del mismo tenant OT
+ *  resuelto — EXCLUSIVO de SuperAdmin (403 para ot_admin). Omitido o `false`: comportamiento
+ *  normal, sin cambios. */
+export function fetchOtUsers(
+  scope?: OtApiScope,
+  signal?: AbortSignal,
+  onlyDeleted?: boolean,
+): Promise<OtUserListResponse> {
+  return apiFetch<OtUserListResponse>(`${base}/users`, {
+    query: { ...scopeQuery(scope), onlyDeleted: onlyDeleted || undefined },
+    signal,
+  });
 }
 
 /** POST /api/v1/admin/ot/users/invite — invita un usuario con el rol ot_admin del tenant resuelto. */

@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2 } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, TenantUser, TenantRole } from "@/lib/api/security";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
+import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -47,6 +48,11 @@ export function Usuarios() {
   const [suspendTarget, setSuspendTarget] = useState<TenantUser | null>(null);
   const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+  // HU #10624 — pestaña "Eliminados": usuarios de CUALQUIER tenant con deletedAt != null.
+  const [deletedUsers, setDeletedUsers] = useState<TenantUser[]>([]);
+  const [deletedLoading, setDeletedLoading] = useState(false);
+  const [deletedError, setDeletedError] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<TenantUser | null>(null);
 
   // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin.
   const tabs = isSuperAdmin ? ALL_TABS : ALL_TABS.filter((t) => t.id !== "eliminados");
@@ -61,6 +67,20 @@ export function Usuarios() {
       setError("Error al cargar usuarios.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true, EXCLUSIVO de SuperAdmin.
+  async function loadDeletedUsers() {
+    setDeletedLoading(true);
+    setDeletedError(null);
+    try {
+      const data = await getUsers(true);
+      setDeletedUsers(data);
+    } catch {
+      setDeletedError("Error al cargar usuarios eliminados.");
+    } finally {
+      setDeletedLoading(false);
     }
   }
 
@@ -90,6 +110,14 @@ export function Usuarios() {
     }
   }, [isSuperAdmin]);
 
+  useEffect(() => {
+    // HU #10624 — carga perezosa: solo al entrar a la pestaña "Eliminados" (SuperAdmin).
+    if (tab === "eliminados" && isSuperAdmin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadDeletedUsers();
+    }
+  }, [tab, isSuperAdmin]);
+
   function handleInviteSuccess() {
     loadUsers();
   }
@@ -108,6 +136,11 @@ export function Usuarios() {
   // vive en DeleteUserDialog; aquí solo se persiste. Errores 400/409 los mapea el propio diálogo.
   async function handleDelete(userId: string, rowVersion: number) {
     return deleteUser(userId, rowVersion);
+  }
+
+  // HU #10624 (AC3) — la confirmación vive en RestoreUserDialog; aquí solo se persiste.
+  async function handleRestore(userId: string) {
+    return restoreUser(userId);
   }
 
   return (
@@ -281,27 +314,65 @@ export function Usuarios() {
       )}
 
       {tab === "eliminados" && isSuperAdmin && (
-        // HU #10623 (AC3) — BLOQUEADO: GET /api/v1/security/users excluye incondicionalmente
-        // DeletedAt != null (SecurityEndpoints.cs) y no expone ningún parámetro para listar SOLO
-        // eliminados (p. ej. `?onlyDeleted=true`). No se inventa un endpoint ni se filtra en el
-        // cliente sobre una lista que el backend ya depuró — se reporta como bloqueante hasta que
-        // el architecture/backend-agent agregue el soporte necesario. La confirmación de
-        // restauración (RestoreUserDialog + restoreUser) ya está lista para conectarse en cuanto
-        // exista el listado.
-        <div className="flex flex-col items-center gap-3 py-14 text-center" role="status">
-          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(249,172,0,0.14)" }}>
-            <Trash2 className="h-5 w-5" style={{ color: "#F9AC00" }} aria-hidden="true" />
+        // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
+        // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
+        // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
+        <div className="flex flex-col">
+          <div
+            className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+            style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
+          >
+            <div>Usuario</div>
+            <div>Empresa</div>
+            <div>Eliminado el</div>
+            <div />
           </div>
-          <div>
-            <p className="text-sm font-semibold">Usuarios eliminados de cualquier compañía u organismo</p>
-            <p className="text-xs opacity-60 mt-0.5 max-w-md">
-              Pendiente de soporte de backend: <code>GET /api/v1/security/users</code> excluye
-              siempre a los usuarios con <code>deletedAt</code> y hoy no expone un parámetro para
-              listar solo eliminados (por ejemplo <code>?onlyDeleted=true</code>). En cuanto el
-              backend lo soporte, esta vista listará los usuarios eliminados de cualquier tenant y
-              permitirá restaurarlos con un clic de confirmación.
+
+          <div className="space-y-2 pt-2">
+            {deletedLoading && (
+              <div role="status" className="py-12 text-center text-sm opacity-60">Cargando usuarios eliminados…</div>
+            )}
+            {!deletedLoading && deletedError && (
+              <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+            )}
+            {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
+              <div className="py-12 text-center text-sm opacity-60">
+                No hay usuarios eliminados de ninguna compañía u organismo.
+              </div>
+            )}
+            {!deletedLoading && !deletedError && deletedUsers.map((u) => (
+              <div
+                // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
+                // key cuando el JOIN produce N filas por usuario con N roles.
+                key={`${u.id}-${u.roleId ?? "sin-rol"}`}
+                className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
+              >
+                <div>
+                  <p className="font-semibold">{u.fullName}</p>
+                  <p className="text-[10px] opacity-60">{u.email}</p>
+                </div>
+                <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
+                <div className="opacity-70">{u.deletedAt ?? "—"}</div>
+                <div className="flex justify-end">
+                  <button
+                    title="Restaurar usuario"
+                    aria-label={`Restaurar usuario ${u.fullName}`}
+                    onClick={() => setRestoreTarget(u)}
+                    className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                    style={{ color: "#557EFF" }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
+            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
+              Mostrando {deletedUsers.length} usuario{deletedUsers.length !== 1 ? "s" : ""} eliminado{deletedUsers.length !== 1 ? "s" : ""}
             </p>
-          </div>
+          )}
         </div>
       )}
 
@@ -406,6 +477,21 @@ export function Usuarios() {
             loadUsers();
           }}
           onDelete={handleDelete}
+        />
+      )}
+      {restoreTarget && (
+        <RestoreUserDialog
+          user={{
+            id: restoreTarget.id,
+            fullName: restoreTarget.fullName,
+            email: restoreTarget.email,
+          }}
+          onClose={() => setRestoreTarget(null)}
+          onRestored={() => {
+            setRestoreTarget(null);
+            loadDeletedUsers();
+          }}
+          onRestore={handleRestore}
         />
       )}
     </div>

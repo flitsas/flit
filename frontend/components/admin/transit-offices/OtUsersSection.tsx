@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, Pencil, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, Pencil, RotateCcw, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -13,10 +13,14 @@ import {
   deleteOtUser,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
+// HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
+// genérico SOLO SuperAdmin, sin scope OT: se reutiliza el mismo cliente que Usuarios.tsx.
+import { restoreUser } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
+import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -40,6 +44,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // HU #10623 (AC3/AC4): "Ver eliminados" es exclusivo de SuperAdmin — este hub no tiene tabs
   // (a diferencia de Usuarios.tsx), así que se ofrece como toggle en el header.
   const [showDeleted, setShowDeleted] = useState(false);
+  // HU #10624 (AC3) — listado real de eliminados del tenant OT resuelto.
+  const [deletedStatus, setDeletedStatus] = useState<UiStatus>("loading");
+  const [deletedUsers, setDeletedUsers] = useState<OtUserItem[]>([]);
+  const [restoreTarget, setRestoreTarget] = useState<OtUserItem | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -66,6 +74,34 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // HU #10624 (AC3) — GET /api/v1/admin/ot/users?onlyDeleted=true, EXCLUSIVO de SuperAdmin.
+  const loadDeleted = useCallback(
+    async (signal?: AbortSignal) => {
+      setDeletedStatus("loading");
+      try {
+        const result = await fetchOtUsers({ transitOfficeId }, signal, true);
+        if (signal?.aborted) {
+          return;
+        }
+        setDeletedUsers(result.data);
+        setDeletedStatus(result.data.length === 0 ? "empty" : "ready");
+      } catch {
+        if (!signal?.aborted) {
+          setDeletedStatus("error");
+        }
+      }
+    },
+    [transitOfficeId],
+  );
+
+  useEffect(() => {
+    if (!showDeleted || !isSuperAdmin) return;
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga al activar el toggle
+    void loadDeleted(controller.signal);
+    return () => controller.abort();
+  }, [showDeleted, isSuperAdmin, loadDeleted]);
 
   async function handleInvite(email: string, fullName: string) {
     try {
@@ -119,6 +155,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return deleteOtUser(userId, { rowVersion }, { transitOfficeId });
   }
 
+  // HU #10624 (AC3) — inyectado a RestoreUserDialog; la confirmación vive en el diálogo.
+  function handleRestoreUser(userId: string) {
+    return restoreUser(userId);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -156,27 +197,62 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       </div>
 
       {showDeleted && isSuperAdmin && (
-        // HU #10623 (AC3) — BLOQUEADO: GET /api/v1/admin/ot/users (fetchOtUsers) excluye
-        // incondicionalmente DeletedAt != null y no expone un parámetro para listar SOLO
-        // eliminados. No se inventa un endpoint: se reporta como bloqueante hasta que el
-        // architecture/backend-agent agregue el soporte necesario. DeleteUserDialog/restoreUser
-        // ya están listos para conectarse en cuanto exista el listado.
-        <div className="flex flex-col items-center gap-3 rounded-xl border p-8 text-center" role="status">
-          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(249,172,0,0.14)" }}>
-            <Trash2 className="h-5 w-5" style={{ color: "#F9AC00" }} aria-hidden="true" />
+        // HU #10624 (AC3) — GET /api/v1/admin/ot/users?onlyDeleted=true: usuarios eliminados
+        // del tenant OT resuelto. Restaurar (1 clic de confirmación en RestoreUserDialog) deshace
+        // el soft-delete vía el endpoint genérico restoreUser() (SOLO SuperAdmin).
+        <UiStateBoundary
+          status={deletedStatus}
+          emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
+          errorMessage="No se pudo cargar el listado de usuarios eliminados."
+          onRetry={() => void loadDeleted()}
+        >
+          <div className="rounded-xl border overflow-hidden" style={{ background: "#FFFFFF" }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid #DFE5ED", background: "#F7F9FC" }}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Usuario
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Eliminado el
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedUsers.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="transition hover:bg-blue-50/40"
+                    style={{ borderBottom: "1px solid #EEF5FF" }}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-sm">{u.fullName}</div>
+                      <div className="text-xs" style={{ color: "#557EFF" }}>
+                        {u.email}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 opacity-70">{u.deletedAt ?? "—"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        title="Restaurar usuario"
+                        aria-label={`Restaurar usuario ${u.fullName}`}
+                        onClick={() => setRestoreTarget(u)}
+                        className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                        style={{ color: "#557EFF" }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: "#162744" }}>
-              Usuarios eliminados de este organismo de tránsito
-            </p>
-            <p className="text-xs opacity-60 mt-0.5 max-w-md">
-              Pendiente de soporte de backend: <code>GET /api/v1/admin/ot/users</code> excluye
-              siempre a los usuarios con <code>deletedAt</code> y hoy no expone un parámetro para
-              listar solo eliminados. En cuanto el backend lo soporte, esta vista listará los
-              usuarios eliminados y permitirá restaurarlos con un clic de confirmación.
-            </p>
-          </div>
-        </div>
+        </UiStateBoundary>
       )}
 
       {!showDeleted && (
@@ -336,6 +412,22 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             void load();
           }}
           onDelete={handleDeleteUser}
+        />
+      )}
+      {restoreTarget && (
+        <RestoreUserDialog
+          user={{
+            id: restoreTarget.id,
+            fullName: restoreTarget.fullName,
+            email: restoreTarget.email,
+          }}
+          onClose={() => setRestoreTarget(null)}
+          onRestored={() => {
+            setRestoreTarget(null);
+            show("Usuario restaurado correctamente.", "success");
+            void loadDeleted();
+          }}
+          onRestore={handleRestoreUser}
         />
       )}
     </div>
