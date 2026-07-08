@@ -57,3 +57,24 @@ public sealed class NoActiveSuspensionException : Exception
     {
     }
 }
+
+/// <summary>Un usuario no puede eliminarse a sí mismo (HU #10623 AC2).</summary>
+public sealed class SelfDeletionException : Exception
+{
+    public SelfDeletionException()
+        : base("A user cannot delete themselves.")
+    {
+    }
+}
+
+/// <summary>
+/// El usuario objetivo de una restauración NO está eliminado (HU #10623 AC5): se rechaza
+/// explícitamente en vez de tratar la restauración como un no-op silencioso.
+/// </summary>
+public sealed class UserNotDeletedException : Exception
+{
+    public UserNotDeletedException()
+        : base("The user is not deleted, there is nothing to restore.")
+    {
+    }
+}

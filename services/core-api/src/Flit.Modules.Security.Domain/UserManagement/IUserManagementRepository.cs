@@ -79,6 +79,27 @@ public interface IUserManagementRepository
         string reason,
         Guid? createdBy,
         CancellationToken ct);
+
+    /// <summary>
+    /// Soft-delete reversible de un usuario (HU #10623): marca <c>DeletedAt</c>/<c>DeletedBy</c> con
+    /// concurrencia optimista contra <paramref name="expectedRowVersion"/> (mismo mecanismo que
+    /// <see cref="UpdateProfileAsync"/> — <see cref="UserProfileConcurrencyException"/> si la fila
+    /// cambió desde que el caller la leyó). NO toca <c>UserRoleAssignment</c> ni
+    /// <c>UserTempSuspension</c> (AC3: restaurar debe recuperar exactamente el mismo estado).
+    /// </summary>
+    Task SoftDeleteUserAsync(
+        Guid userId,
+        DateTimeOffset deletedAt,
+        Guid? deletedBy,
+        long expectedRowVersion,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Restaura (deshace el soft-delete) a un usuario, limpiando <c>DeletedAt</c>/<c>DeletedBy</c>
+    /// (HU #10623 AC3). No toca <c>UserRoleAssignment</c> ni <c>UserTempSuspension</c> — nunca se
+    /// modificaron al eliminar, así que el usuario recupera exactamente el mismo estado.
+    /// </summary>
+    Task RestoreUserAsync(Guid userId, Guid? restoredBy, CancellationToken ct);
 }
 
 /// <summary>Snapshot de lectura del usuario objetivo de una acción administrativa.</summary>

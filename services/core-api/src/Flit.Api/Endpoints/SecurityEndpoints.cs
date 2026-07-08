@@ -3,6 +3,7 @@ using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UpdateUser;
@@ -136,6 +137,13 @@ public static class SecurityEndpoints
             {
                 return Results.Json(
                     new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserEmailBelongsToDeletedAccountException ex)
+            {
+                // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+                return Results.Json(
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
         });
@@ -637,6 +645,66 @@ public static class SecurityEndpoints
             }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
+        // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario del
+        // alcance del caller (HU #10623). rowVersion obligatorio (concurrencia optimista, igual
+        // que PATCH /users/{userId}). Restaurar es EXCLUSIVO de SuperAdmin — ver
+        // POST /api/v1/superadmin/users/{userId}/restore.
+        group.MapDelete("/users/{userId:guid}", async (
+            Guid userId,
+            [FromBody] DeleteUserRequest request,
+            ClaimsPrincipal caller,
+            DeleteUserHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo.
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            try
+            {
+                await handler.HandleAsync(
+                    new DeleteUserCommand(callerTenantId, userId, request.RowVersion, callerId, callerIsSuperAdmin),
+                    cancellationToken);
+
+                return Results.NoContent();
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.NotFound(new ErrorResponse("USER_NOT_FOUND", "El usuario no existe en este tenant."));
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (SelfDeletionException)
+            {
+                return Results.BadRequest(new ErrorResponse("SELF_DELETE", "No puedes eliminarte a ti mismo."));
+            }
+            catch (LastActiveAdminException)
+            {
+                return Results.Conflict(new ErrorResponse(
+                    "LAST_ACTIVE_ADMIN", "No es posible eliminar al último administrador activo."));
+            }
+            catch (UserProfileConcurrencyException ex)
+            {
+                return Results.Json(
+                    new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+
         return app;
     }
 
@@ -648,6 +716,10 @@ public static class SecurityEndpoints
 
     // HU #10619 AC1: EndsAt nulo = desactivación indefinida (sin fecha de fin).
     private sealed record SuspendUserRequest(string Reason, DateTimeOffset? EndsAt);
+
+    // HU #10623 — RowVersion obligatorio (concurrencia optimista, igual que UpdateUserRequest —
+    // el valor leído de TenantUserDto.RowVersion).
+    private sealed record DeleteUserRequest(long RowVersion);
 
     private sealed record CreateInvitationRequest(string Email, string? FullName, Guid[]? RoleIds, Guid? TargetTenantId);
 

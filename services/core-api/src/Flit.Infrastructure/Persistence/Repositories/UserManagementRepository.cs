@@ -175,4 +175,53 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
         await db.SaveChangesAsync(ct);
         return suspension.Id;
     }
+
+    public async Task SoftDeleteUserAsync(
+        Guid userId,
+        DateTimeOffset deletedAt,
+        Guid? deletedBy,
+        long expectedRowVersion,
+        CancellationToken ct)
+    {
+        var entity = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity is null)
+            throw new TargetUserNotFoundException();
+
+        // Mismo mecanismo de concurrencia optimista que UpdateProfileAsync (ver comentario allí):
+        // fuerza el OriginalValue del concurrency token para que el UPDATE incluya
+        // "WHERE ... AND row_version = expectedRowVersion".
+        db.Entry(entity).Property(e => e.RowVersion).OriginalValue = expectedRowVersion;
+
+        // AC3 — solo se toca User.DeletedAt/DeletedBy: UserRoleAssignment y UserTempSuspension
+        // quedan intactos para que RestoreUserAsync recupere exactamente el mismo estado.
+        entity.DeletedAt = deletedAt;
+        entity.DeletedBy = deletedBy;
+        entity.UpdatedAt = deletedAt;
+        entity.UpdatedBy = deletedBy;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new UserProfileConcurrencyException();
+        }
+    }
+
+    public async Task RestoreUserAsync(Guid userId, Guid? restoredBy, CancellationToken ct)
+    {
+        var entity = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity is null)
+            throw new TargetUserNotFoundException();
+
+        // AC3 — solo se limpia User.DeletedAt/DeletedBy: UserRoleAssignment y UserTempSuspension
+        // nunca se tocaron al eliminar, así que el usuario recupera exactamente el mismo estado.
+        entity.DeletedAt = null;
+        entity.DeletedBy = null;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = restoredBy;
+
+        await db.SaveChangesAsync(ct);
+    }
 }
