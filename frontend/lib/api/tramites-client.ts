@@ -21,6 +21,8 @@ import type {
   GenerarConsolidadoResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
+  PrendaData,
+  PrendaInput,
   InstanceSummary,
   InstancesResponse,
   TransitOfficeOption,
@@ -290,8 +292,21 @@ export const tramitesClient = {
       identityValidationStatus: item.identityValidationStatus ?? null,
       signaturePending: item.signaturePending ?? false,
       canSubmit: item.canSubmit ?? false,
+      prioritario: item.prioritario ?? false,
     }));
   },
+
+  // HU #10536 — marca/desmarca el trámite como prioritario (el OT lo revisa con primacía).
+  // No cambia el estado del ciclo de vida; solo el flag de ordenamiento de los listados.
+  setPriority: (id: string, prioritario: boolean, tenantId?: string) =>
+    request<{ id: string; prioritario: boolean }>(
+      `/api/v1/tramites/instances/${id}/priority`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ prioritario }),
+      },
+    ),
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
@@ -636,6 +651,23 @@ export const tramitesClient = {
   ) =>
     request<CommercialData>(
       `/api/v1/tramites/instances/${instanceId}/commercial`,
+      {
+        method: 'PUT',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(data),
+      },
+    ),
+
+  // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
+  getPrenda: (instanceId: string, tenantId?: string) =>
+    request<PrendaData | null>(
+      `/api/v1/tramites/instances/${instanceId}/prenda`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  putPrenda: (instanceId: string, data: PrendaInput, tenantId?: string) =>
+    request<PrendaData>(
+      `/api/v1/tramites/instances/${instanceId}/prenda`,
       {
         method: 'PUT',
         headers: tenantHeader(tenantId),

@@ -47,6 +47,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_procedure_instances_draft_finalized")
             .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
 
+        // HU #10536 — prioritario. Columna agregada por migración SQL cruda (la tabla está
+        // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Índice que sostiene el
+        // ordenamiento con primacía de los listados (prioritarios primero, luego por fecha).
+        builder.Property(x => x.Prioritario)
+            .HasColumnName("prioritario")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.HasIndex(x => new { x.TenantId, x.Prioritario, x.CreatedAt })
+            .HasDatabaseName("ix_procedure_instances_prioritario");
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");

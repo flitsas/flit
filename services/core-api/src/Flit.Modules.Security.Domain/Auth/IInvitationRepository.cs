@@ -15,11 +15,15 @@ public interface IInvitationRepository
     Task<IReadOnlyList<PendingInvitationSummary>> ListPendingByTenantAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// HU #10506 AC4/AC5: <c>RoleIds</c> reemplaza el <c>RoleId?</c> nullable — siempre tiene al
+/// menos un elemento (validado en <c>CreateInvitationHandler</c> antes de llegar aquí).
+/// </summary>
 public sealed record UserInvitationData(
     Guid TenantId,
     string Email,
     string FullName,
-    Guid? RoleId,
+    IReadOnlyList<Guid> RoleIds,
     string TokenHash,
     Guid InvitedBy);
 
@@ -28,7 +32,7 @@ public sealed record PendingInvitation(
     Guid TenantId,
     string Email,
     string FullName,
-    Guid? RoleId,
+    IReadOnlyList<Guid> RoleIds,
     Guid InvitedBy);
 
 public sealed record PendingInvitationSummary(

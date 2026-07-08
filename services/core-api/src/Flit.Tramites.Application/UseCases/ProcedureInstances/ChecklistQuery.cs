@@ -59,6 +59,8 @@ public sealed class GetChecklistHandler(
 
         // RF30 — atributos del trámite derivados de los datos persistidos (actores, campos RUNT,
         // participantes) y sus reglas condicionales por tipología; RF31 — parámetros por gestora.
+        // La supresión de cédula para persona natural (HU #10542) queda cubierta por la regla
+        // condicional `pn_sin_cedula` (EsPersonaNatural ⇒ Hide cedulas), sin override aparte.
         var context = TramiteDocumentContextMapper.From(instance);
         var rules = ConditionalDocumentRules.For(codigo);
         var parametros = await companyParams.GetForTenantAsync(tenantId, ct);
@@ -79,7 +81,7 @@ public sealed class GetChecklistHandler(
             }
         }
 
-        // Fallback (flag OFF o sin matriz configurada): catálogo plano actual ⇒ sin regresión.
+        // Fallback (sin matriz configurada): catálogo plano + condicionales ⇒ sin regresión.
         computed ??= ChecklistEngine.ComputeConditional(codigo, manual, docTipos, context, rules, parametros);
         if (computed is null)
             return (null, "tipologia_not_found");

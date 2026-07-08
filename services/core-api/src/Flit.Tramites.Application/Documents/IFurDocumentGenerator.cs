@@ -63,7 +63,12 @@ public sealed record FurDocumentData(
     // HU #10488 — sello de la validación biométrica por parte ("comprador"/"vendedor"): texto con
     // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
     // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
-    IReadOnlyDictionary<string, string>? SellosIdentidad = null)
+    IReadOnlyDictionary<string, string>? SellosIdentidad = null,
+    // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
+    // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
+    // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
+    bool TienePrenda = false,
+    string? AcreedorPrenda = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
@@ -110,4 +115,28 @@ public interface IIdentityCertificateGenerator
 {
     /// <summary>Genera el certificado de validación de identidad (tipo 'certificado_identidad').</summary>
     GeneratedDocument GenerateIdentityCertificate(IdentityCertificateData data);
+}
+
+/// <summary>
+/// Datos para el Certificado RUES (HU #10589): razón social + NIT del actor persona jurídica y su
+/// estado en RUES. En modo mock el estado es "ACTIVA"; con el proveedor real se enriquece con
+/// matrícula mercantil / cámara de comercio.
+/// </summary>
+public sealed record RuesCertificateData(
+    Guid ProcedureInstanceId,
+    string ReferenceNumber,
+    string RazonSocial,
+    string Nit,
+    string Estado);
+
+/// <summary>
+/// Contrato del generador del Certificado RUES. La implementación productiva es
+/// <c>RuesCertificatePdfGenerator</c> (Infrastructure): PDF real vía QuestPDF (tipo 'certificado_rues')
+/// que pasa IsMergeableMime y se fusiona en el Expediente Consolidado (mismo patrón que el certificado
+/// de identidad).
+/// </summary>
+public interface IRuesCertificateGenerator
+{
+    /// <summary>Genera el certificado RUES de una persona jurídica (tipo 'certificado_rues').</summary>
+    GeneratedDocument GenerateRuesCertificate(RuesCertificateData data);
 }

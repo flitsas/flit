@@ -21,6 +21,9 @@ public sealed class OtClientProcedureResponse
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? SubmittedAt { get; init; }
+
+    /// <summary>HU #10536 — trámite prioritario: se ordena con primacía en la bandeja del OT.</summary>
+    public bool Prioritario { get; init; }
 }
 
 public sealed class RejectOtClientProcedureRequest
@@ -43,5 +46,6 @@ internal static class OtClientProcedureMapper
             TransitOfficeId = procedure.TransitOfficeId,
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,
+            Prioritario = procedure.Prioritario,
         };
 }

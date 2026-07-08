@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
@@ -26,10 +27,12 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     private readonly FlitDbContext _context;
+    private readonly IAuditContextAccessor _auditContext;
 
-    public TenantSettingsRepository(FlitDbContext context)
+    public TenantSettingsRepository(FlitDbContext context, IAuditContextAccessor auditContext)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public async Task<TenantSettings?> GetAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -116,6 +119,8 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
 
         ApplyTo(policy, settings);
 
+        var clientIp = _auditContext.ClientIp;
+
         foreach (var change in changes)
         {
             _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
@@ -129,6 +134,10 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
                 ChangedAt = now,
                 ChangedBy = changedBy,
                 CorrelationId = correlationId,
+                // RNF01 (ADR-0024): IP, operación y resultado del cambio exitoso.
+                ClientIp = clientIp,
+                Operation = AuditVocabulary.Operations.Update,
+                Result = AuditVocabulary.Results.Success,
             });
         }
 

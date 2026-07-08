@@ -201,6 +201,115 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("impronta_generations", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("IntegrityHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("integrity_hash");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registered_at");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mandate_signers");
+
+                    b.HasIndex("TransitOfficeId", "IsActive")
+                        .HasDatabaseName("ix_mandate_signers_transit_office_id_is_active");
+
+                    b.ToTable("mandate_signers", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<Guid>("CompanyTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("MandateSignerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mandate_signer_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mandate_signer_companies");
+
+                    b.HasIndex("MandateSignerId")
+                        .HasDatabaseName("ix_mandate_signer_companies_mandate_signer_id");
+
+                    b.HasIndex("TransitOfficeId", "CompanyTenantId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_mandate_signer_companies_active")
+                        .HasFilter("is_active");
+
+                    b.ToTable("mandate_signer_companies", "admin");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtApiCallLogEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -430,6 +539,77 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("ot_feature_flags", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtRequirementsEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<bool>("AllowPlatePreassign")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("allow_plate_preassign");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IdentityValidationEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("identity_validation_enabled");
+
+                    b.Property<bool>("RequiresRnmc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("requires_rnmc");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ot_requirements");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ot_requirements_tenant_id");
+
+                    b.HasIndex("TransitOfficeId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ot_requirements_transit_office_id");
+
+                    b.ToTable("ot_requirements", "admin");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtWebhookSubscriptionEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -507,6 +687,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by");
 
+                    b.Property<string>("ClientIp")
+                        .HasColumnType("text")
+                        .HasColumnName("client_ip");
+
                     b.Property<Guid?>("CorrelationId")
                         .HasColumnType("uuid")
                         .HasColumnName("correlation_id");
@@ -516,6 +700,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("entity_name");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text")
+                        .HasColumnName("error_code");
 
                     b.Property<string>("FieldName")
                         .IsRequired()
@@ -531,6 +719,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("old_value");
 
+                    b.Property<string>("Operation")
+                        .HasColumnType("text")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("text")
+                        .HasColumnName("result");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -541,6 +737,10 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ChangedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_changed_at");
+
+                    b.HasIndex("TenantId", "Result", "ChangedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_result_changed_at");
 
                     b.ToTable("tenant_config_audit_logs", "admin");
                 });
@@ -999,6 +1199,72 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("users", "identity");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("InvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invitation_id");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invitation_roles");
+
+                    b.HasIndex("InvitationId")
+                        .HasDatabaseName("ix_invitation_roles_invitation_id");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_invitation_roles_role_id");
+
+                    b.HasIndex("TenantId", "InvitationId", "RoleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_invitation_roles_tenant_id_invitation_id_role_id");
+
+                    b.ToTable("invitation_roles", "security");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1180,6 +1446,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
                     b.Property<bool>("IsSystem")
                         .HasColumnType("boolean")
                         .HasColumnName("is_system");
@@ -1195,9 +1467,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("row_version");
 
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
+                    b.Property<string>("TargetEntityType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("COMPANY")
+                        .HasColumnName("target_entity_type");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1235,10 +1511,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
 
                     b.HasKey("Id")
                         .HasName("pk_role_permissions");
@@ -2581,6 +2853,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("matricula_inicial")
                         .HasColumnName("modalidad_entrada");
 
+                    b.Property<bool>("Prioritario")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("prioritario");
+
                     b.Property<Guid>("ProcedureTypeId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_type_id");
@@ -2649,6 +2927,9 @@ namespace Flit.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_procedure_instances_tenant_reference");
 
+                    b.HasIndex("TenantId", "Prioritario", "CreatedAt")
+                        .HasDatabaseName("ix_procedure_instances_prioritario");
+
                     b.HasIndex("TenantId", "Status", "CreatedAt")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_status_created_at");
 
@@ -2697,6 +2978,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
 
+                    b.Property<bool>("EsRepresentanteLegal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("es_representante_legal");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2709,6 +2996,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("PersonType")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("person_type");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
@@ -3361,6 +3653,95 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstancePrenda", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("AcreedorDocumento")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("acreedor_documento");
+
+                    b.Property<string>("AcreedorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("acreedor_nombre");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("vigente")
+                        .HasColumnName("estado");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<Guid>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_procedure_instance_prenda");
+
+                    b.HasIndex("ProcedureInstanceId")
+                        .HasDatabaseName("ix_procedure_instance_prenda_instance");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_procedure_instance_prenda_tenant_id");
+
+                    b.ToTable("procedure_instance_prenda", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_procedure_instance_prenda_audit");
+
+                            t.HasTrigger("tr_procedure_instance_prenda_row_version");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceSignature", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3835,6 +4216,37 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("data_protection_keys", (string)null);
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", null)
+                        .WithMany()
+                        .HasForeignKey("MandateSignerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mandate_signer_companies_mandate_signers_mandate_signer_id");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.UserInvitation", "Invitation")
+                        .WithMany()
+                        .HasForeignKey("InvitationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitation_roles_user_invitations_invitation_id");
+
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitation_roles_roles_role_id");
+
+                    b.Navigation("Invitation");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.PasswordResetToken", b =>
                 {
                     b.HasOne("Flit.Infrastructure.Persistence.Entities.Identity.User", "User")
@@ -4139,6 +4551,18 @@ namespace Flit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_procedure_instance_preflight_snapshots_procedure_instances");
+
+                    b.Navigation("ProcedureInstance");
+                });
+
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstancePrenda", b =>
+                {
+                    b.HasOne("Flit.Tramites.Domain.Entities.ProcedureInstance", "ProcedureInstance")
+                        .WithMany()
+                        .HasForeignKey("ProcedureInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_procedure_instance_prenda_procedure_instances");
 
                     b.Navigation("ProcedureInstance");
                 });

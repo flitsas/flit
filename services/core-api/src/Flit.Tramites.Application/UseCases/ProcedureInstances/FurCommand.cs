@@ -6,6 +6,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -32,6 +33,8 @@ public sealed class GenerarFurHandler(
     IProcedureInstanceRepository repo,
     IFurDocumentGenerator generator,
     IKyverumCertificateClient certClient,
+    IRuesCertificateGenerator ruesGenerator,
+    IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger)
 {
@@ -77,7 +80,13 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad);
+        // HU #10601 — prenda vigente: marca el gravamen en el FUR cuando la decisión implica prenda
+        // (solicitar/registrar). sin_prenda/omitir/levantar no marcan gravamen.
+        var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
+        var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
+        var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -100,6 +109,27 @@ public sealed class GenerarFurHandler(
             // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5).
             foreach (var prev in instance.Attachments
                          .Where(a => string.Equals(a.Tipo, "certificado_identidad", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
+
+        // HU #10589 — Certificado RUES: si el trámite tiene un actor persona jurídica (NIT), generar el
+        // certificado RUES (PDF, Source=system) desde los datos del actor para que se fusione en el
+        // consolidado. Independiente de la biométrica (una persona jurídica no valida identidad biométrica).
+        var certificadoRues = TryGenerateRuesCertificate(instance);
+        if (certificadoRues is not null)
+        {
+            generated.Add(certificadoRues);
+        }
+        else
+        {
+            // Sin actor NIT (o dejó de haberlo en una regeneración): retirar cualquier certificado RUES previo.
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "certificado_rues", StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -174,7 +204,8 @@ public sealed class GenerarFurHandler(
 
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
-        bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad)
+        bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
+        bool tienePrenda, string? acreedorPrenda)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -225,7 +256,9 @@ public sealed class GenerarFurHandler(
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
             Observaciones: Get(fv, "fur_observations"),
             IdentidadValidada: identidadValidada,
-            SellosIdentidad: sellosIdentidad);
+            SellosIdentidad: sellosIdentidad,
+            TienePrenda: tienePrenda,
+            AcreedorPrenda: acreedorPrenda);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
@@ -276,6 +309,28 @@ public sealed class GenerarFurHandler(
         var vence = v.ValidUntil is { } vu
             ? vu.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
+    }
+
+    /// <summary>
+    /// HU #10589 — Genera el certificado RUES del primer actor persona jurídica (DocumentType = NIT)
+    /// del trámite, o <c>null</c> si no hay ninguno. Autocontenido: usa la razón social (FullName) y el
+    /// NIT del actor; el estado en RUES es "ACTIVA" (mock hasta el proveedor real).
+    /// </summary>
+    private GeneratedDocument? TryGenerateRuesCertificate(ProcedureInstance instance)
+    {
+        var juridico = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase));
+        if (juridico is null)
+            return null;
+
+        var data = new RuesCertificateData(
+            instance.Id,
+            instance.ReferenceNumber,
+            juridico.FullName,
+            juridico.DocumentNumber,
+            "ACTIVA");
+
+        return ruesGenerator.GenerateRuesCertificate(data);
     }
 
     /// <summary>

@@ -24,8 +24,20 @@ internal sealed class TenantConfigAuditLogConfiguration
 
         builder.Property(x => x.ChangedAt).IsRequired();
 
+        // Auditoría mínima RNF01 (ADR-0024): IP, resultado, operación y código de error.
+        // text sin longitud fija: client_ip admite listas X-Forwarded-For normalizadas.
+        builder.Property(x => x.ClientIp).HasColumnType("text");
+        builder.Property(x => x.Result).HasColumnType("text");
+        builder.Property(x => x.Operation).HasColumnType("text");
+        builder.Property(x => x.ErrorCode).HasColumnType("text");
+
         builder.HasIndex(x => new { x.TenantId, x.ChangedAt })
             .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_changed_at")
             .IsDescending(false, true);
+
+        // Consultas de auditoría filtradas por resultado (éxito/fallo) más recientes primero.
+        builder.HasIndex(x => new { x.TenantId, x.Result, x.ChangedAt })
+            .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_result_changed_at")
+            .IsDescending(false, false, true);
     }
 }

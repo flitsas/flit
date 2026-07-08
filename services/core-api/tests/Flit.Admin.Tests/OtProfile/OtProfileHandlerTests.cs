@@ -177,6 +177,48 @@ public sealed class OtProfileHandlerTests
         result.IsAllowed.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("legalName")]
+    [InlineData("taxId")]
+    [InlineData("code")]
+    public async Task RF05_PatchWithOfficialField_Returns422AndDoesNotPersist(string field)
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedProfile(seed, TenantA, OtOperationModes.Dashboard, quipuxReadOnly: false);
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateOtProfileHandler(new OtProfileRepository(act));
+            var request = new UpdateOtProfileRequest
+            {
+                // Un modo válido junto al campo oficial: el rechazo es por el campo oficial, no por el modo.
+                OperationMode = OtOperationModes.Quipux,
+                LegalName = field == "legalName" ? "Organismo Falso S.A." : null,
+                TaxId = field == "taxId" ? "900123456-7" : null,
+                Code = field == "code" ? "OT-999" : null,
+            };
+
+            var result = await handler.HandleAsync(new UpdateOtProfileCommand
+            {
+                TenantId = TenantA,
+                ChangedBy = ChangedBy,
+                Request = request,
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainSingle(e => e.Field == UpdateOtProfileHandler.OfficialFieldsImmutableCode);
+        }
+
+        // RF05: el intento no modifica nada — el perfil sigue en su modo original.
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken))
+            .OperationMode.Should().Be(OtOperationModes.Dashboard);
+    }
+
     private static string NewDbName() => Guid.NewGuid().ToString();
 
     private static FlitDbContext NewContext(string dbName) =>

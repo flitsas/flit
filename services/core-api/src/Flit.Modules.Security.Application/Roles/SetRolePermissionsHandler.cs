@@ -7,10 +7,10 @@ public sealed class SetRolePermissionsHandler(IRoleRepository repository)
     public async Task<RoleDetail> HandleAsync(SetRolePermissionsCommand command, CancellationToken ct)
     {
         var role = await repository.GetByIdAsync(command.RoleId, ct);
-        if (role is null || role.TenantId != command.TenantId)
+        if (role is null)
             throw new RoleNotFoundException();
 
-        await repository.SetPermissionsAsync(command.RoleId, command.TenantId, command.PermissionIds, ct);
+        await repository.SetPermissionsAsync(command.RoleId, command.PermissionIds, ct);
 
         var updated = await repository.GetByIdAsync(command.RoleId, ct);
         return updated!;

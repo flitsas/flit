@@ -83,15 +83,6 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 builder.Services.AddAdminApplication();
 builder.Services.AddAdminInfrastructure();
 
-// Policy "SuperAdminOnly" (por header X-Flit-SuperAdmin) del SuperAdmin de
-// parametrización del rework de trámites (#10184/#10185). Es aditiva a la policy
-// "SuperAdmin" (rol JWT) que registra AddApiSecurity: nombres distintos, no chocan.
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("SuperAdminOnly", policy =>
-        policy.Requirements.Add(new SuperAdminRequirement()));
-
-builder.Services.AddSingleton<IAuthorizationHandler, SuperAdminStubAuthorizationHandler>();
-
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -181,6 +172,7 @@ app.MapAdminOtEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
+app.MapAdminMandateSignersEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();

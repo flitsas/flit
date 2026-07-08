@@ -31,7 +31,7 @@ public sealed class ActivateAccountHandler(
                 invitation.FullName,
                 passwordHash,
                 invitation.TenantId,
-                invitation.RoleId,
+                invitation.RoleIds,
                 invitation.InvitedBy,
                 activatedAt),
             cancellationToken);

@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
@@ -52,9 +53,32 @@ public sealed class TramiteDocumentContextMapperTests
     [Fact]
     public void ActoresPersonaNatural_EsPersonaNatural_NoNit()
     {
-        var ctx = TramiteDocumentContextMapper.From(
-            InstanceWith(actors: [("comprador", "CC"), ("vendedor", "CE")]));
+        // HU #10542: la persona natural es explícita (PersonType), no inferida del tipo de documento.
+        var instance = InstanceWith(actors: [("comprador", "CC"), ("vendedor", "CE")]);
+        foreach (var a in instance.Actors) a.PersonType = ActorPersonTypes.Natural;
+
+        var ctx = TramiteDocumentContextMapper.From(instance);
         ctx.EsPersonaNatural.Should().BeTrue();
+        ctx.EsNit.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ActorJuridico_PorPersonType_EsNit()
+    {
+        var instance = InstanceWith(actors: [("comprador", "CC")]);
+        instance.Actors.First().PersonType = ActorPersonTypes.Juridical;
+
+        var ctx = TramiteDocumentContextMapper.From(instance);
+        ctx.EsNit.Should().BeTrue();
+        ctx.EsPersonaNatural.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ActorSinTipoPersona_NiPnNiNit()
+    {
+        // Sin PersonType declarado y documento no-NIT ⇒ ni PN ni NIT (conservador: conserva cédula).
+        var ctx = TramiteDocumentContextMapper.From(InstanceWith(actors: [("vendedor", "CC")]));
+        ctx.EsPersonaNatural.Should().BeFalse();
         ctx.EsNit.Should().BeFalse();
     }
 

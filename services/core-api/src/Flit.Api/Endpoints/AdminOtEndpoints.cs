@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
@@ -18,12 +19,15 @@ using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
+using Flit.Admin.Application.OtRequirements.GetOtRequirements;
+using Flit.Admin.Application.OtRequirements.UpdateOtRequirements;
 using Flit.Admin.Application.OtWebhooks;
 using Flit.Admin.Application.OtWebhooks.CreateOtWebhook;
 using Flit.Admin.Application.OtWebhooks.ListOtApiLogs;
 using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
@@ -58,7 +62,10 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // RNF01/RF05 (ADR-0024): audita como failure los intentos fallidos de escribir el
+        // perfil OT (p. ej. campos oficiales RUNT o modo inválido) en scope independiente.
         group.MapPatch("/profile", UpdateProfileAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("transit_office_profile", "update"))
             .WithName("AdminOtUpdateProfile")
             .WithSummary("Actualiza el perfil OT del tenant autenticado")
             .Produces(StatusCodes.Status200OK)
@@ -67,12 +74,28 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPatch("/feature-flags/{id:guid}", UpdateFeatureFlagAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("ot_feature_flags", "update"))
             .WithName("AdminOtUpdateFeatureFlag")
             .WithSummary("Activa o desactiva un feature flag OT")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/requirements", GetRequirementsAsync)
+            .WithName("AdminOtGetRequirements")
+            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPut("/requirements", UpdateRequirementsAsync)
+            .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
+            .WithName("AdminOtUpdateRequirements")
+            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
             .WithName("AdminOtCreateWebhook")
@@ -108,6 +131,13 @@ public static class AdminOtEndpoints
         group.MapGet("/client-procedures", ListClientProceduresAsync)
             .WithName("AdminOtListClientProcedures")
             .WithSummary("Lista trámites de clientes con grant vigente hacia el OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/client-procedures/health", GetClientProceduresHealthAsync)
+            .WithName("AdminOtClientProceduresHealth")
+            .WithSummary("Diagnóstico de la bandeja OT: trámites entregados con/sin grant vigente (R09)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -339,12 +369,77 @@ public static class AdminOtEndpoints
 
         if (!result.IsValid)
         {
+            // Código estable para la auditoría de fallo (ADR-0024): el campo del primer error
+            // (p. ej. campos_oficiales_no_editables u operation_mode), nunca el valor enviado.
+            if (result.Errors.Count > 0)
+            {
+                ConfigAuditFailureContext.SetErrorCode(httpContext, result.Errors[0].Field);
+            }
+
             return Results.Json(
                 new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
         return Results.Ok(result.Profile);
+    }
+
+    private static async Task<IResult> GetRequirementsAsync(
+        HttpContext httpContext,
+        GetOtRequirementsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var response = await handler.HandleAsync(
+            new GetOtRequirementsQuery
+            {
+                TenantId = tenantId,
+                TransitOfficeId = scopedOfficeId,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(response);
+    }
+
+    private static async Task<IResult> UpdateRequirementsAsync(
+        HttpContext httpContext,
+        UpdateOtRequirementsRequest request,
+        UpdateOtRequirementsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+        {
+            TenantId = tenantId,
+            ChangedBy = ResolveUserId(httpContext.User),
+            Request = request,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result.Requirements);
     }
 
     private static async Task<IResult> UpdateFeatureFlagAsync(
@@ -584,6 +679,39 @@ public static class AdminOtEndpoints
             page = result.Page,
             pageSize = result.PageSize,
         });
+    }
+
+    private static async Task<IResult> GetClientProceduresHealthAsync(
+        HttpContext httpContext,
+        GetOtBandejaHealthHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new GetOtBandejaHealthQuery
+        {
+            OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> GetClientProcedureAsync(
@@ -1093,9 +1221,11 @@ public static class AdminOtEndpoints
 
         // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
         // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
+        // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
         var role = await db.Roles.AsNoTracking()
             .FirstOrDefaultAsync(
-                r => r.TenantId == tenantId && r.Code == TransitOfficeTenantWriteRepositoryRoleCode,
+                r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1110,7 +1240,7 @@ public static class AdminOtEndpoints
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, role.Id, invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(

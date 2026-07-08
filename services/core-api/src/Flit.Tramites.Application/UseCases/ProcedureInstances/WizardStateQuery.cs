@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -31,7 +32,14 @@ public sealed record WizardStateDto(
     bool CanSubmit,
     IReadOnlyList<string> Blockers,
     string Status,
-    IReadOnlyList<string> AllowedTransitions);
+    IReadOnlyList<string> AllowedTransitions)
+{
+    /// <summary>
+    /// HU #10548 — si el OT destino tiene la validación de identidad deshabilitada, es <c>false</c>
+    /// y el frontend oculta el paso de identidad (AC3 / HU #10549). Default <c>true</c> (se exige).
+    /// </summary>
+    public bool IdentityValidationEnabled { get; init; } = true;
+}
 
 /// <summary>
 /// Compone el estado del wizard server-driven. Carga el grafo persistido, lo mapea a los
@@ -49,11 +57,16 @@ public sealed record WizardStateDto(
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
+    IIdentityValidationPolicy? identityPolicy = null,
     ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
     public const string FurPendiente = "fur_pendiente";
+
+    // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
+    private readonly IIdentityValidationPolicy _identityPolicy =
+        identityPolicy ?? NullIdentityValidationPolicy.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -69,12 +82,36 @@ public sealed class GetWizardStateHandler(
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct);
 
-        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
+        // HU #10548 — si el OT destino deshabilita la identidad, se trata como satisfecha (el paso no
+        // bloquea el submit) y se expone el flag para que el wizard oculte el paso (AC3 / HU #10549).
+        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
+            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct);
+        var partesEfectivas = identityRequired
+            ? identidadAprobada
+            : IdentitySatisfiedForAllParties(identidadAprobada);
+
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
             ? null
             : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
 
-        return (ComputeState(instance, identidadAprobada, docsCompletos), null);
+        var state = ComputeState(instance, partesEfectivas, docsCompletos) with
+        {
+            IdentityValidationEnabled = identityRequired,
+        };
+        return (state, null);
+    }
+
+    /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
+    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
+        new(approved, StringComparer.OrdinalIgnoreCase) { "comprador", "vendedor" };
+
+    /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
+    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
+    {
+        var raw = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
     /// <summary>

@@ -21,6 +21,11 @@ interface Props {
   // El disparo de la consulta puede vivir fuera del panel (p. ej. junto al campo
   // VIN en matrícula). En ese caso el panel es solo presentacional (semáforo).
   showRunButton?: boolean;
+  // R3 (HU #10539) — en matrícula, cuando el preflight detecta que el VIN ya tiene
+  // matrícula previa (check `vin_matricula`), el panel ofrece iniciar el traspaso del
+  // vehículo. El wizard inyecta la navegación (sembrando placa/VIN); el panel es
+  // presentacional. Ausente ⇒ no se ofrece el CTA (p. ej. en traspaso).
+  onIniciarTraspaso?: () => void;
 }
 
 const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> = {
@@ -55,6 +60,17 @@ export function sourceLabel(source: string | null | undefined): string {
   return SOURCE_LABEL[source] ?? source.toUpperCase();
 }
 
+/**
+ * RNMC (HU #10602/#10603) corre por actor persona natural: las claves quedan
+ * `rnmc_comprador_*` / `rnmc_vendedor_*`. Devuelve el sufijo de rol para
+ * distinguir ambos checks en el panel (el label del proveedor es idéntico).
+ */
+export function checkRoleSuffix(key: string): string {
+  if (key.startsWith('rnmc_comprador')) return ' (comprador)';
+  if (key.startsWith('rnmc_vendedor')) return ' (vendedor)';
+  return '';
+}
+
 export function PreflightPanel({
   snapshot,
   loading,
@@ -63,6 +79,7 @@ export function PreflightPanel({
   onToggleRiesgo,
   saving = false,
   showRunButton = true,
+  onIniciarTraspaso,
 }: Props) {
   // En solo lectura nunca se ofrece el disparo de la consulta (Track C).
   const readOnly = useWizardReadOnly();
@@ -74,6 +91,13 @@ export function PreflightPanel({
   // Un check "error" = consulta no verificable (proveedor caído/timeout): bloqueo DURO. NO se
   // ofrece "aceptar riesgo" (no es subsanable); el gestor debe reintentar la consulta.
   const hasProviderError = checks.some((c) => c.status === 'error');
+  // R3 (HU #10539) — señal server-driven de "VIN ya matriculado": el backend agrega el check
+  // `vin_matricula` (warn, con secretaría + fecha del registro previo). Cuando está presente y el
+  // wizard proveyó la navegación, se ofrece iniciar el traspaso del vehículo en vez de una matrícula.
+  const vinConflicto = checks.find((c) => c.key === 'vin_matricula');
+  // Se saca de la lista genérica de checks: su mensaje se muestra —de forma accionable— en la
+  // tarjeta CTA de abajo, para no duplicarlo. El resto del semáforo se pinta normal.
+  const visibleChecks = checks.filter((c) => c.key !== 'vin_matricula');
 
   return (
     <div
@@ -120,7 +144,7 @@ export function PreflightPanel({
 
       {hasResult && (
         <ul className="space-y-1.5" aria-label="Resultados del pre-vuelo">
-          {checks.map((c) => {
+          {visibleChecks.map((c) => {
             const s = STATUS_STYLE[c.status];
             return (
               <li
@@ -134,7 +158,10 @@ export function PreflightPanel({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-semibold">{c.label}</span>
+                    <span className="text-xs font-semibold">
+                      {c.label}
+                      {checkRoleSuffix(c.key)}
+                    </span>
                     <span
                       className="text-[10px] uppercase font-bold"
                       style={{ color: s.text }}
@@ -162,6 +189,30 @@ export function PreflightPanel({
             );
           })}
         </ul>
+      )}
+
+      {vinConflicto && (
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: 'rgba(85,126,255,0.06)', border: '1px solid rgba(85,126,255,0.30)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+            Este VIN ya está matriculado
+          </p>
+          <p className="mt-0.5 text-[11px] opacity-70">{vinConflicto.message}</p>
+          {onIniciarTraspaso && !readOnly && (
+            <button
+              type="button"
+              onClick={onIniciarTraspaso}
+              className="mt-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            >
+              Iniciar traspaso de este vehículo →
+            </button>
+          )}
+        </div>
       )}
 
       {hasProviderError && (

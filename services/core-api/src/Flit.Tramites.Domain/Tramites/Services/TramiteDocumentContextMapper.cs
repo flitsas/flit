@@ -59,13 +59,16 @@ public static class TramiteDocumentContextMapper
             .FirstOrDefault(f => string.Equals(f.FieldKey, OwnerDocumentTypeFieldKey, StringComparison.OrdinalIgnoreCase))
             ?.ValueText;
 
+        // NIT / persona natural (RF35 + HU #10542): la fuente canónica es el tipo de persona del actor
+        // (ActorPersonTypes), que fija explícitamente natural vs jurídica; se conserva NIT por
+        // DocumentType/owner_document_type como señal adicional. Persona natural SOLO cuando el actor lo
+        // declara explícitamente (PersonType=natural); sin declaración ⇒ ni PN ni NIT (conservador).
         var esNit =
-            actors.Any(a => string.Equals(a.DocumentType, NitDocumentType, StringComparison.OrdinalIgnoreCase))
+            actors.Any(a => ActorPersonTypes.IsJuridical(a.PersonType))
+            || actors.Any(a => string.Equals(a.DocumentType, NitDocumentType, StringComparison.OrdinalIgnoreCase))
             || string.Equals(ownerDocType, NitDocumentType, StringComparison.OrdinalIgnoreCase);
 
-        // Persona natural: hay identificación de actor y ninguna es NIT.
-        var tieneIdentificacion = actors.Count > 0 || !string.IsNullOrWhiteSpace(ownerDocType);
-        var esPersonaNatural = !esNit && tieneIdentificacion;
+        var esPersonaNatural = !esNit && actors.Any(a => ActorPersonTypes.IsNatural(a.PersonType));
 
         var servicioEspecial = fieldValues.Any(f =>
             string.Equals(f.FieldKey, VehicleServiceFieldKey, StringComparison.OrdinalIgnoreCase)

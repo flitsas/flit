@@ -20,9 +20,13 @@ public sealed class PermissionAuthorizationHandler
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        // AC4 — SuperAdmin bypass total
-        var roleCode = context.User.FindFirstValue("role_code");
-        if (string.Equals(roleCode, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+        // AC4 — SuperAdmin bypass total. Multi-rol (HU #10506): el JWT emite un claim
+        // "role_code" POR CADA rol activo, en orden no determinístico — FindFirstValue solo
+        // evalúa el primero y puede negar el bypass si SuperAdmin no quedó primero. Se evalúan
+        // TODOS los claims "role_code" (fix post-review #10504).
+        var isSuperAdmin = context.User.Claims.Any(c =>
+            c.Type == "role_code" && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+        if (isSuperAdmin)
         {
             context.Succeed(requirement);
             return Task.CompletedTask;

@@ -55,6 +55,12 @@ vi.mock('@/components/admin/Toast', () => ({
   useToast: () => ({ show: toastShow }),
 }));
 
+// HU #10539 — el paso de consulta usa useRouter() para el CTA "Iniciar traspaso".
+const routerPush = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 const CONFIG: ProcedureConfiguration = {

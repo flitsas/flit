@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark } from "lucide-react";
+import Link from "next/link";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
@@ -68,8 +69,16 @@ export function Usuarios() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUsers();
-    loadRoles();
-  }, []);
+    // AC4 (HU #10509): GET /api/v1/security/roles resuelve el tipo de entidad por el tenant
+    // del caller — para el SuperAdmin (tenant interno) no aporta información útil, y el CRUD
+    // de roles ya vive exclusivamente en RbacAdmin (HU #10508). Se evita la llamada y se
+    // muestra en su lugar un atajo al módulo RBAC (ver tab "roles" más abajo).
+    if (!isSuperAdmin) {
+      loadRoles();
+    } else {
+      setRolesLoading(false);
+    }
+  }, [isSuperAdmin]);
 
   function handleInviteSuccess() {
     loadUsers();
@@ -159,7 +168,11 @@ export function Usuarios() {
                 const badge = STATUS_BADGE[u.status];
                 return (
                   <div
-                    key={u.id}
+                    // GET /api/v1/security/users hace JOIN vía UserRoleAssignments: un usuario
+                    // con N roles activos produce N filas con el mismo u.id (una por asignación
+                    // de rol). u.id solo no es único — se compone con u.roleId para evitar el
+                    // warning de React "two children with the same key".
+                    key={`${u.id}-${u.roleId ?? "sin-rol"}`}
                     className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
                       gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
@@ -225,8 +238,37 @@ export function Usuarios() {
         </>
       )}
 
-      {tab === "roles" && (
+      {tab === "roles" && isSuperAdmin && (
+        // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);
+        // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
+        <div className="flex flex-col items-center gap-3 py-14 text-center">
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(85,126,255,0.10)" }}>
+            <Shield className="h-5 w-5" style={{ color: "#557EFF" }} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">La gestión de roles del sistema vive en el módulo RBAC</p>
+            <p className="text-xs opacity-60 mt-0.5">
+              Crea, edita, activa/desactiva o elimina roles de Compañía y de Organismo de Tránsito.
+            </p>
+          </div>
+          <Link
+            href="/?m=rbac"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            Ir a Roles y permisos (RBAC)
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      )}
+
+      {tab === "roles" && !isSuperAdmin && (
         <div className="flex flex-col gap-3">
+          {/* AC4 (HU #10509) — modo SOLO LECTURA para AdminCompany/OtAdmin: sin botones de
+              crear/editar/eliminar/desactivar. La gobernanza de roles es exclusiva de SuperAdmin. */}
+          <p className="text-xs opacity-60">
+            Roles disponibles para tu empresa. Solo el Super Admin puede crear, editar o desactivar roles.
+          </p>
           {rolesLoading ? (
             <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
           ) : roles.length === 0 ? (
@@ -256,7 +298,7 @@ export function Usuarios() {
         </div>
       )}
 
-      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} isSuperAdmin={isSuperAdmin} />}
+      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} rolesLoading={rolesLoading} isSuperAdmin={isSuperAdmin} />}
       {suspendTarget && (
         <SuspendModal
           user={suspendTarget}
@@ -414,16 +456,20 @@ function SuspendModal({
 }
 
 function InviteModal({
-  onClose, onSuccess, roles, isSuperAdmin,
+  onClose, onSuccess, roles, rolesLoading, isSuperAdmin,
 }: {
   onClose: () => void;
   onSuccess: () => void;
   roles: TenantRole[];
+  rolesLoading: boolean;
   isSuperAdmin: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [selectedRoleId, setSelectedRoleId] = useState("");
+  // HU #10510 AC1/AC3: selección MÚLTIPLE de roles (antes single-value opcional). Al menos
+  // 1 rol es obligatorio para AdminCompany/OtAdmin — el SuperAdmin no usa este set (el rol de
+  // sistema lo fuerza el backend según el tenant destino).
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
@@ -454,6 +500,16 @@ function InviteModal({
 
   const isDone = status === "done" || status === "done_no_email";
 
+  function toggleRole(roleId: string) {
+    setSelectedRoleIds((prev) =>
+      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
+    );
+  }
+
+  // AC3 — al menos un rol es obligatorio para AdminCompany/OtAdmin (el SuperAdmin no
+  // selecciona rol: el backend lo fuerza según el tenant destino).
+  const rolesRequiredAndMissing = !isSuperAdmin && selectedRoleIds.length === 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -463,27 +519,36 @@ function InviteModal({
       return;
     }
 
+    if (rolesRequiredAndMissing) {
+      setError("Selecciona al menos un rol para el usuario invitado.");
+      return;
+    }
+
     setStatus("loading");
     try {
       const result = await createInvitation(
         email.trim(),
         fullName.trim(),
-        isSuperAdmin ? undefined : (selectedRoleId || undefined),
+        isSuperAdmin ? [] : selectedRoleIds,
         isSuperAdmin ? selectedTenantId : undefined,
       );
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
       onSuccess();
     } catch (err) {
-      const s = (err as ApiError).status;
+      const apiErr = err as ApiError;
+      const s = apiErr.status;
+      const code = (apiErr.body as { code?: string } | undefined)?.code;
       setError(
-        s === 409
-          ? "Ya existe una invitación pendiente para este correo."
-          : s === 404
-            ? "El rol especificado no existe en el tenant."
-            : s === 400
-              ? "Debes seleccionar una empresa destino válida."
-              : "No se pudo enviar la invitación. Inténtalo de nuevo."
+        code === "NO_ROLES_SELECTED"
+          ? "Selecciona al menos un rol para el usuario invitado."
+          : s === 409
+            ? "Ya existe una invitación pendiente para este correo."
+            : s === 404
+              ? "El rol especificado no existe en el tenant."
+              : s === 400
+                ? "Debes seleccionar una empresa destino válida."
+                : "No se pudo enviar la invitación. Inténtalo de nuevo."
       );
       setStatus("idle");
     }
@@ -533,7 +598,7 @@ function InviteModal({
                   id="invite-tenant"
                   required
                   value={selectedTenantId}
-                  onChange={(e) => { setSelectedTenantId(e.target.value); setSelectedRoleId(""); }}
+                  onChange={(e) => { setSelectedTenantId(e.target.value); setSelectedRoleIds([]); }}
                   disabled={tenantsLoading}
                   className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
                 >
@@ -589,22 +654,36 @@ function InviteModal({
                   <strong>{isSelectedTenantOt ? "Administrador OT" : "Administrador de Compañía"}</strong>
                 </span>
               </div>
+            ) : rolesLoading ? (
+              <p className="text-xs opacity-60">Cargando roles…</p>
             ) : roles.length > 0 ? (
-              <div>
-                <label htmlFor="invite-role" className="text-xs font-semibold block mb-1">Rol (opcional)</label>
-                <select
-                  id="invite-role"
-                  value={selectedRoleId}
-                  onChange={(e) => setSelectedRoleId(e.target.value)}
-                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                >
-                  <option value="">Sin rol asignado</option>
+              // HU #10510 AC1/AC3: selección MÚLTIPLE de roles (checklist, mismo patrón visual
+              // de checkboxes que RbacAdmin.tsx). Al menos un rol es obligatorio — el botón de
+              // enviar se deshabilita y se muestra un mensaje de ayuda mientras no haya ninguno.
+              <fieldset>
+                <legend className="text-xs font-semibold block mb-1">Roles *</legend>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
                   {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                    <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={selectedRoleIds.includes(r.id)}
+                        onChange={() => toggleRole(r.id)}
+                        className="h-3.5 w-3.5 accent-[#557EFF]"
+                      />
+                      <span>{r.name}</span>
+                    </label>
                   ))}
-                </select>
-              </div>
-            ) : null}
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: rolesRequiredAndMissing ? "#FF4E00" : undefined, opacity: rolesRequiredAndMissing ? 1 : 0.6 }}>
+                  {rolesRequiredAndMissing ? "Selecciona al menos un rol." : "Puedes marcar varios roles."}
+                </p>
+              </fieldset>
+            ) : (
+              <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>
+                No hay roles configurados para tu empresa. Contacta al Super Admin.
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
             )}
@@ -621,7 +700,7 @@ function InviteModal({
             </div>
             <button
               type="submit"
-              disabled={status === "loading" || (isSuperAdmin && !selectedTenantId)}
+              disabled={status === "loading" || (isSuperAdmin && !selectedTenantId) || rolesRequiredAndMissing}
               className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition"
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >

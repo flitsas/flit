@@ -31,6 +31,14 @@ const REASON_COPY: Record<string, string> = {
   pendiente_biometria: 'Validación biométrica pendiente',
   pendiente_firma: 'Firma de la compraventa pendiente',
   fur_pendiente: 'FUR pendiente (opcional)',
+  // R10 (HU #10597/#10598) — prenda como gate del traspaso (gravámenes en warn).
+  prenda_decision_requerida:
+    'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
+  prenda_documento_requerido:
+    'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // R19 (HU #10604/#10605) — medida correctiva RNMC: se puede registrar, pero no enviar al OT.
+  rnmc_medida_bloquea_envio:
+    'Medida correctiva RNMC: carga el paz y salvo RNMC para poder enviar al OT',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -47,6 +55,14 @@ const BLOCKER_COPY: Record<string, string> = {
   pendiente_firma: 'Firma de la compraventa pendiente',
   fur_pendiente: 'FUR pendiente (opcional)',
   pasos_incompletos: 'Hay pasos sin completar',
+  // R10 (HU #10597/#10598) — gate de preparación/radicación del traspaso por prenda.
+  prenda_decision_requerida:
+    'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
+  prenda_documento_requerido:
+    'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // R19 (HU #10604/#10605) — gate de envío al OT por medida correctiva RNMC ("Imponer Medida").
+  rnmc_medida_bloquea_envio:
+    'Medida correctiva RNMC pendiente: carga el paz y salvo RNMC para poder enviar el trámite al organismo de tránsito',
 };
 
 /** Convierte un código a copy legible (fallback: el código humanizado). */
