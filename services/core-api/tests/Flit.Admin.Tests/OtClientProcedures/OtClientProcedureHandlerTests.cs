@@ -407,6 +407,12 @@ public sealed class OtClientProcedureHandlerTests
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
             SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado);
+            // Gate SOAT (HU #10611): sin soat_estado=vigente el OT no puede aprobar.
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(), ProcedureInstanceId = procedureId, TenantId = ClientTenant,
+                FieldKey = "soat_estado", ValueText = "vigente",
+            });
             var plateRepo = new PlateRangeRepository(seed);
             await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
             await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
@@ -459,8 +465,8 @@ public sealed class OtClientProcedureHandlerTests
     [Theory]
     [InlineData("vencido", false)]  // SOAT vencido → bloquea la aprobación (gate duro).
     [InlineData("vigente", true)]   // SOAT vigente → aprueba.
-    [InlineData("unknown", true)]   // unknown (0 km) → no bloquea.
-    [InlineData(null, true)]        // ausente → no bloquea.
+    [InlineData("unknown", false)]  // HU #10611: sin evidencia de SOAT vigente → bloquea.
+    [InlineData(null, false)]       // HU #10611: ausente → bloquea (el OT exige SOAT registrado).
     public async Task Approve_Asignado_SoatGateDuro(string? soatEstado, bool expectApproved)
     {
         var db = NewDbName();

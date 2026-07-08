@@ -2,9 +2,12 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 
 /// <summary>
 /// Gate DURO de SOAT en la ruta de preasignación de placa (R06, Feature #10587): el SOAT debe estar
-/// vigente para que el OT reciba y apruebe la matrícula. A diferencia del preflight estándar (blando,
-/// subsanable con "asumo el riesgo"), aquí un SOAT <b>vencido</b> bloquea la aprobación y NO es
-/// subsanable. El estado <c>unknown</c> (típico en 0 km) NO bloquea.
+/// registrado y vigente para que el OT reciba y apruebe la matrícula. La compañía lo registra en
+/// estado <c>asignado</c> por una de dos vías (HU #10611): validando en línea la consulta RUNT (que
+/// marca <c>soat_estado=vigente</c> si el RUNT lo reporta vigente) o cargando el PDF del SOAT (que
+/// también marca <c>vigente</c>). A diferencia del preflight estándar (blando, subsanable con "asumo
+/// el riesgo"), este gate es NO subsanable: sin evidencia de SOAT (estado distinto de <c>vigente</c>:
+/// <c>vencido</c>, <c>unknown</c>, null o desconocido) la aprobación del OT queda bloqueada.
 /// </summary>
 public static class SoatGate
 {
@@ -15,10 +18,13 @@ public static class SoatGate
     public const string Vencido = "vencido";
     public const string Unknown = "unknown";
 
+    /// <summary>¿El SOAT está registrado como vigente (evidencia válida: RUNT vigente o PDF cargado)?</summary>
+    public static bool IsSatisfied(string? soatEstado) =>
+        string.Equals(soatEstado, Vigente, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// ¿El estado del SOAT bloquea la aprobación del OT? Solo <c>vencido</c> bloquea (gate duro).
-    /// <c>vigente</c>, <c>unknown</c>, null o desconocido NO bloquean (0 km suele venir unknown).
+    /// ¿El estado del SOAT bloquea la aprobación del OT? Bloquea SALVO que esté <c>vigente</c>: sin
+    /// evidencia de SOAT (null/<c>unknown</c>/<c>vencido</c>/desconocido) el OT no puede aprobar.
     /// </summary>
-    public static bool BlocksApproval(string? soatEstado) =>
-        string.Equals(soatEstado, Vencido, StringComparison.OrdinalIgnoreCase);
+    public static bool BlocksApproval(string? soatEstado) => !IsSatisfied(soatEstado);
 }

@@ -45,6 +45,7 @@ import type {
   ProcedureInstanceSummary,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
+  ValidateSoatResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -442,6 +443,14 @@ export const tramitesClient = {
       createdAt: new Date().toISOString(),
     };
   },
+
+  // HU #10611 (Feature #10587) — valida el SOAT re-consultando el RUNT del vehículo con el trámite
+  // en 'asignado'. El backend marca soat_estado (vigente/vencido/unknown) sin cambiar de estado.
+  validateSoatViaRunt: (instanceId: string, tenantId?: string) =>
+    request<ValidateSoatResult>(
+      `/api/v1/tramites/instances/${instanceId}/soat/validate-runt`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 
   // ── Documentos / checklist (Slice 3) ────────────────────────────
   // Checklist guiado por la tipología: qué docTipos exige el trámite y

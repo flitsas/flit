@@ -237,6 +237,16 @@ export interface RuntPersonLookupResult {
   licenseCategories?: string | null; // "B1" o "B1,C1"
 }
 
+// HU #10611 (Feature #10587) — validación en línea del SOAT (re-consulta RUNT) en estado 'asignado'.
+export type SoatEstado = 'vigente' | 'vencido' | 'unknown';
+export interface ValidateSoatResult {
+  vigente: boolean;
+  soatEstado: SoatEstado;
+  vencimiento: string | null;
+  aseguradora: string | null;
+  message: string;
+}
+
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
 
 // 'error' = un proveedor no se pudo verificar (no-200/timeout): bloqueo DURO, no subsanable con
