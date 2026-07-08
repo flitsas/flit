@@ -39,9 +39,10 @@ export interface InviteOtUserResponse {
   emailSent: boolean;
 }
 
+/** `endsAt` nulo (HU #10619 AC1) desactiva indefinidamente; con fecha, suspende temporalmente. */
 export interface SuspendOtUserRequest {
   reason: string;
-  endsAt: string;
+  endsAt: string | null;
 }
 
 /** HU #10621: payload de edición — displayName/email opcionales ("no tocar ese campo");

@@ -38,6 +38,24 @@ const STATUS_BADGE: Record<
   pending: { label: "Pendiente", bg: "rgba(245,158,11,0.14)", color: "#b45309", border: "rgba(245,158,11,0.35)" },
 };
 
+// Ajuste QA (flujo completo HU #10619-#10628): un usuario suspendido/desactivado seguía
+// mostrando el chip "Activo" — solo cambiaba el ícono de acción (Ban → ShieldOff), sin
+// ninguna señal visible al escanear la tabla. Prevalece sobre STATUS_BADGE[status].
+const SUSPENDED_BADGE = { label: "Bloqueado", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" };
+
+function userBadge(u: TenantUser) {
+  return u.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[u.status];
+}
+
+// Ajuste QA: la columna "Fecha" mostraba el ISO crudo (con microsegundos) de invitaciones
+// pendientes y de "Eliminado el" en vez de una fecha legible.
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+}
+
 export function Usuarios() {
   const { isSuperAdmin, userId: currentUserId } = usePermissions();
   const [open, setOpen] = useState(false);
@@ -126,7 +144,7 @@ export function Usuarios() {
     loadUsers();
   }
 
-  async function handleSuspend(userId: string, reason: string, endsAt: string) {
+  async function handleSuspend(userId: string, reason: string, endsAt: string | null) {
     await blockUser(userId, reason, endsAt);
     loadUsers();
   }
@@ -224,7 +242,7 @@ export function Usuarios() {
                 </div>
               )}
               {!loading && !error && users.map((u) => {
-                const badge = STATUS_BADGE[u.status];
+                const badge = userBadge(u);
                 return (
                   <div
                     // GET /api/v1/security/users hace JOIN vía UserRoleAssignments: un usuario
@@ -260,7 +278,7 @@ export function Usuarios() {
                     <div>
                       <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
                     </div>
-                    <div className="opacity-70">{u.createdAt ?? "—"}</div>
+                    <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
                     <div className="flex justify-end gap-1">
                       {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
                           no hay una cuenta real que editar. */}
@@ -279,6 +297,7 @@ export function Usuarios() {
                         u.isSuspended ? (
                           <button
                             title="Desbloquear usuario"
+                            aria-label={`Desbloquear usuario ${u.fullName}`}
                             onClick={() => handleUnsuspend(u.id)}
                             className="p-1.5 rounded-lg transition hover:bg-green-50"
                             style={{ color: "#00DBD5" }}
@@ -288,6 +307,7 @@ export function Usuarios() {
                         ) : (
                           <button
                             title="Bloquear usuario"
+                            aria-label={`Bloquear usuario ${u.fullName}`}
                             onClick={() => setSuspendTarget(u)}
                             className="p-1.5 rounded-lg transition hover:bg-red-50"
                             style={{ color: "#FF4E00" }}
@@ -386,7 +406,7 @@ export function Usuarios() {
                   <p className="text-[10px] opacity-60">{u.email}</p>
                 </div>
                 <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
-                <div className="opacity-70">{u.deletedAt ?? "—"}</div>
+                <div className="opacity-70">{formatDateTime(u.deletedAt)}</div>
                 <div className="flex justify-end">
                   <button
                     title="Restaurar usuario"
@@ -539,6 +559,9 @@ export function Usuarios() {
           onRestored={() => {
             setRestoreTarget(null);
             loadDeletedUsers();
+            // Ajuste QA: sin este refresco, la pestaña "Usuarios" quedaba con el estado
+            // viejo (sin el usuario restaurado) hasta recargar la página manualmente.
+            loadUsers();
           }}
           onRestore={handleRestore}
         />
@@ -603,10 +626,13 @@ function SuspendModal({
 }: {
   user: TenantUser;
   onClose: () => void;
-  onConfirm: (reason: string, endsAt: string) => Promise<void>;
+  onConfirm: (reason: string, endsAt: string | null) => Promise<void>;
 }) {
   const [reason, setReason] = useState("");
   const [endsAt, setEndsAt] = useState("");
+  // HU #10619 AC1 — desactivación indefinida (EndsAt nulo). El backend ya lo soporta;
+  // faltaba exponerlo en la UI (el modal exigía siempre una fecha de fin).
+  const [indefinite, setIndefinite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -621,7 +647,7 @@ function SuspendModal({
     setBusy(true);
     setError(null);
     try {
-      await onConfirm(reason.trim(), new Date(endsAt || defaultEndsAt).toISOString());
+      await onConfirm(reason.trim(), indefinite ? null : new Date(endsAt || defaultEndsAt).toISOString());
     } catch {
       setError("No se pudo aplicar la suspensión. Inténtalo de nuevo.");
       setBusy(false);
@@ -635,15 +661,16 @@ function SuspendModal({
           <div>
             <h3 className="text-lg font-bold">Bloquear usuario</h3>
             <p className="text-xs opacity-70 mt-0.5">
-              <strong>{user.fullName}</strong> no podrá iniciar sesión durante el periodo indicado.
+              <strong>{user.fullName}</strong> no podrá iniciar sesión {indefinite ? "hasta que lo reactives" : "durante el periodo indicado"}.
             </p>
           </div>
           <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs font-semibold block mb-1">Motivo de suspensión *</label>
+            <label htmlFor="suspend-reason" className="text-xs font-semibold block mb-1">Motivo de suspensión *</label>
             <textarea
+              id="suspend-reason"
               required
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -652,17 +679,29 @@ function SuspendModal({
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00] resize-none"
             />
           </div>
-          <div>
-            <label className="text-xs font-semibold block mb-1">Bloqueado hasta *</label>
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold">
             <input
-              type="datetime-local"
-              required
-              value={endsAt || defaultEndsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00]"
+              type="checkbox"
+              checked={indefinite}
+              onChange={(e) => setIndefinite(e.target.checked)}
+              className="h-3.5 w-3.5 accent-[#FF4E00]"
             />
-          </div>
+            Desactivar indefinidamente (sin fecha de fin)
+          </label>
+          {!indefinite && (
+            <div>
+              <label htmlFor="suspend-ends-at" className="text-xs font-semibold block mb-1">Bloqueado hasta *</label>
+              <input
+                id="suspend-ends-at"
+                type="datetime-local"
+                required={!indefinite}
+                value={endsAt || defaultEndsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#FF4E00]"
+              />
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
           )}

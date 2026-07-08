@@ -144,6 +144,29 @@ describe("Usuarios — pestaña Eliminados (#10624, SuperAdmin)", () => {
     ).toBeInTheDocument();
   });
 
+  it("Ajuste QA: 'Eliminado el' muestra una fecha legible, no el ISO crudo", async () => {
+    await openEliminadosTab();
+
+    await screen.findByText("Laura García");
+    expect(screen.queryByText(deletedUser.deletedAt!)).not.toBeInTheDocument();
+  });
+
+  it("Ajuste QA: tras restaurar, también recarga el listado de 'Usuarios' (no solo 'Eliminados')", async () => {
+    const user = await openEliminadosTab();
+    await screen.findByText("Laura García");
+
+    const activeCallsBefore = vi.mocked(getUsers).mock.calls.filter((call) => call[0] !== true).length;
+
+    await user.click(screen.getByRole("button", { name: /restaurar usuario laura garcía/i }));
+    await user.click(screen.getByRole("button", { name: /^restaurar usuario$/i }));
+
+    await waitFor(() => expect(restoreUser).toHaveBeenCalledWith("user-1"));
+    await waitFor(() => {
+      const activeCallsAfter = vi.mocked(getUsers).mock.calls.filter((call) => call[0] !== true).length;
+      expect(activeCallsAfter).toBeGreaterThan(activeCallsBefore);
+    });
+  });
+
   it("AC2 (SuperAdmin): sin botón Eliminar en la tabla de Usuarios para SuperAdmin (patrón existente de solo-lectura cross-tenant)", async () => {
     render(<Usuarios />);
     await screen.findByRole("button", { name: /^eliminados$/i });

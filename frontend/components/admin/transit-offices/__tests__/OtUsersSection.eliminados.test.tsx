@@ -146,4 +146,31 @@ describe("OtUsersSection — toggle Ver eliminados (#10624, SuperAdmin)", () => 
       await screen.findByText(/no hay usuarios eliminados en este organismo de tránsito/i),
     ).toBeInTheDocument();
   });
+
+  it("Ajuste QA: 'Eliminado el' muestra una fecha legible, no el ISO crudo", async () => {
+    await openVerEliminados();
+
+    await screen.findByText("Pedro Ruiz");
+    expect(screen.queryByText(deletedUser.deletedAt!)).not.toBeInTheDocument();
+  });
+
+  it("Ajuste QA: tras restaurar, también recarga el listado de usuarios activos (no solo el de eliminados)", async () => {
+    const user = await openVerEliminados();
+    await screen.findByText("Pedro Ruiz");
+
+    const activeCallsBefore = vi
+      .mocked(fetchOtUsers)
+      .mock.calls.filter((call) => !call[2]).length;
+
+    await user.click(screen.getByRole("button", { name: /restaurar usuario pedro ruiz/i }));
+    await user.click(screen.getByRole("button", { name: /^restaurar usuario$/i }));
+
+    await waitFor(() => expect(restoreUser).toHaveBeenCalledWith("u-2"));
+    await waitFor(() => {
+      const activeCallsAfter = vi
+        .mocked(fetchOtUsers)
+        .mock.calls.filter((call) => !call[2]).length;
+      expect(activeCallsAfter).toBeGreaterThan(activeCallsBefore);
+    });
+  });
 });

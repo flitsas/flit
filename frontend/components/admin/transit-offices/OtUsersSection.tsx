@@ -25,6 +25,7 @@ import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDial
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
 import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
+import { formatOtDate } from "./ot-utils";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -124,7 +125,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     }
   }
 
-  async function handleSuspend(userId: string, reason: string, endsAt: string) {
+  async function handleSuspend(userId: string, reason: string, endsAt: string | null) {
     try {
       await suspendOtUser(userId, { reason, endsAt }, { transitOfficeId });
       show("Usuario suspendido correctamente.", "success");
@@ -253,7 +254,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                         {u.email}
                       </div>
                     </td>
-                    <td className="px-4 py-3 opacity-70">{u.deletedAt ?? "—"}</td>
+                    <td className="px-4 py-3 opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -493,6 +494,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             setRestoreTarget(null);
             show("Usuario restaurado correctamente.", "success");
             void loadDeleted();
+            // Ajuste QA: sin este refresco, el listado activo quedaba con el estado viejo
+            // (sin el usuario restaurado) al volver a "Ver usuarios activos".
+            void load();
           }}
           onRestore={handleRestoreUser}
         />
@@ -627,11 +631,14 @@ function OtSuspendUserDialog({
   onClose,
 }: {
   user: OtUserItem;
-  onConfirm: (reason: string, endsAt: string) => Promise<void>;
+  onConfirm: (reason: string, endsAt: string | null) => Promise<void>;
   onClose: () => void;
 }) {
   const [reason, setReason] = useState("");
   const [endsAt, setEndsAt] = useState("");
+  // HU #10619 AC1 — desactivación indefinida (EndsAt nulo). El backend ya lo soporta;
+  // faltaba exponerlo en la UI (el diálogo exigía siempre una fecha de fin).
+  const [indefinite, setIndefinite] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // eslint-disable-next-line react-hooks/purity
@@ -640,7 +647,7 @@ function OtSuspendUserDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await onConfirm(reason.trim(), new Date(endsAt || defaultEndsAt).toISOString());
+    await onConfirm(reason.trim(), indefinite ? null : new Date(endsAt || defaultEndsAt).toISOString());
     setBusy(false);
   }
 
@@ -671,17 +678,28 @@ function OtSuspendUserDialog({
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400 resize-none"
             />
           </OtField>
-          <OtField label="Suspendido hasta *" htmlFor="ot-suspend-ends-at">
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium" style={{ color: "#162744" }}>
             <input
-              id="ot-suspend-ends-at"
-              type="datetime-local"
-              value={endsAt || defaultEndsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              required
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
+              type="checkbox"
+              checked={indefinite}
+              onChange={(e) => setIndefinite(e.target.checked)}
+              className="h-3.5 w-3.5 accent-red-500"
             />
-          </OtField>
+            Desactivar indefinidamente (sin fecha de fin)
+          </label>
+          {!indefinite && (
+            <OtField label="Suspendido hasta *" htmlFor="ot-suspend-ends-at">
+              <input
+                id="ot-suspend-ends-at"
+                type="datetime-local"
+                value={endsAt || defaultEndsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                required={!indefinite}
+                className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-red-400"
+              />
+            </OtField>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"

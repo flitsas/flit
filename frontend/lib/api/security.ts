@@ -163,11 +163,12 @@ export async function deleteTenantRole(roleId: string): Promise<void> {
   });
 }
 
-/** POST /api/v1/security/users/{userId}/suspend — bloquea al usuario temporalmente. */
+/** POST /api/v1/security/users/{userId}/suspend — bloquea al usuario. `endsAt` nulo
+ *  (HU #10619 AC1) desactiva indefinidamente; con fecha, suspende temporalmente. */
 export async function blockUser(
   userId: string,
   reason: string,
-  endsAt: string,
+  endsAt: string | null,
 ): Promise<{ id: string }> {
   return apiFetch<{ id: string }>(`/api/v1/security/users/${userId}/suspend`, {
     method: "POST",
