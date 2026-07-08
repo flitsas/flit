@@ -14,6 +14,10 @@ namespace Flit.Infrastructure.Migrations
     /// y bandeja del OT); no altera el ciclo de vida. La tabla está <c>ExcludeFromMigrations</c> (DDL
     /// gestionado por SQL crudo, HU #10150), por eso el diff EF queda vacío y la columna + índice se
     /// agregan con SQL idempotente.
+    /// Nota (Reportes 2.0): esta clase carecía de los atributos [DbContext]/[Migration] (no tiene
+    /// Designer), por lo que EF NUNCA la descubría ni aplicaba — en una BD fresca la columna no
+    /// existía y los endpoints de instancias fallaban con 42703. Los atributos la hacen visible;
+    /// el SQL ya era idempotente, así que es segura en BDs donde la columna se creó por otra vía.
     ///
     /// Migración hand-authored: atributos <c>[DbContext]</c> + <c>[Migration]</c> inline y sin Designer
     /// (patrón N03 / HU #10198). Sin estos atributos EF NO descubre la migración (queda fuera de
