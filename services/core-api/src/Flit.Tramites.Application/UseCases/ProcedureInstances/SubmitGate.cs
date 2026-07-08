@@ -35,7 +35,15 @@ public static class SubmitGate
     /// Evalúa el gate de preparación (RF03). La instancia debe traer cargado el grafo del wizard
     /// (FieldValues, Actors, Attachments, BiometricValidations, Signatures, ChecklistEstado).
     /// </summary>
-    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    /// <param name="documentosCompletosOverride">
+    /// HU #10522 (RF17/RF22): completitud documental resuelta desde la matriz del gestor. Cuando
+    /// viene (no <c>null</c>) manda sobre el cómputo interno del catálogo; <c>null</c> ⇒ se usa el
+    /// gate actual (flag OFF o sin matriz) sin regresión.
+    /// </param>
+    public static IReadOnlyList<string> Evaluate(
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool? documentosCompletosOverride = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -43,16 +51,19 @@ public static class SubmitGate
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
+        var docsCompletos = documentosCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
+
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? EvaluateTraspaso(instance, identidadAprobadaPartes)
-            : EvaluateMatricula(instance, identidadAprobadaPartes);
+            ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos)
+            : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos);
     }
 
-    private static List<string> EvaluateMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static List<string> EvaluateMatricula(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
     {
         var errors = new List<string>(2);
 
-        if (!DocumentosObligatoriosCompletos(instance))
+        if (!docsCompletos)
             errors.Add(DocumentosIncompletos);
         // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
         if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador))
@@ -68,11 +79,12 @@ public static class SubmitGate
     /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
     /// incumplidos; lista vacía = puede prepararse/radicar.
     /// </summary>
-    private static List<string> EvaluateTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static List<string> EvaluateTraspaso(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
     {
         var errors = new List<string>(5);
 
-        if (!DocumentosObligatoriosCompletos(instance))
+        if (!docsCompletos)
             errors.Add(DocumentosIncompletos);
         // Identidad PER-PERSONA (documento de cada parte), referenciada de su validación vigente (HU #10350).
         if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador)

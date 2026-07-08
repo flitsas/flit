@@ -28,7 +28,8 @@ public sealed class TramiteLifecycleService(
     ITramiteTransitionRecorder recorder,
     ITramiteTransitionPublisher publisher,
     IIdentityValidationPolicy? identityPolicy = null,
-    IProcedureInstancePrendaRepository? prendaRepo = null) : ITramiteLifecycleService
+    IProcedureInstancePrendaRepository? prendaRepo = null,
+    ChecklistMatrixCompleteness? matrixCompleteness = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
@@ -82,7 +83,6 @@ public sealed class TramiteLifecycleService(
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
                 repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
-
             // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
             // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
             var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
@@ -90,7 +90,11 @@ public sealed class TramiteLifecycleService(
             if (!identityRequired)
                 identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
 
-            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
+            // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
+            var docsCompletos = matrixCompleteness is null
+                ? null
+                : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
 

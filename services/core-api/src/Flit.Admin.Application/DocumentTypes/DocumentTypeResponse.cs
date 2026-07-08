@@ -13,7 +13,9 @@ public sealed record DocumentTypeResponse(
     string Nombre,
     string? Descripcion,
     string Estado,
-    DateTimeOffset FechaCreacion)
+    DateTimeOffset FechaCreacion,
+    IReadOnlyList<string> MimeTypesAllowed,
+    long MaxSizeBytes)
 {
     public const string EstadoActivo = "activo";
     public const string EstadoInactivo = "inactivo";
@@ -28,6 +30,8 @@ public sealed record DocumentTypeResponse(
             item.Name,
             item.Description,
             item.IsActive ? EstadoActivo : EstadoInactivo,
-            item.CreatedAt);
+            item.CreatedAt,
+            item.MimeTypesAllowed,
+            item.MaxSizeBytes);
     }
 }

@@ -87,6 +87,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
 
+    // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+    public DbSet<Entities.Admin.CompanyDocumentParamEntity> CompanyDocumentParams => Set<Entities.Admin.CompanyDocumentParamEntity>();
+
     // Snapshot documental inmutable (HU #10197). Ancla a la instancia canónica del runtime.
     public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();
 

@@ -98,7 +98,8 @@ public sealed record RegisterAttachmentInput(
 /// </summary>
 public sealed class UploadAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AttachmentValidator? validator = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -109,7 +110,9 @@ public sealed class UploadAttachmentHandler(
     {
         if (input.Content is null)
             return (null, "missing_file");
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
 
@@ -165,7 +168,8 @@ public sealed class UploadAttachmentHandler(
 /// </summary>
 public sealed class PresignAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AttachmentValidator? validator = null)
 {
     public async Task<(PresignAttachmentResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -173,7 +177,9 @@ public sealed class PresignAttachmentHandler(
         PresignAttachmentInput input,
         CancellationToken ct = default)
     {
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
 
@@ -197,7 +203,9 @@ public sealed class PresignAttachmentHandler(
 /// cliente calculó. Aplica las mismas validaciones, estado draft y auto-marca de checklist que la
 /// subida multipart.
 /// </summary>
-public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
+public sealed class RegisterAttachmentHandler(
+    IProcedureInstanceRepository repo,
+    AttachmentValidator? validator = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -206,7 +214,9 @@ public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
         Guid? uploadedBy = null,
         CancellationToken ct = default)
     {
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
         if (string.IsNullOrWhiteSpace(input.StoragePath))

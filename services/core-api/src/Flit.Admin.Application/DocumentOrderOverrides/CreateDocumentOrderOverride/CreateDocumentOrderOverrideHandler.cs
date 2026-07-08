@@ -6,13 +6,13 @@ using Flit.Admin.Domain.DocumentTypes;
 namespace Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 
 /// <summary>
-/// Caso de uso de alta de un override de orden documental (HU #10196, AC1/AC2 / RF09–RF16).
+/// Caso de uso de alta de un override de orden documental (HU #10196, AC1/AC2; RF22).
 ///
 /// Flujo: (1) valida <c>orden</c> → 422; (2) el tipo de trámite debe existir → 404;
 /// (3) el tipo de documento debe existir → 404 y estar asociado al trámite → 422;
-/// (4) la referencia del scope debe venir → 422 y existir → 404 (OT vía catálogo,
-/// CLIENTE vía catálogo de tenants); (5) la tupla única (trámite, documento, scope,
-/// referencia) no debe estar duplicada → 422; (6) crea el override.
+/// (4) la referencia del OT debe venir → 422 y existir → 404 (RF22 — el único scope es OT);
+/// (5) la tupla única (trámite, documento, scope, referencia) no debe estar duplicada → 422;
+/// (6) crea el override.
 /// </summary>
 public sealed class CreateDocumentOrderOverrideHandler
 {
@@ -21,22 +21,19 @@ public sealed class CreateDocumentOrderOverrideHandler
     private readonly IDocumentTypeRepository _documentTypes;
     private readonly IProcedureDocumentRequirementRepository _requirements;
     private readonly ITransitOfficeCatalog _transitOffices;
-    private readonly ITenantCatalog _tenants;
 
     public CreateDocumentOrderOverrideHandler(
         IDocumentOrderOverrideRepository overrides,
         IProcedureTypeCatalog procedureTypes,
         IDocumentTypeRepository documentTypes,
         IProcedureDocumentRequirementRepository requirements,
-        ITransitOfficeCatalog transitOffices,
-        ITenantCatalog tenants)
+        ITransitOfficeCatalog transitOffices)
     {
         _overrides = overrides ?? throw new ArgumentNullException(nameof(overrides));
         _procedureTypes = procedureTypes ?? throw new ArgumentNullException(nameof(procedureTypes));
         _documentTypes = documentTypes ?? throw new ArgumentNullException(nameof(documentTypes));
         _requirements = requirements ?? throw new ArgumentNullException(nameof(requirements));
         _transitOffices = transitOffices ?? throw new ArgumentNullException(nameof(transitOffices));
-        _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
     }
 
     public async Task<CreateDocumentOrderOverrideResult> HandleAsync(
@@ -113,40 +110,32 @@ public sealed class CreateDocumentOrderOverrideHandler
     }
 
     /// <summary>
-    /// Resuelve la referencia del scope: devuelve un mensaje de validación (422) si la
-    /// referencia obligatoria falta, marca <c>notFound</c> (404) si no existe en su
-    /// catálogo, o el id válido en caso contrario.
+    /// Resuelve la referencia del scope OT (RF22 — único ámbito): devuelve un mensaje de
+    /// validación (422) si el <c>transitOfficeId</c> falta o el scope no es OT, marca
+    /// <c>notFound</c> (404) si el OT no existe, o el id válido en caso contrario.
     /// </summary>
-    private async Task<(string? Error, bool NotFound, Guid ScopeRefId)> ResolveScopeRefAsync(
+    private Task<(string? Error, bool NotFound, Guid ScopeRefId)> ResolveScopeRefAsync(
         CreateDocumentOrderOverrideCommand command,
         CancellationToken cancellationToken)
     {
+        _ = cancellationToken;
         var request = command.Request;
 
-        if (command.Scope == DocumentOrderScope.Ot)
+        if (command.Scope != DocumentOrderScope.Ot)
         {
-            if (request.TransitOfficeId is null || request.TransitOfficeId == Guid.Empty)
-            {
-                return ("El transitOfficeId es obligatorio para overrides de scope OT.", false, Guid.Empty);
-            }
+            return Task.FromResult<(string?, bool, Guid)>(
+                ("El único ámbito de override de orden es OT (RF22).", false, Guid.Empty));
+        }
 
-            return _transitOffices.Exists(request.TransitOfficeId.Value)
+        if (request.TransitOfficeId is null || request.TransitOfficeId == Guid.Empty)
+        {
+            return Task.FromResult<(string?, bool, Guid)>(
+                ("El transitOfficeId es obligatorio para overrides de scope OT.", false, Guid.Empty));
+        }
+
+        return Task.FromResult<(string?, bool, Guid)>(
+            _transitOffices.Exists(request.TransitOfficeId.Value)
                 ? (null, false, request.TransitOfficeId.Value)
-                : (null, true, Guid.Empty);
-        }
-
-        // Scope CLIENTE.
-        if (request.ClienteId is null || request.ClienteId == Guid.Empty)
-        {
-            return ("El clienteId es obligatorio para overrides de scope CLIENTE.", false, Guid.Empty);
-        }
-
-        var tenantExists = await _tenants
-            .ExistsAsync(request.ClienteId.Value, cancellationToken)
-            .ConfigureAwait(false);
-
-        return tenantExists
-            ? (null, false, request.ClienteId.Value)
-            : (null, true, Guid.Empty);
+                : (null, true, Guid.Empty));
     }
 }

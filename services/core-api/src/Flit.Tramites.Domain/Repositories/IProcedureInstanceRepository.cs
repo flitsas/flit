@@ -30,6 +30,14 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Carga la instancia con el grafo necesario para computar el checklist condicional
+    /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
+    /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
+    /// <c>Participants</c> (tramitador). Es el grafo que consume <c>GetChecklistHandler</c>.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con sus <c>Actors</c> y <c>Attachments</c>. Query lean para el
     /// cómputo del checklist, que necesita los tipos de documento subidos (auto-marca) y el
     /// tipo de persona de los actores (supresión de <c>cedulas</c> para persona natural, HU #10542).

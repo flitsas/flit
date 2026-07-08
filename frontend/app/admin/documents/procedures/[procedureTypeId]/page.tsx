@@ -8,8 +8,8 @@ import { DocumentProcedureTabs } from "@/components/admin/documents/DocumentProc
 import { findProcedureType } from "@/lib/constants/procedure-types";
 
 // Consola documental por trámite (HU #10198, AC2–AC5/AC7). Recibe el procedureTypeId
-// por la URL y orquesta las pestañas: documentos asociados, overrides OT, overrides
-// Cliente y matriz resuelta. El acceso SuperAdmin lo gobierna el middleware (AC6).
+// por la URL y orquesta las pestañas: documentos asociados, overrides OT y matriz
+// resuelta. El acceso SuperAdmin lo gobierna el middleware (AC6).
 export default function DocumentProcedurePage() {
   return (
     <ToastProvider>

@@ -87,6 +87,10 @@ public static class AdminInfrastructureExtensions
         // HU #10198 — overrides de obligatoriedad documental por OT (3 estados).
         services.AddScoped<IDocumentRequirementOverrideRepository, DocumentRequirementOverrideRepository>();
 
+        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+        services.AddScoped<Flit.Admin.Domain.CompanyDocumentParams.ICompanyDocumentParamRepository,
+            CompanyDocumentParamRepository>();
+
         // HU #10197 — instancias de trámite + snapshot documental inmutable.
         // Tras el merge del rework (#10128) la implementación vive en
         // AdminProcedureInstanceRepository (opera sobre la entidad canónica del runtime).

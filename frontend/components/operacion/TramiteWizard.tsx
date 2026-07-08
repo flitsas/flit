@@ -974,6 +974,9 @@ function ConsultaStep({
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
   const [riesgoSaving, setRiesgoSaving] = useState(false);
+  // Banderas manuales del vehículo (leasing / cambio de carrocería / acción de prenda) que
+  // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
+  const [atributosSaving, setAtributosSaving] = useState(false);
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -1145,6 +1148,28 @@ function ConsultaStep({
     }
   };
 
+  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
+  // TramiteDocumentContextMapper). Importado solo aplica en matrícula (dispara Aduana); leasing solo
+  // en traspaso; carrocería y prenda en ambos.
+  const esImportado = fieldValues.find((f) => f.fieldKey === 'es_importado')?.valueText === 'true';
+  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
+  const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
+  const accionPrenda = fieldValues.find((f) => f.fieldKey === 'accion_prenda')?.valueText ?? '';
+
+  const saveAtributo = async (fieldKey: string, valueText: string) => {
+    if (!instanceId) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey, valueText, valueJson: null },
+      ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
   // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
@@ -1280,6 +1305,84 @@ function ConsultaStep({
       )}
 
       <VehicleDataCard fieldValues={fieldValues} />
+
+      <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
+        <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
+        <p className="text-[11px] opacity-55 -mt-1.5">
+          Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
+        </p>
+
+        {isVin && (
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={esImportado}
+              onChange={(e) => void saveAtributo('es_importado', e.target.checked ? 'true' : 'false')}
+              disabled={readOnly || atributosSaving}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            />
+            <span className="text-xs">
+              <span className="font-semibold">Vehículo importado</span>
+              <span className="mt-0.5 block opacity-55">
+                Exige el Certificado de Aduana / Declaración de Importación.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {!isVin && (
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={esLeasing}
+              onChange={(e) => void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')}
+              disabled={readOnly || atributosSaving}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            />
+            <span className="text-xs">
+              <span className="font-semibold">Vehículo en leasing</span>
+              <span className="mt-0.5 block opacity-55">
+                Exige contrato de leasing y declaración de la arrendadora.
+              </span>
+            </span>
+          </label>
+        )}
+
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={cambioCarroceria}
+            onChange={(e) => void saveAtributo('cambio_carroceria', e.target.checked ? 'true' : 'false')}
+            disabled={readOnly || atributosSaving}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+          />
+          <span className="text-xs">
+            <span className="font-semibold">Cambio de carrocería</span>
+            <span className="mt-0.5 block opacity-55">Exige la factura de carrocería.</span>
+          </span>
+        </label>
+
+        <div>
+          <label htmlFor="consulta-accion-prenda" className="mb-1.5 block text-xs font-semibold">
+            Prenda / garantía mobiliaria
+          </label>
+          <select
+            id="consulta-accion-prenda"
+            value={accionPrenda}
+            onChange={(e) => void saveAtributo('accion_prenda', e.target.value)}
+            disabled={readOnly || atributosSaving}
+            className={`${inputClass} max-w-xs disabled:opacity-60`}
+          >
+            <option value="">Sin prenda</option>
+            <option value="registrar">Registrar prenda</option>
+            <option value="levantar">Levantar prenda</option>
+            <option value="omitir">Omitir</option>
+          </select>
+          <p className="mt-1 text-[11px] opacity-55">
+            «Registrar» exige el paz y salvo e inscripción de la prenda.
+          </p>
+        </div>
+      </div>
 
       {mostrarPazSalvo && (
         <label

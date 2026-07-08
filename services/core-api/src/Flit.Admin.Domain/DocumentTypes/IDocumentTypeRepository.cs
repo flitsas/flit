@@ -9,12 +9,17 @@ namespace Flit.Admin.Domain.DocumentTypes;
 /// </summary>
 public interface IDocumentTypeRepository
 {
-    /// <summary>Crea un tipo de documento activo y devuelve el read model resultante (AC1).</summary>
+    /// <summary>
+    /// Crea un tipo de documento activo y devuelve el read model resultante (AC1). Los límites por
+    /// tipo (RF08/09) son opcionales: <c>null</c> ⇒ vacío/0 ⇒ se aplican los globales por defecto.
+    /// </summary>
     Task<DocumentTypeListItem> CreateAsync(
         string code,
         string name,
         string? description,
         Guid? createdBy,
+        IReadOnlyList<string>? mimeTypesAllowed = null,
+        long? maxSizeBytes = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Listado paginado ordenado por nombre ascendente (AC2).</summary>
@@ -27,13 +32,18 @@ public interface IDocumentTypeRepository
         Guid id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Actualiza un tipo de documento existente; devuelve null si no existe (AC3).</summary>
+    /// <summary>
+    /// Actualiza un tipo de documento existente; devuelve null si no existe (AC3). Los límites por
+    /// tipo (RF08/09) son opcionales: <c>null</c> ⇒ conserva/limpia según se envíe (vacío/0 ⇒ globales).
+    /// </summary>
     Task<DocumentTypeListItem?> UpdateAsync(
         Guid id,
         string code,
         string name,
         string? description,
         Guid? updatedBy,
+        IReadOnlyList<string>? mimeTypesAllowed = null,
+        long? maxSizeBytes = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Soft-delete: marca <c>is_active = false</c>; devuelve false si no existe (AC4).</summary>
