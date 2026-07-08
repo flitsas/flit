@@ -1168,9 +1168,9 @@ function ConsultaStep({
   };
 
   // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Importado solo aplica en matrícula (dispara Aduana); leasing solo
-  // en traspaso; carrocería en ambos. La prenda se gestiona aparte con PrendaForm (Feature #10585).
-  const esImportado = fieldValues.find((f) => f.fieldKey === 'es_importado')?.valueText === 'true';
+  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; carrocería en ambos. Aduana es
+  // obligatorio de base en matrícula (no hay check de importado). La prenda se gestiona aparte con
+  // PrendaForm (Feature #10585).
   const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
   const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
 
@@ -1329,24 +1329,6 @@ function ConsultaStep({
         <p className="text-[11px] opacity-55 -mt-1.5">
           Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
         </p>
-
-        {isVin && (
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={esImportado}
-              onChange={(e) => void saveAtributo('es_importado', e.target.checked ? 'true' : 'false')}
-              disabled={readOnly || atributosSaving}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-            />
-            <span className="text-xs">
-              <span className="font-semibold">Vehículo importado</span>
-              <span className="mt-0.5 block opacity-55">
-                Exige el Certificado de Aduana / Declaración de Importación.
-              </span>
-            </span>
-          </label>
-        )}
 
         {!isVin && (
           <label className="flex items-start gap-2.5">

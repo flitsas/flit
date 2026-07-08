@@ -3979,6 +3979,16 @@ components:
         obligatorio: { type: boolean }
         satisfied: { type: boolean }
         docTipo: { type: string, nullable: true }
+        maxSizeBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: Tamaño máximo por tipo (RF09). null ⇒ usar el límite global.
+        mimeTypesAllowed:
+          type: array
+          nullable: true
+          items: { type: string }
+          description: Formatos MIME permitidos por tipo (RF08). null/vacío ⇒ formatos globales.
     ChecklistResponse:
       type: object
       properties:

@@ -67,17 +67,6 @@ public sealed class ConditionalDocumentRulesTests
     // ── Escenarios reales del catálogo ────────────────────────────────────────
 
     [Fact]
-    public void Matricula_Importado_ExigeAduana_NoImportadoNo()
-    {
-        var rules = ConditionalDocumentRules.For(TramiteTipologiaCatalog.CodigoMatriculaInicial);
-
-        ChecklistEngine.ApplyConditional([], new TramiteDocumentContext(EsImportado: true), rules)
-            .Should().Contain(i => i.Id == "aduana" && i.Obligatorio);
-        ChecklistEngine.ApplyConditional([], new TramiteDocumentContext(EsImportado: false), rules)
-            .Should().NotContain(i => i.Id == "aduana");
-    }
-
-    [Fact]
     public void Nit_ExigeRuesYCedula_PersonaNaturalOcultaCedula()
     {
         var rules = ConditionalDocumentRules.For(TramiteTipologiaCatalog.CodigoMatriculaInicial);
