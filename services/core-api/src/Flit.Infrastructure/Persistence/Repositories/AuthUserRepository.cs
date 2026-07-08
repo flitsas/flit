@@ -1,10 +1,11 @@
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
+public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepository userRoleAssignmentRepository) : IAuthUserRepository
 {
     public async Task<UserAuthSnapshot?> FindByEmailAsync(string email, CancellationToken cancellationToken)
     {
@@ -53,11 +54,19 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
         if (tenantId is null)
             return null;
 
-        var tenantName = await db.Tenants
+        var tenant = await db.Tenants
             .AsNoTracking()
             .Where(t => t.Id == tenantId.Value)
-            .Select(t => t.LegalName)
-            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+            .Select(t => new { t.LegalName, t.TaxId })
+            .FirstOrDefaultAsync(cancellationToken);
+        var tenantName = tenant?.LegalName ?? string.Empty;
+        // HU #10616 AC4 — el NIT puede no estar registrado (columna requerida pero admite vacío
+        // heredado); se emite tal cual, sin romper el login ni la emisión del JWT.
+        var tenantTaxId = tenant?.TaxId ?? string.Empty;
+
+        // HU #10616 AC1/AC2 — tipo de entidad del tenant (COMPANY | TRANSIT_OFFICE), mismo
+        // criterio ya usado por SecurityEndpoints/UserRoleAssignmentRepository (HU #10504/#10506).
+        var entityType = await userRoleAssignmentRepository.GetTenantTargetEntityTypeAsync(tenantId.Value, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         var isSuspended = await db.UserTempSuspensions
@@ -96,6 +105,8 @@ public sealed class AuthUserRepository(FlitDbContext db) : IAuthUserRepository
             MustChangePassword = credential.MustChangePassword,
             TenantId = tenantId.Value,
             TenantName = tenantName,
+            TenantTaxId = tenantTaxId,
+            EntityType = entityType,
             ActiveRoles = activeRoles,
             TotalAssignedRolesCount = totalAssignedRolesCount,
             PermissionSlugs = permissionSlugs,

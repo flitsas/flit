@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
@@ -194,6 +195,11 @@ public static class AuthEndpoints
             }
         });
 
+        // HU #10616 AC3 — expone TODOS los roles activos (roleId + roleCode de cada uno) y el
+        // arreglo completo de permisos (unión de todos los roles, igual que el JWT), no solo el
+        // primer rol. El claim "roles" es un array JSON de {id, code} por rol activo (emitido por
+        // RsaJwtTokenIssuer, HU #10506); el pipeline de JwtBearer lo expande a un Claim("roles", ...)
+        // por elemento — se deserializa cada uno individualmente.
         group.MapGet("/me", (ClaimsPrincipal user) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -201,24 +207,63 @@ public static class AuthEndpoints
             var email = user.FindFirstValue(ClaimTypes.Email)
                 ?? user.FindFirstValue("email");
             var tenantId = user.FindFirstValue("tenant_id");
-            var roleId = user.FindFirstValue("role_id");
-            var roleCode = user.FindFirstValue("role_code");
+            var companyName = user.FindFirstValue("company_name") ?? string.Empty;
+            var companyNit = user.FindFirstValue("company_nit") ?? string.Empty;
+            var entityType = user.FindFirstValue("entity_type") ?? string.Empty;
             var permissions = user.FindAll("permissions").Select(c => c.Value).ToArray();
+            var roles = user.FindAll("roles")
+                .Select(TryParseRoleClaim)
+                .Where(r => r is not null)
+                .Select(r => r!)
+                .ToArray();
 
             if (userId is null || email is null || tenantId is null)
                 return Results.Unauthorized();
 
-            var parsedRoleId = Guid.TryParse(roleId, out var rid) && rid != Guid.Empty ? (Guid?)rid : null;
             return Results.Ok(new CurrentUserResponse(
                 Guid.Parse(userId),
                 email,
                 Guid.Parse(tenantId),
-                parsedRoleId,
-                roleCode ?? string.Empty,
-                permissions));
+                roles,
+                permissions,
+                companyName,
+                companyNit,
+                entityType));
         }).RequireAuthorization();
 
         return app;
+    }
+
+    /// <summary>
+    /// Deserializa un elemento del claim <c>roles</c> (<c>{"id": "...", "code": "..."}</c>, HU
+    /// #10506/#10616). Devuelve <c>null</c> ante un valor inesperado en vez de propagar la
+    /// excepción — un claim corrupto no debe tumbar <c>/me</c> con 500.
+    /// </summary>
+    private static RoleClaimResponse? TryParseRoleClaim(Claim claim)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(claim.Value);
+            var id = doc.RootElement.GetProperty("id").GetGuid();
+            var code = doc.RootElement.GetProperty("code").GetString() ?? string.Empty;
+            return new RoleClaimResponse(id, code);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     private sealed record ActivateAccountRequest(string Token, string Password);
@@ -241,9 +286,14 @@ public static class AuthEndpoints
         Guid UserId,
         string Email,
         Guid TenantId,
-        Guid? RoleId,
-        string RoleCode,
-        IReadOnlyList<string> Permissions);
+        IReadOnlyList<RoleClaimResponse> Roles,
+        IReadOnlyList<string> Permissions,
+        string CompanyName,
+        string CompanyNit,
+        string EntityType);
+
+    /// <summary>Rol activo del usuario, tal como viaja en el JWT (HU #10506/#10616).</summary>
+    private sealed record RoleClaimResponse(Guid RoleId, string RoleCode);
 
     private sealed record ErrorResponse(string Code, string Message);
 }

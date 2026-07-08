@@ -4024,7 +4024,7 @@ components:
           example: Bearer
     CurrentUserResponse:
       type: object
-      required: [userId, email, tenantId, roleId, permissions]
+      required: [userId, email, tenantId, roles, permissions, companyName, companyNit, entityType]
       properties:
         userId:
           type: string
@@ -4034,15 +4034,37 @@ components:
         tenantId:
           type: string
           format: uuid
+        roles:
+          description: >
+            TODOS los roles activos del usuario (HU #10616 AC3) — antes solo se exponía el
+            primero.
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrentUserRole'
+        permissions:
+          description: Unión de permisos de todos los roles activos, igual que el JWT (HU #10616 AC3).
+          type: array
+          items:
+            type: string
+        companyName:
+          description: Nombre de la empresa u organismo de tránsito asociado al tenant (HU #10616 AC1/AC2).
+          type: string
+        companyNit:
+          description: NIT de la empresa/organismo de tránsito. Vacío si no está registrado (HU #10616 AC4).
+          type: string
+        entityType:
+          description: Tipo de entidad del tenant (HU #10616 AC1/AC2).
+          type: string
+          enum: [COMPANY, TRANSIT_OFFICE]
+    CurrentUserRole:
+      type: object
+      required: [roleId, roleCode]
+      properties:
         roleId:
           type: string
           format: uuid
         roleCode:
           type: string
-        permissions:
-          type: array
-          items:
-            type: string
     AuthErrorResponse:
       type: object
       required: [code, message]
