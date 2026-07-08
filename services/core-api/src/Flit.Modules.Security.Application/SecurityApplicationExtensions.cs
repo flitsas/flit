@@ -1,9 +1,11 @@
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.Permissions;
@@ -28,6 +30,8 @@ public static class SecurityApplicationExtensions
         services.AddScoped<AdminResetPasswordHandler>();
         services.AddScoped<ChangePasswordHandler>();
         services.AddScoped<CreateInvitationHandler>();
+        services.AddScoped<ResendInvitationHandler>(); // HU #10625 — reenviar invitación pendiente
+        services.AddScoped<CancelInvitationHandler>(); // HU #10627 — cancelar invitación pendiente
         services.AddScoped<ActivateAccountHandler>();
 
         // HU #10161 — CRUD módulos dinámicos Super Admin

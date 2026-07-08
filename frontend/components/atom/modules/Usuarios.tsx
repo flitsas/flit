@@ -2,9 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, Clock, ShieldOff, Landmark, ArrowRight } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, TenantUser, TenantRole } from "@/lib/api/security";
+import { Search, X, Users, Shield, Ban, Clock, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw, MailX } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
+import { EditUserModal } from "./users/EditUserModal";
+import { DeleteUserDialog } from "./users/DeleteUserDialog";
+import { RestoreUserDialog } from "./users/RestoreUserDialog";
+import { ResendInvitationButton } from "./users/ResendInvitationButton";
+import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -16,12 +21,15 @@ import {
   type SuspendMode,
 } from "./users/SuspendOrDeactivateModal";
 
-const TABS = [
+// HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin — AdminCompany/OtAdmin ven
+// "Eliminar" (AC1) pero nunca la vista de restauración, exclusiva de SuperAdmin.
+const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
+  { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof ALL_TABS)[number]["id"];
 
 // Chips tintados (HU #10494 · decisión D1). Mismo vocabulario (Activo/Inactivo/Pendiente),
 // convención tintada: fondo translúcido + texto de color legible + borde.
@@ -34,8 +42,26 @@ const STATUS_BADGE: Record<
   pending: { label: "Pendiente", bg: "rgba(245,158,11,0.14)", color: "#b45309", border: "rgba(245,158,11,0.35)" },
 };
 
+// Ajuste QA (flujo completo HU #10619-#10628): un usuario suspendido/desactivado seguía
+// mostrando el chip "Activo" — solo cambiaba el ícono de acción (Ban → ShieldOff), sin
+// ninguna señal visible al escanear la tabla. Prevalece sobre STATUS_BADGE[status].
+const SUSPENDED_BADGE = { label: "Bloqueado", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" };
+
+function userBadge(u: TenantUser) {
+  return u.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[u.status];
+}
+
+// Ajuste QA: la columna "Fecha" mostraba el ISO crudo (con microsegundos) de invitaciones
+// pendientes y de "Eliminado el" en vez de una fecha legible.
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+}
+
 export function Usuarios() {
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, userId: currentUserId } = usePermissions();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -44,6 +70,18 @@ export function Usuarios() {
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [suspendTarget, setSuspendTarget] = useState<{ user: TenantUser; mode: SuspendMode } | null>(null);
+  const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+  // HU #10624 — pestaña "Eliminados": usuarios de CUALQUIER tenant con deletedAt != null.
+  const [deletedUsers, setDeletedUsers] = useState<TenantUser[]>([]);
+  const [deletedLoading, setDeletedLoading] = useState(false);
+  const [deletedError, setDeletedError] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<TenantUser | null>(null);
+  // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
+  const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
+
+  // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin.
+  const tabs = isSuperAdmin ? ALL_TABS : ALL_TABS.filter((t) => t.id !== "eliminados");
 
   async function loadUsers() {
     setLoading(true);
@@ -55,6 +93,20 @@ export function Usuarios() {
       setError("Error al cargar usuarios.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true, EXCLUSIVO de SuperAdmin.
+  async function loadDeletedUsers() {
+    setDeletedLoading(true);
+    setDeletedError(null);
+    try {
+      const data = await getUsers(true);
+      setDeletedUsers(data);
+    } catch {
+      setDeletedError("Error al cargar usuarios eliminados.");
+    } finally {
+      setDeletedLoading(false);
     }
   }
 
@@ -84,6 +136,14 @@ export function Usuarios() {
     }
   }, [isSuperAdmin]);
 
+  useEffect(() => {
+    // HU #10624 — carga perezosa: solo al entrar a la pestaña "Eliminados" (SuperAdmin).
+    if (tab === "eliminados" && isSuperAdmin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadDeletedUsers();
+    }
+  }, [tab, isSuperAdmin]);
+
   function handleInviteSuccess() {
     loadUsers();
   }
@@ -96,6 +156,23 @@ export function Usuarios() {
   async function handleUnsuspend(userId: string) {
     await unblockUser(userId);
     loadUsers();
+  }
+
+  // HU #10623 — AC1: la confirmación (con el aviso de que solo un SuperAdmin puede restaurar)
+  // vive en DeleteUserDialog; aquí solo se persiste. Errores 400/409 los mapea el propio diálogo.
+  async function handleDelete(userId: string, rowVersion: number) {
+    return deleteUser(userId, rowVersion);
+  }
+
+  // HU #10624 (AC3) — la confirmación vive en RestoreUserDialog; aquí solo se persiste.
+  async function handleRestore(userId: string) {
+    return restoreUser(userId);
+  }
+
+  // HU #10628 — la confirmación (distinta de "Eliminar usuario", AC2) vive en
+  // CancelInvitationDialog; aquí solo se persiste. Errores 404/409 (AC3) los mapea el propio diálogo.
+  async function handleCancelInvitation(invitationId: string) {
+    return cancelInvitation(invitationId);
   }
 
   return (
@@ -113,7 +190,7 @@ export function Usuarios() {
       />
 
       <div className="flex items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
           return (
@@ -143,7 +220,7 @@ export function Usuarios() {
             <div
               className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
               style={{
-                gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 76px",
+                gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                 background: "#DFE5ED",
                 color: "#162744",
               }}
@@ -169,7 +246,7 @@ export function Usuarios() {
                 </div>
               )}
               {!loading && !error && users.map((u) => {
-                const badge = STATUS_BADGE[u.status];
+                const badge = userBadge(u);
                 return (
                   <div
                     // GET /api/v1/security/users hace JOIN vía UserRoleAssignments: un usuario
@@ -179,7 +256,7 @@ export function Usuarios() {
                     key={`${u.id}-${u.roleId ?? "sin-rol"}`}
                     className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
-                      gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 76px",
+                      gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                       }}
                   >
                     <div>
@@ -205,8 +282,21 @@ export function Usuarios() {
                     <div>
                       <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
                     </div>
-                    <div className="opacity-70">{u.createdAt ?? "—"}</div>
+                    <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
                     <div className="flex items-center justify-end gap-1">
+                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
+                          no hay una cuenta real que editar. */}
+                      {u.status !== "pending" && !isSuperAdmin && (
+                        <button
+                          title="Editar usuario"
+                          aria-label={`Editar usuario ${u.fullName}`}
+                          onClick={() => setEditTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          style={{ color: "#557EFF" }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {u.status !== "pending" && !isSuperAdmin && (
                         u.isSuspended ? (
                           <button
@@ -241,6 +331,42 @@ export function Usuarios() {
                           </>
                         )
                       )}
+                      {/* AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
+                          nunca puede auto-eliminarse. */}
+                      {u.status !== "pending" && !isSuperAdmin && u.id !== currentUserId && (
+                        <button
+                          title="Eliminar usuario"
+                          aria-label={`Eliminar usuario ${u.fullName}`}
+                          onClick={() => setDeleteTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
+                          invitationId. */}
+                      {u.status === "pending" && !isSuperAdmin && (
+                        <ResendInvitationButton
+                          invitationId={u.id}
+                          fullName={u.fullName}
+                          resend={resendInvitation}
+                        />
+                      )}
+                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
+                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
+                      {u.status === "pending" && !isSuperAdmin && (
+                        <button
+                          type="button"
+                          title="Cancelar invitación"
+                          aria-label={`Cancelar invitación a ${u.fullName}`}
+                          onClick={() => setCancelTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <MailX className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -253,6 +379,69 @@ export function Usuarios() {
             )}
           </div>
         </>
+      )}
+
+      {tab === "eliminados" && isSuperAdmin && (
+        // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
+        // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
+        // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
+        <div className="flex flex-col">
+          <div
+            className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+            style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
+          >
+            <div>Usuario</div>
+            <div>Empresa</div>
+            <div>Eliminado el</div>
+            <div />
+          </div>
+
+          <div className="space-y-2 pt-2">
+            {deletedLoading && (
+              <div role="status" className="py-12 text-center text-sm opacity-60">Cargando usuarios eliminados…</div>
+            )}
+            {!deletedLoading && deletedError && (
+              <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+            )}
+            {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
+              <div className="py-12 text-center text-sm opacity-60">
+                No hay usuarios eliminados de ninguna compañía u organismo.
+              </div>
+            )}
+            {!deletedLoading && !deletedError && deletedUsers.map((u) => (
+              <div
+                // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
+                // key cuando el JOIN produce N filas por usuario con N roles.
+                key={`${u.id}-${u.roleId ?? "sin-rol"}`}
+                className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
+              >
+                <div>
+                  <p className="font-semibold">{u.fullName}</p>
+                  <p className="text-[10px] opacity-60">{u.email}</p>
+                </div>
+                <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
+                <div className="opacity-70">{formatDateTime(u.deletedAt)}</div>
+                <div className="flex justify-end">
+                  <button
+                    title="Restaurar usuario"
+                    aria-label={`Restaurar usuario ${u.fullName}`}
+                    onClick={() => setRestoreTarget(u)}
+                    className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                    style={{ color: "#557EFF" }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
+            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
+              Mostrando {deletedUsers.length} usuario{deletedUsers.length !== 1 ? "s" : ""} eliminado{deletedUsers.length !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
       )}
 
       {tab === "roles" && isSuperAdmin && (
@@ -325,6 +514,72 @@ export function Usuarios() {
             await handleSuspend(suspendTarget.user.id, reason, endsAt);
             setSuspendTarget(null);
           }}
+        />
+      )}
+      {editTarget && (
+        <EditUserModal
+          user={{
+            id: editTarget.id,
+            fullName: editTarget.fullName,
+            email: editTarget.email,
+            rowVersion: editTarget.rowVersion,
+          }}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            loadUsers();
+          }}
+          onUpdate={updateUser}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteUserDialog
+          user={{
+            id: deleteTarget.id,
+            fullName: deleteTarget.fullName,
+            email: deleteTarget.email,
+            rowVersion: deleteTarget.rowVersion,
+          }}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setDeleteTarget(null);
+            loadUsers();
+          }}
+          onDelete={handleDelete}
+        />
+      )}
+      {cancelTarget && (
+        <CancelInvitationDialog
+          invitation={{
+            id: cancelTarget.id,
+            fullName: cancelTarget.fullName,
+            email: cancelTarget.email,
+          }}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null);
+            loadUsers();
+          }}
+          onStale={loadUsers}
+          onCancel={handleCancelInvitation}
+        />
+      )}
+      {restoreTarget && (
+        <RestoreUserDialog
+          user={{
+            id: restoreTarget.id,
+            fullName: restoreTarget.fullName,
+            email: restoreTarget.email,
+          }}
+          onClose={() => setRestoreTarget(null)}
+          onRestored={() => {
+            setRestoreTarget(null);
+            loadDeletedUsers();
+            // Ajuste QA: sin este refresco, la pestaña "Usuarios" quedaba con el estado
+            // viejo (sin el usuario restaurado) hasta recargar la página manualmente.
+            loadUsers();
+          }}
+          onRestore={handleRestore}
         />
       )}
     </div>

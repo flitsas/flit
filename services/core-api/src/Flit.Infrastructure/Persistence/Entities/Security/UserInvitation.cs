@@ -21,4 +21,11 @@ public sealed class UserInvitation : AuditableEntity
     public DateTimeOffset? AcceptedAt { get; set; }
 
     public DateTimeOffset? ExpiresAt { get; set; }
+
+    /// <summary>
+    /// HU #10625: última vez que se (re)envió el correo de invitación (creación o reenvío).
+    /// Usado para calcular el cooldown anti-abuso de <c>InvitationOptions.ResendCooldown</c>
+    /// entre reenvíos consecutivos.
+    /// </summary>
+    public DateTimeOffset? LastSentAt { get; set; }
 }

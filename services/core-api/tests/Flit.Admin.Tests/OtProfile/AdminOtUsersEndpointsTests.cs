@@ -126,6 +126,149 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Data.Should().Contain(u => u.Id == _collaboratorUserId.ToString());
     }
 
+    // HU #10624 AC3 — con ?onlyDeleted=true, SuperAdmin ve al colaborador soft-deleted del
+    // tenant OT resuelto (mismo criterio de scope que el listado normal — transitOfficeId).
+    [Fact]
+    public async Task ListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaborator()
+    {
+        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var response = await _client.GetAsync(
+            $"/api/v1/admin/ot/users?transitOfficeId={_transitOfficeId}&onlyDeleted=true",
+            TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<DeletedUsersBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body.Should().NotBeNull();
+        var deletedCollaborator = body!.Data.Should()
+            .ContainSingle(u => u.Id == _collaboratorUserId.ToString()).Subject;
+        deletedCollaborator.DeletedAt.Should().NotBeNull();
+    }
+
+    // HU #10624 AC4 — un ot_admin (no SuperAdmin) que intenta usar onlyDeleted=true recibe 403:
+    // solo SuperAdmin puede ver/restaurar usuarios eliminados.
+    [Fact]
+    public async Task ListUsers_OnlyDeleted_AsOtAdmin_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.GetAsync(
+            "/api/v1/admin/ot/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // HU #10624 — regresión: sin onlyDeleted, el listado sigue excluyendo usuarios eliminados
+    // exactamente igual que antes de agregar el parámetro.
+    [Fact]
+    public async Task ListUsers_WithoutOnlyDeleted_StillExcludesSoftDeletedUser()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await _client.GetAsync("/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<ListUsersBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Data.Should().NotContain(u => u.Id == _collaboratorUserId.ToString());
+    }
+
+    // HU #10624 AC3 — con ?onlyDeleted=true en GET /api/v1/security/users, SuperAdmin ve al
+    // colaborador soft-deleted de CUALQUIER tenant (aquí, el tenant OT del fixture).
+    [Fact]
+    public async Task SecurityListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaboratorFromAnyTenant()
+    {
+        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var response = await _client.GetAsync(
+            "/api/v1/security/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<List<SecurityDeletedUserItem>>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body.Should().NotBeNull();
+        var deletedCollaborator = body!.Should()
+            .ContainSingle(u => u.Id == _collaboratorUserId.ToString()).Subject;
+        deletedCollaborator.TenantId.Should().Be(_otTenantId.ToString());
+        deletedCollaborator.DeletedAt.Should().NotBeNull();
+    }
+
+    // HU #10624 AC4 — un ot_admin (no SuperAdmin) que intenta usar onlyDeleted=true en
+    // GET /api/v1/security/users recibe 403.
+    [Fact]
+    public async Task SecurityListUsers_OnlyDeleted_AsOtAdmin_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.GetAsync(
+            "/api/v1/security/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     [Fact]
     public async Task Suspend_ThenUnsuspend_AsOtAdmin_TogglesActiveSuspension()
     {
@@ -210,6 +353,26 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         user.RowVersion.Should().BeGreaterThan(rowVersion);
     }
 
+    // HU #10625 AC1 — reenvío exitoso: sin envío previo, regenera el token y responde 200
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_PendingNeverSent_Returns200()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, email) = await SeedPendingInvitationAsync(lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        invitation.Email.Should().Be(email);
+        invitation.LastSentAt.Should().NotBeNull();
+    }
     // HU #10621 AC4 — rowVersion desactualizado (otro admin ya guardó cambios) → 409, sin
     // sobrescribir nada.
     [Fact]
@@ -231,6 +394,21 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         user.DisplayName.Should().NotBe("No debería guardarse");
     }
 
+    // HU #10625 AC2 — cooldown activo: reenviada hace menos de 2 minutos → 429 + Retry-After
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_WithinCooldown_Returns429WithRetryAfterHeader()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(lastSentAt: DateTimeOffset.UtcNow.AddSeconds(-30));
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter.Should().NotBeNull();
+    }
     // HU #10621 AC2 — el correo ya pertenece a otra cuenta ACTIVA (el propio ot_admin) → 409
     // USER_ALREADY_EXISTS.
     [Fact]
@@ -263,6 +441,119 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("USER_ALREADY_EXISTS");
+    }
+
+    // HU #10625 AC3 — invitación ya no pendiente (aceptada) → 409
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_InvitationAlreadyAccepted_Returns409()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(lastSentAt: null, status: "accepted");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+    // Invitación inexistente / fuera del alcance del tenant OT resuelto → 404
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_InvitationNotFound_Returns404()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // AC1 (HU #10627) — ot_admin cancela una invitación pendiente de su propio tenant: el
+    // enlace de activación deja de funcionar y el email queda disponible para una nueva invitación.
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_PendingInvitation_CancelsAndAllowsNewInvitation()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-cancel-invite-{Guid.NewGuid():N}@flit.local";
+        var inviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Colaborador a cancelar" },
+            TestContext.Current.CancellationToken);
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        Guid invitationId;
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            invitationId = invitation.Id;
+        }
+
+        var cancelResponse = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using (var db = CreateDbContext())
+        {
+            var cancelled = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+            cancelled.Status.Should().Be("cancelled");
+            cancelled.DeletedAt.Should().NotBeNull();
+        }
+
+        // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
+        var reInviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Colaborador a cancelar" },
+            TestContext.Current.CancellationToken);
+        reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    // AC2 (HU #10627) — cancelar una invitación ya aceptada/cancelada previamente → 409.
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_AlreadyCancelled_Returns409()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-cancel-twice-{Guid.NewGuid():N}@flit.local";
+        await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Cancelar Dos Veces OT" },
+            TestContext.Current.CancellationToken);
+
+        Guid invitationId;
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            invitationId = invitation.Id;
+        }
+
+        var firstCancel = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondCancel = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ot_admin no puede cancelar una invitación fuera de su tenant → 404 (mismo alcance que suspender).
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_TargetingInvitationOutsideTenant_Returns404()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     // HU #10619 AC1 — sin endsAt: desactivación indefinida (sin fecha de fin), hasta reactivación manual.
@@ -765,6 +1056,34 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Error.Should().Be("EMAIL_BELONGS_TO_DELETED_USER");
     }
 
+    private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
+        DateTimeOffset? lastSentAt, string status = "pending")
+    {
+        await using var db = CreateDbContext();
+
+        var invitationId = Guid.NewGuid();
+        var email = $"resend-{Guid.NewGuid():N}@flit.local";
+
+        db.UserInvitations.Add(new UserInvitation
+        {
+            Id = invitationId,
+            TenantId = _otTenantId,
+            Email = email,
+            FullName = "Invitado Reenvío",
+            RoleId = _roleId,
+            TokenHash = $"hash-{Guid.NewGuid():N}",
+            Status = status,
+            InvitedBy = _otAdminUserId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastSentAt = lastSentAt,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (invitationId, email);
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();
@@ -940,6 +1259,15 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     private sealed record ListUsersBody(List<ListUserItem> Data);
 
     private sealed record ListUserItem(string Id, string FullName, string Email, string Status);
+
+    // HU #10624 — respuesta de GET /api/v1/admin/ot/users?onlyDeleted=true (OtUserDto con deletedAt).
+    private sealed record DeletedUsersBody(List<DeletedUserItem> Data);
+
+    private sealed record DeletedUserItem(string Id, string FullName, string Email, string Status, DateTimeOffset? DeletedAt);
+
+    // HU #10624 — respuesta de GET /api/v1/security/users?onlyDeleted=true (TenantUserDto con
+    // tenantId/deletedAt); ese endpoint devuelve el arreglo directamente (sin envolver en "data").
+    private sealed record SecurityDeletedUserItem(string Id, string FullName, string Email, string? TenantId, DateTimeOffset? DeletedAt);
 
     private sealed record ErrorBody(string Error, string? Message);
 

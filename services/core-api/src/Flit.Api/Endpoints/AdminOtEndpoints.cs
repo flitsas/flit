@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
@@ -30,7 +31,10 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
@@ -290,7 +294,9 @@ public static class AdminOtEndpoints
             .WithName("AdminOtListUsers")
             .WithSummary("Lista los usuarios del tenant OT")
             .WithDescription("Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto (propio "
-                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin).")
+                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). Con ?onlyDeleted=true "
+                + "(HU #10624, EXCLUSIVO de SuperAdmin — 403 en otro caso) lista en su lugar los usuarios "
+                + "eliminados (soft-delete) de ese mismo tenant OT resuelto.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -333,6 +339,34 @@ public static class AdminOtEndpoints
             .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // HU #10625 — reenviar invitación pendiente del tenant OT: SIEMPRE regenera el token
+        // de activación (el enlace anterior queda invalidado) y reenvía el correo. Mismo alcance
+        // que /users/invite: ot_admin solo su propio tenant, SuperAdmin vía ?transitOfficeId=.
+        group.MapPost("/invitations/{invitationId:guid}/resend", ResendInvitationAsync)
+            .WithName("AdminOtResendInvitation")
+            .WithSummary("Reenvía una invitación pendiente del tenant OT")
+            .WithDescription("Regenera el token de activación (el enlace anterior deja de ser válido) y reenvía el "
+                + "correo. 409 si la invitación ya no está pendiente, 429 si no ha pasado el cooldown anti-abuso "
+                + "desde el último envío.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
+        // HU #10627 — cancelar invitación pendiente del tenant OT resuelto (propio para
+        // ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin).
+        group.MapDelete("/invitations/{invitationId:guid}", CancelInvitationAsync)
+            .WithName("AdminOtCancelInvitation")
+            .WithSummary("Cancela una invitación pendiente del tenant OT")
+            .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
@@ -1308,8 +1342,20 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
+        [FromQuery] bool? onlyDeleted,
         CancellationToken cancellationToken)
     {
+        // HU #10624 AC3/AC4 — onlyDeleted=true: vista de usuarios eliminados del tenant OT
+        // resuelto (mismo criterio de alcance que el listado normal — propio tenant para
+        // ot_admin, o el indicado por transitOfficeId para SuperAdmin), EXCLUSIVA de SuperAdmin
+        // (único rol que puede restaurar — ver POST /api/v1/superadmin/users/{userId}/restore).
+        if (onlyDeleted == true && !IsSuperAdmin(httpContext.User))
+        {
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "Solo SuperAdmin puede ver usuarios eliminados." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
             httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
         if (scopeError is not null)
@@ -1318,6 +1364,54 @@ public static class AdminOtEndpoints
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        if (onlyDeleted == true)
+        {
+            var deletedWithRole = await (
+                from a in db.UserRoleAssignments.AsNoTracking()
+                join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                where a.TenantId == tenantId && a.DeletedAt == null && u.DeletedAt != null
+                select new OtUserDto(
+                    u.Id.ToString(),
+                    u.DisplayName,
+                    u.Email,
+                    r.Name,
+                    r.Code,
+                    a.RoleId,
+                    u.Status == "active" ? "active" : "inactive",
+                    null,
+                    false,
+                    u.RowVersion,
+                    u.DeletedAt)
+            ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+            var deletedWithoutRole = await (
+                from u in db.Users.AsNoTracking()
+                where u.HomeTenantId == tenantId
+                      && u.DeletedAt != null
+                      && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.TenantId == tenantId && a.DeletedAt == null)
+                select new OtUserDto(
+                    u.Id.ToString(),
+                    u.DisplayName,
+                    u.Email,
+                    null,
+                    null,
+                    null,
+                    u.Status == "active" ? "active" : "inactive",
+                    null,
+                    false,
+                    u.RowVersion,
+                    u.DeletedAt)
+            ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new
+            {
+                data = deletedWithRole.Concat(deletedWithoutRole)
+                    .OrderByDescending(x => x.DeletedAt)
+                    .ToList(),
+            });
+        }
 
         var activeUsers = await (
             from a in db.UserRoleAssignments.AsNoTracking()
@@ -1585,6 +1679,105 @@ public static class AdminOtEndpoints
         }
     }
 
+    private static async Task<IResult> ResendInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        ResendInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var resentBy = ResolveUserId(httpContext.User);
+        if (resentBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new ResendInvitationCommand(invitationId, tenantId, resentBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece al tenant OT resuelto." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotPendingException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_PENDING", message = "La invitación ya no está pendiente (fue aceptada o cancelada)." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ResendCooldownActiveException ex)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.Json(
+                new
+                {
+                    error = "RESEND_COOLDOWN_ACTIVE",
+                    message = $"Debes esperar antes de reenviar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                    retryAfterSeconds,
+                },
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+    }
+
+    private static async Task<IResult> CancelInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        CancelInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var cancelledBy = ResolveUserId(httpContext.User);
+        if (cancelledBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            await handler.HandleAsync(
+                new CancelInvitationCommand(invitationId, tenantId, cancelledBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.NoContent();
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece a este tenant OT." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotPendingException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_PENDING", message = "La invitación ya no está pendiente (fue aceptada o cancelada previamente)." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
     private const string TransitOfficeTenantWriteRepositoryRoleCode = "ot_admin";
 
@@ -1649,6 +1842,8 @@ public static class AdminOtEndpoints
     // el valor leído de OtUserDto.RowVersion).
     private sealed record DeleteOtUserRequest(long RowVersion);
 
+    // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Ver eliminados" de
+    // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
     private sealed record OtUserDto(
         string Id,
         string FullName,
@@ -1659,5 +1854,6 @@ public static class AdminOtEndpoints
         string Status,
         DateTimeOffset? CreatedAt,
         bool IsSuspended,
-        long RowVersion);
+        long RowVersion,
+        DateTimeOffset? DeletedAt = null);
 }

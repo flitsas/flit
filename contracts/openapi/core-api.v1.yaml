@@ -17,6 +17,10 @@ servers:
 tags:
   - name: Auth
     description: Autenticación y sesión (login, perfil del usuario).
+  - name: Security · Invitaciones
+    description: >
+      Reenvío de invitaciones pendientes (rol SuperAdmin cualquier tenant, o
+      AdminCompany/ot_admin solo su propio tenant).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
   - name: Admin · Tenants OT
@@ -157,6 +161,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/security/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Security · Invitaciones]
+      operationId: securityResendInvitation
+      summary: Reenvía una invitación pendiente (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo. SuperAdmin puede reenviar
+        cualquier invitación del sistema; AdminCompany solo las de su propio tenant
+        (mismo alcance que `POST /api/v1/security/invitations`). Rechaza el reenvío si
+        la invitación ya no está pendiente (409) o si no ha pasado el cooldown
+        anti-abuso (~2 minutos, configurable) desde el último envío (429).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
+
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -861,6 +916,10 @@ paths:
         Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto
         (propio para ot_admin, o el indicado por `?transitOfficeId=` para
         SuperAdmin). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        Con `?onlyDeleted=true` (#10624) lista en su lugar los usuarios
+        eliminados (soft-delete, `deletedAt != null`) de ese mismo tenant OT
+        resuelto — EXCLUSIVO de SuperAdmin (403 para ot_admin). Sin este
+        parámetro el comportamiento es exactamente el de antes.
       security:
         - bearerAuth: []
       parameters:
@@ -868,9 +927,17 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados del tenant OT
+            resuelto (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
       responses:
         "200":
-          description: Usuarios del tenant OT resuelto.
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del tenant OT resuelto.
           content:
             application/json:
               schema:
@@ -878,7 +945,9 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: >
+            Sin rol SuperAdmin u ot_admin, o `onlyDeleted=true` solicitado por
+            un caller distinto de SuperAdmin.
           content:
             application/json:
               schema:
@@ -1090,6 +1159,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/security/users:
+    get:
+      tags: [Security]
+      operationId: securityListUsers
+      summary: Lista usuarios activos e invitaciones pendientes del alcance del caller
+      description: >
+        AdminCompany ve solo su propio tenant; SuperAdmin ve los usuarios de
+        todas las compañías (excepto su propio tenant interno). Con
+        `?onlyDeleted=true` (#10624) lista en su lugar los usuarios eliminados
+        (soft-delete, `deletedAt != null`) de CUALQUIER tenant — EXCLUSIVO de
+        SuperAdmin (403 en otro caso, incluido AdminCompany), ya que solo
+        SuperAdmin puede restaurar (`POST /api/v1/superadmin/users/{userId}/restore`).
+        Sin este parámetro el comportamiento es exactamente el de antes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados de cualquier
+            tenant (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del alcance del caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TenantUserItem"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: "`onlyDeleted=true` solicitado por un caller distinto de SuperAdmin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/security/users/{userId}:
     parameters:
       - name: userId
@@ -1185,6 +1296,161 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtResendInvitation
+      summary: Reenvía una invitación pendiente del tenant OT (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo, para la invitación del tenant
+        OT resuelto (propio para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). Rechaza el reenvío si la invitación ya no está pendiente (409) o
+        si no ha pasado el cooldown anti-abuso (~2 minutos, configurable) desde el
+        último envío (429). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            La invitación no existe o no pertenece al tenant OT resuelto (o no existe
+            un tenant OT vinculado al transitOfficeId indicado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
+
+  /api/v1/security/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Security]
+      operationId: securityCancelInvitation
+      summary: Cancela una invitación pendiente (HU #10627)
+      description: >
+        Anula una invitación pendiente (distinto de reenviarla, HU #10625): el enlace de
+        activación anterior deja de funcionar y el email queda disponible de nuevo para una
+        nueva invitación. Mismo alcance que POST /security/invitations — SuperAdmin puede
+        cancelar la invitación de cualquier empresa; AdminCompany solo las de su propio tenant.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin o AdminCompany.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtCancelInvitation
+      summary: Cancela una invitación pendiente del tenant OT (HU #10627)
+      description: >
+        Anula una invitación pendiente del tenant OT resuelto (propio para ot_admin, o el
+        indicado por `?transitOfficeId=` para SuperAdmin). El enlace de activación anterior
+        deja de funcionar y el email queda disponible para una nueva invitación. Requiere JWT
+        con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Invitación cancelada.
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La invitación no existe en el tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada previamente).
           content:
             application/json:
               schema:
@@ -4823,9 +5089,38 @@ components:
         emailSent: { type: boolean }
       required: [invitationId, email, emailSent]
 
+    ResendInvitationResponse:
+      type: object
+      description: >
+        Resultado de reenviar una invitación pendiente (HU #10625). Mismo shape en
+        `/api/v1/security/invitations/{invitationId}/resend` y
+        `/api/v1/admin/ot/invitations/{invitationId}/resend`.
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailSent: { type: boolean }
+      required: [invitationId, email, emailSent]
+
+    ResendCooldownErrorResponse:
+      type: object
+      description: >
+        Error 429 del cooldown anti-abuso de reenvío (HU #10625 AC2). El endpoint
+        Compañía usa `code`; el endpoint OT usa `error` — ambos incluyen `message` y
+        `retryAfterSeconds`.
+      properties:
+        code: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        error: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        message: { type: string }
+        retryAfterSeconds:
+          type: integer
+          description: Segundos hasta que se pueda reenviar de nuevo.
+      required: [message, retryAfterSeconds]
+
     OtUserItem:
       type: object
-      description: Usuario (activo, sin rol o invitación pendiente) del tenant OT.
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del tenant OT, o
+        usuario eliminado cuando se lista con `?onlyDeleted=true` (#10624).
       properties:
         id: { type: string }
         fullName: { type: string }
@@ -4845,6 +5140,14 @@ components:
             Versión de fila del usuario (#10621). Requerida para editar (PATCH
             /users/{userId}) con concurrencia optimista; 0 para invitaciones
             pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
       required: [id, fullName, email, status, isSuspended, rowVersion]
 
     UpdateOtUserRequest:
@@ -4912,6 +5215,43 @@ components:
           format: int64
           description: Versión de fila leída por el cliente (concurrencia optimista).
       required: [rowVersion]
+
+    TenantUserItem:
+      type: object
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del alcance del
+        caller, o usuario eliminado cuando se lista con `?onlyDeleted=true`
+        (#10624).
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, nullable: true }
+        roleCode: { type: string, nullable: true }
+        roleId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        createdAt: { type: string, format: date-time, nullable: true }
+        isSuspended: { type: boolean }
+        tenantId: { type: string, format: uuid, nullable: true }
+        tenantName: { type: string, nullable: true }
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
 
     AuditLogEntry:
       type: object

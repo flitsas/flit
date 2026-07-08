@@ -19,6 +19,19 @@ export interface TenantUser {
   isSuspended: boolean;
   tenantId?: string | null;
   tenantName?: string | null;
+  /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
+  rowVersion: number;
+  /** HU #10623/#10624: fecha de soft-delete. `null`/ausente en el listado normal;
+   *  siempre poblado cuando se listó con `getUsers(true)` (onlyDeleted=true). */
+  deletedAt?: string | null;
+}
+
+/** HU #10621: payload de edición — displayName/email opcionales ("no tocar ese campo");
+ *  rowVersion obligatorio (concurrencia optimista, AC3). */
+export interface UpdateUserRequest {
+  displayName?: string;
+  email?: string;
+  rowVersion: number;
 }
 
 export interface TenantRole {
@@ -83,9 +96,14 @@ export async function createInvitation(
   }
 }
 
-/** GET /api/v1/security/users → lista de usuarios del tenant. */
-export async function getUsers(): Promise<TenantUser[]> {
-  return apiFetch<TenantUser[]>("/api/v1/security/users");
+/** GET /api/v1/security/users → lista de usuarios del tenant (AdminCompany) o de todas las
+ *  compañías (SuperAdmin, excepto su tenant interno). Con `onlyDeleted=true` (HU #10624) lista en
+ *  su lugar los usuarios eliminados (soft-delete) de CUALQUIER tenant — EXCLUSIVO de SuperAdmin
+ *  (403 en otro caso). Omitido o `false`: comportamiento normal, sin cambios. */
+export async function getUsers(onlyDeleted?: boolean): Promise<TenantUser[]> {
+  return apiFetch<TenantUser[]>("/api/v1/security/users", {
+    query: onlyDeleted ? { onlyDeleted: true } : undefined,
+  });
 }
 
 /** GET /api/v1/security/roles */
@@ -168,6 +186,77 @@ export async function blockUser(
 /** DELETE /api/v1/security/users/{userId}/suspend — levanta la suspensión activa. */
 export async function unblockUser(userId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/security/users/${userId}/suspend`, {
+    method: "DELETE",
+  });
+}
+
+/** PATCH /api/v1/security/users/{userId} — edita nombre y/o correo del usuario (HU #10621).
+ *  409 con código USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
+ *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+export async function updateUser(userId: string, request: UpdateUserRequest): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/users/${userId}`, {
+    method: "PATCH",
+    body: request,
+  });
+}
+
+/** DELETE /api/v1/security/users/{userId} — elimina (soft-delete reversible) a un usuario
+ *  dentro del alcance del caller (AdminCompany su propio tenant, SuperAdmin cualquiera) —
+ *  HU #10623. `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+ *  `TenantUser.rowVersion`). Errores mapeados por el backend: 400 SELF_DELETE, 409
+ *  LAST_ACTIVE_ADMIN | CONCURRENCY_CONFLICT, 404 si el usuario ya no existe. NO toca roles
+ *  ni suspensiones: restaurar (`restoreUser`, SOLO SuperAdmin) recupera el mismo estado. */
+export async function deleteUser(userId: string, rowVersion: number): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/users/${userId}`, {
+    method: "DELETE",
+    body: { rowVersion },
+  });
+}
+
+/** POST /api/v1/superadmin/users/{userId}/restore — restaura (deshace el soft-delete) a un
+ *  usuario eliminado (HU #10623). SOLO SuperAdmin. No toca roles ni suspensiones: el usuario
+ *  recupera exactamente el mismo estado que tenía al eliminarse. 409 USER_NOT_DELETED si el
+ *  usuario no estaba eliminado; 404 si no existe. */
+export async function restoreUser(userId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/superadmin/users/${userId}/restore`, {
+    method: "POST",
+  });
+}
+
+/** Resultado de reenviar una invitación pendiente (HU #10626) — mismo shape en el endpoint
+ *  Compañía y en el OT (ver admin-ot-security.ts). */
+export interface ResendInvitationResult {
+  invitationId: string;
+  email: string;
+  emailSent: boolean;
+}
+
+/** POST /api/v1/security/invitations/{invitationId}/resend — reenvía una invitación pendiente
+ *  (HU #10626): SIEMPRE regenera el token de activación (invalida el enlace anterior) y reenvía
+ *  el correo. Mismo alcance de autorización que crear invitaciones (AdminCompany su tenant,
+ *  SuperAdmin cualquiera). El `id` de la fila YA es el `invitationId` cuando `status === "pending"`
+ *  (`TenantUser.id`) — no hace falta un campo nuevo. Errores: 409 si la invitación ya no está
+ *  pendiente (fue aceptada o cancelada); 429 con `{ code, message, retryAfterSeconds }` si el
+ *  cooldown anti-abuso (~2 min, configurable) sigue activo (AC2) — este endpoint usa `code`
+ *  (el de OT usa `error`, ver ResendInvitationButton). */
+export async function resendInvitation(invitationId: string): Promise<ResendInvitationResult> {
+  return apiFetch<ResendInvitationResult>(`/api/v1/security/invitations/${invitationId}/resend`, {
+    method: "POST",
+  });
+}
+
+/** DELETE /api/v1/security/invitations/{invitationId} — cancela (anula) una invitación
+ *  pendiente (HU #10627/#10628): el enlace de activación anterior deja de funcionar y el
+ *  email queda disponible de nuevo para una nueva invitación. Distinto de eliminar un usuario
+ *  (`deleteUser`/`DeleteUserDialog`): aquí todavía no existe ninguna cuenta creada. Mismo
+ *  alcance que crear invitaciones (AdminCompany su tenant, SuperAdmin cualquiera). El `id` de
+ *  la fila YA es el `invitationId` cuando `status === "pending"` (`TenantUser.id`) — no hace
+ *  falta un campo nuevo. Errores: 404 si la invitación ya no existe o no pertenece al alcance
+ *  del caller; 409 si ya no está pendiente (fue aceptada o cancelada previamente por otra
+ *  persona — condición de carrera, AC3). Sin cuerpo de petición ni de respuesta (204).
+ */
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/invitations/${invitationId}`, {
     method: "DELETE",
   });
 }

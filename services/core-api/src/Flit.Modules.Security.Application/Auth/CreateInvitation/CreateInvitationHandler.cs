@@ -56,12 +56,12 @@ public sealed partial class CreateInvitationHandler(
             new UserInvitationData(command.TenantId, email, command.FullName, roleIds, token.TokenHash, command.InvitedBy),
             cancellationToken);
 
-        var link = BuildActivateLink(options.ActivateUrlBase, token.RawToken);
+        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
         var message = new EmailMessage(
             email,
             email,
-            "Invitación a FLIT — Activa tu cuenta",
-            BuildHtmlBody(command.FullName, link));
+            InvitationEmailTemplate.Subject,
+            InvitationEmailTemplate.BuildHtmlBody(command.FullName, link));
 
         LogActivationLinkDev(logger, link);
 
@@ -86,19 +86,4 @@ public sealed partial class CreateInvitationHandler(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[DEV] Activation link (use this to test locally): {Link}")]
     private static partial void LogActivationLinkDev(ILogger logger, string link);
-
-    private static string BuildActivateLink(string activateUrlBase, string rawToken)
-    {
-        var separator = activateUrlBase.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        return $"{activateUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
-    }
-
-    private static string BuildHtmlBody(string fullName, string link) => $"""
-        <p>Hola {System.Net.WebUtility.HtmlEncode(fullName)},</p>
-        <p>Has sido invitado a unirte a FLIT.</p>
-        <p>Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:</p>
-        <p><a href="{link}">Activar mi cuenta</a></p>
-        <p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>
-        <p>— Equipo FLIT</p>
-        """;
 }

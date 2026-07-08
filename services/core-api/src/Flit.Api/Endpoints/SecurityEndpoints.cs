@@ -1,7 +1,11 @@
+using System.Globalization;
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
@@ -147,6 +151,114 @@ public static class SecurityEndpoints
                     statusCode: StatusCodes.Status409Conflict);
             }
         });
+
+        // HU #10625 — reenviar invitación pendiente: SIEMPRE regenera el token de activación
+        // (el enlace anterior queda invalidado) y reenvía el correo. Mismo alcance que crear
+        // invitaciones: SuperAdmin puede reenviar cualquier invitación; AdminCompany solo las
+        // de su propio tenant.
+        group.MapPost("/invitations/{invitationId:guid}/resend", async (
+            Guid invitationId,
+            ClaimsPrincipal caller,
+            ResendInvitationHandler handler,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var resentBy))
+                return Results.Unauthorized();
+
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // SuperAdmin puede reenviar cualquier invitación del sistema (sin restricción de
+            // tenant); AdminCompany solo las de su propio tenant (mismo alcance que /invitations).
+            Guid? scopeTenantId = isSuperAdmin ? null : callerTenantId;
+
+            try
+            {
+                var result = await handler.HandleAsync(
+                    new ResendInvitationCommand(invitationId, scopeTenantId, resentBy),
+                    cancellationToken);
+
+                return Results.Ok(new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
+            }
+            catch (InvitationNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_FOUND", "La invitación no existe o no pertenece a tu alcance."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (InvitationNotPendingException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_PENDING", "La invitación ya no está pendiente (fue aceptada o cancelada)."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (ResendCooldownActiveException ex)
+            {
+                var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+                httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                return Results.Json(
+                    new ResendCooldownResponse(
+                        "RESEND_COOLDOWN_ACTIVE",
+                        $"Debes esperar antes de reenviar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                        retryAfterSeconds),
+                    statusCode: StatusCodes.Status429TooManyRequests);
+            }
+        });
+
+        // HU #10627 — cancelar invitación pendiente. Distinto de reenviar (HU #10625): anula la
+        // invitación en vez de reenviar el correo. Mismo patrón de alcance que POST /invitations:
+        // SuperAdmin puede cancelar la invitación de cualquier tenant; AdminCompany solo las de
+        // su propio tenant.
+        group.MapDelete("/invitations/{invitationId:guid}", async (
+            Guid invitationId,
+            ClaimsPrincipal caller,
+            CancelInvitationHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var cancelledBy))
+                return Results.Unauthorized();
+
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // SuperAdmin no restringe por tenant (alcance global); AdminCompany solo su propio tenant.
+            Guid? scopeTenantId = isSuperAdmin ? null : callerTenantId;
+
+            try
+            {
+                await handler.HandleAsync(
+                    new CancelInvitationCommand(invitationId, scopeTenantId, cancelledBy),
+                    cancellationToken);
+
+                return Results.NoContent();
+            }
+            catch (InvitationNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_FOUND", "La invitación no existe o no pertenece a tu alcance."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (InvitationNotPendingException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_PENDING", "La invitación ya no está pendiente (fue aceptada o cancelada previamente)."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
         // HU #10504: acepta un query param opcional targetEntityType ("COMPANY" | "TRANSIT_OFFICE")
@@ -401,6 +513,7 @@ public static class SecurityEndpoints
         group.MapGet("/users", async (
             ClaimsPrincipal caller,
             FlitDbContext db,
+            bool? onlyDeleted,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
@@ -412,6 +525,66 @@ public static class SecurityEndpoints
             var isSuperAdmin = caller.Claims.Any(c =>
                 c.Type == AdminAuthorization.RoleClaimType
                 && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // HU #10624 AC3/AC4 — onlyDeleted=true: vista administrativa GLOBAL de usuarios
+            // eliminados (cualquier tenant), EXCLUSIVA de SuperAdmin (único rol que puede
+            // restaurar — ver POST /api/v1/superadmin/users/{userId}/restore). Sin este
+            // parámetro el comportamiento no cambia (compatibilidad hacia atrás).
+            if (onlyDeleted == true)
+            {
+                if (!isSuperAdmin)
+                    return Results.Json(
+                        new ErrorResponse("FORBIDDEN_SCOPE", "Solo SuperAdmin puede ver usuarios eliminados."),
+                        statusCode: StatusCodes.Status403Forbidden);
+
+                var deletedWithRole = await (
+                    from a in db.UserRoleAssignments.AsNoTracking()
+                    join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                    join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                    join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
+                    where a.DeletedAt == null && u.DeletedAt != null
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        r.Name,
+                        r.Code,
+                        a.RoleId,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        u.RowVersion,
+                        u.DeletedAt)
+                ).ToListAsync(cancellationToken);
+
+                var deletedWithoutRole = await (
+                    from u in db.Users.AsNoTracking()
+                    join t in db.Tenants.AsNoTracking() on u.HomeTenantId equals t.Id
+                    where u.DeletedAt != null
+                          && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.DeletedAt == null)
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        null,
+                        null,
+                        null,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        u.RowVersion,
+                        u.DeletedAt)
+                ).ToListAsync(cancellationToken);
+
+                return Results.Ok(deletedWithRole.Concat(deletedWithoutRole)
+                    .OrderByDescending(x => x.DeletedAt)
+                    .ToList());
+            }
+
             var now = DateTimeOffset.UtcNow;
 
             if (isSuperAdmin)
@@ -725,7 +898,11 @@ public static class SecurityEndpoints
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion);
+    // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Eliminados" de
+    // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null);
 
     private sealed record ErrorResponse(string Code, string Message);
+
+    private sealed record ResendCooldownResponse(string Code, string Message, int RetryAfterSeconds);
 }
