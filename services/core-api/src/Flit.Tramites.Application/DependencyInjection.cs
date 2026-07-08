@@ -143,6 +143,8 @@ public static class DependencyInjection
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
+        // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
+        services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
 
         // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
         // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura

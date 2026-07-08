@@ -45,6 +45,8 @@ import type {
   ProcedureInstanceSummary,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
+  RuesPersonLookupInput,
+  RuesPersonLookupResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -400,6 +402,22 @@ export const tramitesClient = {
   ) =>
     request<RuntPersonLookupResult>(
       `/api/v1/tramites/instances/${instanceId}/runt-person`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  // Autopopulado JURÍDICO del actor desde RUES por NIT (bifurcación del "Consultar RUNT" para
+  // persona jurídica). Siempre 200 ante petición válida; `found=false` => fallback manual.
+  ruesPersonLookup: (
+    instanceId: string,
+    input: RuesPersonLookupInput,
+    tenantId?: string,
+  ) =>
+    request<RuesPersonLookupResult>(
+      `/api/v1/tramites/instances/${instanceId}/rues-lookup`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),

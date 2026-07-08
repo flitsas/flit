@@ -15,6 +15,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// Contrato congelado consumido por el frontend (Slice 2).
 /// <c>rol</c>: comprador|vendedor; <c>tipoDocumento</c>: CC|CE|NIT|PAS|TI.
 /// <c>ciudad</c>/<c>direccion</c> son opcionales y se persisten en <c>actor.metadata</c> (JSON).
+/// <c>representanteLegal</c>: solo aplica a persona jurídica (NIT); es una persona natural
+/// capturada/consultada en el RUNT y se persiste embebida en <c>actor.metadata</c> (sin DDL).
 /// </summary>
 public sealed record ActorInput(
     string Rol,
@@ -26,7 +28,8 @@ public sealed record ActorInput(
     string? Ciudad = null,
     string? Direccion = null,
     string? PersonType = null,
-    bool EsRepresentanteLegal = false);
+    bool EsRepresentanteLegal = false,
+    ActorRepresentanteLegal? RepresentanteLegal = null);
 
 public sealed record ActorDto(
     string Rol,
@@ -38,7 +41,20 @@ public sealed record ActorDto(
     string? Ciudad = null,
     string? Direccion = null,
     string? PersonType = null,
-    bool EsRepresentanteLegal = false);
+    bool EsRepresentanteLegal = false,
+    ActorRepresentanteLegal? RepresentanteLegal = null);
+
+/// <summary>
+/// Representante legal / apoderado de una persona jurídica (persona natural). Datos capturados
+/// manualmente o autopoblados desde el RUNT. Todos opcionales: es información de contacto, no un
+/// actor de primera clase (no participa en biométrica ni en los gates del wizard).
+/// </summary>
+public sealed record ActorRepresentanteLegal(
+    string? TipoDocumento,
+    string? NumeroDocumento,
+    string? NombreCompleto,
+    string? Email,
+    string? Telefono);
 
 public sealed record PutActorsRequest(IReadOnlyList<ActorInput> Actors);
 
@@ -186,7 +202,7 @@ public sealed class PutActorsHandler(
                 Phone = string.IsNullOrWhiteSpace(a.Telefono) ? null : a.Telefono.Trim(),
                 PersonType = ActorPersonTypes.Normalize(a.PersonType),
                 EsRepresentanteLegal = a.EsRepresentanteLegal,
-                Metadata = SerializeMetadata(a.Ciudad, a.Direccion),
+                Metadata = SerializeMetadata(a.Ciudad, a.Direccion, a.RepresentanteLegal),
                 CreatedAt = now,
             };
             instance.Actors.Add(actor);
@@ -262,7 +278,7 @@ public sealed class PutActorsHandler(
         new(instance.Actors
             .Select(a =>
             {
-                var (ciudad, direccion) = ParseMetadata(a.Metadata);
+                var (ciudad, direccion, rl) = ParseMetadata(a.Metadata);
                 return new ActorDto(
                     a.ActorType,
                     a.DocumentType,
@@ -273,39 +289,66 @@ public sealed class PutActorsHandler(
                     ciudad,
                     direccion,
                     a.PersonType,
-                    a.EsRepresentanteLegal);
+                    a.EsRepresentanteLegal,
+                    rl);
             })
             .ToList());
 
     private static readonly JsonSerializerOptions MetadataJson = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Serializa ciudad/dirección al JSON de <c>actor.metadata</c>. Vacíos → "{}".</summary>
-    private static string SerializeMetadata(string? ciudad, string? direccion)
+    /// <summary>
+    /// Serializa ciudad/dirección + representante legal al JSON de <c>actor.metadata</c>.
+    /// Sin ningún dato → "{}".
+    /// </summary>
+    private static string SerializeMetadata(string? ciudad, string? direccion, ActorRepresentanteLegal? rl)
     {
         var c = string.IsNullOrWhiteSpace(ciudad) ? null : ciudad.Trim();
         var d = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim();
-        return c is null && d is null
+        var repLegal = NormalizeRepresentanteLegal(rl);
+        return c is null && d is null && repLegal is null
             ? "{}"
-            : JsonSerializer.Serialize(new ActorMetadata(c, d), MetadataJson);
+            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal), MetadataJson);
     }
 
-    /// <summary>Lee ciudad/dirección de <c>actor.metadata</c>. Robusto ante null/"{}"/JSON inválido.</summary>
-    private static (string? Ciudad, string? Direccion) ParseMetadata(string? metadata)
+    /// <summary>
+    /// Lee ciudad/dirección + representante legal de <c>actor.metadata</c>. Robusto ante
+    /// null/"{}"/JSON inválido.
+    /// </summary>
+    private static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal) ParseMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
-            return (null, null);
+            return (null, null, null);
         try
         {
             var m = JsonSerializer.Deserialize<ActorMetadata>(metadata, MetadataJson);
-            return (m?.Ciudad, m?.Direccion);
+            return (m?.Ciudad, m?.Direccion, NormalizeRepresentanteLegal(m?.RepresentanteLegal));
         }
         catch (JsonException)
         {
-            return (null, null);
+            return (null, null, null);
         }
     }
 
-    private sealed record ActorMetadata(string? Ciudad, string? Direccion);
+    /// <summary>Trim + colapso a null si el representante legal viene vacío en todos sus campos.</summary>
+    private static ActorRepresentanteLegal? NormalizeRepresentanteLegal(ActorRepresentanteLegal? rl)
+    {
+        if (rl is null)
+            return null;
+        string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        var tipo = Clean(rl.TipoDocumento);
+        var numero = Clean(rl.NumeroDocumento);
+        var nombre = Clean(rl.NombreCompleto);
+        var email = Clean(rl.Email);
+        var telefono = Clean(rl.Telefono);
+        return tipo is null && numero is null && nombre is null && email is null && telefono is null
+            ? null
+            : new ActorRepresentanteLegal(tipo, numero, nombre, email, telefono);
+    }
+
+    private sealed record ActorMetadata(
+        string? Ciudad,
+        string? Direccion,
+        ActorRepresentanteLegal? RepresentanteLegal = null);
 }
 
 /// <summary>GET de actores del set guardado.</summary>
