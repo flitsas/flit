@@ -11,6 +11,7 @@ import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPan
 import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
+import { SignatureVaultTab } from "@/components/admin/companies/signature-vault/SignatureVaultTab";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
@@ -112,6 +113,7 @@ function CompanyDetail() {
                 otSlot={<OTMatrixPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                baulFirmasSlot={<SignatureVaultTab tenantId={tenantId} />}
               />
             </>
           )}
