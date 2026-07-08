@@ -26,6 +26,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         string name,
         string? description,
         Guid? createdBy,
+        IReadOnlyList<string>? mimeTypesAllowed = null,
+        long? maxSizeBytes = null,
         CancellationToken cancellationToken = default)
     {
         var entity = new DocumentType
@@ -37,6 +39,9 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = createdBy,
+            // RF08/09: null ⇒ vacío/0 ⇒ el AttachmentValidator cae a los límites globales.
+            MimeTypesAllowed = mimeTypesAllowed?.ToList() ?? [],
+            MaxSizeBytes = maxSizeBytes ?? 0,
         };
 
         _context.DocumentTypes.Add(entity);
@@ -78,6 +83,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
                 Description = d.Description,
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
+                MimeTypesAllowed = d.MimeTypesAllowed,
+                MaxSizeBytes = d.MaxSizeBytes,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -103,6 +110,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         string name,
         string? description,
         Guid? updatedBy,
+        IReadOnlyList<string>? mimeTypesAllowed = null,
+        long? maxSizeBytes = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.DocumentTypes
@@ -119,6 +128,11 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         entity.Description = description;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = updatedBy;
+        // RF08/09: solo se tocan los límites si el request los envía (null ⇒ conserva lo existente).
+        if (mimeTypesAllowed is not null)
+            entity.MimeTypesAllowed = mimeTypesAllowed.ToList();
+        if (maxSizeBytes is not null)
+            entity.MaxSizeBytes = maxSizeBytes.Value;
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -208,5 +222,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Description = entity.Description,
         IsActive = entity.IsActive,
         CreatedAt = entity.CreatedAt,
+        MimeTypesAllowed = entity.MimeTypesAllowed,
+        MaxSizeBytes = entity.MaxSizeBytes,
     };
 }

@@ -55,6 +55,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
+            // HU #10522 — Participants alimenta TieneTramitador (RF39) en el contexto del checklist:
+            // el gate "gestor manda" debe verlo igual que el display (GetByIdWithChecklistGraphAsync).
+            .Include(x => x.Participants)
             .Include(x => x.Commercial)
             .Include(x => x.PreflightSnapshots)
             .Include(x => x.BiometricValidations)

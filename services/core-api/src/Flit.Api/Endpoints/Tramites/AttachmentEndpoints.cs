@@ -208,6 +208,37 @@ internal static class AttachmentEndpoints
             };
         }).WithName("GenerarProcedureInstanceImpronta");
 
+        // POST autogenerar RUES (RF36) para actor NIT y adjuntarlo -> 201 GenerarRuesAttachmentResult.
+        // Aditivo: si la integración está deshabilitada (Rues:Enabled=false), responde 409 rues_autogen_disabled
+        // y el operador sube el RUES manualmente (el tipo de documento y su regla condicional ya existen).
+        group.MapPost("/instances/{id:guid}/attachments/generate-rues", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            GenerarRuesAttachmentHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var userId = ResolveUserId(http.User);
+            if (userId is null)
+                return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el usuario autenticado.");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, userId.Value, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar el RUES en estado borrador."),
+                "rues_ya_existe" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un documento RUES cargado para este trámite."),
+                "actor_nit_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El RUES solo aplica a actores con documento NIT."),
+                "rues_autogen_disabled" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La autogeneración de RUES no está habilitada; suba el certificado manualmente."),
+                "provider_error" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El proveedor RUES rechazó la solicitud."),
+                "provider_unavailable" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor RUES no está disponible temporalmente."),
+                _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.AttachmentId}", result),
+            };
+        }).WithName("GenerarProcedureInstanceRues");
+
         // GET checklist computado -> { items, faltanObligatorios, completo }
         group.MapGet("/instances/{id:guid}/checklist", async (
             Guid id,

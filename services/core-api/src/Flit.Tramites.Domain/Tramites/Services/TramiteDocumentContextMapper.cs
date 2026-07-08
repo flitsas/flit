@@ -18,8 +18,16 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 ///   <item><b>Servicio especial</b> (RF33): campo <c>vehicle_service</c> del RUNT que contiene
 ///   <c>ESPECIAL</c>.</item>
 ///   <item><b>Tramitador</b> (RF39): un participante con rol <c>mandatario</c>.</item>
-///   <item><b>Importado, leasing, prenda, cambio de carrocería</b>: sin campo de captura propio
-///   hoy ⇒ <c>false</c> (pendiente de habilitar su captura para que la regla condicional aplique).</item>
+///   <item><b>Leasing</b> (RF38) y <b>cambio de carrocería</b> (RF33): banderas manuales del
+///   operador persistidas como field_values <c>es_leasing</c> / <c>cambio_carroceria</c>
+///   (mismo canal que <c>vehicle_service</c>); en producción v1.0 son un checkbox/selector del
+///   paso de vehículo.</item>
+///   <item><b>Prenda</b> (RF37): field_value <c>accion_prenda</c> (<c>registrar|levantar|omitir</c>);
+///   solo <c>registrar</c> exige los documentos de prenda. La presencia automática desde la
+///   consulta RUNT (<c>guaranteeMobiliary</c>) queda pendiente de que el DTO de consulta la pueble.</item>
+///   <item><b>Importado</b> (RF33): bandera manual del operador persistida como field_value
+///   <c>es_importado</c> (checkbox del paso de vehículo en matrícula inicial); dispara pedir el
+///   documento de Aduana.</item>
 /// </list>
 /// </summary>
 public static class TramiteDocumentContextMapper
@@ -28,6 +36,11 @@ public static class TramiteDocumentContextMapper
     private const string OwnerDocumentTypeFieldKey = "owner_document_type";
     private const string VehicleServiceFieldKey = "vehicle_service";
     private const string ServicioEspecialMarker = "ESPECIAL";
+    private const string ImportadoFieldKey = "es_importado";
+    private const string LeasingFieldKey = "es_leasing";
+    private const string CambioCarroceriaFieldKey = "cambio_carroceria";
+    private const string AccionPrendaFieldKey = "accion_prenda";
+    private const string AccionPrendaRegistrar = "registrar";
 
     /// <summary>
     /// Construye el contexto documental a partir de la instancia (con sus colecciones cargadas:
@@ -62,14 +75,30 @@ public static class TramiteDocumentContextMapper
         var tieneTramitador = participants.Any(p =>
             string.Equals(p.Rol, ParticipantRoles.Mandatario, StringComparison.OrdinalIgnoreCase));
 
+        // Banderas manuales del paso de vehículo (persistidas como field_values por el wizard).
+        var esImportado = LeerBool(fieldValues, ImportadoFieldKey);
+        var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
+        var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
+        // Prenda: solo "registrar" exige inscripción/paz y salvo; "levantar"/"omitir" no.
+        var accionPrenda = LeerTexto(fieldValues, AccionPrendaFieldKey);
+        var tienePrenda = string.Equals(accionPrenda, AccionPrendaRegistrar, StringComparison.OrdinalIgnoreCase);
+
         return new TramiteDocumentContext(
-            EsImportado: false,
+            EsImportado: esImportado,
             EsPersonaNatural: esPersonaNatural,
             EsNit: esNit,
-            TieneLeasing: false,
-            TienePrenda: false,
+            TieneLeasing: tieneLeasing,
+            TienePrenda: tienePrenda,
             TieneTramitador: tieneTramitador,
-            CambioCarroceria: false,
+            CambioCarroceria: cambioCarroceria,
             ServicioEspecial: servicioEspecial);
     }
+
+    private static string? LeerTexto(IEnumerable<ProcedureInstanceFieldValue> fieldValues, string fieldKey) =>
+        fieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+
+    private static bool LeerBool(IEnumerable<ProcedureInstanceFieldValue> fieldValues, string fieldKey) =>
+        string.Equals(LeerTexto(fieldValues, fieldKey), "true", StringComparison.OrdinalIgnoreCase);
 }

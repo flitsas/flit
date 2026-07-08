@@ -206,6 +206,35 @@ public static class ChecklistEngine
         return ComputeFromItems(tip.Codigo, tip.Nombre, effective, checklistEstado, docTipos);
     }
 
+    /// <summary>
+    /// Computa el checklist tomando como base la <b>matriz documental resuelta del gestor</b>
+    /// (HU #10522, RF17/RF22 — el gestor manda la lista, obligatoriedad y orden), en vez del
+    /// catálogo plano. Sobre esa base aplica —igual que <see cref="ComputeConditional"/>— las
+    /// reglas condicionales por atributo del trámite (<paramref name="context"/>) y los parámetros
+    /// de la compañía gestora (<paramref name="companyParams"/>), y resuelve la satisfacción. No
+    /// depende de <see cref="TramiteTipologiaCatalog"/> (solo lo usa para el nombre visible, con
+    /// fallback a <paramref name="codigo"/>), de modo que soporta modalidades que el catálogo en
+    /// código aún no describe. <paramref name="matrixItems"/> ya viene ordenada por el resolutor.
+    /// </summary>
+    public static ChecklistResultado ComputeFromMatrix(
+        string? codigo,
+        IReadOnlyList<ChecklistItem> matrixItems,
+        IReadOnlyDictionary<string, bool>? checklistEstado,
+        IReadOnlyCollection<string>? docTipos,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules,
+        IReadOnlyCollection<CompanyDocumentParam>? companyParams)
+    {
+        ArgumentNullException.ThrowIfNull(matrixItems);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var nombre = TramiteTipologiaCatalog.Get(codigo)?.Nombre ?? codigo ?? string.Empty;
+
+        var conditional = ApplyConditional(matrixItems, context, rules);
+        var effective = ApplyCompanyParams(conditional, companyParams);
+        return ComputeFromItems(codigo ?? string.Empty, nombre, effective, checklistEstado, docTipos);
+    }
+
     private static ChecklistResultado ComputeFromItems(
         string codigo,
         string nombre,

@@ -22,15 +22,16 @@ public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
-    DocumentBehaviorOptions? behaviorOptions = null,
-    IConsolidadoMatrixOrderProvider? matrixOrderProvider = null)
+    ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
+        // reglas condicionales) resuelva la completitud con el mismo contexto que radicación.
+        var instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -40,16 +41,14 @@ public sealed class GenerarConsolidadoHandler(
         if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
             return (null, SubmitGate.FurRequerido);
 
-        if (!DocumentosObligatoriosCompletos(instance))
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
+        if (!(docsCompletos ?? DocumentosObligatoriosCompletos(instance)))
             return (null, SubmitGate.DocumentosIncompletos);
 
-        // RF26 (flag OFF por defecto) — si ConsolidadoFromMatrix está activo y hay proveedor de matriz,
-        // ordena por la prelación configurada; si no, orden hard-coded por modalidad (comportamiento actual).
-        IReadOnlyList<string>? matrixOrder = null;
-        if (behaviorOptions?.ConsolidadoFromMatrix == true && matrixOrderProvider is not null)
-            matrixOrder = await matrixOrderProvider.GetOrderAsync(instance, ct);
-
-        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada, matrixOrder);
+        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 

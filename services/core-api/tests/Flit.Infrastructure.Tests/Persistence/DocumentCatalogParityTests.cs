@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using Xunit;
 
@@ -52,6 +53,37 @@ public sealed class DocumentCatalogParityTests
 
         missing.Should().BeEmpty(
             "todo documento de CatalogoDocumentos debe tener su fila en el seed del catálogo");
+    }
+
+    [Fact]
+    public void EveryConditionalObligatoriedadRuleDocumentExistsInCatalog()
+    {
+        // RNF02 (segunda mitad) — paridad: cada documento con REGLA DE OBLIGATORIEDAD (RF30, reglas
+        // condicionales por tipología) debe tener también su tipo en el catálogo (RF32). Cierra la
+        // consistencia reglas↔catálogo: ninguna regla puede apuntar a un documento no cataloged.
+        var sql = LoadSeedSql();
+
+        var docTiposConRegla = new[]
+            {
+                TramiteTipologiaCatalog.CodigoMatriculaInicial,
+                TramiteTipologiaCatalog.CodigoTraspasoStandard,
+            }
+            .SelectMany(ConditionalDocumentRules.For)
+            .Select(r => r.Item.DocTipo)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        docTiposConRegla.Should().NotBeEmpty(
+            "las tipologías de paridad deben declarar reglas de obligatoriedad condicional (RF30)");
+
+        var missing = docTiposConRegla
+            .Where(code => !sql.Contains($"('{code}',", StringComparison.Ordinal))
+            .ToList();
+
+        missing.Should().BeEmpty(
+            "cada documento con regla de obligatoriedad (RF30) debe existir en el catálogo (RNF02)");
     }
 
     [Fact]

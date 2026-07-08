@@ -83,4 +83,53 @@ public sealed class TramiteDocumentContextMapperTests
         TramiteDocumentContextMapper.From(InstanceWith(participantRoles: ["comprador"]))
             .TieneTramitador.Should().BeFalse();
     }
+
+    // ── Banderas manuales del paso de vehículo (RF33/37/38) ──────────────────
+
+    [Fact]
+    public void EsImportadoTrue_DesdeCampo_EsImportado()
+    {
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_importado", "true")]))
+            .EsImportado.Should().BeTrue();
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_importado", "false")]))
+            .EsImportado.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EsLeasingTrue_DesdeCampo_TieneLeasing()
+    {
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_leasing", "true")]))
+            .TieneLeasing.Should().BeTrue();
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_leasing", "false")]))
+            .TieneLeasing.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CambioCarroceriaTrue_DesdeCampo_CambioCarroceria()
+    {
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("cambio_carroceria", "true")]))
+            .CambioCarroceria.Should().BeTrue();
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("cambio_carroceria", "false")]))
+            .CambioCarroceria.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("registrar", true)]
+    [InlineData("levantar", false)]
+    [InlineData("omitir", false)]
+    public void AccionPrenda_SoloRegistrar_TienePrenda(string accion, bool esperado)
+    {
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("accion_prenda", accion)]))
+            .TienePrenda.Should().Be(esperado);
+    }
+
+    [Fact]
+    public void CampoBooleanoNoReconocido_NoActivaBandera()
+    {
+        // Valor distinto de "true" (case-insensitive) ⇒ false; ausencia ⇒ false (cero regresión).
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_leasing", "1")]))
+            .TieneLeasing.Should().BeFalse();
+        TramiteDocumentContextMapper.From(InstanceWith(fields: [("es_leasing", "TRUE")]))
+            .TieneLeasing.Should().BeTrue();
+    }
 }

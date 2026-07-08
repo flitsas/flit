@@ -54,6 +54,11 @@ public static class DependencyInjection
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se
+        // registra en Infraestructura SOLO si Rues:Enabled=true; sin él, el handler cae a carga manual.
+        services.AddScoped<GenerarRuesAttachmentHandler>();
+        // HU #10522 (RF17/RF22) — completitud documental "gestor manda" compartida por display y gates.
+        services.AddScoped<UseCases.ProcedureInstances.ChecklistMatrixCompleteness>();
         services.AddScoped<GetChecklistHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();

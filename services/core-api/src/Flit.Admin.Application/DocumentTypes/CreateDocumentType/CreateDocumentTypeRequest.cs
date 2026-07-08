@@ -16,4 +16,7 @@ public sealed record CreateDocumentTypeRequest(
     string? Codigo,
     string? Nombre,
     string? Descripcion,
-    bool? Obligatorio);
+    bool? Obligatorio,
+    // RF08/09 — límites por tipo. Opcionales: null/omitido ⇒ se aplican los globales por defecto.
+    IReadOnlyList<string>? MimeTypesAllowed = null,
+    long? MaxSizeBytes = null);

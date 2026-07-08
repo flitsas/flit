@@ -22,7 +22,8 @@ public sealed class TramiteLifecycleService(
     ITransitOfficeGrantGate transitOfficeGrantGate,
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
-    ITramiteTransitionPublisher publisher) : ITramiteLifecycleService
+    ITramiteTransitionPublisher publisher,
+    ChecklistMatrixCompleteness? matrixCompleteness = null) : ITramiteLifecycleService
 {
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
@@ -67,7 +68,11 @@ public sealed class TramiteLifecycleService(
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
                 repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
-            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
+            // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
+            var docsCompletos = matrixCompleteness is null
+                ? null
+                : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
         }
