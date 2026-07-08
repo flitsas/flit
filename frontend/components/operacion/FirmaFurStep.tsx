@@ -1261,7 +1261,7 @@ function ImprontaSection({
 // ── FUR / compraventa ─────────────────────────────────────────────────
 
 /** Tipos de documento generados por el FUR. */
-const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad']);
+const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor']);
 
 function FurSection({
   instanceId,
