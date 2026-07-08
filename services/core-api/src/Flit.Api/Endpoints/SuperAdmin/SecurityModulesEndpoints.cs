@@ -1,11 +1,8 @@
-using Flit.Infrastructure.Persistence;
-using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Domain.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Api.Endpoints.SuperAdmin;
 
@@ -104,58 +101,8 @@ internal static class SecurityModulesEndpoints
             await repo.ActivateAsync(id, ct);
             return Results.Ok();
         }).WithName("ActivateModule");
-
-        group.MapGet("/modules/{id:guid}/grants", async (
-            Guid id,
-            FlitDbContext db,
-            CancellationToken ct) =>
-        {
-            var grants = await (
-                from g in db.TenantModuleGrants.AsNoTracking()
-                join t in db.Tenants.AsNoTracking() on g.TenantId equals t.Id
-                where g.ModuleId == id
-                select new TenantModuleGrantDto(g.TenantId.ToString(), t.LegalName)
-            ).ToListAsync(ct);
-            return Results.Ok(grants);
-        }).WithName("ListModuleGrants");
-
-        group.MapPost("/modules/{id:guid}/grants/{tenantId:guid}", async (
-            Guid id,
-            Guid tenantId,
-            FlitDbContext db,
-            CancellationToken ct) =>
-        {
-            var exists = await db.TenantModuleGrants
-                .AnyAsync(g => g.ModuleId == id && g.TenantId == tenantId, ct);
-            if (exists) return Results.Ok();
-
-            db.TenantModuleGrants.Add(new TenantModuleGrant
-            {
-                TenantId = tenantId,
-                ModuleId = id,
-                GrantedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(ct);
-            return Results.Created();
-        }).WithName("GrantModuleToTenant");
-
-        group.MapDelete("/modules/{id:guid}/grants/{tenantId:guid}", async (
-            Guid id,
-            Guid tenantId,
-            FlitDbContext db,
-            CancellationToken ct) =>
-        {
-            var grant = await db.TenantModuleGrants
-                .FirstOrDefaultAsync(g => g.ModuleId == id && g.TenantId == tenantId, ct);
-            if (grant is null) return Results.NoContent();
-
-            db.TenantModuleGrants.Remove(grant);
-            await db.SaveChangesAsync(ct);
-            return Results.NoContent();
-        }).WithName("RevokeModuleFromTenant");
     }
 
     private sealed record CreateModuleRequest(string Code, string Name, string? Description, short SortOrder);
     private sealed record UpdateModuleRequest(string Name, string? Description, short SortOrder);
-    private sealed record TenantModuleGrantDto(string TenantId, string TenantName);
 }
