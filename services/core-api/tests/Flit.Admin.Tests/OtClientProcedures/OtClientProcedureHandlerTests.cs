@@ -507,6 +507,93 @@ public sealed class OtClientProcedureHandlerTests
         }
     }
 
+    [Fact] // HU #10611 — el OT aprueba un trámite ASIGNADO vía el handler: pasa por 'entregado'
+           // (pendiente OT) y termina en 'aprobado' en la misma acción, con la placa utilizada.
+    public async Task Approve_Asignado_ViaHandler_PasaPorEntregadoYUsaPlaca()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(), ProcedureInstanceId = procedureId, TenantId = ClientTenant,
+                FieldKey = "soat_estado", ValueText = "vigente",
+            });
+            var plateRepo = new PlateRangeRepository(seed);
+            await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+            await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await NewApproveHandler(ctx).HandleAsync(new ApproveOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            ApprovedBy = Approver,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(ApproveOtClientProcedureStatus.Approved);
+
+        await using var verify = NewContext(db);
+        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
+            .Status.Should().Be(TramiteEstado.Aprobado);
+        (await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken))
+            .State.Should().Be("utilizada");
+        var history = await verify.ProcedureInstanceStatusHistories
+            .Where(h => h.ProcedureInstanceId == procedureId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        history.Should().Contain(h => h.FromStatus == TramiteEstado.Asignado && h.ToStatus == TramiteEstado.Entregado);
+        history.Should().Contain(h => h.FromStatus == TramiteEstado.Entregado && h.ToStatus == TramiteEstado.Aprobado);
+    }
+
+    [Fact] // HU #10611 — el OT rechaza un trámite ASIGNADO vía el handler: pasa por 'entregado' y
+           // termina en 'rechazado'; la placa reservada se libera (vuelve a disponible).
+    public async Task Reject_Asignado_ViaHandler_PasaPorEntregadoYLiberaPlaca()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado);
+            var plateRepo = new PlateRangeRepository(seed);
+            await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+            await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await NewRejectHandler(ctx).HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = "Placa incorrecta" },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
+
+        await using var verify = NewContext(db);
+        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
+            .Status.Should().Be(TramiteEstado.Rechazado);
+        var plate = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
+        plate.State.Should().Be("disponible");
+        plate.ProcedureInstanceId.Should().BeNull();
+        var history = await verify.ProcedureInstanceStatusHistories
+            .Where(h => h.ProcedureInstanceId == procedureId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        history.Should().Contain(h => h.FromStatus == TramiteEstado.Asignado && h.ToStatus == TramiteEstado.Entregado);
+        history.Should().Contain(h => h.FromStatus == TramiteEstado.Entregado && h.ToStatus == TramiteEstado.Rechazado);
+    }
+
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)
     {
         ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile

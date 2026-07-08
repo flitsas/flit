@@ -271,9 +271,32 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
-                // Feature #10587 — al aprobar en RUNT un trámite de la ruta de placa, la placa reservada
-                // pasa a utilizada (terminal).
-                if (targetStatus == TramiteEstado.Aprobado)
+                // Feature #10587 — la ruta de placa entra a la decisión del OT desde 'asignado'. La acción
+                // del OT hace pasar el trámite por 'entregado' (pendiente OT) y luego a la decisión final,
+                // en la MISMA transacción: se registra el hito intermedio en el historial (asignado→
+                // entregado) y la decisión final parte de 'entregado', reusando el flujo estándar de
+                // decisión del OT. El estado del trámite salta directo al final (atómico).
+                var effectiveFrom = fromStatus;
+                if (fromStatus == TramiteEstado.Asignado)
+                {
+                    _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = accessible.ClientTenantId,
+                        ProcedureInstanceId = entity.Id,
+                        FromStatus = TramiteEstado.Asignado,
+                        ToStatus = TramiteEstado.Entregado,
+                        ChangedAt = now,
+                        ChangedBy = resolvedChangedBy,
+                        Reason = "Recepción del OT (ruta de placa).",
+                        Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, source }),
+                    });
+                    effectiveFrom = TramiteEstado.Entregado;
+                }
+
+                // Feature #10587 — al aprobar un trámite de la ruta de placa, la placa reservada pasa a
+                // utilizada (terminal); al rechazar, se libera y vuelve al inventario (disponible).
+                if (targetStatus == TramiteEstado.Aprobado || targetStatus == TramiteEstado.Rechazado)
                 {
                     var plateDetail = await _context.PlateRangeDetails
                         .FirstOrDefaultAsync(
@@ -283,8 +306,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         .ConfigureAwait(false);
                     if (plateDetail is not null)
                     {
-                        plateDetail.State = Flit.Admin.Domain.PlatePreassign.PlateState.Utilizada;
-                        plateDetail.UsedAt = now;
+                        if (targetStatus == TramiteEstado.Aprobado)
+                        {
+                            plateDetail.State = Flit.Admin.Domain.PlatePreassign.PlateState.Utilizada;
+                            plateDetail.UsedAt = now;
+                        }
+                        else
+                        {
+                            plateDetail.State = Flit.Admin.Domain.PlatePreassign.PlateState.Disponible;
+                            plateDetail.ProcedureInstanceId = null;
+                            plateDetail.ReservedAt = null;
+                        }
                         plateDetail.UpdatedAt = now;
                     }
                 }
@@ -295,7 +327,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     new TramiteTransitionRecord(
                         accessible.ClientTenantId,
                         entity.Id,
-                        fromStatus,
+                        effectiveFrom,
                         targetStatus,
                         reason,
                         resolvedChangedBy,
@@ -310,7 +342,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Id = Guid.NewGuid(),
                     TenantId = accessible.ClientTenantId,
                     ProcedureInstanceId = entity.Id,
-                    FromStatus = fromStatus,
+                    FromStatus = effectiveFrom,
                     ToStatus = targetStatus,
                     ChangedAt = now,
                     ChangedBy = resolvedChangedBy,

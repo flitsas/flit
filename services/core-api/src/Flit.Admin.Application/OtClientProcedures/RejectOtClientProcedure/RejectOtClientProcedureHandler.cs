@@ -8,6 +8,9 @@ public sealed class RejectOtClientProcedureHandler
 {
     // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
     private const string EstadoEntregado = "entregado";
+    // Feature #10587 (ruta de placa): la decisión OT también aplica sobre 'asignado'; el trámite
+    // pasa por 'entregado' (pendiente OT) y luego a la decisión final en la misma acción.
+    private const string EstadoAsignado = "asignado";
 
     private readonly IOtClientProcedureRepository _repository;
     private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
@@ -50,7 +53,8 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.NotFound();
         }
 
-        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal))
+        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal)
+            && !string.Equals(existing.Status, EstadoAsignado, StringComparison.Ordinal))
         {
             return RejectOtClientProcedureResult.InvalidState();
         }
