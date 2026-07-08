@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
+import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
@@ -259,6 +260,10 @@ export function TramiteWizard(props: Props) {
   const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
+  // wizard_step_view al cambiar activeStep?.key y expone los demás eventos).
+  const telemetry = useWizardTelemetry(instanceId, activeStep?.key);
+
   // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
   // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
@@ -277,6 +282,9 @@ export function TramiteWizard(props: Props) {
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
     if (!canNavigateToStep(steps, index, navViewOnly)) return;
+    // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
+    // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
+    if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
     setActiveIndex(index);
   };
 
@@ -363,6 +371,8 @@ export function TramiteWizard(props: Props) {
     setSubmitError(null);
     try {
       await tramitesClient.transitionInstance(instanceId, 'entregado');
+      // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
+      telemetry.trackComplete();
       show(
         modalidad === 'traspaso'
           ? 'Traspaso enviado a tránsito correctamente.'
@@ -424,6 +434,8 @@ export function TramiteWizard(props: Props) {
   // pasos: navegación directa al siguiente.
   const handleContinue = async () => {
     if (!isSavableStep) {
+      // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
+      if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
       return;
     }
@@ -471,6 +483,8 @@ export function TramiteWizard(props: Props) {
 
       const fresh = await refresh();
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+        // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
+        telemetry.trackStepComplete();
         setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       }
     } catch (err) {
@@ -496,7 +510,12 @@ export function TramiteWizard(props: Props) {
           )}
         </div>
         <button
-          onClick={onExit}
+          onClick={() => {
+            // Reportes2 HU-A — salida explícita sin radicar = wizard_abandon
+            // (en solo visualización el trámite ya se radicó: no es abandono).
+            if (!fullReadOnly) telemetry.trackAbandon();
+            onExit();
+          }}
           className="text-xs opacity-70 hover:opacity-100"
           aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >

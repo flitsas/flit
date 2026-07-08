@@ -1016,6 +1016,322 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("transit_office_profiles", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.AlertEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<Guid>("AlertRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alert_rule_id");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<decimal>("MetricValue")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("metric_value");
+
+                    b.Property<bool>("Notified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("notified");
+
+                    b.Property<string>("Recipients")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("recipients")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("Threshold")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("threshold");
+
+                    b.Property<DateTimeOffset>("TriggeredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("triggered_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id")
+                        .HasName("pk_alert_events");
+
+                    b.HasIndex("AlertRuleId", "TriggeredAt")
+                        .HasDatabaseName("ix_alert_events_alert_rule_id_triggered_at");
+
+                    b.HasIndex("TenantId", "TriggeredAt")
+                        .HasDatabaseName("ix_alert_events_tenant_id_triggered_at");
+
+                    b.ToTable("alert_events", "analytics");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.AlertRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<int>("CooldownMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(240)
+                        .HasColumnName("cooldown_minutes");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("LastTriggeredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_triggered_at");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("metric");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Operator")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("operator");
+
+                    b.Property<string>("Recipients")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("recipients")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("Threshold")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("threshold");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WindowMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1440)
+                        .HasColumnName("window_minutes");
+
+                    b.HasKey("Id")
+                        .HasName("pk_alert_rules");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_alert_rules_tenant_id");
+
+                    b.ToTable("alert_rules", "analytics");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.AppUsageEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("Module")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("module");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid?>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<string>("StepKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("step_key");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_app_usage_events");
+
+                    b.HasIndex("ProcedureInstanceId")
+                        .HasDatabaseName("ix_app_usage_events_instance")
+                        .HasFilter("procedure_instance_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "OccurredAt")
+                        .HasDatabaseName("ix_app_usage_events_tenant_occurred");
+
+                    b.HasIndex("TenantId", "EventType", "OccurredAt")
+                        .HasDatabaseName("ix_app_usage_events_tenant_type_occurred");
+
+                    b.ToTable("app_usage_events", "analytics");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.ReportSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<short?>("DayOfMonth")
+                        .HasColumnType("smallint")
+                        .HasColumnName("day_of_month");
+
+                    b.Property<short?>("DayOfWeek")
+                        .HasColumnType("smallint")
+                        .HasColumnName("day_of_week");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("format");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("frequency");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sent_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Recipients")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("recipients")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<string>("ReportType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("report_type");
+
+                    b.Property<short>("SendHour")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)7)
+                        .HasColumnName("send_hour");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_report_schedules");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_report_schedules_tenant_id");
+
+                    b.ToTable("report_schedules", "analytics");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Catalogs.TransitOffice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4216,7 +4532,17 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("data_protection_keys", (string)null);
                 });
 
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.AlertEvent", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Analytics.AlertRule", null)
+                        .WithMany()
+                        .HasForeignKey("AlertRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_alert_events_alert_rules");
+                });
+				
+		    modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
                 {
                     b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", null)
                         .WithMany()
@@ -4224,7 +4550,7 @@ namespace Flit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_mandate_signer_companies_mandate_signers_mandate_signer_id");
-                });
+                });	
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
                 {

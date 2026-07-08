@@ -89,8 +89,21 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
+
+        // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertRuleRepository, AlertRuleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertMetricsReadRepository, Analytics.Scheduling.AlertMetricsReadRepository>(); // Reportes2 HU-D
+        services.AddHostedService<Analytics.Scheduling.AnalyticsSchedulerProcessor>(); // Reportes2 HU-D
+
+        services.Configure<Telemetry.AnalyticsTelemetryOptions>(configuration.GetSection(Telemetry.AnalyticsTelemetryOptions.SectionName)); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.ChannelUsageEventQueue>(); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.IUsageEventQueue>(sp => sp.GetRequiredService<Telemetry.ChannelUsageEventQueue>()); // Reportes2 HU-A
+        services.AddHostedService<Telemetry.UsageEventWriterProcessor>(); // Reportes2 HU-A
+        services.AddScoped<IUsageMetricsReadRepository, UsageMetricsReadRepository>(); // Reportes2 HU-A
 
         AddAttachmentStorage(services, configuration);
 

@@ -1,92 +1,102 @@
 "use client";
 
+// Módulo Reportes 2.0 (HU-C): 5 pestañas temáticas con filtros globales
+// persistentes, visibilidad por permiso RBAC (§3 del contrato) y drill-down
+// compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
+// se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ModuleTitle } from "./ModuleTitle";
-import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { fetchAnalyticsOverview, fetchTopProducers } from "@/lib/api/analytics";
+import { CalendarClock, ShieldQuestion } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
-import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
-import { ApiError } from "@/lib/api/types";
-import type {
-  AnalyticsCategory,
-  AnalyticsOverviewResponse,
-  CategoryMetrics,
-  CompanyListItem,
-  TopProducer,
-} from "@/lib/api/types";
-import { DateRangeFilter } from "./_reportes/DateRangeFilter";
-import { CompanySelector } from "./_reportes/CompanySelector";
-import { CategoryDonut } from "./_reportes/CategoryDonut";
-import { ProductivityCards } from "./_reportes/ProductivityCards";
-import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
+import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
+import { ModuleTitle } from "./ModuleTitle";
 import { ExportButtons } from "./_reportes/ExportButtons";
-import { CATEGORY_META, CATEGORY_ORDER } from "./_reportes/categories";
-import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
+import { defaultFilters, type ReportFilters } from "./_reportes/filters";
+import { GlobalFilters } from "./_reportes/GlobalFilters";
+import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
+import { isValidRange } from "./_reportes/range";
+import { ReportesTabBar } from "./_reportes/ReportesTabBar";
+import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
+import { OperacionTab } from "./_reportes/tabs/OperacionTab";
+import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
+import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
+import { ResumenTab } from "./_reportes/tabs/ResumenTab";
+import { UsoTab } from "./_reportes/tabs/UsoTab";
 
-/** Segmento seleccionado en un donut → abre el detalle lateral (HU #10248, AC1). */
+type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+
+/** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. */
+const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
+  { id: "resumen", label: "Resumen general", slug: "reportes.resumen.read" },
+  { id: "operacion", label: "Operación / Trámites", slug: "reportes.operacion.read" },
+  { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
+  { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
+  { id: "productividad", label: "Productividad", slug: "reportes.productividad.read" },
+];
+
+/** Slug legado: hace visible al menos "Resumen general" (compatibilidad §3). */
+const LEGACY_SLUG = "reportes.read";
+
+/** Slug que habilita la administración de informes programados y alertas (HU-D). */
+const SCHEDULING_SLUG = "reportes.programacion.manage";
+const TAB_QUERY_PARAM = "reportesTab";
+
+/** Pestañas con exportaciones (Excel/PDF ejecutivo con los filtros activos). */
+const EXPORT_TABS: ReadonlyArray<TabId> = ["resumen", "operacion", "productividad"];
+
+/** Segmento seleccionado en cualquier gráfica → detalle lateral (drill-down). */
 interface SelectedSegment {
-  category: AnalyticsCategory;
+  category?: AnalyticsCategory;
   status?: string;
 }
 
-/** Traduce un fallo de la API a un mensaje accionable para el usuario (AC3). */
-function describeError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 400) return "El rango de fechas no es válido o falta la compañía.";
-    if (error.status === 403) return "No tienes acceso a las métricas de esa compañía.";
-    if (error.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
-  }
-  return "No se pudieron cargar las métricas del dashboard.";
+function initialTab(): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM) ?? "";
 }
 
-/** Completa las categorías ausentes con totales en cero para pintar siempre los 3 donuts. */
-function normalizeCategories(data: AnalyticsOverviewResponse | null): Record<AnalyticsCategory, CategoryMetrics> {
-  const base: Record<AnalyticsCategory, CategoryMetrics> = {
-    matriculas: { category: "matriculas", total: 0, byStatus: [] },
-    traspasos: { category: "traspasos", total: 0, byStatus: [] },
-    vehicular: { category: "vehicular", total: 0, byStatus: [] },
-    otros: { category: "otros", total: 0, byStatus: [] },
-  };
-  for (const cat of data?.categories ?? []) {
-    base[cat.category] = cat;
-  }
-  return base;
-}
-
-/**
- * Módulo Reportes — Dashboard analítico (HU #10247). Gráficos circulares por categoría
- * con filtro de fechas en tiempo real y acceso por rol. SuperAdmin puede seleccionar la
- * compañía a consultar; el Tenant Admin ve siempre la propia (claim `tenant_id`).
- */
 export function Reportes() {
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
-  const [isSuper, setIsSuper] = useState(false);
-  const [companies, setCompanies] = useState<CompanyListItem[]>([]);
-  const [tenantId, setTenantId] = useState("");
+  const { permissions, isSuperAdmin: isSuper } = usePermissions();
 
-  const [data, setData] = useState<AnalyticsOverviewResponse | null>(null);
-  const [status, setStatus] = useState<UiStatus>("loading");
-  const [errorMessage, setErrorMessage] = useState<string>();
-  const [reloadKey, setReloadKey] = useState(0);
+  const visibleTabs = useMemo(
+    () =>
+      TAB_DEFS.filter(
+        (tab) =>
+          isSuper ||
+          permissions.includes(tab.slug) ||
+          (tab.id === "resumen" && permissions.includes(LEGACY_SLUG)),
+      ),
+    [isSuper, permissions],
+  );
 
-  // Top 5 productividad (HU #10248, AC2) — carga independiente del overview.
-  const [producers, setProducers] = useState<TopProducer[]>([]);
-  const [producersStatus, setProducersStatus] = useState<UiStatus>("loading");
-  const [producersError, setProducersError] = useState<string>();
-  const [producersReloadKey, setProducersReloadKey] = useState(0);
+  // Pestaña activa: persiste en el query param `reportesTab` sin recargar la página.
+  const [requestedTab, setRequestedTab] = useState<string>(() => initialTab());
+  const activeTab: TabId | undefined = visibleTabs.some((t) => t.id === requestedTab)
+    ? (requestedTab as TabId)
+    : visibleTabs[0]?.id;
 
-  // Segmento seleccionado → panel lateral del detalle (HU #10248, AC1).
-  const [segment, setSegment] = useState<SelectedSegment | null>(null);
-
-  // Rol del usuario en cliente (el token solo existe tras el montaje).
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsSuper(isSuperAdmin(decodeJwtPayload(getToken())));
+  const selectTab = useCallback((id: string) => {
+    setRequestedTab(id);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set(TAB_QUERY_PARAM, id);
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history (tests/SSR): el estado local basta */
+    }
   }, []);
 
+  // Filtros globales persistentes: se conservan al cambiar de pestaña.
+  const [filters, setFilters] = useState<ReportFilters>(() => defaultFilters());
+  const rangeValid = isValidRange(filters.range);
+
+  // Los 4 endpoints nuevos EXIGEN tenantId para SuperAdmin (§4): sin compañía
+  // elegida, las pestañas nuevas muestran el aviso en lugar de llamar a la API.
+  const needsCompany = isSuper && !filters.tenantId;
+
   // Catálogo de compañías para el selector — solo SuperAdmin. Un fallo aquí no
-  // bloquea el dashboard: el selector queda vacío y se usa la compañía propia.
+  // bloquea el módulo: el selector queda vacío.
+  const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
@@ -95,182 +105,126 @@ export function Reportes() {
         if (!controller.signal.aborted) setCompanies(res.data);
       })
       .catch(() => {
-        /* silencioso: el dashboard sigue operativo sin el selector poblado */
+        /* silencioso */
       });
     return () => controller.abort();
   }, [isSuper]);
 
-  // Carga del overview. Se redispara al cambiar el rango, la compañía o el reintento.
-  useEffect(() => {
-    const controller = new AbortController();
+  // Programación y alertas (HU-D): visible con su permiso; SuperAdmin bypass.
+  const canManageScheduling = isSuper || permissions.includes(SCHEDULING_SLUG);
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
 
-    async function load() {
-      if (!isValidRange(range)) {
-        setStatus("error");
-        setErrorMessage("La fecha inicial no puede ser posterior a la fecha final.");
-        return;
-      }
-      setStatus("loading");
-      try {
-        const res = await fetchAnalyticsOverview(
-          { from: range.from, to: range.to, tenantId: tenantId || undefined },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setData(res);
-        const hasData = res.categories.some((c) => c.total > 0);
-        setStatus(hasData ? "ready" : "empty");
-      } catch (error) {
-        if (controller.signal.aborted || (error as Error).name === "AbortError") return;
-        setErrorMessage(describeError(error));
-        setStatus("error");
-      }
-    }
+  // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
+  const [segment, setSegment] = useState<SelectedSegment | null>(null);
+  const openSegment = useCallback((next: SelectedSegment) => setSegment(next), []);
+  const activeSegmentKey = segment ? `${segment.category ?? ""}:${segment.status ?? ""}` : undefined;
 
-    void load();
-    return () => controller.abort();
-  }, [range, tenantId, reloadKey]);
-
-  // Carga del Top 5 productividad. Se redispara igual que el overview.
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      if (!isValidRange(range)) {
-        setProducersStatus("empty");
-        return;
-      }
-      setProducersStatus("loading");
-      try {
-        const res = await fetchTopProducers(
-          { from: range.from, to: range.to, limit: 5, tenantId: tenantId || undefined },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setProducers(res.items);
-        setProducersStatus(res.items.length === 0 ? "empty" : "ready");
-      } catch (error) {
-        if (controller.signal.aborted || (error as Error).name === "AbortError") return;
-        setProducersError(describeError(error));
-        setProducersStatus("error");
-      }
-    }
-
-    void load();
-    return () => controller.abort();
-  }, [range, tenantId, producersReloadKey]);
-
-  const byCategory = useMemo(() => normalizeCategories(data), [data]);
-  const totalTramites = useMemo(
-    () => CATEGORY_ORDER.reduce((acc, c) => acc + byCategory[c].total, 0),
-    [byCategory],
-  );
-
-  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
-  const retryProducers = useCallback(() => setProducersReloadKey((k) => k + 1), []);
-  const selectSegment = useCallback(
-    (category: AnalyticsCategory, segmentStatus?: string) => setSegment({ category, status: segmentStatus }),
-    [],
-  );
-  const activeKey = segment ? `${segment.category}:${segment.status ?? ""}` : undefined;
+  // Sin ninguna pestaña visible → estado vacío amable (§3).
+  if (visibleTabs.length === 0) {
+    return (
+      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+        <ModuleTitle title="Reportes y Analíticas" subtitle="Monitorea el desempeño operativo por pestañas temáticas." />
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-white dark:bg-[#0B0F14]"
+          data-testid="reportes-sin-permisos"
+        >
+          <ShieldQuestion className="h-10 w-10 opacity-50" aria-hidden="true" />
+          <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
+          <p className="text-xs opacity-70 max-w-md">
+            Pide a tu administrador que te asigne acceso a alguna pestaña de reportes
+            (Resumen general, Operación, Organismo de Tránsito, Uso o Productividad).
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="Reportes y Analíticas"
-        subtitle="Monitorea el desempeño operativo por categoría de trámite."
+        subtitle="Monitorea el desempeño operativo por pestañas temáticas."
       />
 
-      {/* Filtros — rango de fechas (todos) + compañía (solo SuperAdmin) + exportaciones */}
+      {/* Filtros globales (persisten entre pestañas) + exportaciones */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
-        <DateRangeFilter value={range} onChange={setRange} disabled={status === "loading"} />
-        {isSuper && (
-          <CompanySelector
-            companies={companies}
-            value={tenantId}
-            onChange={setTenantId}
-            disabled={status === "loading"}
-          />
+        <GlobalFilters filters={filters} onChange={setFilters} isSuper={isSuper} companies={companies} />
+        {canManageScheduling && (
+          <button
+            type="button"
+            onClick={() => setSchedulingOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+            data-testid="reportes-abrir-programacion"
+          >
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            Programación y alertas
+          </button>
         )}
-        <div className="ml-auto">
-          <ExportButtons
-            range={range}
-            tenantId={tenantId || undefined}
-            category={segment?.category}
-            status={segment?.status}
-            disabled={status === "loading" || !isValidRange(range)}
-          />
-        </div>
-      </div>
-
-      <div className="pr-1">
-        <UiStateBoundary
-          status={status}
-          errorMessage={errorMessage}
-          onRetry={retry}
-          emptyMessage="No hay trámites para el rango de fechas seleccionado."
-          skeletonRows={3}
-        >
-          <div className="flex flex-col gap-4">
-            {/* Resumen total + por categoría */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <SummaryCard label="Total trámites" value={totalTramites} color="#162744" />
-              {CATEGORY_ORDER.map((cat) => (
-                <SummaryCard
-                  key={cat}
-                  label={CATEGORY_META[cat].label}
-                  value={byCategory[cat].total}
-                  color={CATEGORY_META[cat].color}
-                />
-              ))}
-            </div>
-
-            {/* Gráficos circulares por categoría (segmentos clicables → detalle lateral) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {CATEGORY_ORDER.map((cat) => (
-                <CategoryDonut
-                  key={cat}
-                  metrics={byCategory[cat]}
-                  onSelect={selectSegment}
-                  activeKey={activeKey}
-                />
-              ))}
-            </div>
-
-            {/* Top 5 productividad con multiselect */}
-            <ProductivityCards
-              producers={producers}
-              status={producersStatus}
-              errorMessage={producersError}
-              onRetry={retryProducers}
+        {activeTab && EXPORT_TABS.includes(activeTab) && (
+          <div className="ml-auto">
+            <ExportButtons
+              range={filters.range}
+              tenantId={filters.tenantId || undefined}
+              category={segment?.category}
+              status={segment?.status}
+              disabled={!rangeValid}
             />
           </div>
-        </UiStateBoundary>
+        )}
       </div>
+
+      <ReportesTabBar
+        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
+        activeId={activeTab ?? ""}
+        onChange={selectTab}
+        ariaLabel="Pestañas de reportes"
+      />
+
+      {!rangeValid ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+        >
+          <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
+          <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar las métricas.</p>
+        </div>
+      ) : (
+        <div className="pr-1">
+          {activeTab === "resumen" && (
+            <ResumenTab
+              filters={filters}
+              needsCompany={needsCompany}
+              onDrillDown={openSegment}
+              activeSegmentKey={activeSegmentKey}
+            />
+          )}
+          {activeTab === "operacion" && (
+            <OperacionTab filters={filters} needsCompany={needsCompany} onDrillDown={openSegment} />
+          )}
+          {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
+          {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
+          {activeTab === "productividad" && <ProductividadTab filters={filters} />}
+        </div>
+      )}
+
+      {canManageScheduling && (
+        <SchedulingPanel
+          open={schedulingOpen}
+          onClose={() => setSchedulingOpen(false)}
+          tenantId={filters.tenantId || undefined}
+        />
+      )}
 
       {segment && (
         <ProcedureDetailPanel
-          key={activeKey}
+          key={activeSegmentKey}
           category={segment.category}
           status={segment.status}
-          range={range}
-          tenantId={tenantId || undefined}
+          range={filters.range}
+          tenantId={filters.tenantId || undefined}
           onClose={() => setSegment(null)}
         />
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div
-      className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col justify-between min-h-[88px]"
-    >
-      <p className="text-[11px] opacity-70 font-medium">{label}</p>
-      <p className="text-2xl font-bold mt-1" style={{ color }}>
-        {value}
-      </p>
     </div>
   );
 }

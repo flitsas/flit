@@ -12,7 +12,8 @@ import type { DateRange } from "./range";
 const PAGE_SIZE = 10;
 
 interface ProcedureDetailPanelProps {
-  category: AnalyticsCategory;
+  /** Categoría a filtrar; indefinida = todas (drill-down solo por estado, Reportes 2.0). */
+  category?: AnalyticsCategory;
   /** Estado a filtrar; indefinido = toda la categoría. */
   status?: string;
   range: DateRange;
@@ -39,7 +40,7 @@ function formatDate(value?: string | null): string {
  * los filtros de categoría/estado. Implementa los 4 estados de UI vía UiStateBoundary.
  */
 export function ProcedureDetailPanel({ category, status, range, tenantId, onClose }: ProcedureDetailPanelProps) {
-  const meta = CATEGORY_META[category];
+  const meta = category ? CATEGORY_META[category] : undefined;
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProcedureDetailsPage | null>(null);
   const [uiStatus, setUiStatus] = useState<UiStatus>("loading");
@@ -80,7 +81,8 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE)) : 1;
-  const title = status ? `${meta.label} · ${statusLabel(status)}` : meta.label;
+  const categoryLabel = meta?.label ?? "Todos los trámites";
+  const title = status ? `${categoryLabel} · ${statusLabel(status)}` : categoryLabel;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="detalle-panel-title">
