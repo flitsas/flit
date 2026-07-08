@@ -11,6 +11,7 @@ import {
   unsuspendOtUser,
   updateOtUser,
   deleteOtUser,
+  resendOtInvitation,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 // HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
@@ -21,6 +22,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
+import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -158,6 +160,12 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // HU #10624 (AC3) — inyectado a RestoreUserDialog; la confirmación vive en el diálogo.
   function handleRestoreUser(userId: string) {
     return restoreUser(userId);
+  }
+
+  // HU #10626 — Inyectado a ResendInvitationButton: liga el scope OT a resendOtInvitation. El
+  // propio botón mapea 409/429 (AC2) y aplica el cooldown visual (AC1); aquí solo se persiste.
+  function handleResendInvitation(invitationId: string) {
+    return resendOtInvitation(invitationId, { transitOfficeId });
   }
 
   return (
@@ -359,6 +367,23 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
+                      )}
+                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
+                          invitationId. */}
+                      {u.status === "pending" && (
+                        <ResendInvitationButton
+                          invitationId={u.id}
+                          fullName={u.fullName}
+                          resend={handleResendInvitation}
+                          onResent={(outcome) =>
+                            show(
+                              outcome.emailSent
+                                ? `Invitación reenviada a ${outcome.email}.`
+                                : "Invitación reenviada, pero el correo no pudo entregarse.",
+                              "success",
+                            )
+                          }
+                        />
                       )}
                     </div>
                   </td>

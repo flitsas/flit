@@ -57,6 +57,14 @@ export interface DeleteOtUserRequest {
   rowVersion: number;
 }
 
+/** Resultado de reenviar una invitación pendiente (HU #10626) — mismo shape que
+ *  ResendInvitationResult (security.ts). */
+export interface ResendOtInvitationResponse {
+  invitationId: string;
+  email: string;
+  emailSent: boolean;
+}
+
 function scopeQuery(scope?: OtApiScope) {
   return scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined;
 }
@@ -136,6 +144,23 @@ export function deleteOtUser(
   return apiFetch<void>(`${base}/users/${userId}`, {
     method: "DELETE",
     body,
+    query: scopeQuery(scope),
+  });
+}
+
+/** POST /api/v1/admin/ot/invitations/{invitationId}/resend — reenvía una invitación pendiente del
+ *  tenant OT resuelto (propio para ot_admin, o el indicado por `scope.transitOfficeId` para
+ *  SuperAdmin) — HU #10626. SIEMPRE regenera el token de activación y reenvía el correo. El `id`
+ *  de la fila YA es el `invitationId` cuando `status === "pending"` (`OtUserItem.id`). Errores:
+ *  409 si la invitación ya no está pendiente; 429 con `{ error, message, retryAfterSeconds }` si
+ *  el cooldown anti-abuso (~2 min) sigue activo (AC2) — este endpoint usa `error` (no `code`, a
+ *  diferencia de security.ts — misma inconsistencia preexistente que deleteOtUser). */
+export function resendOtInvitation(
+  invitationId: string,
+  scope?: OtApiScope,
+): Promise<ResendOtInvitationResponse> {
+  return apiFetch<ResendOtInvitationResponse>(`${base}/invitations/${invitationId}/resend`, {
+    method: "POST",
     query: scopeQuery(scope),
   });
 }

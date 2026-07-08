@@ -214,3 +214,25 @@ export async function restoreUser(userId: string): Promise<void> {
     method: "POST",
   });
 }
+
+/** Resultado de reenviar una invitación pendiente (HU #10626) — mismo shape en el endpoint
+ *  Compañía y en el OT (ver admin-ot-security.ts). */
+export interface ResendInvitationResult {
+  invitationId: string;
+  email: string;
+  emailSent: boolean;
+}
+
+/** POST /api/v1/security/invitations/{invitationId}/resend — reenvía una invitación pendiente
+ *  (HU #10626): SIEMPRE regenera el token de activación (invalida el enlace anterior) y reenvía
+ *  el correo. Mismo alcance de autorización que crear invitaciones (AdminCompany su tenant,
+ *  SuperAdmin cualquiera). El `id` de la fila YA es el `invitationId` cuando `status === "pending"`
+ *  (`TenantUser.id`) — no hace falta un campo nuevo. Errores: 409 si la invitación ya no está
+ *  pendiente (fue aceptada o cancelada); 429 con `{ code, message, retryAfterSeconds }` si el
+ *  cooldown anti-abuso (~2 min, configurable) sigue activo (AC2) — este endpoint usa `code`
+ *  (el de OT usa `error`, ver ResendInvitationButton). */
+export async function resendInvitation(invitationId: string): Promise<ResendInvitationResult> {
+  return apiFetch<ResendInvitationResult>(`/api/v1/security/invitations/${invitationId}/resend`, {
+    method: "POST",
+  });
+}

@@ -19,6 +19,7 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   unsuspendOtUser: vi.fn(),
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
+  resendOtInvitation: vi.fn(),
 }));
 
 vi.mock("@/lib/api/security", () => ({

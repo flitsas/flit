@@ -33,6 +33,7 @@ vi.mock("@/lib/api/security", () => ({
   updateUser: vi.fn(),
   deleteUser: vi.fn(),
   restoreUser: vi.fn(),
+  resendInvitation: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({

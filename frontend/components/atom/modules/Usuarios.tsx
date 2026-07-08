@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, TenantUser, TenantRole } from "@/lib/api/security";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { RestoreUserDialog } from "./users/RestoreUserDialog";
+import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -298,6 +299,15 @@ export function Usuarios() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
+                      )}
+                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
+                          invitationId. */}
+                      {u.status === "pending" && !isSuperAdmin && (
+                        <ResendInvitationButton
+                          invitationId={u.id}
+                          fullName={u.fullName}
+                          resend={resendInvitation}
+                        />
                       )}
                     </div>
                   </div>
