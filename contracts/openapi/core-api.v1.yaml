@@ -5515,11 +5515,13 @@ components:
         current:
           $ref: "#/components/schemas/OtMetricsData"
         previous:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/OtMetricsData"
           description: Misma forma que `current` sobre la ventana comparada; null sin `compareWith`.
         comparison:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ComparisonInfo"
@@ -5582,10 +5584,12 @@ components:
         current:
           $ref: "#/components/schemas/FunnelData"
         previous:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/FunnelData"
         comparison:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ComparisonInfo"
@@ -5677,10 +5681,12 @@ components:
         current:
           $ref: "#/components/schemas/UsageData"
         previous:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/UsageData"
         comparison:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ComparisonInfo"

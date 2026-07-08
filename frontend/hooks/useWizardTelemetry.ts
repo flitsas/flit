@@ -19,14 +19,20 @@ export function useWizardTelemetry(
   activeStepKey: string | undefined,
 ) {
   const instanceRef = useRef<string | null>(instanceId);
-  instanceRef.current = instanceId;
-
-  // Paso actual + instante de entrada (para las duraciones de permanencia).
   const currentStepRef = useRef<string | undefined>(undefined);
-  const stepEnteredAtRef = useRef<number>(Date.now());
-  // Inicio del wizard (duración total de wizard_complete) y sello de radicado.
-  const wizardStartedAtRef = useRef<number>(Date.now());
+  const stepEnteredAtRef = useRef<number>(0);
+  const wizardStartedAtRef = useRef<number>(0);
   const completedRef = useRef(false);
+
+  useEffect(() => {
+    instanceRef.current = instanceId;
+  }, [instanceId]);
+
+  useEffect(() => {
+    const now = Date.now();
+    stepEnteredAtRef.current = now;
+    wizardStartedAtRef.current = now;
+  }, []);
 
   // wizard_step_view al cambiar el paso activo (mismo patrón de detección que el
   // effect de preflight del wizard: reacciona a activeStep?.key).

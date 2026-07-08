@@ -47,6 +47,7 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
   }, [ruleId, page, tenantId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
     void load();
   }, [load]);
 
