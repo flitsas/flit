@@ -9,17 +9,31 @@ import { getUsers, cancelInvitation } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import type { TenantUser } from "@/lib/api/security";
 
+// "Cancelar invitación" está disponible para AdminCompany (gestión de invitaciones), pero
+// "Eliminar usuario" ahora es exclusivo de SuperAdmin. Por eso los permisos son mutables: el
+// caso "fila NO pendiente muestra Eliminar" se prueba como SuperAdmin.
+const ADMIN_COMPANY_PERMS = {
+  isSuperAdmin: false,
+  isAdminCompany: true,
+  isOtAdmin: false,
+  permissions: [] as string[],
+  tenantId: "tenant-1",
+  userId: "user-self",
+  roleId: "role-admin",
+  roleCode: "AdminCompany",
+};
+const SUPER_ADMIN_PERMS = {
+  ...ADMIN_COMPANY_PERMS,
+  isSuperAdmin: true,
+  isAdminCompany: false,
+  roleId: "role-super",
+  roleCode: "SuperAdmin",
+};
+
+const perms = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+
 vi.mock("@/hooks/usePermissions", () => ({
-  usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: true,
-    isOtAdmin: false,
-    permissions: [],
-    tenantId: "tenant-1",
-    userId: "user-self",
-    roleId: "role-admin",
-    roleCode: "AdminCompany",
-  }),
+  usePermissions: () => perms.current,
 }));
 
 vi.mock("@/lib/api/security", () => ({
@@ -70,9 +84,10 @@ const activeUser: TenantUser = {
   rowVersion: 2,
 };
 
-describe("Usuarios — botón Cancelar invitación (#10628, AdminCompany)", () => {
+describe("Usuarios — botón Cancelar invitación (#10628)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    perms.current = { ...ADMIN_COMPANY_PERMS };
   });
 
   it("AC2: SOLO muestra 'Cancelar invitación' (no 'Eliminar usuario') en una fila Pendiente", async () => {
@@ -88,7 +103,8 @@ describe("Usuarios — botón Cancelar invitación (#10628, AdminCompany)", () =
     ).not.toBeInTheDocument();
   });
 
-  it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente", async () => {
+  it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente (SuperAdmin)", async () => {
+    perms.current = { ...SUPER_ADMIN_PERMS };
     vi.mocked(getUsers).mockResolvedValue([activeUser]);
     render(<Usuarios />);
 
