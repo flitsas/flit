@@ -165,7 +165,7 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   {
     key: "baulFirmasActivo",
     module: "Configuración Empresa",
-    label: "Baúl de firmas activo",
+    label: "Firma precargada (baúl)",
     describe: (_i, c) => onOff(c.baulFirmasActivo),
   },
   {
