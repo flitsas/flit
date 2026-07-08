@@ -42,7 +42,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WithoutEndsAt_CreatesIndefiniteSuspension()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null, 1));
 
         var id = await _handler.HandleAsync(MakeCommand(endsAt: null), CancellationToken.None);
 
@@ -56,7 +56,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WithEndsAt_CreatesTemporarySuspension()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null, 1));
 
         var endsAt = DateTimeOffset.UtcNow.AddDays(3);
 
@@ -73,7 +73,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_AsSuperAdmin_TargetingOtherTenant_UsesTargetTenant()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null, 1));
 
         await _handler.HandleAsync(MakeCommand(endsAt: null, callerIsSuperAdmin: true), CancellationToken.None);
 
@@ -86,7 +86,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_AsNonSuperAdmin_TargetingOtherTenant_ThrowsUserOutOfScope()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null, 1));
 
         await _handler
             .Invoking(h => h.HandleAsync(MakeCommand(endsAt: null, callerIsSuperAdmin: false), CancellationToken.None))
@@ -102,7 +102,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WhenSelfSuspension_ThrowsSelfSuspension()
     {
         _repo.FindTargetAsync(CallerId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(CallerId, TenantId, "self@flit.local", "Yo mismo", null));
+            .Returns(new UserManagementTarget(CallerId, TenantId, "self@flit.local", "Yo mismo", null, 1));
 
         var command = new SuspendUserCommand(TenantId, CallerId, "Motivo", null, CallerId, false);
 
@@ -122,7 +122,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WhenTargetIsLastActiveAdminCompany_ThrowsLastActiveAdmin()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "admin@flit.local", "Admin", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "admin@flit.local", "Admin", null, 1));
         _repo.GetActiveAdminRoleAssignmentsAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([new ActiveAdminRoleAssignment(AdminRoleCodes.AdminCompany, TenantId)]);
         _repo.HasOtherActiveAdminsAsync(AdminRoleCodes.AdminCompany, TenantId, UserId, Arg.Any<CancellationToken>())
@@ -142,7 +142,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WhenTargetIsLastActiveSuperAdmin_ThrowsLastActiveAdmin_WithGlobalScope()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "super@flit.local", "Super", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "super@flit.local", "Super", null, 1));
         _repo.GetActiveAdminRoleAssignmentsAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([new ActiveAdminRoleAssignment(AdminRoleCodes.SuperAdmin, TenantId)]);
         _repo.HasOtherActiveAdminsAsync(AdminRoleCodes.SuperAdmin, null, UserId, Arg.Any<CancellationToken>())
@@ -161,7 +161,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_WhenAnotherActiveAdminExists_Succeeds()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "admin@flit.local", "Admin", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "admin@flit.local", "Admin", null, 1));
         _repo.GetActiveAdminRoleAssignmentsAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([new ActiveAdminRoleAssignment(AdminRoleCodes.AdminCompany, TenantId)]);
         _repo.HasOtherActiveAdminsAsync(AdminRoleCodes.AdminCompany, TenantId, UserId, Arg.Any<CancellationToken>())
@@ -195,7 +195,7 @@ public sealed class SuspendUserHandlerTests
     public async Task HandleAsync_ClosesActiveSuspensionsBeforeCreatingNewOne()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null, 1));
 
         await _handler.HandleAsync(MakeCommand(endsAt: null), CancellationToken.None);
 

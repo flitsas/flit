@@ -1,10 +1,12 @@
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Security.Application.Auth.CreateInvitation;
 
 public sealed partial class CreateInvitationHandler(
     IInvitationRepository invitationRepository,
+    IUserManagementRepository userManagementRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
@@ -21,6 +23,15 @@ public sealed partial class CreateInvitationHandler(
         var roleIds = command.RoleIds?.Distinct().ToList() ?? [];
         if (roleIds.Count == 0)
             throw new NoRolesSelectedException();
+
+        // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted: uq_users_email es un
+        // índice único GLOBAL (no parcial por deleted_at), así que ese correo sigue "ocupado" en
+        // BD aunque IInvitationRepository.UserExistsWithEmailAsync (que SÍ filtra DeletedAt ==
+        // null) reporte que "no existe". Sin este chequeo la invitación se crearía igual y solo
+        // fallaría al activarla, con un error crudo de constraint de BD.
+        var existingByEmail = await userManagementRepository.FindByEmailIncludingDeletedAsync(email, cancellationToken);
+        if (existingByEmail is { IsDeleted: true })
+            throw new UserEmailBelongsToDeletedAccountException();
 
         foreach (var roleId in roleIds)
         {

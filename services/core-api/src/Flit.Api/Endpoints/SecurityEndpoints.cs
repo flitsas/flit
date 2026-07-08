@@ -3,8 +3,10 @@ using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
@@ -135,6 +137,13 @@ public static class SecurityEndpoints
             {
                 return Results.Json(
                     new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserEmailBelongsToDeletedAccountException ex)
+            {
+                // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+                return Results.Json(
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
         });
@@ -274,6 +283,88 @@ public static class SecurityEndpoints
             }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
+        // HU #10621 — PATCH /users/{userId} — edita nombre y/o correo de un usuario del
+        // alcance del caller. rowVersion es obligatorio (concurrencia optimista, AC4).
+        group.MapPatch("/users/{userId:guid}", async (
+            Guid userId,
+            [FromBody] UpdateUserRequest request,
+            ClaimsPrincipal caller,
+            UpdateUserHandler handler,
+            ILoggerFactory lf,
+            CancellationToken cancellationToken) =>
+        {
+            var logger = lf.CreateLogger(nameof(SecurityEndpoints));
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var tenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo (fix post-review #10504).
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            try
+            {
+                await handler.HandleAsync(
+                    new UpdateUserCommand(
+                        tenantId, userId, request.DisplayName, request.Email, request.RowVersion, callerId, isSuperAdmin),
+                    cancellationToken);
+                return Results.Ok();
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_NOT_FOUND", "El usuario no existe."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("OUT_OF_SCOPE", "El usuario no pertenece al tenant."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (UserAlreadyExistsException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserEmailBelongsToDeletedAccountException ex)
+            {
+                return Results.Json(
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserProfileConcurrencyException ex)
+            {
+                return Results.Json(
+                    new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Json(
+                    new ErrorResponse("VALIDATION_ERROR", ex.Message),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (Exception ex)
+            {
+#pragma warning disable CA1848
+                logger.LogError(ex, "Error inesperado al editar el usuario {UserId} en tenant {TenantId}",
+                    userId, tenantId);
+#pragma warning restore CA1848
+                return Results.Json(
+                    new ErrorResponse("UPDATE_USER_ERROR", ex.Message),
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+
         // HU #10506 AC3 — DELETE /users/{userId}/roles/{roleId} — quita un rol puntual sin
         // afectar los demás roles activos del usuario (modelo aditivo).
         group.MapDelete("/users/{userId:guid}/roles/{roleId:guid}", async (
@@ -343,7 +434,8 @@ public static class SecurityEndpoints
                         null,
                         false,
                         t.Id.ToString(),
-                        t.LegalName)
+                        t.LegalName,
+                        u.RowVersion)
                 ).ToListAsync(cancellationToken);
 
                 // SuperAdmin also sees users that belong to other tenants but have no role assignment
@@ -364,7 +456,8 @@ public static class SecurityEndpoints
                         null,
                         false,
                         t.Id.ToString(),
-                        t.LegalName)
+                        t.LegalName,
+                        u.RowVersion)
                 ).ToListAsync(cancellationToken);
 
                 var allPending = await (
@@ -383,7 +476,8 @@ public static class SecurityEndpoints
                         i.CreatedAt,
                         false,
                         t.Id.ToString(),
-                        t.LegalName)
+                        t.LegalName,
+                        0L)
                 ).ToListAsync(cancellationToken);
 
                 return Results.Ok(allUsers.Concat(allUsersWithoutRole).Concat(allPending).ToList());
@@ -409,7 +503,8 @@ public static class SecurityEndpoints
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
-                    null)
+                    null,
+                    u.RowVersion)
             ).ToListAsync(cancellationToken);
 
             var usersWithoutRole = await (
@@ -429,7 +524,8 @@ public static class SecurityEndpoints
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
-                    null)
+                    null,
+                    u.RowVersion)
             ).ToListAsync(cancellationToken);
 
             var pending = await db.UserInvitations
@@ -447,7 +543,8 @@ public static class SecurityEndpoints
                     x.CreatedAt,
                     false,
                     null,
-                    null))
+                    null,
+                    0L))
                 .ToListAsync(cancellationToken);
 
             return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
@@ -548,19 +645,87 @@ public static class SecurityEndpoints
             }
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
+        // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario del
+        // alcance del caller (HU #10623). rowVersion obligatorio (concurrencia optimista, igual
+        // que PATCH /users/{userId}). Restaurar es EXCLUSIVO de SuperAdmin — ver
+        // POST /api/v1/superadmin/users/{userId}/restore.
+        group.MapDelete("/users/{userId:guid}", async (
+            Guid userId,
+            [FromBody] DeleteUserRequest request,
+            ClaimsPrincipal caller,
+            DeleteUserHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var callerId))
+                return Results.Unauthorized();
+
+            // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
+            // en orden no determinístico — se evalúan TODOS los claims de ese tipo.
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            try
+            {
+                await handler.HandleAsync(
+                    new DeleteUserCommand(callerTenantId, userId, request.RowVersion, callerId, callerIsSuperAdmin),
+                    cancellationToken);
+
+                return Results.NoContent();
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.NotFound(new ErrorResponse("USER_NOT_FOUND", "El usuario no existe en este tenant."));
+            }
+            catch (UserOutOfScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (SelfDeletionException)
+            {
+                return Results.BadRequest(new ErrorResponse("SELF_DELETE", "No puedes eliminarte a ti mismo."));
+            }
+            catch (LastActiveAdminException)
+            {
+                return Results.Conflict(new ErrorResponse(
+                    "LAST_ACTIVE_ADMIN", "No es posible eliminar al último administrador activo."));
+            }
+            catch (UserProfileConcurrencyException ex)
+            {
+                return Results.Json(
+                    new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+
         return app;
     }
 
     private sealed record AssignRoleRequest(Guid RoleId);
 
+    // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
+    // (concurrencia optimista, AC4 — el valor que el frontend leyó de TenantUserDto.RowVersion).
+    private sealed record UpdateUserRequest(string? DisplayName, string? Email, long RowVersion);
+
     // HU #10619 AC1: EndsAt nulo = desactivación indefinida (sin fecha de fin).
     private sealed record SuspendUserRequest(string Reason, DateTimeOffset? EndsAt);
+
+    // HU #10623 — RowVersion obligatorio (concurrencia optimista, igual que UpdateUserRequest —
+    // el valor leído de TenantUserDto.RowVersion).
+    private sealed record DeleteUserRequest(long RowVersion);
 
     private sealed record CreateInvitationRequest(string Email, string? FullName, Guid[]? RoleIds, Guid? TargetTenantId);
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName);
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion);
 
     private sealed record ErrorResponse(string Code, string Message);
 }

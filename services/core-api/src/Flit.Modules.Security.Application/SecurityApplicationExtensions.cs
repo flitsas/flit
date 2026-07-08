@@ -8,8 +8,11 @@ using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
+using Flit.Modules.Security.Application.UserManagement.DeleteUser;
+using Flit.Modules.Security.Application.UserManagement.RestoreUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Application.UserRoles;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,9 +60,17 @@ public static class SecurityApplicationExtensions
         // Fase 2 — Endpoints AdminCompañía
         services.AddScoped<ListAccessibleModulesHandler>();
 
+        // HU #10621 — Editar nombre/correo de un usuario (compartido entre SecurityEndpoints
+        // y AdminOtEndpoints, mismo Handler).
+        services.AddScoped<UpdateUserHandler>();
+
         // HU #10619 — unificación de suspensión/desactivación indefinida + fix de alcance SuperAdmin
         services.AddScoped<SuspendUserHandler>();
         services.AddScoped<UnsuspendUserHandler>();
+
+        // HU #10623 — eliminar (soft-delete reversible) y restaurar (SOLO SuperAdmin) un usuario.
+        services.AddScoped<DeleteUserHandler>();
+        services.AddScoped<RestoreUserHandler>();
 
         return services;
     }

@@ -150,7 +150,8 @@ public static class InfrastructureExtensions
         // HU #10164 — Asignación única de rol por usuario tenant
         services.AddScoped<IUserRoleAssignmentRepository, UserRoleAssignmentRepository>();
 
-        // HU #10619 — repositorio compartido de suspensión/desactivación/reactivación de usuarios
+        // HU #10621 — Editar nombre/correo de un usuario; HU #10619 — repositorio compartido de
+        // suspensión/desactivación/reactivación de usuarios (mismo repositorio, IUserManagementRepository).
         services.AddScoped<IUserManagementRepository, UserManagementRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).

@@ -890,6 +890,122 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/ot/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Admin · OT]
+      operationId: adminOtUpdateUser
+      summary: Edita nombre y/o correo de un usuario del tenant OT (#10621)
+      description: >
+        Edita displayName y/o email de un usuario dentro del alcance del caller
+        (propio tenant para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). `rowVersion` es obligatorio (concurrencia optimista: el valor
+        leído de `OtUserItem.rowVersion`). No invalida sesiones activas — el cambio
+        de correo solo aplica en el próximo login. Requiere JWT con rol SuperAdmin
+        u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOtUserRequest"
+      responses:
+        "200":
+          description: Usuario actualizado.
+        "400":
+          description: Datos inválidos (longitud de nombre/correo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o el usuario no pertenece al tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El correo ya tiene una cuenta activa (`USER_ALREADY_EXISTS`), pertenece
+            a una cuenta eliminada (`EMAIL_BELONGS_TO_DELETED_USER`), o `rowVersion`
+            quedó desactualizado (`CONCURRENCY_CONFLICT` — otro admin ya modificó al
+            usuario). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Admin · OT]
+      operationId: adminOtDeleteUser
+      summary: Elimina (soft-delete reversible) a un usuario del tenant OT (#10623)
+      description: >
+        Marca `deletedAt`/`deletedBy` en el usuario dentro del alcance del caller
+        (propio tenant para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin) — HU #10623. `rowVersion` es obligatorio (concurrencia optimista,
+        el valor leído de `OtUserItem.rowVersion`). NO toca roles ni suspensiones: al
+        restaurar (`POST /api/v1/superadmin/users/{userId}/restore`, SOLO SuperAdmin)
+        el usuario recupera exactamente el mismo estado. Se rechaza la
+        auto-eliminación y la eliminación del último administrador activo del
+        tenant/sistema. Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteOtUserRequest"
+      responses:
+        "204":
+          description: Usuario eliminado (soft-delete).
+        "400":
+          description: Auto-eliminación no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin, o el usuario no pertenece al tenant OT resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (`LAST_ACTIVE_ADMIN`), o `rowVersion` quedó desactualizado
+            (`CONCURRENCY_CONFLICT`). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/ot/users/{userId}/suspend:
     parameters:
       - name: userId
@@ -969,6 +1085,106 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: El usuario no existe en el tenant OT resuelto, o no tiene una suspensión activa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Security]
+      operationId: securityDeleteUser
+      summary: Elimina (soft-delete reversible) a un usuario del alcance del caller (#10623)
+      description: >
+        Marca `deletedAt`/`deletedBy` en el usuario dentro del alcance del caller
+        (AdminCompany solo su propio tenant, SuperAdmin cualquiera) — HU #10623.
+        `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+        `TenantUserDto.rowVersion`). NO toca roles ni suspensiones: al restaurar
+        (`POST /api/v1/superadmin/users/{userId}/restore`, SOLO SuperAdmin) el
+        usuario recupera exactamente el mismo estado. Se rechaza la
+        auto-eliminación y la eliminación del último administrador activo del
+        tenant/sistema. Requiere JWT con rol SuperAdmin o AdminCompany
+        (AdminCompanyPolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteUserRequest"
+      responses:
+        "204":
+          description: Usuario eliminado (soft-delete).
+        "400":
+          description: Auto-eliminación no permitida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin o AdminCompany, o sin ámbito sobre el usuario objetivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El usuario no existe en este tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            La acción dejaría al tenant o al sistema sin ningún administrador activo
+            (`LAST_ACTIVE_ADMIN`), o `rowVersion` quedó desactualizado
+            (`CONCURRENCY_CONFLICT`). No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/superadmin/users/{userId}/restore:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Super Admin]
+      operationId: restoreUser
+      summary: Restaura (deshace el soft-delete) a un usuario eliminado (#10623)
+      description: >
+        SOLO SuperAdmin. NO toca `UserRoleAssignment` ni `UserTempSuspension` —
+        como `DELETE` nunca los modificó, el usuario recupera exactamente los
+        mismos roles y el mismo estado de suspensión que tenía al momento de
+        eliminarse (AC3). Restaurar un usuario que NO está eliminado se rechaza
+        explícitamente (AC5, no es un no-op silencioso). Requiere JWT con rol
+        SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Usuario restaurado.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin.
+        "404":
+          description: El usuario no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar.
           content:
             application/json:
               schema:
@@ -4622,7 +4838,33 @@ components:
           enum: [active, inactive, pending]
         createdAt: { type: string, format: date-time, nullable: true }
         isSuspended: { type: boolean }
-      required: [id, fullName, email, status, isSuspended]
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
+
+    UpdateOtUserRequest:
+      type: object
+      description: Edición de nombre/correo de un usuario del tenant OT (#10621).
+      properties:
+        displayName:
+          type: string
+          nullable: true
+          description: Nombre nuevo. Omitido o vacío = no se modifica.
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Correo nuevo. Omitido o vacío = no se modifica.
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista, AC4).
+      required: [rowVersion]
 
     OtUserListResponse:
       type: object
@@ -4644,6 +4886,32 @@ components:
         reason: { type: string }
         endsAt: { type: string, format: date-time, nullable: true }
       required: [reason]
+
+    DeleteOtUserRequest:
+      type: object
+      description: >
+        HU #10623: elimina (soft-delete reversible) a un usuario del tenant OT.
+        `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
+        `OtUserItem.rowVersion`).
+      properties:
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista).
+      required: [rowVersion]
+
+    DeleteUserRequest:
+      type: object
+      description: >
+        HU #10623: elimina (soft-delete reversible) a un usuario. `rowVersion` es
+        obligatorio (concurrencia optimista, el valor leído de
+        `TenantUserDto.rowVersion`).
+      properties:
+        rowVersion:
+          type: integer
+          format: int64
+          description: Versión de fila leída por el cliente (concurrencia optimista).
+      required: [rowVersion]
 
     AuditLogEntry:
       type: object

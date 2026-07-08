@@ -1,14 +1,16 @@
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// HU #10619: repositorio compartido de suspensión/desactivación/reactivación de usuarios,
-/// consumido por <c>SuspendUserHandler</c>/<c>UnsuspendUserHandler</c> desde
-/// <c>SecurityEndpoints</c> y <c>AdminOtEndpoints</c> (antes cada endpoint manipulaba
-/// <c>FlitDbContext</c> directamente y duplicaba la misma lógica).
+/// Implementación EF Core del repositorio compartido de gestión administrativa del ciclo de
+/// vida de un usuario: edición de perfil (HU #10621) y suspensión/desactivación/reactivación
+/// (HU #10619), consumido por <c>UpdateUserHandler</c>/<c>SuspendUserHandler</c>/
+/// <c>UnsuspendUserHandler</c> desde <c>SecurityEndpoints</c> y <c>AdminOtEndpoints</c> (antes
+/// cada endpoint manipulaba <c>FlitDbContext</c> directamente y duplicaba la misma lógica).
 /// </summary>
 public sealed class UserManagementRepository(FlitDbContext db) : IUserManagementRepository
 {
@@ -19,7 +21,7 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
             query = query.Where(u => u.DeletedAt == null);
 
         var user = await query
-            .Select(u => new { u.Id, u.HomeTenantId, u.Email, u.DisplayName, u.DeletedAt })
+            .Select(u => new { u.Id, u.HomeTenantId, u.Email, u.DisplayName, u.DeletedAt, u.RowVersion })
             .FirstOrDefaultAsync(ct);
 
         // Mismo criterio que UserRoleAssignmentRepository.UserBelongsToTenantAsync: el tenant del
@@ -27,7 +29,60 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
         if (user is null || user.HomeTenantId is null)
             return null;
 
-        return new UserManagementTarget(user.Id, user.HomeTenantId.Value, user.Email, user.DisplayName, user.DeletedAt);
+        return new UserManagementTarget(
+            user.Id, user.HomeTenantId.Value, user.Email, user.DisplayName, user.DeletedAt, user.RowVersion);
+    }
+
+    public async Task<ExistingUserByEmail?> FindByEmailIncludingDeletedAsync(string email, CancellationToken ct)
+    {
+        // uq_users_email es un índice único GLOBAL (no parcial por deleted_at): un correo
+        // soft-deleted sigue "ocupado" en BD, por eso esta búsqueda NO filtra por DeletedAt
+        // (a diferencia de AuthUserRepository.FindByEmailAsync, que sí lo hace para el login).
+        return await db.Users
+            .AsNoTracking()
+            .Where(u => EF.Functions.ILike(u.Email, email))
+            .Select(u => new ExistingUserByEmail(u.Id, u.DeletedAt != null))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task UpdateProfileAsync(
+        Guid userId,
+        string? displayName,
+        string? email,
+        long expectedRowVersion,
+        DateTimeOffset updatedAt,
+        Guid? updatedBy,
+        CancellationToken ct)
+    {
+        var entity = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity is null)
+            throw new TargetUserNotFoundException();
+
+        // Concurrencia optimista contra la versión que el CALLER leyó (no la que acabamos de
+        // traer de BD): al forzar el OriginalValue del concurrency token a expectedRowVersion,
+        // el UPDATE que emite EF incluye "WHERE ... AND row_version = expectedRowVersion". Si
+        // otro admin ya guardó cambios entre el fetch del formulario y este submit, row_version
+        // actual en BD ya no coincide con expectedRowVersion → 0 filas afectadas → EF lanza
+        // DbUpdateConcurrencyException (AC4). El trigger tr_users_row_version (BEFORE UPDATE)
+        // incrementa row_version en BD de forma independiente de lo que EF intente escribir.
+        db.Entry(entity).Property(e => e.RowVersion).OriginalValue = expectedRowVersion;
+
+        if (displayName is not null)
+            entity.DisplayName = displayName;
+        if (email is not null)
+            entity.Email = email;
+
+        entity.UpdatedAt = updatedAt;
+        entity.UpdatedBy = updatedBy;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new UserProfileConcurrencyException();
+        }
     }
 
     public async Task<IReadOnlyList<ActiveAdminRoleAssignment>> GetActiveAdminRoleAssignmentsAsync(
@@ -119,5 +174,54 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
         db.UserTempSuspensions.Add(suspension);
         await db.SaveChangesAsync(ct);
         return suspension.Id;
+    }
+
+    public async Task SoftDeleteUserAsync(
+        Guid userId,
+        DateTimeOffset deletedAt,
+        Guid? deletedBy,
+        long expectedRowVersion,
+        CancellationToken ct)
+    {
+        var entity = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity is null)
+            throw new TargetUserNotFoundException();
+
+        // Mismo mecanismo de concurrencia optimista que UpdateProfileAsync (ver comentario allí):
+        // fuerza el OriginalValue del concurrency token para que el UPDATE incluya
+        // "WHERE ... AND row_version = expectedRowVersion".
+        db.Entry(entity).Property(e => e.RowVersion).OriginalValue = expectedRowVersion;
+
+        // AC3 — solo se toca User.DeletedAt/DeletedBy: UserRoleAssignment y UserTempSuspension
+        // quedan intactos para que RestoreUserAsync recupere exactamente el mismo estado.
+        entity.DeletedAt = deletedAt;
+        entity.DeletedBy = deletedBy;
+        entity.UpdatedAt = deletedAt;
+        entity.UpdatedBy = deletedBy;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new UserProfileConcurrencyException();
+        }
+    }
+
+    public async Task RestoreUserAsync(Guid userId, Guid? restoredBy, CancellationToken ct)
+    {
+        var entity = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity is null)
+            throw new TargetUserNotFoundException();
+
+        // AC3 — solo se limpia User.DeletedAt/DeletedBy: UserRoleAssignment y UserTempSuspension
+        // nunca se tocaron al eliminar, así que el usuario recupera exactamente el mismo estado.
+        entity.DeletedAt = null;
+        entity.DeletedBy = null;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = restoredBy;
+
+        await db.SaveChangesAsync(ct);
     }
 }

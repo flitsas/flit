@@ -32,7 +32,7 @@ public sealed class UnsuspendUserHandlerTests
     public async Task HandleAsync_WhenActiveSuspensionExists_ClosesIt()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null, 1));
         _repo.CloseActiveSuspensionsAsync(TenantId, UserId, Arg.Any<DateTimeOffset>(), CallerId, Arg.Any<CancellationToken>())
             .Returns(1);
 
@@ -48,7 +48,7 @@ public sealed class UnsuspendUserHandlerTests
     public async Task HandleAsync_WhenNoActiveSuspension_ThrowsNoActiveSuspension()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", null, 1));
         _repo.CloseActiveSuspensionsAsync(TenantId, UserId, Arg.Any<DateTimeOffset>(), CallerId, Arg.Any<CancellationToken>())
             .Returns(0);
 
@@ -63,7 +63,7 @@ public sealed class UnsuspendUserHandlerTests
     public async Task HandleAsync_AsSuperAdmin_TargetingOtherTenant_UsesTargetTenant()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null, 1));
         _repo.CloseActiveSuspensionsAsync(OtherTenantId, UserId, Arg.Any<DateTimeOffset>(), CallerId, Arg.Any<CancellationToken>())
             .Returns(1);
 
@@ -79,7 +79,7 @@ public sealed class UnsuspendUserHandlerTests
     public async Task HandleAsync_AsNonSuperAdmin_TargetingOtherTenant_ThrowsUserOutOfScope()
     {
         _repo.FindTargetAsync(UserId, false, Arg.Any<CancellationToken>())
-            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null));
+            .Returns(new UserManagementTarget(UserId, OtherTenantId, "user@flit.local", "Usuario", null, 1));
 
         await _handler
             .Invoking(h => h.HandleAsync(MakeCommand(callerIsSuperAdmin: false), CancellationToken.None))
