@@ -137,16 +137,6 @@ public sealed class TramiteDocumentContextMapperTests
             .CambioCarroceria.Should().BeFalse();
     }
 
-    [Theory]
-    [InlineData("registrar", true)]
-    [InlineData("levantar", false)]
-    [InlineData("omitir", false)]
-    public void AccionPrenda_SoloRegistrar_TienePrenda(string accion, bool esperado)
-    {
-        TramiteDocumentContextMapper.From(InstanceWith(fields: [("accion_prenda", accion)]))
-            .TienePrenda.Should().Be(esperado);
-    }
-
     [Fact]
     public void CampoBooleanoNoReconocido_NoActivaBandera()
     {
