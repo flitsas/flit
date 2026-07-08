@@ -158,8 +158,8 @@ public static class FurFieldMapper
     {
         MarkCheckbox(dict, "requested_process_1", !esTraspaso);
         MarkCheckbox(dict, "requested_process_2", esTraspaso);
-        MarkCheckbox(dict, "requested_process_11", false);
-        _ = data;
+        // HU #10601 — marca el gravamen (prenda) cuando la decisión vigente del trámite lo implica.
+        MarkCheckbox(dict, "requested_process_11", data.TienePrenda);
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)

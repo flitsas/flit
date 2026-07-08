@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
@@ -26,10 +27,12 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
     private const string FieldName = "transit_office_id";
 
     private readonly FlitDbContext _context;
+    private readonly IAuditContextAccessor _auditContext;
 
-    public TransitGrantRepository(FlitDbContext context)
+    public TransitGrantRepository(FlitDbContext context, IAuditContextAccessor auditContext)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public async Task<IReadOnlyList<Guid>> ListEnabledOfficeIdsAsync(
@@ -145,6 +148,10 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
             ChangedAt = now,
             ChangedBy = createdBy,
             CorrelationId = correlationId,
+            // RNF01 (ADR-0024): alta del grant = create, exitosa.
+            ClientIp = _auditContext.ClientIp,
+            Operation = AuditVocabulary.Operations.Create,
+            Result = AuditVocabulary.Results.Success,
         });
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -184,6 +191,10 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
             ChangedAt = now,
             ChangedBy = changedBy,
             CorrelationId = correlationId,
+            // RNF01 (ADR-0024): baja del grant = delete, exitosa.
+            ClientIp = _auditContext.ClientIp,
+            Operation = AuditVocabulary.Operations.Delete,
+            Result = AuditVocabulary.Results.Success,
         });
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

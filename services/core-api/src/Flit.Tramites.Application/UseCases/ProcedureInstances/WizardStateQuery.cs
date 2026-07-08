@@ -57,7 +57,8 @@ public sealed record WizardStateDto(
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
-    IIdentityValidationPolicy? identityPolicy = null)
+    IIdentityValidationPolicy? identityPolicy = null,
+    ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -89,7 +90,12 @@ public sealed class GetWizardStateHandler(
             ? identidadAprobada
             : IdentitySatisfiedForAllParties(identidadAprobada);
 
-        var state = ComputeState(instance, partesEfectivas) with
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
+
+        var state = ComputeState(instance, partesEfectivas, docsCompletos) with
         {
             IdentityValidationEnabled = identityRequired,
         };
@@ -114,7 +120,15 @@ public sealed class GetWizardStateHandler(
     /// Signatures). Expuesto para reusar la MISMA lógica de gates por paso desde otros handlers (p.ej. el
     /// listado de trámites computa <c>PasoActual</c> contando los pasos en <c>complete</c>) sin duplicarla.
     /// </summary>
-    public static WizardStateDto ComputeState(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    /// <param name="documentosCompletosOverride">
+    /// HU #10522 (RF17/RF22): completitud documental resuelta desde la matriz del gestor; <c>null</c>
+    /// ⇒ se usa el cómputo actual del catálogo (flag OFF, sin matriz, o llamadores que no lo aportan,
+    /// p. ej. el listado de trámites), sin regresión.
+    /// </param>
+    public static WizardStateDto ComputeState(
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool? documentosCompletosOverride = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -123,20 +137,21 @@ public sealed class GetWizardStateHandler(
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes)
-            : BuildMatricula(instance, identidadAprobadaPartes);
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride)
+            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static WizardStateDto BuildMatricula(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
         var runtComprador = RuntOf(instance, "comprador");
         var preflight = PreflightOf(instance);
 
-        var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
         var riesgoAceptado = RiesgoAceptado(instance);
 
         // Matrícula: la única parte (comprador) lleva la biométrica. Aprobación PER-PERSONA (documento),
@@ -248,7 +263,8 @@ public sealed class GetWizardStateHandler(
 
     // ---- Traspaso estándar (6 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static WizardStateDto BuildTraspaso(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -257,7 +273,7 @@ public sealed class GetWizardStateHandler(
         var runtComprador = RuntOf(instance, "comprador");
         var preflight = PreflightOf(instance);
         var simitComprador = SimitOf(instance, comprador, preflight);
-        var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
         var riesgoAceptado = RiesgoAceptado(instance);
 
         var ctx = new TraspasoGateContext

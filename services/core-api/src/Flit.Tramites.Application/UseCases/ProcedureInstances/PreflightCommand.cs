@@ -3,10 +3,13 @@ using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -49,7 +52,9 @@ public sealed class RunPreflightHandler(
     IProcedureInstanceRepository repo,
     IConsultationProviderRegistry registry,
     IConsultationProviderChainResolver chainResolver,
-    IConsultationTenantOverrideProvider overrideProvider)
+    IConsultationTenantOverrideProvider overrideProvider,
+    IRnmcRequirementPolicy rnmcPolicy,
+    ITransitOfficeResolver transitOfficeResolver)
 {
     private const string ProviderVerifikSimit = "verifik_simit";
     private const string ProviderVerifikRnmc = "verifik_rnmc";
@@ -57,6 +62,7 @@ public sealed class RunPreflightHandler(
     private const string SystemSource = "system";
     private const string FieldVinConflictoTraspaso = "vin_conflicto_traspaso";
     private const string CheckVinMatricula = "vin_matricula";
+    private const string FieldRnmcMedidaPendiente = "rnmc_medida_pendiente";
 
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -88,6 +94,11 @@ public sealed class RunPreflightHandler(
         // salen de la config del tenant; null ⇒ defaults globales.
         var tenantOverride = await overrideProvider.GetAsync(tenantId, ct);
 
+        // HU #10602 (R18) — RNMC condicionado por el OT destino (admin.ot_requirements.requires_rnmc)
+        // y SOLO para actores persona natural (comprador/vendedor). El jurídico (NIT) nunca consulta RNMC.
+        var requiresRnmc = await rnmcPolicy.IsRnmcRequiredAsync(
+            tenantId, TransitOfficeIdFromFieldValues(instance), ct);
+
         if (modalidad == TramiteModalidadEntrada.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
@@ -97,8 +108,12 @@ public sealed class RunPreflightHandler(
             // SIMIT del comprador y del vendedor (comparendos).
             await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, ct);
             await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, ct);
-            // RNMC del comprador (medidas correctivas).
-            await RunRnmcAsync(checks, providersUsed, comprador, ct);
+            // RNMC (medidas correctivas) por cada actor persona natural, si el OT lo exige.
+            if (requiresRnmc)
+            {
+                await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
+                await RunRnmcAsync(checks, providersUsed, "vendedor", vendedor, fieldValues, ct);
+            }
         }
         else
         {
@@ -106,13 +121,33 @@ public sealed class RunPreflightHandler(
             vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
             // R3 (HU #10538): si el VIN ya tiene una matrícula previa en el tenant, informar y ofrecer traspaso.
             await DetectVinConflictoTraspasoAsync(checks, instance, tenantId, vin, ct);
+            // RNMC del comprador/propietario persona natural, si el OT lo exige (ambas modalidades, R18).
+            if (requiresRnmc)
+            {
+                await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
+            }
         }
+
+        // HU #10604 (R19) — señal server-driven de medida correctiva RNMC pendiente ("Imponer Medida")
+        // para el gate de envío al OT (EvaluarEntregaAsync). Se pone en true si algún check RNMC quedó
+        // en "fail" (medidas correctivas); si no, se baja a false (sin crear filas innecesarias).
+        var hasRnmcMedida = checks.Any(c =>
+            c.Key.StartsWith("rnmc_", StringComparison.Ordinal) && c.Status == "fail");
+        if (hasRnmcMedida)
+            SetSignalIfChanged(instance, tenantId, FieldRnmcMedidaPendiente, "true", createIfMissing: true);
+        else
+            SetSignalIfChanged(instance, tenantId, FieldRnmcMedidaPendiente, "false", createIfMissing: false);
 
         // Una sola consulta a Verifik alimenta AMBAS secciones: el proveedor del vehículo ya
         // devolvió los atributos del RUNT (marca/línea/color/…). Los persistimos en field_values
         // (source="consultation") para la tarjeta "Datos del vehículo", evitando una segunda
         // consulta dedicada. Idempotente: upsert por field_key.
         UpsertHydratedFields(instance, tenantId, vehicleFields);
+
+        // B11 (HU #10659) — en TRASPASO el vehículo ya tiene OT en RUNT: tras hidratar
+        // transit_office_name, resolver el OT habilitado de la empresa y fijar también id/code/city.
+        // El OT queda fijado desde el RUNT (no editable manualmente; ver PatchFieldValuesHandler).
+        await AutoBindTransitOfficeForTraspasoAsync(instance, tenantId, ct);
 
         // Matrícula inicial: el estado del vehículo no debe bloquear (ver RelajarEstadoVehiculoMatricula).
         RelajarEstadoVehiculoMatricula(checks, modalidad);
@@ -277,20 +312,21 @@ public sealed class RunPreflightHandler(
     private async Task RunRnmcAsync(
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
+        string role,
         ActorRef? actor,
+        Dictionary<string, string?> fieldValues,
         CancellationToken ct)
     {
+        // RNMC solo aplica a personas naturales: sin actor, o si el actor es jurídico (NIT), no se consulta.
+        if (actor is null || !IsNaturalPerson(actor))
+            return;
+
+        var keyPrefix = $"rnmc_{role}";
         var provider = registry.Resolve(ProviderVerifikRnmc);
         if (provider is null)
         {
-            checks.Add(new PreflightCheckDto("rnmc", "Consulta RNMC (Policía)", "error", ProviderVerifikRnmc,
+            checks.Add(new PreflightCheckDto(keyPrefix, $"Consulta RNMC ({role})", "error", ProviderVerifikRnmc,
                 "No fue posible verificar la información en el RNMC en este momento. Vuelve a intentarlo en unos minutos."));
-            return;
-        }
-
-        if (actor is null)
-        {
-            checks.Add(new PreflightCheckDto("rnmc", "RNMC comprador", "unknown", ProviderVerifikRnmc, "Comprador sin documento para consultar RNMC"));
             return;
         }
 
@@ -299,10 +335,20 @@ public sealed class RunPreflightHandler(
         {
             ["owner_document_type"] = actor.DocumentType,
             ["owner_document_number"] = actor.DocumentNumber,
+            // Fecha de expedición que el RNMC real exige: por actor (rol) o genérica; si falta, el
+            // provider real la trata como dato ausente (unknown, no bloquea).
+            ["document_issue_date"] = Get(fieldValues, $"{role}_document_issue_date") ?? Get(fieldValues, "document_issue_date"),
         };
 
-        await RunProviderAsync(checks, provider, fv, ct, keyPrefix: "rnmc");
+        await RunProviderAsync(checks, provider, fv, ct, keyPrefix: keyPrefix);
     }
+
+    // RNMC aplica solo a personas naturales. Usa PersonType (HU #10542) y, si no está seteado,
+    // cae al tipo de documento: NIT ⇒ jurídica; cualquier otro ⇒ natural.
+    private static bool IsNaturalPerson(ActorRef actor) =>
+        ActorPersonTypes.IsNatural(actor.PersonType)
+        || (string.IsNullOrWhiteSpace(actor.PersonType)
+            && !string.Equals(actor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Ejecuta un provider con un contexto a medida y vuelca sus checks en el snapshot.
@@ -484,6 +530,43 @@ public sealed class RunPreflightHandler(
         }
     }
 
+    /// <summary>
+    /// B11 (HU #10659) — SOLO en traspaso_standard: tras hidratar <c>transit_office_name</c> desde el
+    /// RUNT, resuelve el OT habilitado de la empresa (por nombre, case-insensitive) y fija también
+    /// <c>transit_office_id</c>, <c>transit_office_code</c> y <c>transit_office_city</c>
+    /// (Source="consultation"). Si el nombre RUNT NO coincide con ningún OT habilitado se conserva solo
+    /// <c>transit_office_name</c> y NO se inventa un id (el traspaso queda a la espera de que el
+    /// SuperAdmin habilite el grant correcto). En matrícula no hace nada (el operador elige libremente).
+    /// </summary>
+    private async Task AutoBindTransitOfficeForTraspasoAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        if (!string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal))
+            return;
+
+        var runtName = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.IsNullOrWhiteSpace(runtName))
+            return;
+
+        var match = await transitOfficeResolver.ResolveEnabledByNameAsync(tenantId, runtName, ct);
+        if (match is null)
+            return; // Sin OT habilitado que coincida: se deja solo el nombre RUNT (no se inventa id).
+
+        // Reusa el upsert idempotente de campos hidratados (Source="consultation").
+        UpsertHydratedFields(instance, tenantId,
+        [
+            new HydratedField("transit_office_id", match.Id.ToString(), null),
+            new HydratedField("transit_office_code", match.Code, null),
+            new HydratedField("transit_office_name", match.Name, null),
+            new HydratedField("transit_office_city", match.CityCode, null),
+        ]);
+    }
+
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
 
@@ -493,10 +576,19 @@ public sealed class RunPreflightHandler(
             string.Equals(x.ActorType, actorType, StringComparison.OrdinalIgnoreCase));
         if (a is null || string.IsNullOrWhiteSpace(a.DocumentType) || string.IsNullOrWhiteSpace(a.DocumentNumber))
             return null;
-        return new ActorRef(a.DocumentType, a.DocumentNumber);
+        return new ActorRef(a.DocumentType, a.DocumentNumber, a.PersonType);
     }
 
-    private sealed record ActorRef(string DocumentType, string DocumentNumber);
+    // OT destino elegido en el wizard (transit_office_id en field_values). null si aún no se ha elegido;
+    // en ese caso IRnmcRequirementPolicy cae al único grant vigente o al default seguro (false).
+    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
+    {
+        var raw = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        return Guid.TryParse(raw, out var id) ? id : null;
+    }
+
+    private sealed record ActorRef(string DocumentType, string DocumentNumber, string? PersonType);
 }
 
 /// <summary>GET del último snapshot de preflight. Devuelve null si aún no se ha corrido.</summary>

@@ -21,6 +21,7 @@ public sealed class FurHandlerTests
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
     private readonly FakeCertClient _certClient = new();
     private readonly IRuesCertificateGenerator _ruesGenerator = Substitute.For<IRuesCertificateGenerator>();
+    private readonly IProcedureInstancePrendaRepository _prendaRepo = Substitute.For<IProcedureInstancePrendaRepository>();
     private readonly FakeStorage _storage = new();
     private readonly GenerarFurHandler _handler;
 
@@ -33,7 +34,7 @@ public sealed class FurHandlerTests
                 return new GeneratedDocument("certificado_rues", $"certificado_rues_{d.Nit}.pdf",
                     "application/pdf", Encoding.UTF8.GetBytes($"RUES {d.RazonSocial} {d.Nit} {d.Estado}"));
             });
-        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _storage, NullLogger<GenerarFurHandler>.Instance);
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
     }
 
     /// <summary>

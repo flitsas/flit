@@ -1,8 +1,8 @@
-// AC2 — Lista reordenable: alternativa accesible (↑/↓) al drag-and-drop, toggle de
-// obligatoriedad y baja. El reordenamiento emite la lista completa renumerada.
+// HU #10198 / RF22 — Lista de documentos del trámite: define qué documentos y su
+// obligatoriedad. Tras RF22 ya NO reordena (el orden lo fija solo «Overrides OT»).
 //
 // Uso de ejemplo:
-//   render(<DocumentAssociationList items={items} onReorder={fn} ... />);
+//   render(<DocumentAssociationList items={items} onToggleObligatorio={fn} onRemove={fn} />);
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { DocumentAssociationList } from "../panels/DocumentAssociationList";
@@ -21,34 +21,18 @@ function req(id: string, codigo: string, nombre: string, orden: number): Procedu
 
 const items = [req("a", "DOCA", "Documento A", 10), req("b", "DOCB", "Documento B", 20)];
 
-describe("DocumentAssociationList (AC2)", () => {
-  it("reordena con el botón bajar y emite el nuevo orden", () => {
-    const onReorder = vi.fn();
+describe("DocumentAssociationList (RF22)", () => {
+  it("NO ofrece reordenamiento (el orden lo define Overrides OT)", () => {
     render(
       <DocumentAssociationList
         items={items}
-        onReorder={onReorder}
         onToggleObligatorio={vi.fn()}
         onRemove={vi.fn()}
       />,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: /bajar documento a/i }));
-    const reordered = onReorder.mock.calls[0][0] as ProcedureDocumentRequirement[];
-    expect(reordered.map((r) => r.id)).toEqual(["b", "a"]);
-  });
-
-  it("deshabilita subir en el primer ítem y bajar en el último", () => {
-    render(
-      <DocumentAssociationList
-        items={items}
-        onReorder={vi.fn()}
-        onToggleObligatorio={vi.fn()}
-        onRemove={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /subir documento a/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /bajar documento b/i })).toBeDisabled();
+    // Ya no existen botones de subir/bajar en esta lista.
+    expect(screen.queryByRole("button", { name: /subir/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /bajar/i })).toBeNull();
   });
 
   it("dispara toggle de obligatoriedad y baja", () => {
@@ -57,7 +41,6 @@ describe("DocumentAssociationList (AC2)", () => {
     render(
       <DocumentAssociationList
         items={items}
-        onReorder={vi.fn()}
         onToggleObligatorio={onToggleObligatorio}
         onRemove={onRemove}
       />,

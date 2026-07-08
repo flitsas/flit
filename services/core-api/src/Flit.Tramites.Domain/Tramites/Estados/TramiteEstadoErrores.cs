@@ -42,4 +42,23 @@ public static class TramiteEstadoErrores
 
     /// <summary>Gate de entrega — una regla OT activa bloquea la entrega (422).</summary>
     public const string ReglaOtBloquea = "ot_rule_blocked";
+
+    /// <summary>
+    /// R10 (HU #10597) — gate Borrador→Preparado del traspaso: el vehículo tiene gravámenes (prenda)
+    /// y no se ha registrado una decisión de prenda vigente (409).
+    /// </summary>
+    public const string PrendaDecisionRequerida = "prenda_decision_requerida";
+
+    /// <summary>
+    /// R10 (HU #10597) — la decisión de prenda registrada exige un documento de soporte que no se ha
+    /// adjuntado (409).
+    /// </summary>
+    public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
+
+    /// <summary>
+    /// Gate de entrega (R19) — hay una medida correctiva RNMC ("Imponer Medida") pendiente: el trámite
+    /// se puede REGISTRAR pero NO enviar al OT hasta cargar el paz y salvo RNMC (DocTipo
+    /// <c>paz_salvo_rnmc</c>) (422).
+    /// </summary>
+    public const string RnmcMedidaBloqueaEnvio = "rnmc_medida_bloquea_envio";
 }

@@ -63,7 +63,12 @@ public sealed record FurDocumentData(
     // HU #10488 — sello de la validación biométrica por parte ("comprador"/"vendedor"): texto con
     // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
     // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
-    IReadOnlyDictionary<string, string>? SellosIdentidad = null)
+    IReadOnlyDictionary<string, string>? SellosIdentidad = null,
+    // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
+    // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
+    // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
+    bool TienePrenda = false,
+    string? AcreedorPrenda = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

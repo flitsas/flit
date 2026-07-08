@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.TransitOffices.Create;
@@ -39,10 +40,12 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
     private const string TenantStatusAuditField = "is_active";
 
     private readonly FlitDbContext _context;
+    private readonly IAuditContextAccessor _auditContext;
 
-    public TransitOfficeTenantWriteRepository(FlitDbContext context)
+    public TransitOfficeTenantWriteRepository(FlitDbContext context, IAuditContextAccessor auditContext)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
@@ -230,6 +233,10 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
             ChangedAt = now,
             ChangedBy = changedBy,
             CorrelationId = correlationId,
+            // RNF01 (ADR-0024): cambio de estado del tenant OT = update, exitoso.
+            ClientIp = _auditContext.ClientIp,
+            Operation = AuditVocabulary.Operations.Update,
+            Result = AuditVocabulary.Results.Success,
         });
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

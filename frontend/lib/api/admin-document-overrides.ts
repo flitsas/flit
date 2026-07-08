@@ -16,8 +16,6 @@ export interface OverrideListParams {
   scope: OverrideScope;
   /** Obligatorio si scope=OT. */
   transitOfficeId?: string;
-  /** Obligatorio si scope=CLIENTE. */
-  clienteId?: string;
 }
 
 /** GET — overrides de la combinación (trámite, scope, referencia) ordenados asc (AC3/AC4). */
@@ -56,10 +54,9 @@ export function removeDocumentOrderOverride(id: string): Promise<void> {
 export interface ResolvedMatrixParams {
   procedureTypeId: string;
   transitOfficeId?: string;
-  clienteId?: string;
 }
 
-/** GET /resolved-document-matrix — orden final con precedencia Cliente > OT > Default (AC5). */
+/** GET /resolved-document-matrix — orden final con precedencia OT > Default (AC5). */
 export async function fetchResolvedDocumentMatrix(
   params: ResolvedMatrixParams,
   signal?: AbortSignal,

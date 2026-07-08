@@ -344,6 +344,10 @@ export interface ChecklistItemView {
   obligatorio: boolean;
   docTipo?: string;
   satisfied: boolean;
+  /** RF09 — tamaño máximo por tipo (bytes). Ausente ⇒ usar el límite global. */
+  maxSizeBytes?: number;
+  /** RF08 — formatos MIME permitidos por tipo. Ausente/vacío ⇒ formatos globales. */
+  mimeTypesAllowed?: string[];
 }
 
 /** Respuesta de GET /instances/{id}/checklist. */
@@ -423,6 +427,33 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+}
+
+// ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
+//   PUT /api/v1/tramites/instances/{id}/prenda -> PrendaData
+//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData | null
+export type PrendaDecision =
+  | 'solicitar'
+  | 'registrar'
+  | 'levantar'
+  | 'omitir'
+  | 'sin_prenda';
+
+/** Decisión de prenda vigente del trámite (o null si no se ha registrado ninguna). */
+export interface PrendaData {
+  id: string;
+  decision: PrendaDecision;
+  estado: 'vigente' | 'reemplazada';
+  acreedorNombre: string | null;
+  acreedorDocumento: string | null;
+  createdAt: string;
+}
+
+/** Payload de PUT /prenda. */
+export interface PrendaInput {
+  decision: PrendaDecision;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
 }
 
 // ── Biométrica (Slice 6) ────────────────────────────────────────────

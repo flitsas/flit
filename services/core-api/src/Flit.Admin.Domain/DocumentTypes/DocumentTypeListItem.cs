@@ -24,4 +24,16 @@ public sealed class DocumentTypeListItem
 
     /// <summary>Fecha de creación — <c>tramites.document_types.created_at</c>.</summary>
     public DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>
+    /// Formatos MIME permitidos por tipo (RF08) — <c>tramites.document_types.mime_types_allowed</c>.
+    /// Lista vacía ⇒ se aplican los formatos globales por defecto al cargar.
+    /// </summary>
+    public IReadOnlyList<string> MimeTypesAllowed { get; init; } = [];
+
+    /// <summary>
+    /// Tamaño máximo por tipo en bytes (RF09) — <c>tramites.document_types.max_size_bytes</c>.
+    /// <c>0</c> ⇒ se aplica el tamaño máximo global por defecto al cargar.
+    /// </summary>
+    public long MaxSizeBytes { get; init; }
 }

@@ -5,6 +5,7 @@ using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
+using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Ocr;
@@ -68,13 +69,42 @@ public static class InfrastructureExtensions
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // IT-3 (Feature #10585) — persistencia del agregado de prenda.
+        services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
+        // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions.SectionName));
+        // Se expone el POCO resuelto para que Application (IdentityValidationResultApplier) lo consuma
+        // sin depender de Microsoft.Extensions.Options.
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>>().Value);
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
+
+        // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertRuleRepository, AlertRuleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertMetricsReadRepository, Analytics.Scheduling.AlertMetricsReadRepository>(); // Reportes2 HU-D
+        services.AddHostedService<Analytics.Scheduling.AnalyticsSchedulerProcessor>(); // Reportes2 HU-D
+
+        services.Configure<Telemetry.AnalyticsTelemetryOptions>(configuration.GetSection(Telemetry.AnalyticsTelemetryOptions.SectionName)); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.ChannelUsageEventQueue>(); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.IUsageEventQueue>(sp => sp.GetRequiredService<Telemetry.ChannelUsageEventQueue>()); // Reportes2 HU-A
+        services.AddHostedService<Telemetry.UsageEventWriterProcessor>(); // Reportes2 HU-A
+        services.AddScoped<IUsageMetricsReadRepository, UsageMetricsReadRepository>(); // Reportes2 HU-A
 
         AddAttachmentStorage(services, configuration);
 
@@ -89,6 +119,7 @@ public static class InfrastructureExtensions
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
+        AddRues(services, configuration);
         AddOcr(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -416,6 +447,40 @@ public static class InfrastructureExtensions
         services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+    }
+
+    private static void AddRues(IServiceCollection services, IConfiguration configuration)
+    {
+        // RF36 — autogeneración del Certificado RUES. Opt-in: solo se registra el cliente HTTP cuando
+        // Rues:Enabled=true y hay BaseUrl. Sin registro, GenerarRuesAttachmentHandler recibe el cliente
+        // opcional en null y responde "rues_autogen_disabled" (respaldo: carga manual). Env var CRUDA
+        // primero (override 12-factor), fallback a configuration. La API key NUNCA se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        var enabled = string.Equals(Cfg("Rues:Enabled", "RUES_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+        var baseUrl = Cfg("Rues:BaseUrl", "RUES_BASE_URL");
+        if (!enabled || string.IsNullOrWhiteSpace(baseUrl))
+            return;
+
+        services.Configure<RuesOptions>(o =>
+        {
+            o.Enabled = true;
+            o.BaseUrl = baseUrl;
+            o.ApiKey = Cfg("Rues:ApiKey", "RUES_API_KEY") ?? "";
+            o.AuthScheme = Cfg("Rues:AuthScheme", "RUES_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("Rues:TimeoutSeconds", "RUES_TIMEOUT_SECONDS"), out var t) ? t : 30;
+        });
+
+        services.AddHttpClient<IRuesExternalClient, RuesApiClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<RuesOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });

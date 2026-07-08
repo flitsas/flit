@@ -32,6 +32,9 @@ public sealed class LoginHandlerTests
                 Status = "active",
                 PasswordHash = "hash",
                 TenantId = tenantId,
+                TenantName = "Acme Renting SAS",
+                TenantTaxId = "900123456-7",
+                EntityType = "COMPANY",
                 ActiveRoles = [new UserRoleSnapshot(roleId, "demo_admin")],
                 PermissionSlugs = ["auth.me.read"],
             });
@@ -40,6 +43,8 @@ public sealed class LoginHandlerTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
                 Arg.Any<IReadOnlyList<string>>())
@@ -50,6 +55,86 @@ public sealed class LoginHandlerTests
         result.AccessToken.Should().Be("jwt-token");
         result.ExpiresInSeconds.Should().Be(43200);
         result.TokenType.Should().Be("Bearer");
+
+        // AC1 — el handler debe propagar NIT y tipo de entidad al emisor del JWT sin alterarlos.
+        _jwtTokenIssuer.Received(1).IssueToken(
+            userId,
+            "demo@flit.local",
+            tenantId,
+            "Acme Renting SAS",
+            "900123456-7",
+            "COMPANY",
+            Arg.Is<IReadOnlyList<UserRoleSnapshot>>(r => r.Count == 1 && r[0].Id == roleId),
+            Arg.Is<IReadOnlyList<string>>(p => p.Single() == "auth.me.read"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_TenantTransitOffice_PropagatesEntityType()
+    {
+        // AC2 — el tipo de entidad TRANSIT_OFFICE también debe propagarse tal cual al emisor.
+        var userId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repository.FindByEmailAsync("ot@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new UserAuthSnapshot
+            {
+                UserId = userId,
+                Email = "ot@flit.local",
+                Status = "active",
+                PasswordHash = "hash",
+                TenantId = tenantId,
+                TenantName = "Organismo de Tránsito Norte",
+                TenantTaxId = "800987654-1",
+                EntityType = "TRANSIT_OFFICE",
+                ActiveRoles = [new UserRoleSnapshot(Guid.NewGuid(), "ot_admin")],
+            });
+        _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
+        _jwtTokenIssuer.IssueToken(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+            .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
+
+        await _handler.HandleAsync(new LoginCommand("ot@flit.local", "DemoPass1!"), CancellationToken.None);
+
+        _jwtTokenIssuer.Received(1).IssueToken(
+            userId, "ot@flit.local", tenantId, "Organismo de Tránsito Norte",
+            "800987654-1", "TRANSIT_OFFICE",
+            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_TenantWithoutTaxId_CompletesLoginWithEmptyNit()
+    {
+        // AC4 — tenant sin NIT registrado: el login se completa sin error y el NIT se propaga vacío.
+        var userId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repository.FindByEmailAsync("sinnit@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new UserAuthSnapshot
+            {
+                UserId = userId,
+                Email = "sinnit@flit.local",
+                Status = "active",
+                PasswordHash = "hash",
+                TenantId = tenantId,
+                TenantName = "Tenant Legacy Sin NIT",
+                TenantTaxId = string.Empty,
+                EntityType = "COMPANY",
+                ActiveRoles = [new UserRoleSnapshot(Guid.NewGuid(), "demo_admin")],
+            });
+        _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
+        _jwtTokenIssuer.IssueToken(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+            .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
+
+        var result = await _handler.HandleAsync(new LoginCommand("sinnit@flit.local", "DemoPass1!"), CancellationToken.None);
+
+        result.AccessToken.Should().Be("jwt-token");
+        _jwtTokenIssuer.Received(1).IssueToken(
+            userId, "sinnit@flit.local", tenantId, "Tenant Legacy Sin NIT",
+            string.Empty, "COMPANY",
+            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
     }
 
     [Fact]

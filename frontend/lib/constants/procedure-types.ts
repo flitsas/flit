@@ -9,8 +9,11 @@ export interface ProcedureTypeOption {
 }
 
 export const PROCEDURE_TYPES: ProcedureTypeOption[] = [
-  { id: "33333333-3333-3333-3333-333333333333", code: "TRASPASO", name: "Traspaso" },
-  { id: "44444444-4444-4444-4444-444444444444", code: "MATRICULA_INICIAL", name: "Matrícula inicial" },
+  // HU #10522 — alineados a los procedure_type que usan los trámites reales, para que la
+  // configuración del gestor y el checklist del trámite operen sobre el MISMO tipo (coordinados):
+  // Traspaso → TRASPASO_STANDARD, Matrícula inicial → MATRICULA_NUEVA.
+  { id: "019ef140-f2d8-720f-a624-b0e526f87002", code: "TRASPASO_STANDARD", name: "Traspaso" },
+  { id: "019ef140-f24e-78e4-8e6d-97faa44ed7a8", code: "MATRICULA_NUEVA", name: "Matrícula inicial" },
   { id: "55555555-5555-5555-5555-555555555555", code: "DUPLICADO_PLACA", name: "Duplicado de placa" },
   { id: "66666666-6666-6666-6666-666666666666", code: "CAMBIO_SERVICIO", name: "Cambio de servicio" },
 ];

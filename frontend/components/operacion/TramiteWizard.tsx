@@ -25,10 +25,12 @@ import {
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
+import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import { PrendaForm } from './PrendaForm';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -258,6 +260,10 @@ export function TramiteWizard(props: Props) {
   const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
+  // wizard_step_view al cambiar activeStep?.key y expone los demás eventos).
+  const telemetry = useWizardTelemetry(instanceId, activeStep?.key);
+
   // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
   // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
@@ -276,6 +282,9 @@ export function TramiteWizard(props: Props) {
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
     if (!canNavigateToStep(steps, index, navViewOnly)) return;
+    // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
+    // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
+    if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
     setActiveIndex(index);
   };
 
@@ -362,6 +371,8 @@ export function TramiteWizard(props: Props) {
     setSubmitError(null);
     try {
       await tramitesClient.transitionInstance(instanceId, 'entregado');
+      // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
+      telemetry.trackComplete();
       show(
         modalidad === 'traspaso'
           ? 'Traspaso enviado a tránsito correctamente.'
@@ -423,6 +434,8 @@ export function TramiteWizard(props: Props) {
   // pasos: navegación directa al siguiente.
   const handleContinue = async () => {
     if (!isSavableStep) {
+      // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
+      if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
       return;
     }
@@ -470,6 +483,8 @@ export function TramiteWizard(props: Props) {
 
       const fresh = await refresh();
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+        // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
+        telemetry.trackStepComplete();
         setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       }
     } catch (err) {
@@ -495,7 +510,12 @@ export function TramiteWizard(props: Props) {
           )}
         </div>
         <button
-          onClick={onExit}
+          onClick={() => {
+            // Reportes2 HU-A — salida explícita sin radicar = wizard_abandon
+            // (en solo visualización el trámite ya se radicó: no es abandono).
+            if (!fullReadOnly) telemetry.trackAbandon();
+            onExit();
+          }}
           className="text-xs opacity-70 hover:opacity-100"
           aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >
@@ -973,6 +993,9 @@ function ConsultaStep({
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
   const [riesgoSaving, setRiesgoSaving] = useState(false);
+  // Banderas manuales del vehículo (leasing / cambio de carrocería / acción de prenda) que
+  // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
+  const [atributosSaving, setAtributosSaving] = useState(false);
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -1144,6 +1167,27 @@ function ConsultaStep({
     }
   };
 
+  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
+  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; carrocería en ambos. Aduana es
+  // obligatorio de base en matrícula (no hay check de importado). La prenda se gestiona aparte con
+  // PrendaForm (Feature #10585).
+  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
+  const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
+
+  const saveAtributo = async (fieldKey: string, valueText: string) => {
+    if (!instanceId) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey, valueText, valueJson: null },
+      ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
   // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
@@ -1280,6 +1324,45 @@ function ConsultaStep({
 
       <VehicleDataCard fieldValues={fieldValues} />
 
+      <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
+        <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
+        <p className="text-[11px] opacity-55 -mt-1.5">
+          Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
+        </p>
+
+        {!isVin && (
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={esLeasing}
+              onChange={(e) => void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')}
+              disabled={readOnly || atributosSaving}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            />
+            <span className="text-xs">
+              <span className="font-semibold">Vehículo en leasing</span>
+              <span className="mt-0.5 block opacity-55">
+                Exige contrato de leasing y declaración de la arrendadora.
+              </span>
+            </span>
+          </label>
+        )}
+
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={cambioCarroceria}
+            onChange={(e) => void saveAtributo('cambio_carroceria', e.target.checked ? 'true' : 'false')}
+            disabled={readOnly || atributosSaving}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+          />
+          <span className="text-xs">
+            <span className="font-semibold">Cambio de carrocería</span>
+            <span className="mt-0.5 block opacity-55">Exige la factura de carrocería.</span>
+          </span>
+        </label>
+      </div>
+
       {mostrarPazSalvo && (
         <label
           className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"
@@ -1372,12 +1455,20 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist
-          instanceId={instanceId}
-          onChanged={onRefresh}
-          hideHeader
-          modalidad={modalidad}
-        />
+        <div className="space-y-4">
+          <DocumentChecklist
+            instanceId={instanceId}
+            onChanged={onRefresh}
+            hideHeader
+            modalidad={modalidad}
+          />
+          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
+              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
+              comercial (HU #10598), no en documentos. */}
+          {modalidad !== 'traspaso' && (
+            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
+          )}
+        </div>
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
@@ -1419,14 +1510,24 @@ function StepBody({
       // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
       // lo dispara el footer "Guardar y continuar" (vía save() del ref).
       return (
-        <CommercialForm
-          key={step.key}
-          ref={stepFormRef}
-          instanceId={instanceId}
-          onSaved={onRefresh}
-          hideHeader
-          embeddedInWizard
-        />
+        <div className="space-y-4">
+          <CommercialForm
+            key={step.key}
+            ref={stepFormRef}
+            instanceId={instanceId}
+            onSaved={onRefresh}
+            hideHeader
+            embeddedInWizard
+          />
+          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
+              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+          <PrendaForm
+            instanceId={instanceId}
+            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            onSaved={onRefresh}
+          />
+        </div>
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).

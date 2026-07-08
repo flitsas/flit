@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
 using Flit.Infrastructure.Persistence;
@@ -29,7 +30,7 @@ public sealed class WhitelistHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act));
+            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new AddWhitelistEmailsCommand
             {
                 TenantId = tenantId,
@@ -77,7 +78,7 @@ public sealed class WhitelistHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act));
+            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new AddWhitelistEmailsCommand
             {
                 TenantId = tenantId,
@@ -107,7 +108,7 @@ public sealed class WhitelistHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act));
+            var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new AddWhitelistEmailsCommand
             {
                 TenantId = tenantId,
@@ -130,7 +131,7 @@ public sealed class WhitelistHandlerTests
     public async Task AC5_EmptyEmails_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(ctx));
+        var handler = new AddWhitelistEmailsHandler(new WhitelistRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new AddWhitelistEmailsCommand
         {
@@ -171,7 +172,7 @@ public sealed class WhitelistHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetWhitelistHandler(new WhitelistRepository(ctx));
+        var handler = new GetWhitelistHandler(new WhitelistRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetWhitelistQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -184,7 +185,7 @@ public sealed class WhitelistHandlerTests
     public async Task AC6_Get_ReturnsEmpty_WhenNoWhitelist()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetWhitelistHandler(new WhitelistRepository(ctx));
+        var handler = new GetWhitelistHandler(new WhitelistRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetWhitelistQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 

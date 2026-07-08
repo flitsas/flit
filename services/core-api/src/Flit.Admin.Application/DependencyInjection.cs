@@ -5,6 +5,12 @@ using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
+using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
@@ -119,6 +125,15 @@ public static class DependencyInjection
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 
+        // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
+        // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.
+        services.AddScoped<CreateMandateSignerHandler>();
+        services.AddScoped<UpdateMandateSignerHandler>();
+        services.AddScoped<InactivateMandateSignerHandler>();
+        services.AddScoped<ReactivateMandateSignerHandler>();
+        services.AddScoped<ListMandateSignersHandler>();
+        services.AddScoped<ListOtCompaniesHandler>();
+
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
         services.AddScoped<ListImprontasHandler>();
@@ -146,6 +161,10 @@ public static class DependencyInjection
         // HU #10198 — obligatoriedad documental por OT (3 estados, granular solo para OT).
         services.AddScoped<SetDocumentRequirementOverrideHandler>();
         services.AddScoped<ListDocumentRequirementOverridesHandler>();
+
+        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+        services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
+        services.AddScoped<CompanyDocumentParams.UpsertCompanyDocumentParamHandler>();
 
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();

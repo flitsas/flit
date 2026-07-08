@@ -32,7 +32,8 @@ public sealed class IdentityValidationCompletedConsumerTests
         _firma = new SolicitarFirmaHandler(_repo, new MockSignatureProvider());
         _fur = new GenerarFurHandler(
             _repo, new MockFurDocumentGenerator(), Substitute.For<IKyverumCertificateClient>(),
-            Substitute.For<IRuesCertificateGenerator>(), new FakeStorage(), NullLogger<GenerarFurHandler>.Instance);
+            Substitute.For<IRuesCertificateGenerator>(), Substitute.For<IProcedureInstancePrendaRepository>(),
+            new FakeStorage(), NullLogger<GenerarFurHandler>.Instance);
         _sut = new IdentityValidationCompletedConsumer(_repo, _firma, _fur);
     }
 

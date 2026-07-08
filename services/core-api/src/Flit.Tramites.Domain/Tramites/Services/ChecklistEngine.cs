@@ -45,6 +45,105 @@ public static class ChecklistEngine
     }
 
     /// <summary>
+    /// Aplica reglas condicionales de obligatoriedad (HU #10521, RF30) sobre la lista base según
+    /// los atributos del trámite (<paramref name="context"/>). Función pura y aditiva:
+    /// <list type="bullet">
+    ///   <item><c>Require</c>: fuerza obligatorio el ítem (lo agrega como obligatorio si no existía).</item>
+    ///   <item><c>Add</c>: agrega el ítem si no existía (respeta su obligatoriedad).</item>
+    ///   <item><c>Hide</c>: quita el ítem.</item>
+    /// </list>
+    /// Sin reglas (o ninguna cuya condición se cumpla) el resultado es idéntico a
+    /// <paramref name="baseItems"/> ⇒ sin cambios de comportamiento.
+    /// </summary>
+    public static IReadOnlyList<ChecklistItem> ApplyConditional(
+        IReadOnlyList<ChecklistItem> baseItems,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules)
+    {
+        ArgumentNullException.ThrowIfNull(baseItems);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (rules is null || rules.Count == 0)
+            return baseItems.ToList();
+
+        var result = baseItems.ToList();
+
+        foreach (var rule in rules)
+        {
+            if (!rule.When(context))
+                continue;
+
+            var index = result.FindIndex(i => i.Id == rule.Item.Id);
+            switch (rule.Effect)
+            {
+                case ConditionalEffect.Hide:
+                    if (index >= 0)
+                        result.RemoveAt(index);
+                    break;
+
+                case ConditionalEffect.Require:
+                    if (index >= 0)
+                        result[index] = result[index] with { Obligatorio = true };
+                    else
+                        result.Add(rule.Item with { Obligatorio = true });
+                    break;
+
+                case ConditionalEffect.Add:
+                    if (index < 0)
+                        result.Add(rule.Item);
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Aplica los parámetros documentales de la compañía gestora (HU #10521, RF31) sobre la lista:
+    /// <c>Oculto</c> quita el ítem, <c>Obligatorio</c> lo fuerza obligatorio y <c>Opcional</c> lo
+    /// vuelve opcional. Empareja por <c>DocTipo</c> o <c>Id</c>. Función pura y aditiva: sin
+    /// parámetros el resultado es idéntico a <paramref name="baseItems"/>.
+    /// </summary>
+    public static IReadOnlyList<ChecklistItem> ApplyCompanyParams(
+        IReadOnlyList<ChecklistItem> baseItems,
+        IReadOnlyCollection<CompanyDocumentParam>? parametros)
+    {
+        ArgumentNullException.ThrowIfNull(baseItems);
+
+        if (parametros is null || parametros.Count == 0)
+            return baseItems.ToList();
+
+        var byDoc = parametros
+            .GroupBy(p => p.DocTipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last().State, StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<ChecklistItem>();
+        foreach (var item in baseItems)
+        {
+            var key = item.DocTipo ?? item.Id;
+            if (!byDoc.TryGetValue(key, out var state) && !byDoc.TryGetValue(item.Id, out state))
+            {
+                result.Add(item);
+                continue;
+            }
+
+            switch (state)
+            {
+                case CompanyDocumentParamState.Oculto:
+                    break; // se omite
+                case CompanyDocumentParamState.Obligatorio:
+                    result.Add(item with { Obligatorio = true });
+                    break;
+                case CompanyDocumentParamState.Opcional:
+                    result.Add(item with { Obligatorio = false });
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Computa el estado del checklist combinando overrides manuales
     /// (<paramref name="checklistEstado"/>) y documentos subidos
     /// (<paramref name="docTipos"/>, que auto-marcan ítems con <c>DocTipo</c>).
@@ -78,6 +177,62 @@ public static class ChecklistEngine
 
         var effective = Merge(tip.Checklist, @override);
         return ComputeFromItems(tip.Codigo, tip.Nombre, effective, checklistEstado, docTipos);
+    }
+
+    /// <summary>
+    /// Computa el checklist aplicando, sobre la lista base de la tipología, las reglas
+    /// condicionales por atributo del trámite (<paramref name="context"/>, RF30/33/35/37/38/39)
+    /// y los parámetros de la compañía gestora (<paramref name="companyParams"/>, RF31), antes de
+    /// resolver el estado de satisfacción. Con contexto vacío, sin reglas y sin parámetros el
+    /// resultado es idéntico a <see cref="Compute"/> ⇒ sin cambios de comportamiento. Devuelve
+    /// <c>null</c> si la tipología no existe.
+    /// </summary>
+    public static ChecklistResultado? ComputeConditional(
+        string? codigo,
+        IReadOnlyDictionary<string, bool>? checklistEstado,
+        IReadOnlyCollection<string>? docTipos,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules,
+        IReadOnlyCollection<CompanyDocumentParam>? companyParams)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var tip = TramiteTipologiaCatalog.Get(codigo);
+        if (tip is null)
+            return null;
+
+        var conditional = ApplyConditional(tip.Checklist, context, rules);
+        var effective = ApplyCompanyParams(conditional, companyParams);
+        return ComputeFromItems(tip.Codigo, tip.Nombre, effective, checklistEstado, docTipos);
+    }
+
+    /// <summary>
+    /// Computa el checklist tomando como base la <b>matriz documental resuelta del gestor</b>
+    /// (HU #10522, RF17/RF22 — el gestor manda la lista, obligatoriedad y orden), en vez del
+    /// catálogo plano. Sobre esa base aplica —igual que <see cref="ComputeConditional"/>— las
+    /// reglas condicionales por atributo del trámite (<paramref name="context"/>) y los parámetros
+    /// de la compañía gestora (<paramref name="companyParams"/>), y resuelve la satisfacción. No
+    /// depende de <see cref="TramiteTipologiaCatalog"/> (solo lo usa para el nombre visible, con
+    /// fallback a <paramref name="codigo"/>), de modo que soporta modalidades que el catálogo en
+    /// código aún no describe. <paramref name="matrixItems"/> ya viene ordenada por el resolutor.
+    /// </summary>
+    public static ChecklistResultado ComputeFromMatrix(
+        string? codigo,
+        IReadOnlyList<ChecklistItem> matrixItems,
+        IReadOnlyDictionary<string, bool>? checklistEstado,
+        IReadOnlyCollection<string>? docTipos,
+        TramiteDocumentContext context,
+        IReadOnlyList<ConditionalRule>? rules,
+        IReadOnlyCollection<CompanyDocumentParam>? companyParams)
+    {
+        ArgumentNullException.ThrowIfNull(matrixItems);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var nombre = TramiteTipologiaCatalog.Get(codigo)?.Nombre ?? codigo ?? string.Empty;
+
+        var conditional = ApplyConditional(matrixItems, context, rules);
+        var effective = ApplyCompanyParams(conditional, companyParams);
+        return ComputeFromItems(codigo ?? string.Empty, nombre, effective, checklistEstado, docTipos);
     }
 
     private static ChecklistResultado ComputeFromItems(

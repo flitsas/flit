@@ -6,6 +6,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -33,6 +34,7 @@ public sealed class GenerarFurHandler(
     IFurDocumentGenerator generator,
     IKyverumCertificateClient certClient,
     IRuesCertificateGenerator ruesGenerator,
+    IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger)
 {
@@ -78,7 +80,13 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad);
+        // HU #10601 — prenda vigente: marca el gravamen en el FUR cuando la decisión implica prenda
+        // (solicitar/registrar). sin_prenda/omitir/levantar no marcan gravamen.
+        var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
+        var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
+        var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -196,7 +204,8 @@ public sealed class GenerarFurHandler(
 
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
-        bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad)
+        bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
+        bool tienePrenda, string? acreedorPrenda)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -247,7 +256,9 @@ public sealed class GenerarFurHandler(
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
             Observaciones: Get(fv, "fur_observations"),
             IdentidadValidada: identidadValidada,
-            SellosIdentidad: sellosIdentidad);
+            SellosIdentidad: sellosIdentidad,
+            TienePrenda: tienePrenda,
+            AcreedorPrenda: acreedorPrenda);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>

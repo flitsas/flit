@@ -1,8 +1,11 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -24,12 +27,18 @@ public sealed class TramiteLifecycleService(
     IOtRuleGate otRuleGate,
     ITramiteTransitionRecorder recorder,
     ITramiteTransitionPublisher publisher,
-    IIdentityValidationPolicy? identityPolicy = null) : ITramiteLifecycleService
+    IIdentityValidationPolicy? identityPolicy = null,
+    IProcedureInstancePrendaRepository? prendaRepo = null,
+    ChecklistMatrixCompleteness? matrixCompleteness = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
         identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
+    // R10 (HU #10597) — repo de prenda para el gate de traspaso. Null en tests que no lo ejercitan
+    // (el gate se omite de forma segura); en producción lo inyecta el contenedor.
+    private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
 
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
@@ -74,7 +83,6 @@ public sealed class TramiteLifecycleService(
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
                 repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
-
             // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
             // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
             var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
@@ -82,9 +90,20 @@ public sealed class TramiteLifecycleService(
             if (!identityRequired)
                 identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
 
-            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada);
+            // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
+            var docsCompletos = matrixCompleteness is null
+                ? null
+                : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
+
+            // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
+            // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
+            // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
+            var prendaError = await EvaluarPrendaGateAsync(instance, ct).ConfigureAwait(false);
+            if (prendaError is var (prendaCode, prendaDetail) && prendaCode is not null)
+                return TramiteTransitionOutcome.Fail(prendaCode, prendaDetail);
         }
 
         // Gates OT de entrega (heredados del submit HU #10217/#2).
@@ -145,6 +164,15 @@ public sealed class TramiteLifecycleService(
         var procedureType = await typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).ConfigureAwait(false);
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
             return (TramiteEstadoErrores.TipoNoPublicado, "El tipo de trámite no está publicado.");
+
+        // HU #10604 (R19) — "Imponer Medida": si el preflight detectó una medida correctiva RNMC
+        // pendiente (señal rnmc_medida_pendiente), el trámite se puede REGISTRAR pero NO enviar al OT
+        // hasta cargar el paz y salvo RNMC. La señal solo se pone cuando el OT exige RNMC (HU #10602),
+        // así que su presencia ya implica la condición; no hace falta re-consultar la config del OT.
+        if (RnmcMedidaPendiente(instance) && !TienePazSalvoRnmc(instance))
+            return (TramiteEstadoErrores.RnmcMedidaBloqueaEnvio,
+                "Hay una medida correctiva RNMC pendiente. Cargue el paz y salvo RNMC para poder enviar " +
+                "el trámite al organismo de tránsito.");
 
         // #2 (R09) — el OT elegido en el FUR (transit_office_id en field_values) debe estar
         // HABILITADO para la empresa. Se promueve a la columna TransitOfficeId para que el motor de
@@ -212,4 +240,92 @@ public sealed class TramiteLifecycleService(
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
+
+    /// <summary>
+    /// R10 (HU #10597) — gate de prenda del traspaso. Solo aplica a traspaso con el semáforo de
+    /// gravámenes en <c>warn</c>: exige una decisión de prenda vigente y, si la decisión requiere
+    /// documento, su adjunto. <c>(null, null)</c> = puede prepararse. Se omite si no hay repo cableado.
+    /// </summary>
+    private async Task<(string? Code, string? Detail)> EvaluarPrendaGateAsync(
+        ProcedureInstance instance,
+        CancellationToken ct)
+    {
+        if (_prendaRepo is null)
+            return (null, null);
+
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
+        if (!esTraspaso || !HasGravamenWarn(instance))
+            return (null, null);
+
+        var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
+
+        return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
+        {
+            TramiteEstadoErrores.PrendaDecisionRequerida => (TramiteEstadoErrores.PrendaDecisionRequerida,
+                "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite."),
+            TramiteEstadoErrores.PrendaDocumentoRequerido => (TramiteEstadoErrores.PrendaDocumentoRequerido,
+                "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            _ => (null, null),
+        };
+    }
+
+    /// <summary>
+    /// ¿El último snapshot de preflight reporta el check <c>gravamenes</c> en <c>warn</c>/<c>fail</c>?
+    /// El snapshot serializa la lista de checks (Key/Status). Parseo tolerante a Pascal/camelCase.
+    /// </summary>
+    private static bool HasGravamenWarn(ProcedureInstance instance)
+    {
+        var snapshot = instance.PreflightSnapshots
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+        if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.Checks))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(snapshot.Checks);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return false;
+
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (JsonStringEquals(el, "key", "gravamenes")
+                    && (JsonStringEquals(el, "status", "warn") || JsonStringEquals(el, "status", "fail")))
+                    return true;
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>Compara (case-insensitive) una propiedad JSON con un valor, probando Pascal y camelCase.</summary>
+    private static bool JsonStringEquals(JsonElement el, string prop, string expected)
+    {
+        foreach (var name in new[] { prop, char.ToUpperInvariant(prop[0]) + prop[1..] })
+        {
+            if (el.TryGetProperty(name, out var v)
+                && v.ValueKind == JsonValueKind.String
+                && string.Equals(v.GetString(), expected, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    // HU #10604 — señal server-driven puesta por el preflight cuando hay una medida correctiva RNMC.
+    private static bool RnmcMedidaPendiente(ProcedureInstance instance) =>
+        string.Equals(
+            instance.FieldValues.FirstOrDefault(f =>
+                string.Equals(f.FieldKey, "rnmc_medida_pendiente", StringComparison.OrdinalIgnoreCase))?.ValueText,
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool TienePazSalvoRnmc(ProcedureInstance instance) =>
+        instance.Attachments.Any(a =>
+            string.Equals(a.Tipo, "paz_salvo_rnmc", StringComparison.OrdinalIgnoreCase));
 }
