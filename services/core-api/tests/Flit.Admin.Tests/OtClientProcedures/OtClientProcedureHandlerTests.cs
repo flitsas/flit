@@ -454,6 +454,53 @@ public sealed class OtClientProcedureHandlerTests
         detail.ProcedureInstanceId.Should().BeNull();
     }
 
+    // ---------- HU #10610 (R06): SOAT gate duro en la aprobación de la ruta de placa ----------
+
+    [Theory]
+    [InlineData("vencido", false)]  // SOAT vencido → bloquea la aprobación (gate duro).
+    [InlineData("vigente", true)]   // SOAT vigente → aprueba.
+    [InlineData("unknown", true)]   // unknown (0 km) → no bloquea.
+    [InlineData(null, true)]        // ausente → no bloquea.
+    public async Task Approve_Asignado_SoatGateDuro(string? soatEstado, bool expectApproved)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado);
+            if (soatEstado is not null)
+            {
+                seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+                {
+                    Id = Guid.NewGuid(), ProcedureInstanceId = procedureId, TenantId = ClientTenant,
+                    FieldKey = "soat_estado", ValueText = soatEstado,
+                });
+                seed.SaveChanges();
+            }
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        await using var verify = NewContext(db);
+        var status = (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken)).Status;
+        if (expectApproved)
+        {
+            updated.Should().NotBeNull();
+            status.Should().Be(TramiteEstado.Aprobado);
+        }
+        else
+        {
+            updated.Should().BeNull();
+            status.Should().Be(TramiteEstado.Asignado); // bloqueado, sin cambiar
+        }
+    }
+
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)
     {
         ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile

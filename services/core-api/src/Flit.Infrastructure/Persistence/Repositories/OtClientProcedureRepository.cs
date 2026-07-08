@@ -246,6 +246,24 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
+                // R06 (Feature #10587) — gate DURO de SOAT en la ruta de placa: no se puede aprobar un
+                // trámite ASIGNADO con el SOAT vencido (no subsanable). unknown (0 km) no bloquea.
+                if (targetStatus == TramiteEstado.Aprobado && fromStatus == TramiteEstado.Asignado)
+                {
+                    var soatEstado = await _context.ProcedureInstanceFieldValues
+                        .AsNoTracking()
+                        .Where(f => f.ProcedureInstanceId == procedureInstanceId
+                            && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
+                        .Select(f => f.ValueText)
+                        .FirstOrDefaultAsync(cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (Flit.Tramites.Domain.Tramites.Services.SoatGate.BlocksApproval(soatEstado))
+                    {
+                        return null;
+                    }
+                }
+
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
                     .ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
