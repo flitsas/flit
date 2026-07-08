@@ -164,3 +164,19 @@ export function resendOtInvitation(
     query: scopeQuery(scope),
   });
 }
+
+/** DELETE /api/v1/admin/ot/invitations/{invitationId} — cancela (anula) una invitación
+ *  pendiente del tenant OT resuelto (propio para ot_admin, o el indicado por
+ *  `scope.transitOfficeId` para SuperAdmin) — HU #10627/#10628. El enlace de activación
+ *  anterior deja de funcionar y el email queda disponible para una nueva invitación. El `id`
+ *  de la fila YA es el `invitationId` cuando `status === "pending"` (`OtUserItem.id`). Errores:
+ *  404 si la invitación no existe en el tenant OT resuelto; 409 si ya no está pendiente (fue
+ *  aceptada o cancelada previamente — condición de carrera, AC3). Este endpoint usa el campo
+ *  `error` (no `code`, misma inconsistencia preexistente que resendOtInvitation/deleteOtUser).
+ *  Sin cuerpo de petición ni de respuesta (204). */
+export function cancelOtInvitation(invitationId: string, scope?: OtApiScope): Promise<void> {
+  return apiFetch<void>(`${base}/invitations/${invitationId}`, {
+    method: "DELETE",
+    query: scopeQuery(scope),
+  });
+}

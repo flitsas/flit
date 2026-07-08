@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, TenantUser, TenantRole } from "@/lib/api/security";
+import { Search, X, Users, Shield, Ban, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw, MailX } from "lucide-react";
+import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
+import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -54,6 +55,8 @@ export function Usuarios() {
   const [deletedLoading, setDeletedLoading] = useState(false);
   const [deletedError, setDeletedError] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<TenantUser | null>(null);
+  // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
+  const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
 
   // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin.
   const tabs = isSuperAdmin ? ALL_TABS : ALL_TABS.filter((t) => t.id !== "eliminados");
@@ -142,6 +145,12 @@ export function Usuarios() {
   // HU #10624 (AC3) — la confirmación vive en RestoreUserDialog; aquí solo se persiste.
   async function handleRestore(userId: string) {
     return restoreUser(userId);
+  }
+
+  // HU #10628 — la confirmación (distinta de "Eliminar usuario", AC2) vive en
+  // CancelInvitationDialog; aquí solo se persiste. Errores 404/409 (AC3) los mapea el propio diálogo.
+  async function handleCancelInvitation(invitationId: string) {
+    return cancelInvitation(invitationId);
   }
 
   return (
@@ -308,6 +317,20 @@ export function Usuarios() {
                           fullName={u.fullName}
                           resend={resendInvitation}
                         />
+                      )}
+                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
+                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
+                      {u.status === "pending" && !isSuperAdmin && (
+                        <button
+                          type="button"
+                          title="Cancelar invitación"
+                          aria-label={`Cancelar invitación a ${u.fullName}`}
+                          onClick={() => setCancelTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <MailX className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -487,6 +510,22 @@ export function Usuarios() {
             loadUsers();
           }}
           onDelete={handleDelete}
+        />
+      )}
+      {cancelTarget && (
+        <CancelInvitationDialog
+          invitation={{
+            id: cancelTarget.id,
+            fullName: cancelTarget.fullName,
+            email: cancelTarget.email,
+          }}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null);
+            loadUsers();
+          }}
+          onStale={loadUsers}
+          onCancel={handleCancelInvitation}
         />
       )}
       {restoreTarget && (

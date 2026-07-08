@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, Pencil, RotateCcw, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, MailX, Pencil, RotateCcw, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -12,6 +12,7 @@ import {
   updateOtUser,
   deleteOtUser,
   resendOtInvitation,
+  cancelOtInvitation,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 // HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
@@ -23,6 +24,7 @@ import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
+import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -50,6 +52,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [deletedStatus, setDeletedStatus] = useState<UiStatus>("loading");
   const [deletedUsers, setDeletedUsers] = useState<OtUserItem[]>([]);
   const [restoreTarget, setRestoreTarget] = useState<OtUserItem | null>(null);
+  // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
+  const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -166,6 +170,13 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // propio botón mapea 409/429 (AC2) y aplica el cooldown visual (AC1); aquí solo se persiste.
   function handleResendInvitation(invitationId: string) {
     return resendOtInvitation(invitationId, { transitOfficeId });
+  }
+
+  // HU #10628 — Inyectado a CancelInvitationDialog: liga el scope OT a cancelOtInvitation. La
+  // confirmación (distinta de "Eliminar usuario", AC2) y el mapeo de errores 404/409 (AC3)
+  // viven en el propio diálogo; aquí solo se persiste.
+  function handleCancelInvitation(invitationId: string) {
+    return cancelOtInvitation(invitationId, { transitOfficeId });
   }
 
   return (
@@ -385,6 +396,20 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           }
                         />
                       )}
+                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
+                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
+                      {u.status === "pending" && (
+                        <button
+                          type="button"
+                          title="Cancelar invitación"
+                          aria-label={`Cancelar invitación a ${u.fullName}`}
+                          onClick={() => setCancelTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <MailX className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -437,6 +462,23 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             void load();
           }}
           onDelete={handleDeleteUser}
+        />
+      )}
+      {cancelTarget && (
+        <CancelInvitationDialog
+          invitation={{
+            id: cancelTarget.id,
+            fullName: cancelTarget.fullName,
+            email: cancelTarget.email,
+          }}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null);
+            show("Invitación cancelada correctamente.", "success");
+            void load();
+          }}
+          onStale={() => void load()}
+          onCancel={handleCancelInvitation}
         />
       )}
       {restoreTarget && (

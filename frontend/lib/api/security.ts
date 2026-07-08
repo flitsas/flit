@@ -236,3 +236,19 @@ export async function resendInvitation(invitationId: string): Promise<ResendInvi
     method: "POST",
   });
 }
+
+/** DELETE /api/v1/security/invitations/{invitationId} — cancela (anula) una invitación
+ *  pendiente (HU #10627/#10628): el enlace de activación anterior deja de funcionar y el
+ *  email queda disponible de nuevo para una nueva invitación. Distinto de eliminar un usuario
+ *  (`deleteUser`/`DeleteUserDialog`): aquí todavía no existe ninguna cuenta creada. Mismo
+ *  alcance que crear invitaciones (AdminCompany su tenant, SuperAdmin cualquiera). El `id` de
+ *  la fila YA es el `invitationId` cuando `status === "pending"` (`TenantUser.id`) — no hace
+ *  falta un campo nuevo. Errores: 404 si la invitación ya no existe o no pertenece al alcance
+ *  del caller; 409 si ya no está pendiente (fue aceptada o cancelada previamente por otra
+ *  persona — condición de carrera, AC3). Sin cuerpo de petición ni de respuesta (204).
+ */
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/invitations/${invitationId}`, {
+    method: "DELETE",
+  });
+}
