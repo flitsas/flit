@@ -446,13 +446,13 @@ public sealed class PreflightHandlerTests
     [Fact]
     public async Task Post_RnmcMedidaCorrectiva_PersisteSenalPendiente()
     {
-        // HU #10604: una medida correctiva (rnmc fail) deja la señal rnmc_medida_pendiente=true.
+        // HU #10604: una medida correctiva (rnmc warn, informativa) deja la señal rnmc_medida_pendiente=true.
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWithRnmc(true,
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("red", RnmcCheck("fail")))));
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("yellow", RnmcCheck("warn")))));
 
         var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 

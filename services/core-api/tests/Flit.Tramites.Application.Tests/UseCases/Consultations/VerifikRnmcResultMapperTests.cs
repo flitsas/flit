@@ -46,12 +46,13 @@ public sealed class VerifikRnmcResultMapperTests
     }
 
     [Fact]
-    public void ConMedidas_ProduceFailRed()
+    public void ConMedidas_ProduceWarnYellow()
     {
+        // RNMC no es bloqueante: la medida es informativa (warn/amarillo), no fail/rojo.
         var result = VerifikRnmcResultMapper.Map(Response(measures: [Measure()]));
 
-        Check(result, "medidas_correctivas").Status.Should().Be("fail");
-        result.Overall.Should().Be("red");
+        Check(result, "medidas_correctivas").Status.Should().Be("warn");
+        result.Overall.Should().Be("yellow");
     }
 
     [Fact]

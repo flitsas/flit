@@ -126,11 +126,14 @@ public sealed class RunPreflightHandler(
             }
         }
 
-        // HU #10604 (R19) — señal server-driven de medida correctiva RNMC pendiente ("Imponer Medida")
-        // para el gate de envío al OT (EvaluarEntregaAsync). Se pone en true si algún check RNMC quedó
-        // en "fail" (medidas correctivas); si no, se baja a false (sin crear filas innecesarias).
+        // HU #10604 (R19) — señal server-driven INFORMATIVA de medida correctiva RNMC ("Imponer
+        // Medida") para visibilidad del OT. RNMC NO es bloqueante: la señal ya NO veta el envío
+        // (ver TramiteLifecycleService.EvaluarEntregaAsync). La medida RNMC se reporta como "warn"
+        // (check {rnmc_rol}_medidas_correctivas); si la hay, se marca true; si no, se baja a false.
         var hasRnmcMedida = checks.Any(c =>
-            c.Key.StartsWith("rnmc_", StringComparison.Ordinal) && c.Status == "fail");
+            c.Key.StartsWith("rnmc_", StringComparison.Ordinal)
+            && c.Key.EndsWith("medidas_correctivas", StringComparison.Ordinal)
+            && c.Status == "warn");
         if (hasRnmcMedida)
             SetSignalIfChanged(instance, tenantId, FieldRnmcMedidaPendiente, "true", createIfMissing: true);
         else
