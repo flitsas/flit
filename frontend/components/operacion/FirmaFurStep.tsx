@@ -646,8 +646,9 @@ function FirmaSection({
         <div>
           <h4 className="text-sm font-bold">Firma de la compraventa</h4>
           <p className="text-xs opacity-70">
-            Solicita la firma electrónica de cada parte. El proveedor genera un
-            enlace de firma; en DEV puedes simular la firma para avanzar.
+            Estado informativo de la firma electrónica por parte. La lógica
+            definitiva de firmas está pendiente de definición de negocio, por lo
+            que <strong>no bloquea</strong> preparar ni radicar el traspaso.
           </p>
         </div>
         {!readOnly && (
