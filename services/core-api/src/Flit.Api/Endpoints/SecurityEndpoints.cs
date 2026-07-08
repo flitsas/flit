@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.UserRoles;
 using Flit.Modules.Security.Domain.Auth;
@@ -134,6 +136,66 @@ public static class SecurityEndpoints
                 return Results.Json(
                     new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
                     statusCode: StatusCodes.Status409Conflict);
+            }
+        });
+
+        // HU #10625 — reenviar invitación pendiente: SIEMPRE regenera el token de activación
+        // (el enlace anterior queda invalidado) y reenvía el correo. Mismo alcance que crear
+        // invitaciones: SuperAdmin puede reenviar cualquier invitación; AdminCompany solo las
+        // de su propio tenant.
+        group.MapPost("/invitations/{invitationId:guid}/resend", async (
+            Guid invitationId,
+            ClaimsPrincipal caller,
+            ResendInvitationHandler handler,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var resentBy))
+                return Results.Unauthorized();
+
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // SuperAdmin puede reenviar cualquier invitación del sistema (sin restricción de
+            // tenant); AdminCompany solo las de su propio tenant (mismo alcance que /invitations).
+            Guid? scopeTenantId = isSuperAdmin ? null : callerTenantId;
+
+            try
+            {
+                var result = await handler.HandleAsync(
+                    new ResendInvitationCommand(invitationId, scopeTenantId, resentBy),
+                    cancellationToken);
+
+                return Results.Ok(new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
+            }
+            catch (InvitationNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_FOUND", "La invitación no existe o no pertenece a tu alcance."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (InvitationNotPendingException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_PENDING", "La invitación ya no está pendiente (fue aceptada o cancelada)."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (ResendCooldownActiveException ex)
+            {
+                var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+                httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                return Results.Json(
+                    new ResendCooldownResponse(
+                        "RESEND_COOLDOWN_ACTIVE",
+                        $"Debes esperar antes de reenviar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                        retryAfterSeconds),
+                    statusCode: StatusCodes.Status429TooManyRequests);
             }
         });
 
@@ -563,4 +625,6 @@ public static class SecurityEndpoints
     private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName);
 
     private sealed record ErrorResponse(string Code, string Message);
+
+    private sealed record ResendCooldownResponse(string Code, string Message, int RetryAfterSeconds);
 }

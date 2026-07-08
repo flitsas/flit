@@ -13,6 +13,21 @@ public interface IInvitationRepository
     Task<PendingInvitation?> FindPendingByTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<PendingInvitationSummary>> ListPendingByTenantAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// HU #10625: busca una invitación por id para reenviarla. Si <paramref name="scopeTenantId"/>
+    /// no es <c>null</c> (caller AdminCompany/ot_admin), la búsqueda se restringe a ese tenant;
+    /// si es <c>null</c> (caller SuperAdmin), no hay restricción de tenant. Devuelve la invitación
+    /// sin importar su <c>Status</c> — es responsabilidad del handler decidir si está pendiente.
+    /// </summary>
+    Task<InvitationForResend?> FindForResendAsync(
+        Guid invitationId, Guid? scopeTenantId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// HU #10625: persiste el nuevo hash de token y <c>LastSentAt</c> de un reenvío exitoso.
+    /// </summary>
+    Task UpdateResendAsync(
+        Guid invitationId, string tokenHash, DateTimeOffset lastSentAt, Guid resentBy, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -40,3 +55,11 @@ public sealed record PendingInvitationSummary(
     string Email,
     string FullName,
     DateTimeOffset CreatedAt);
+
+/// <summary>HU #10625: datos mínimos para decidir y ejecutar el reenvío de una invitación.</summary>
+public sealed record InvitationForResend(
+    Guid InvitationId,
+    string Email,
+    string FullName,
+    string Status,
+    DateTimeOffset? LastSentAt);

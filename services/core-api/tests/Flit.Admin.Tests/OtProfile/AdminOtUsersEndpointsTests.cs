@@ -176,6 +176,99 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // HU #10625 AC1 — reenvío exitoso: sin envío previo, regenera el token y responde 200
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_PendingNeverSent_Returns200()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, email) = await SeedPendingInvitationAsync(lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        invitation.Email.Should().Be(email);
+        invitation.LastSentAt.Should().NotBeNull();
+    }
+
+    // HU #10625 AC2 — cooldown activo: reenviada hace menos de 2 minutos → 429 + Retry-After
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_WithinCooldown_Returns429WithRetryAfterHeader()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(lastSentAt: DateTimeOffset.UtcNow.AddSeconds(-30));
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    // HU #10625 AC3 — invitación ya no pendiente (aceptada) → 409
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_InvitationAlreadyAccepted_Returns409()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(lastSentAt: null, status: "accepted");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // Invitación inexistente / fuera del alcance del tenant OT resuelto → 404
+    [Fact]
+    public async Task ResendInvitation_AsOtAdmin_InvitationNotFound_Returns404()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
+        DateTimeOffset? lastSentAt, string status = "pending")
+    {
+        await using var db = CreateDbContext();
+
+        var invitationId = Guid.NewGuid();
+        var email = $"resend-{Guid.NewGuid():N}@flit.local";
+
+        db.UserInvitations.Add(new UserInvitation
+        {
+            Id = invitationId,
+            TenantId = _otTenantId,
+            Email = email,
+            FullName = "Invitado Reenvío",
+            RoleId = _roleId,
+            TokenHash = $"hash-{Guid.NewGuid():N}",
+            Status = status,
+            InvitedBy = _otAdminUserId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastSentAt = lastSentAt,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (invitationId, email);
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();

@@ -17,6 +17,10 @@ servers:
 tags:
   - name: Auth
     description: Autenticación y sesión (login, perfil del usuario).
+  - name: Security · Invitaciones
+    description: >
+      Reenvío de invitaciones pendientes (rol SuperAdmin cualquier tenant, o
+      AdminCompany/ot_admin solo su propio tenant).
   - name: Admin · Compañías
     description: Gestión multi-tenant de compañías B2B (rol SuperAdmin).
   - name: Admin · Tenants OT
@@ -157,6 +161,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/security/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Security · Invitaciones]
+      operationId: securityResendInvitation
+      summary: Reenvía una invitación pendiente (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo. SuperAdmin puede reenviar
+        cualquier invitación del sistema; AdminCompany solo las de su propio tenant
+        (mismo alcance que `POST /api/v1/security/invitations`). Rechaza el reenvío si
+        la invitación ya no está pendiente (409) o si no ha pasado el cooldown
+        anti-abuso (~2 minutos, configurable) desde el último envío (429).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "404":
+          description: La invitación no existe o no pertenece al alcance del caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
+
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -963,6 +1018,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/invitations/{invitationId}/resend:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtResendInvitation
+      summary: Reenvía una invitación pendiente del tenant OT (HU #10625)
+      description: >
+        SIEMPRE regenera el token de activación (solo se persiste su hash — el enlace
+        anterior queda invalidado) y reenvía el correo, para la invitación del tenant
+        OT resuelto (propio para ot_admin, o el indicado por `?transitOfficeId=` para
+        SuperAdmin). Rechaza el reenvío si la invitación ya no está pendiente (409) o
+        si no ha pasado el cooldown anti-abuso (~2 minutos, configurable) desde el
+        último envío (429). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Invitación reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendInvitationResponse"
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            La invitación no existe o no pertenece al tenant OT resuelto (o no existe
+            un tenant OT vinculado al transitOfficeId indicado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La invitación ya no está pendiente (fue aceptada o cancelada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Cooldown anti-abuso activo — debes esperar antes de reenviar de nuevo.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda reenviar de nuevo.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendCooldownErrorResponse"
 
   /api/v1/integrations/ot/webhooks/{subscriptionId}/callback:
     post:
@@ -4564,6 +4688,33 @@ components:
         email: { type: string, format: email }
         emailSent: { type: boolean }
       required: [invitationId, email, emailSent]
+
+    ResendInvitationResponse:
+      type: object
+      description: >
+        Resultado de reenviar una invitación pendiente (HU #10625). Mismo shape en
+        `/api/v1/security/invitations/{invitationId}/resend` y
+        `/api/v1/admin/ot/invitations/{invitationId}/resend`.
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailSent: { type: boolean }
+      required: [invitationId, email, emailSent]
+
+    ResendCooldownErrorResponse:
+      type: object
+      description: >
+        Error 429 del cooldown anti-abuso de reenvío (HU #10625 AC2). El endpoint
+        Compañía usa `code`; el endpoint OT usa `error` — ambos incluyen `message` y
+        `retryAfterSeconds`.
+      properties:
+        code: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        error: { type: string, example: RESEND_COOLDOWN_ACTIVE }
+        message: { type: string }
+        retryAfterSeconds:
+          type: integer
+          description: Segundos hasta que se pueda reenviar de nuevo.
+      required: [message, retryAfterSeconds]
 
     OtUserItem:
       type: object
