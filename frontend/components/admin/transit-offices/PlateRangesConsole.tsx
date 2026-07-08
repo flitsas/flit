@@ -23,6 +23,8 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Snapshot de "ahora" para la ventana de edición de 60 min (se fija en cada carga, no en render).
+  const [now, setNow] = useState(0);
 
   const scope = { transitOfficeId };
 
@@ -31,7 +33,11 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
     setBusy(true);
     setError(null);
     try {
-      setRanges(await listPlateRanges(companyTenantId.trim(), scope));
+      const data = await listPlateRanges(companyTenantId.trim(), scope);
+      // Snapshot de "ahora" al cargar (no en render, por pureza): la ventana de edición de 60 min
+      // se evalúa contra este valor; se refresca en cada carga (montaje y tras cada acción).
+      setNow(Date.now());
+      setRanges(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al cargar rangos");
     } finally {
@@ -73,7 +79,7 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
     }
   }
 
-  const isEditable = (r: PlateRangeSummary) => new Date(r.editableUntil).getTime() > Date.now();
+  const isEditable = (r: PlateRangeSummary) => new Date(r.editableUntil).getTime() > now;
 
   return (
     <div className="flex flex-col gap-5">

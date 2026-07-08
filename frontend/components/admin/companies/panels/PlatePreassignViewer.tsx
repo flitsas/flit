@@ -24,6 +24,7 @@ export function PlatePreassignViewer({ tenantId }: PlatePreassignViewerProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de carga/error antes del fetch (AbortController)
     setLoading(true);
     setError(null);
     listPlateDetails(tenantId, {
