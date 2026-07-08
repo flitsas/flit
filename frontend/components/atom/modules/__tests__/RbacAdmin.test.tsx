@@ -95,6 +95,8 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
     await user.type(await screen.findByLabelText(/código/i), "NUEVO");
     await user.type(screen.getByLabelText(/^nombre/i), "Rol Nuevo");
+    // HU #10664 AC2 — hay que marcar al menos un permiso; si no, el formulario se bloquea.
+    await user.click(await screen.findByRole("checkbox", { name: /leer trámites/i }));
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
     await waitFor(() => expect(createRole).toHaveBeenCalledWith({
@@ -103,7 +105,22 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
       name: "Rol Nuevo",
       description: undefined,
     }));
+    await waitFor(() => expect(setRolePermissions).toHaveBeenCalledWith("role-new", ["perm-1"]));
     expect(await screen.findByText("Rol Nuevo")).toBeInTheDocument();
+  });
+
+  it("AC2 (#10664): no permite crear un rol sin al menos un permiso", async () => {
+    const user = userEvent.setup();
+    await openRolesTab();
+    await screen.findByText("Roles de Compañía");
+
+    await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    await user.type(await screen.findByLabelText(/código/i), "SINPERM");
+    await user.type(screen.getByLabelText(/^nombre/i), "Sin permisos");
+    await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
+
+    expect(await screen.findByText(/al menos un permiso/i)).toBeInTheDocument();
+    expect(createRole).not.toHaveBeenCalled();
   });
 
   it("AC3: eliminar un rol con usuarios asignados muestra un mensaje claro (no genérico)", async () => {
