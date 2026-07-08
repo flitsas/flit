@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -14,6 +15,13 @@ public static class EnsureIdentityOutcomes
 
     /// <summary>Se reutilizó (clonó) una validación vigente de la persona desde otro trámite del tenant.</summary>
     public const string Reusada = "reusada";
+
+    /// <summary>
+    /// El actor es jurídico (NIT) y el tenant tiene una firma de baúl ACTIVA+VIGENTE para su NIT
+    /// (ADR-0025 §4, HU #10645, R14). La identidad queda cubierta por la firma precargada → NO se
+    /// exige una nueva validación. Precedencia D8: baúl → identidad vigente reutilizable → manual.
+    /// </summary>
+    public const string FirmaBaul = "firma_baul";
 
     /// <summary>No hay validación vigente → el cliente debe validar (el front la dispara automáticamente).</summary>
     public const string RequiereValidacion = "requiere_validacion";
@@ -39,8 +47,14 @@ public sealed record EnsureIdentityResult(string Outcome, Guid? ValidationId = n
 /// NO inicia la validación aquí (eso lo hace el flujo provider-aware existente); este handler sólo decide y
 /// reutiliza. Idempotente: una segunda llamada ve la validación ya clonada/en curso y responde no-op.
 /// </summary>
-public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
+public sealed class EnsureIdentityHandler(
+    IProcedureInstanceRepository repo,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // ADR-0025 §4 — política del baúl de firmas (activa el flag signature_vault_enabled). Default seguro
+    // (NUNCA resuelve firma) cuando no se cablea, para no alterar los tests de identidad existentes.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     public async Task<(EnsureIdentityResult? Result, string? Error)> HandleAsync(
         Guid id, Guid tenantId, string? parte, CancellationToken ct = default)
     {
@@ -96,6 +110,23 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.EnProceso), null);
         }
 
+        // 1.5) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14). Si el actor es JURÍDICO (NIT) y el tenant
+        // tiene una firma de baúl ACTIVA+VIGENTE para su NIT, la identidad queda cubierta por la firma
+        // precargada → outcome firma_baul, sin exigir validación (ValidationId null). Precedencia D8: el
+        // baúl va DESPUÉS de una validación propia vigente/en curso del trámite (ya resuelta arriba) pero
+        // ANTES de la reutilización cross-trámite por documento (paso 2, reusada). Solo NIT: las personas
+        // naturales caen al flujo de identidad sin cambios. La política es null-safe cuando el baúl está
+        // deshabilitado o no hay firma vigente (devuelve null → se sigue al paso 2).
+        if (EsActorJuridico(tipoActual))
+        {
+            var vaultMatch = await _vaultPolicy.ResolveAsync(tenantId, docActual, ct);
+            if (vaultMatch is not null)
+            {
+                if (changed) await repo.SaveChangesAsync(ct);
+                return (new EnsureIdentityResult(EnsureIdentityOutcomes.FirmaBaul), null);
+            }
+        }
+
         // 2) ¿La persona (documento actual) tiene una identidad vigente aprobada en otro trámite del tenant?
         // → se REFERENCIA (HU #10350 rediseño): NO se clona ni se crea fila. La identidad se valida UNA sola
         // vez por persona y sirve para N trámites hasta que venza; los gates y la vista la resuelven por
@@ -111,6 +142,17 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
         // Persiste la invalidación de las validaciones de la persona anterior (si las hubo).
         if (changed) await repo.SaveChangesAsync(ct);
         return (new EnsureIdentityResult(EnsureIdentityOutcomes.RequiereValidacion), null);
+    }
+
+    /// <summary>
+    /// ¿El actor es una persona JURÍDICA (NIT)? Solo estos consumen el baúl de firmas (ADR-0025 §4).
+    /// Acepta "NIT" y "N" (código corto), sin distinguir mayúsculas ni espacios.
+    /// </summary>
+    private static bool EsActorJuridico(string documentType)
+    {
+        var t = documentType.Trim();
+        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>¿La validación corresponde al documento (tipo + número) del actor actual de la parte?</summary>

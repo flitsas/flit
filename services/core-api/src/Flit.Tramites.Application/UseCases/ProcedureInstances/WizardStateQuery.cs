@@ -58,7 +58,8 @@ public sealed record WizardStateDto(
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
     IIdentityValidationPolicy? identityPolicy = null,
-    ChecklistMatrixCompleteness? matrixCompleteness = null)
+    ChecklistMatrixCompleteness? matrixCompleteness = null,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -67,6 +68,9 @@ public sealed class GetWizardStateHandler(
     // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
         identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
+    // ADR-0025 §4 / HU #10645 — baúl de firmas: un actor NIT cubierto cuenta como identidad aprobada.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -80,7 +84,7 @@ public sealed class GetWizardStateHandler(
         // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
         // vigente de la persona en N trámites sin clonar (HU #10350).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-            repo, instance, DateTimeOffset.UtcNow, ct);
+            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
 
         // HU #10548 — si el OT destino deshabilita la identidad, se trata como satisfecha (el paso no
         // bloquea el submit) y se expone el flag para que el wizard oculte el paso (AC3 / HU #10549).
