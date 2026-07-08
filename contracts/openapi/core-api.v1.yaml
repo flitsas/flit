@@ -861,6 +861,10 @@ paths:
         Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto
         (propio para ot_admin, o el indicado por `?transitOfficeId=` para
         SuperAdmin). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        Con `?onlyDeleted=true` (#10624) lista en su lugar los usuarios
+        eliminados (soft-delete, `deletedAt != null`) de ese mismo tenant OT
+        resuelto — EXCLUSIVO de SuperAdmin (403 para ot_admin). Sin este
+        parámetro el comportamiento es exactamente el de antes.
       security:
         - bearerAuth: []
       parameters:
@@ -868,9 +872,17 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados del tenant OT
+            resuelto (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
       responses:
         "200":
-          description: Usuarios del tenant OT resuelto.
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del tenant OT resuelto.
           content:
             application/json:
               schema:
@@ -878,7 +890,9 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin u ot_admin.
+          description: >
+            Sin rol SuperAdmin u ot_admin, o `onlyDeleted=true` solicitado por
+            un caller distinto de SuperAdmin.
           content:
             application/json:
               schema:
@@ -1085,6 +1099,48 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: El usuario no existe en el tenant OT resuelto, o no tiene una suspensión activa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/users:
+    get:
+      tags: [Security]
+      operationId: securityListUsers
+      summary: Lista usuarios activos e invitaciones pendientes del alcance del caller
+      description: >
+        AdminCompany ve solo su propio tenant; SuperAdmin ve los usuarios de
+        todas las compañías (excepto su propio tenant interno). Con
+        `?onlyDeleted=true` (#10624) lista en su lugar los usuarios eliminados
+        (soft-delete, `deletedAt != null`) de CUALQUIER tenant — EXCLUSIVO de
+        SuperAdmin (403 en otro caso, incluido AdminCompany), ya que solo
+        SuperAdmin puede restaurar (`POST /api/v1/superadmin/users/{userId}/restore`).
+        Sin este parámetro el comportamiento es exactamente el de antes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: onlyDeleted
+          in: query
+          required: false
+          description: >
+            HU #10624. `true` lista solo los usuarios eliminados de cualquier
+            tenant (EXCLUSIVO de SuperAdmin, 403 en otro caso). Omitido o
+            `false`: comportamiento normal, sin cambios.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Usuarios (o usuarios eliminados, con onlyDeleted=true) del alcance del caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TenantUserItem"
+        "401":
+          description: No autenticado o falta el claim tenant_id.
+        "403":
+          description: "`onlyDeleted=true` solicitado por un caller distinto de SuperAdmin."
           content:
             application/json:
               schema:
@@ -3759,7 +3815,9 @@ components:
 
     OtUserItem:
       type: object
-      description: Usuario (activo, sin rol o invitación pendiente) del tenant OT.
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del tenant OT, o
+        usuario eliminado cuando se lista con `?onlyDeleted=true` (#10624).
       properties:
         id: { type: string }
         fullName: { type: string }
@@ -3779,6 +3837,14 @@ components:
             Versión de fila del usuario (#10621). Requerida para editar (PATCH
             /users/{userId}) con concurrencia optimista; 0 para invitaciones
             pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
       required: [id, fullName, email, status, isSuspended, rowVersion]
 
     UpdateOtUserRequest:
@@ -3846,6 +3912,43 @@ components:
           format: int64
           description: Versión de fila leída por el cliente (concurrencia optimista).
       required: [rowVersion]
+
+    TenantUserItem:
+      type: object
+      description: >
+        Usuario (activo, sin rol o invitación pendiente) del alcance del
+        caller, o usuario eliminado cuando se lista con `?onlyDeleted=true`
+        (#10624).
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, nullable: true }
+        roleCode: { type: string, nullable: true }
+        roleId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        createdAt: { type: string, format: date-time, nullable: true }
+        isSuspended: { type: boolean }
+        tenantId: { type: string, format: uuid, nullable: true }
+        tenantName: { type: string, nullable: true }
+        rowVersion:
+          type: integer
+          format: int64
+          description: >
+            Versión de fila del usuario (#10621). Requerida para editar (PATCH
+            /users/{userId}) con concurrencia optimista; 0 para invitaciones
+            pendientes (no aplica edición de perfil).
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha de eliminación (soft-delete, #10623). `null` en el listado
+            normal; siempre poblado cuando se listó con `?onlyDeleted=true`
+            (#10624).
+      required: [id, fullName, email, status, isSuspended, rowVersion]
 
     AuditLogEntry:
       type: object

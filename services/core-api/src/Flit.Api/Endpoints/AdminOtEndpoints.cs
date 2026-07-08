@@ -284,7 +284,9 @@ public static class AdminOtEndpoints
             .WithName("AdminOtListUsers")
             .WithSummary("Lista los usuarios del tenant OT")
             .WithDescription("Usuarios activos, sin rol e invitaciones pendientes del tenant resuelto (propio "
-                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin).")
+                + "para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). Con ?onlyDeleted=true "
+                + "(HU #10624, EXCLUSIVO de SuperAdmin — 403 en otro caso) lista en su lugar los usuarios "
+                + "eliminados (soft-delete) de ese mismo tenant OT resuelto.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -1295,8 +1297,20 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
+        [FromQuery] bool? onlyDeleted,
         CancellationToken cancellationToken)
     {
+        // HU #10624 AC3/AC4 — onlyDeleted=true: vista de usuarios eliminados del tenant OT
+        // resuelto (mismo criterio de alcance que el listado normal — propio tenant para
+        // ot_admin, o el indicado por transitOfficeId para SuperAdmin), EXCLUSIVA de SuperAdmin
+        // (único rol que puede restaurar — ver POST /api/v1/superadmin/users/{userId}/restore).
+        if (onlyDeleted == true && !IsSuperAdmin(httpContext.User))
+        {
+            return Results.Json(
+                new { error = "FORBIDDEN_SCOPE", message = "Solo SuperAdmin puede ver usuarios eliminados." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
             httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
         if (scopeError is not null)
@@ -1305,6 +1319,54 @@ public static class AdminOtEndpoints
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        if (onlyDeleted == true)
+        {
+            var deletedWithRole = await (
+                from a in db.UserRoleAssignments.AsNoTracking()
+                join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                where a.TenantId == tenantId && a.DeletedAt == null && u.DeletedAt != null
+                select new OtUserDto(
+                    u.Id.ToString(),
+                    u.DisplayName,
+                    u.Email,
+                    r.Name,
+                    r.Code,
+                    a.RoleId,
+                    u.Status == "active" ? "active" : "inactive",
+                    null,
+                    false,
+                    u.RowVersion,
+                    u.DeletedAt)
+            ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+            var deletedWithoutRole = await (
+                from u in db.Users.AsNoTracking()
+                where u.HomeTenantId == tenantId
+                      && u.DeletedAt != null
+                      && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.TenantId == tenantId && a.DeletedAt == null)
+                select new OtUserDto(
+                    u.Id.ToString(),
+                    u.DisplayName,
+                    u.Email,
+                    null,
+                    null,
+                    null,
+                    u.Status == "active" ? "active" : "inactive",
+                    null,
+                    false,
+                    u.RowVersion,
+                    u.DeletedAt)
+            ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new
+            {
+                data = deletedWithRole.Concat(deletedWithoutRole)
+                    .OrderByDescending(x => x.DeletedAt)
+                    .ToList(),
+            });
+        }
 
         var activeUsers = await (
             from a in db.UserRoleAssignments.AsNoTracking()
@@ -1636,6 +1698,8 @@ public static class AdminOtEndpoints
     // el valor leído de OtUserDto.RowVersion).
     private sealed record DeleteOtUserRequest(long RowVersion);
 
+    // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Ver eliminados" de
+    // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
     private sealed record OtUserDto(
         string Id,
         string FullName,
@@ -1646,5 +1710,6 @@ public static class AdminOtEndpoints
         string Status,
         DateTimeOffset? CreatedAt,
         bool IsSuspended,
-        long RowVersion);
+        long RowVersion,
+        DateTimeOffset? DeletedAt = null);
 }

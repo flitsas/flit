@@ -401,6 +401,7 @@ public static class SecurityEndpoints
         group.MapGet("/users", async (
             ClaimsPrincipal caller,
             FlitDbContext db,
+            bool? onlyDeleted,
             CancellationToken cancellationToken) =>
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
@@ -412,6 +413,66 @@ public static class SecurityEndpoints
             var isSuperAdmin = caller.Claims.Any(c =>
                 c.Type == AdminAuthorization.RoleClaimType
                 && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // HU #10624 AC3/AC4 — onlyDeleted=true: vista administrativa GLOBAL de usuarios
+            // eliminados (cualquier tenant), EXCLUSIVA de SuperAdmin (único rol que puede
+            // restaurar — ver POST /api/v1/superadmin/users/{userId}/restore). Sin este
+            // parámetro el comportamiento no cambia (compatibilidad hacia atrás).
+            if (onlyDeleted == true)
+            {
+                if (!isSuperAdmin)
+                    return Results.Json(
+                        new ErrorResponse("FORBIDDEN_SCOPE", "Solo SuperAdmin puede ver usuarios eliminados."),
+                        statusCode: StatusCodes.Status403Forbidden);
+
+                var deletedWithRole = await (
+                    from a in db.UserRoleAssignments.AsNoTracking()
+                    join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                    join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                    join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
+                    where a.DeletedAt == null && u.DeletedAt != null
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        r.Name,
+                        r.Code,
+                        a.RoleId,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        u.RowVersion,
+                        u.DeletedAt)
+                ).ToListAsync(cancellationToken);
+
+                var deletedWithoutRole = await (
+                    from u in db.Users.AsNoTracking()
+                    join t in db.Tenants.AsNoTracking() on u.HomeTenantId equals t.Id
+                    where u.DeletedAt != null
+                          && !db.UserRoleAssignments.Any(a => a.UserId == u.Id && a.DeletedAt == null)
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        null,
+                        null,
+                        null,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        u.RowVersion,
+                        u.DeletedAt)
+                ).ToListAsync(cancellationToken);
+
+                return Results.Ok(deletedWithRole.Concat(deletedWithoutRole)
+                    .OrderByDescending(x => x.DeletedAt)
+                    .ToList());
+            }
+
             var now = DateTimeOffset.UtcNow;
 
             if (isSuperAdmin)
@@ -725,7 +786,9 @@ public static class SecurityEndpoints
 
     private sealed record InvitationCreatedResponse(Guid InvitationId, string Email, bool EmailSent);
 
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion);
+    // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Eliminados" de
+    // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null);
 
     private sealed record ErrorResponse(string Code, string Message);
 }

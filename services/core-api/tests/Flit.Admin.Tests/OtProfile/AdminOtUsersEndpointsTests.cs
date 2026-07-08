@@ -126,6 +126,149 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Data.Should().Contain(u => u.Id == _collaboratorUserId.ToString());
     }
 
+    // HU #10624 AC3 — con ?onlyDeleted=true, SuperAdmin ve al colaborador soft-deleted del
+    // tenant OT resuelto (mismo criterio de scope que el listado normal — transitOfficeId).
+    [Fact]
+    public async Task ListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaborator()
+    {
+        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var response = await _client.GetAsync(
+            $"/api/v1/admin/ot/users?transitOfficeId={_transitOfficeId}&onlyDeleted=true",
+            TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<DeletedUsersBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body.Should().NotBeNull();
+        var deletedCollaborator = body!.Data.Should()
+            .ContainSingle(u => u.Id == _collaboratorUserId.ToString()).Subject;
+        deletedCollaborator.DeletedAt.Should().NotBeNull();
+    }
+
+    // HU #10624 AC4 — un ot_admin (no SuperAdmin) que intenta usar onlyDeleted=true recibe 403:
+    // solo SuperAdmin puede ver/restaurar usuarios eliminados.
+    [Fact]
+    public async Task ListUsers_OnlyDeleted_AsOtAdmin_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.GetAsync(
+            "/api/v1/admin/ot/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // HU #10624 — regresión: sin onlyDeleted, el listado sigue excluyendo usuarios eliminados
+    // exactamente igual que antes de agregar el parámetro.
+    [Fact]
+    public async Task ListUsers_WithoutOnlyDeleted_StillExcludesSoftDeletedUser()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await _client.GetAsync("/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<ListUsersBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Data.Should().NotContain(u => u.Id == _collaboratorUserId.ToString());
+    }
+
+    // HU #10624 AC3 — con ?onlyDeleted=true en GET /api/v1/security/users, SuperAdmin ve al
+    // colaborador soft-deleted de CUALQUIER tenant (aquí, el tenant OT del fixture).
+    [Fact]
+    public async Task SecurityListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaboratorFromAnyTenant()
+    {
+        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+
+        long rowVersion;
+        await using (var db = CreateDbContext())
+        {
+            rowVersion = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.RowVersion)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var deleteResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion }),
+            },
+            TestContext.Current.CancellationToken);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var response = await _client.GetAsync(
+            "/api/v1/security/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<List<SecurityDeletedUserItem>>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body.Should().NotBeNull();
+        var deletedCollaborator = body!.Should()
+            .ContainSingle(u => u.Id == _collaboratorUserId.ToString()).Subject;
+        deletedCollaborator.TenantId.Should().Be(_otTenantId.ToString());
+        deletedCollaborator.DeletedAt.Should().NotBeNull();
+    }
+
+    // HU #10624 AC4 — un ot_admin (no SuperAdmin) que intenta usar onlyDeleted=true en
+    // GET /api/v1/security/users recibe 403.
+    [Fact]
+    public async Task SecurityListUsers_OnlyDeleted_AsOtAdmin_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.GetAsync(
+            "/api/v1/security/users?onlyDeleted=true", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     [Fact]
     public async Task Suspend_ThenUnsuspend_AsOtAdmin_TogglesActiveSuspension()
     {
@@ -940,6 +1083,15 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     private sealed record ListUsersBody(List<ListUserItem> Data);
 
     private sealed record ListUserItem(string Id, string FullName, string Email, string Status);
+
+    // HU #10624 — respuesta de GET /api/v1/admin/ot/users?onlyDeleted=true (OtUserDto con deletedAt).
+    private sealed record DeletedUsersBody(List<DeletedUserItem> Data);
+
+    private sealed record DeletedUserItem(string Id, string FullName, string Email, string Status, DateTimeOffset? DeletedAt);
+
+    // HU #10624 — respuesta de GET /api/v1/security/users?onlyDeleted=true (TenantUserDto con
+    // tenantId/deletedAt); ese endpoint devuelve el arreglo directamente (sin envolver en "data").
+    private sealed record SecurityDeletedUserItem(string Id, string FullName, string Email, string? TenantId, DateTimeOffset? DeletedAt);
 
     private sealed record ErrorBody(string Error, string? Message);
 
