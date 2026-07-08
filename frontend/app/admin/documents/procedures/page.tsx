@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ProcedureTypeSelect } from "@/components/admin/documents/ProcedureTypeSelect";
-import { PROCEDURE_TYPES } from "@/lib/constants/procedure-types";
+import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 
-// Selector de tipo de trámite (HU #10198, AC2–AC5). Como no existe endpoint de
-// tipos de trámite, se usa la lista estática; al elegir uno se navega a la consola
-// documental por trámite (`/admin/documents/procedures/[procedureTypeId]`).
+// Selector de tipo de trámite (HU #10198, AC2–AC5). La lista se resuelve desde el API
+// (los ids de procedure_types se generan por ambiente, no se pueden hardcodear); al elegir
+// uno se navega a la consola documental por trámite (`/admin/documents/procedures/[id]`).
 export default function DocumentProceduresPage() {
   const router = useRouter();
   const [procedureTypeId, setProcedureTypeId] = useState("");
+  const { items } = useProcedureTypes();
+  const procedureTypes = items.filter((p) => p.isActive);
 
   const go = (id: string) => {
     if (id) {
@@ -51,7 +53,7 @@ export default function DocumentProceduresPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {PROCEDURE_TYPES.map((p) => (
+          {procedureTypes.map((p) => (
             <button
               key={p.id}
               type="button"

@@ -8,8 +8,8 @@ namespace Flit.Tramites.Domain.Tramites.Catalog;
 /// <summary>
 /// Catálogo de reglas condicionales de obligatoriedad documental por tipología (HU #10521,
 /// RF33/34/35/37/38/39). Fuente de verdad en código. Cada regla exige un documento solo bajo
-/// su condición (importado, PN/NIT, prenda, leasing, tramitador, carrocería, servicio especial),
-/// de modo que ningún documento se pide cuando no aplica ni se omite cuando sí.
+/// su condición (PN/NIT, leasing, tramitador, carrocería, servicio especial), de modo que ningún
+/// documento se pide cuando no aplica ni se omite cuando sí.
 /// </summary>
 public static class ConditionalDocumentRules
 {
@@ -19,11 +19,8 @@ public static class ConditionalDocumentRules
     // Reglas compartidas por matrícula y traspaso (aplican por atributo, no por tipología).
     private static IEnumerable<ConditionalRule> Comunes()
     {
-        // RF37 — prenda condicionada (paz y salvo + inscripción) cuando el OT/vehículo la exige.
-        yield return new ConditionalRule("prenda_paz_salvo", c => c.TienePrenda, ConditionalEffect.Require,
-            Item("paz_salvo_prenda", "Paz y salvo de prenda", true, "paz_salvo_prenda"));
-        yield return new ConditionalRule("prenda_inscripcion", c => c.TienePrenda, ConditionalEffect.Require,
-            Item("inscripcion_prenda", "Inscripción / registro de prenda", true, "inscripcion_prenda"));
+        // La prenda (RF37) NO se resuelve aquí: vive en su propio agregado (ProcedureInstancePrenda /
+        // PrendaGate, Feature #10585), que exige su documento de soporte en la radicación del traspaso.
 
         // RF39 — poderes de tramitador solo si hay processor activo.
         yield return new ConditionalRule("tramitador_poder", c => c.TieneTramitador, ConditionalEffect.Require,
@@ -46,14 +43,6 @@ public static class ConditionalDocumentRules
             Item("cedulas", "Documento de identidad", false, "cedulas"));
     }
 
-    /// <summary>Reglas para matrícula inicial.</summary>
-    private static IEnumerable<ConditionalRule> MatriculaInicial()
-    {
-        // RF33 — aduana/importación obligatoria solo si el vehículo es importado.
-        yield return new ConditionalRule("importado_aduana", c => c.EsImportado, ConditionalEffect.Require,
-            Item("aduana", "Certificado de aduana / declaración de importación", true, "aduana"));
-    }
-
     /// <summary>Reglas para traspaso.</summary>
     private static IEnumerable<ConditionalRule> Traspaso()
     {
@@ -70,7 +59,8 @@ public static class ConditionalDocumentRules
     /// </summary>
     public static IReadOnlyList<ConditionalRule> For(string? codigo) => codigo switch
     {
-        TramiteTipologiaCatalog.CodigoMatriculaInicial => MatriculaInicial().Concat(Comunes()).ToList(),
+        // Matrícula inicial no tiene reglas propias: aduana es obligatorio de base (catálogo + matriz).
+        TramiteTipologiaCatalog.CodigoMatriculaInicial => Comunes().ToList(),
         TramiteTipologiaCatalog.CodigoTraspasoStandard => Traspaso().Concat(Comunes()).ToList(),
         // Tipología desconocida ⇒ sin reglas (checklist base sin cambios).
         _ => [],

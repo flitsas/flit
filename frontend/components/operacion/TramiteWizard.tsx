@@ -571,7 +571,8 @@ export function TramiteWizard(props: Props) {
               Borrador finalizado — esperando validación del cliente.
             </span>{' '}
             Los datos quedaron en solo lectura. Puedes iniciar o compartir la validación de identidad;
-            la firma se procesará automáticamente al aprobarse, y luego podrás radicar a tránsito.
+            al aprobarse podrás radicar a tránsito. La firma de compraventa es informativa y no
+            bloquea la radicación (HU #10661).
           </span>
         </div>
       )}
@@ -1186,12 +1187,11 @@ function ConsultaStep({
   };
 
   // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Importado solo aplica en matrícula (dispara Aduana); leasing solo
-  // en traspaso; carrocería y prenda en ambos.
-  const esImportado = fieldValues.find((f) => f.fieldKey === 'es_importado')?.valueText === 'true';
+  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; carrocería en ambos. Aduana es
+  // obligatorio de base en matrícula (no hay check de importado). La prenda se gestiona aparte con
+  // PrendaForm (Feature #10585).
   const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
   const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
-  const accionPrenda = fieldValues.find((f) => f.fieldKey === 'accion_prenda')?.valueText ?? '';
 
   const saveAtributo = async (fieldKey: string, valueText: string) => {
     if (!instanceId) return;
@@ -1349,24 +1349,6 @@ function ConsultaStep({
           Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
         </p>
 
-        {isVin && (
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={esImportado}
-              onChange={(e) => void saveAtributo('es_importado', e.target.checked ? 'true' : 'false')}
-              disabled={readOnly || atributosSaving}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-            />
-            <span className="text-xs">
-              <span className="font-semibold">Vehículo importado</span>
-              <span className="mt-0.5 block opacity-55">
-                Exige el Certificado de Aduana / Declaración de Importación.
-              </span>
-            </span>
-          </label>
-        )}
-
         {!isVin && (
           <label className="flex items-start gap-2.5">
             <input
@@ -1398,27 +1380,6 @@ function ConsultaStep({
             <span className="mt-0.5 block opacity-55">Exige la factura de carrocería.</span>
           </span>
         </label>
-
-        <div>
-          <label htmlFor="consulta-accion-prenda" className="mb-1.5 block text-xs font-semibold">
-            Prenda / garantía mobiliaria
-          </label>
-          <select
-            id="consulta-accion-prenda"
-            value={accionPrenda}
-            onChange={(e) => void saveAtributo('accion_prenda', e.target.value)}
-            disabled={readOnly || atributosSaving}
-            className={`${inputClass} max-w-xs disabled:opacity-60`}
-          >
-            <option value="">Sin prenda</option>
-            <option value="registrar">Registrar prenda</option>
-            <option value="levantar">Levantar prenda</option>
-            <option value="omitir">Omitir</option>
-          </select>
-          <p className="mt-1 text-[11px] opacity-55">
-            «Registrar» exige el paz y salvo e inscripción de la prenda.
-          </p>
-        </div>
       </div>
 
       {mostrarPazSalvo && (

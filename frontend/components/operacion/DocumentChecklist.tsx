@@ -311,7 +311,12 @@ function DocumentSlot({
     const file = e.target.files?.[0];
     e.target.value = ''; // permite re-seleccionar el mismo archivo
     if (!file) return;
-    const err = validateFile(file);
+    // Pre-validación cliente con los límites del tipo (RF08/09): así el error sale inline y con el
+    // límite real (no el global de 20 MB) y no llega al backend / cuadro global.
+    const err = validateFile(file, {
+      allowedMimes: item.mimeTypesAllowed,
+      maxSizeBytes: item.maxSizeBytes,
+    });
     setLocalError(err);
     if (err) return;
     onUpload(file);

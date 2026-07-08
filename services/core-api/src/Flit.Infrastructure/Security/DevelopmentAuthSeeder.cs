@@ -52,13 +52,13 @@ public static class DevelopmentAuthSeeder
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
-        await SeedTenantModuleGrantsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -794,56 +794,6 @@ public static class DevelopmentAuthSeeder
                         CreatedAt = now,
                     }));
             }
-        }
-
-        await db.SaveChangesAsync(ct);
-    }
-
-    private static async Task SeedTenantModuleGrantsAsync(FlitDbContext db, CancellationToken ct)
-    {
-        var now = DateTimeOffset.UtcNow;
-
-        var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
-        if (empresaTenant is not null)
-        {
-            // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
-            var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
-            await GrantModulesToTenantAsync(db, empresaTenant.Id, grantedCodes, now, ct);
-        }
-
-        // HU #10504 — sin este grant hacia el tenant OT de desarrollo, el fix de scoping por tipo
-        // de entidad (ListAccessibleAsync con targetEntityType) ocultaría estos 4 módulos del
-        // constructor de roles para TRANSIT_OFFICE, ya que hoy solo tienen grant hacia la
-        // compañía demo. "validaciones" queda deliberadamente excluido para OT (decisión confirmada).
-        var otTenantExists = await db.Tenants.AnyAsync(t => t.Id == OtDevTenantId, ct);
-        if (otTenantExists)
-        {
-            var otGrantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes" };
-            await GrantModulesToTenantAsync(db, OtDevTenantId, otGrantedCodes, now, ct);
-        }
-    }
-
-    private static async Task GrantModulesToTenantAsync(
-        FlitDbContext db, Guid tenantId, string[] moduleCodes, DateTimeOffset now, CancellationToken ct)
-    {
-        var modules = await db.SecurityModules
-            .Where(m => moduleCodes.Contains(m.Code) && m.DeletedAt == null)
-            .ToListAsync(ct);
-
-        var existingModuleIds = await db.TenantModuleGrants
-            .Where(g => g.TenantId == tenantId)
-            .Select(g => g.ModuleId)
-            .ToListAsync(ct);
-
-        foreach (var m in modules.Where(m => !existingModuleIds.Contains(m.Id)))
-        {
-            db.TenantModuleGrants.Add(new Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant
-            {
-                TenantId = tenantId,
-                ModuleId = m.Id,
-                GrantedAt = now,
-            });
         }
 
         await db.SaveChangesAsync(ct);

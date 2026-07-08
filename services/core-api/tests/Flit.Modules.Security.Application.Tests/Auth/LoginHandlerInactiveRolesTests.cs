@@ -47,6 +47,8 @@ public sealed class LoginHandlerInactiveRolesTests
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
                 Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
@@ -58,6 +60,8 @@ public sealed class LoginHandlerInactiveRolesTests
             Arg.Any<Guid>(),
             Arg.Any<string>(),
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Is<IReadOnlyList<UserRoleSnapshot>>(roles => roles.Count == 1 && roles[0].Id == activeRoleId),
             Arg.Is<IReadOnlyList<string>>(perms => perms.Count == 1 && perms[0] == "procedures.read"));
@@ -85,7 +89,7 @@ public sealed class LoginHandlerInactiveRolesTests
 
         await act.Should().ThrowAsync<AllRolesInactiveException>();
         _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default!, default!, default!);
+            default, default!, default, default!, default!, default!, default!, default!);
     }
 
     [Fact]
@@ -109,6 +113,8 @@ public sealed class LoginHandlerInactiveRolesTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
                 Arg.Any<IReadOnlyList<string>>())

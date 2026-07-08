@@ -39,6 +39,8 @@ public sealed class LoginHandler(
             snapshot.Email,
             snapshot.TenantId,
             snapshot.TenantName,
+            snapshot.TenantTaxId,
+            snapshot.EntityType,
             snapshot.ActiveRoles,
             snapshot.PermissionSlugs);
 

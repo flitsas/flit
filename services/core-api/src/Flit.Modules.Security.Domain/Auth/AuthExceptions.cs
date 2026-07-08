@@ -135,3 +135,40 @@ public sealed class NoRolesSelectedException : Exception
     {
     }
 }
+
+/// <summary>
+/// La invitación no existe, o existe pero no pertenece al alcance (tenant) del caller
+/// (HU #10625 reenvío, HU #10627 cancelación). Se usa el mismo error para ambos casos para no
+/// revelar la existencia de invitaciones fuera de alcance — se mapea a 404 en el endpoint.
+/// </summary>
+public sealed class InvitationNotFoundException : Exception
+{
+    public InvitationNotFoundException()
+        : base("The invitation was not found.")
+    {
+    }
+}
+
+/// <summary>
+/// La invitación ya no está en estado "pending" — fue aceptada o cancelada previamente, por lo
+/// que no se puede reenviar (HU #10625 AC3) ni cancelar (HU #10627 AC2). Es un error de negocio
+/// explícito, no un no-op silencioso.
+/// </summary>
+public sealed class InvitationNotPendingException : Exception
+{
+    public InvitationNotPendingException()
+        : base("The invitation is no longer pending (it was already accepted or cancelled).")
+    {
+    }
+}
+
+/// <summary>
+/// Reenvío rechazado por el cooldown anti-abuso: la invitación ya se reenvió hace menos del
+/// tiempo mínimo configurado (HU #10625 AC2, <c>InvitationOptions.ResendCooldown</c>).
+/// </summary>
+public sealed class ResendCooldownActiveException(TimeSpan retryAfter)
+    : Exception("You must wait before resending this invitation again.")
+{
+    /// <summary>Tiempo restante hasta que se pueda reenviar de nuevo.</summary>
+    public TimeSpan RetryAfter { get; } = retryAfter;
+}

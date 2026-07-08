@@ -1,13 +1,20 @@
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
+using Flit.Modules.Security.Application.UserManagement.DeleteUser;
+using Flit.Modules.Security.Application.UserManagement.RestoreUser;
+using Flit.Modules.Security.Application.UserManagement.SuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
+using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Application.UserRoles;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,6 +30,8 @@ public static class SecurityApplicationExtensions
         services.AddScoped<AdminResetPasswordHandler>();
         services.AddScoped<ChangePasswordHandler>();
         services.AddScoped<CreateInvitationHandler>();
+        services.AddScoped<ResendInvitationHandler>(); // HU #10625 — reenviar invitación pendiente
+        services.AddScoped<CancelInvitationHandler>(); // HU #10627 — cancelar invitación pendiente
         services.AddScoped<ActivateAccountHandler>();
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
@@ -54,6 +63,18 @@ public static class SecurityApplicationExtensions
 
         // Fase 2 — Endpoints AdminCompañía
         services.AddScoped<ListAccessibleModulesHandler>();
+
+        // HU #10621 — Editar nombre/correo de un usuario (compartido entre SecurityEndpoints
+        // y AdminOtEndpoints, mismo Handler).
+        services.AddScoped<UpdateUserHandler>();
+
+        // HU #10619 — unificación de suspensión/desactivación indefinida + fix de alcance SuperAdmin
+        services.AddScoped<SuspendUserHandler>();
+        services.AddScoped<UnsuspendUserHandler>();
+
+        // HU #10623 — eliminar (soft-delete reversible) y restaurar (SOLO SuperAdmin) un usuario.
+        services.AddScoped<DeleteUserHandler>();
+        services.AddScoped<RestoreUserHandler>();
 
         return services;
     }

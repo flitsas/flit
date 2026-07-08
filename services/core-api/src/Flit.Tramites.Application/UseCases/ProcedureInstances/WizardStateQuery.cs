@@ -328,22 +328,24 @@ public sealed class GetWizardStateHandler(
             // emite las razones precisas de lo que falta.
             else if (p == 6)
             {
-                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + firma de AMBAS
-                // partes (slice 7) + FUR generado. Los documentos ya se exigen en el paso 2
-                // (paridad con matrícula); aquí NO se listan como reason. El faltante de docs
-                // sigue vetando el submit vía el blocker global documentos_incompletos.
+                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + FUR generado. Los
+                // documentos ya se exigen en el paso 2 (paridad con matrícula); aquí NO se listan
+                // como reason. El faltante de docs sigue vetando el submit vía el blocker global
+                // documentos_incompletos.
+                //
+                // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
+                // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
+                // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
+                // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
                 var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
-                var firmaOk = FirmaAmbasFirmadas(instance);
                 var furOk = FurGenerado(instance);
 
                 if (!biometriaOk)
                     reasons.Add(PendienteBiometria);
-                if (!firmaOk)
-                    reasons.Add(PendienteFirma);
                 if (!furOk)
                     reasons.Add(FurPendiente);
 
-                status = (biometriaOk && firmaOk && furOk) ? "complete" : "incomplete";
+                status = (biometriaOk && furOk) ? "complete" : "incomplete";
             }
             else if (gate.Ok)
             {

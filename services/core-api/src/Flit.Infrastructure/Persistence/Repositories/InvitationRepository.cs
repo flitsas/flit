@@ -98,4 +98,55 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
             .Select(x => new PendingInvitationSummary(x.Id, x.Email, x.FullName, x.CreatedAt))
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<InvitationForResend?> FindForResendAsync(
+        Guid invitationId, Guid? scopeTenantId, CancellationToken cancellationToken)
+    {
+        var query = db.UserInvitations.AsNoTracking().Where(x => x.Id == invitationId);
+
+        if (scopeTenantId is { } tenantId)
+            query = query.Where(x => x.TenantId == tenantId);
+
+        return await query
+            .Select(x => new InvitationForResend(x.Id, x.Email, x.FullName, x.Status, x.LastSentAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task UpdateResendAsync(
+        Guid invitationId, string tokenHash, DateTimeOffset lastSentAt, Guid resentBy, CancellationToken cancellationToken)
+    {
+        var entity = await db.UserInvitations.FirstAsync(x => x.Id == invitationId, cancellationToken);
+
+        entity.TokenHash = tokenHash;
+        entity.LastSentAt = lastSentAt;
+        entity.UpdatedAt = lastSentAt;
+        entity.UpdatedBy = resentBy;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<InvitationStatusInfo?> FindByIdAsync(Guid invitationId, CancellationToken cancellationToken) =>
+        db.UserInvitations
+            .AsNoTracking()
+            .Where(x => x.Id == invitationId)
+            .Select(x => new InvitationStatusInfo(x.Id, x.TenantId, x.Status))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task CancelAsync(Guid invitationId, Guid cancelledBy, CancellationToken cancellationToken)
+    {
+        var entity = await db.UserInvitations
+            .FirstOrDefaultAsync(x => x.Id == invitationId, cancellationToken);
+
+        if (entity is null)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        entity.Status = "cancelled";
+        entity.UpdatedAt = now;
+        entity.UpdatedBy = cancelledBy;
+        entity.DeletedAt = now;
+        entity.DeletedBy = cancelledBy;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

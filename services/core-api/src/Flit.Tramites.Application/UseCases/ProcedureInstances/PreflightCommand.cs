@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -52,7 +53,8 @@ public sealed class RunPreflightHandler(
     IConsultationProviderRegistry registry,
     IConsultationProviderChainResolver chainResolver,
     IConsultationTenantOverrideProvider overrideProvider,
-    IRnmcRequirementPolicy rnmcPolicy)
+    IRnmcRequirementPolicy rnmcPolicy,
+    ITransitOfficeResolver transitOfficeResolver)
 {
     private const string ProviderVerifikSimit = "verifik_simit";
     private const string ProviderVerifikRnmc = "verifik_rnmc";
@@ -141,6 +143,11 @@ public sealed class RunPreflightHandler(
         // (source="consultation") para la tarjeta "Datos del vehículo", evitando una segunda
         // consulta dedicada. Idempotente: upsert por field_key.
         UpsertHydratedFields(instance, tenantId, vehicleFields);
+
+        // B11 (HU #10659) — en TRASPASO el vehículo ya tiene OT en RUNT: tras hidratar
+        // transit_office_name, resolver el OT habilitado de la empresa y fijar también id/code/city.
+        // El OT queda fijado desde el RUNT (no editable manualmente; ver PatchFieldValuesHandler).
+        await AutoBindTransitOfficeForTraspasoAsync(instance, tenantId, ct);
 
         // Matrícula inicial: el estado del vehículo no debe bloquear (ver RelajarEstadoVehiculoMatricula).
         RelajarEstadoVehiculoMatricula(checks, modalidad);
@@ -521,6 +528,43 @@ public sealed class RunPreflightHandler(
                 repo.Add(fieldValue);
             }
         }
+    }
+
+    /// <summary>
+    /// B11 (HU #10659) — SOLO en traspaso_standard: tras hidratar <c>transit_office_name</c> desde el
+    /// RUNT, resuelve el OT habilitado de la empresa (por nombre, case-insensitive) y fija también
+    /// <c>transit_office_id</c>, <c>transit_office_code</c> y <c>transit_office_city</c>
+    /// (Source="consultation"). Si el nombre RUNT NO coincide con ningún OT habilitado se conserva solo
+    /// <c>transit_office_name</c> y NO se inventa un id (el traspaso queda a la espera de que el
+    /// SuperAdmin habilite el grant correcto). En matrícula no hace nada (el operador elige libremente).
+    /// </summary>
+    private async Task AutoBindTransitOfficeForTraspasoAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        if (!string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal))
+            return;
+
+        var runtName = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.IsNullOrWhiteSpace(runtName))
+            return;
+
+        var match = await transitOfficeResolver.ResolveEnabledByNameAsync(tenantId, runtName, ct);
+        if (match is null)
+            return; // Sin OT habilitado que coincida: se deja solo el nombre RUNT (no se inventa id).
+
+        // Reusa el upsert idempotente de campos hidratados (Source="consultation").
+        UpsertHydratedFields(instance, tenantId,
+        [
+            new HydratedField("transit_office_id", match.Id.ToString(), null),
+            new HydratedField("transit_office_code", match.Code, null),
+            new HydratedField("transit_office_name", match.Name, null),
+            new HydratedField("transit_office_city", match.CityCode, null),
+        ]);
     }
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
