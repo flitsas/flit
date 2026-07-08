@@ -247,6 +247,11 @@ export function TramiteWizard(props: Props) {
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
+  // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
+  // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
+  // propaga a BiometricStep para pintar el estado "cubierto por el baúl" (sin botones de biométrica).
+  const [vaultCoveredPartes, setVaultCoveredPartes] = useState<BiometricParte[]>([]);
   const { show } = useToast();
   // Guardar+continuar de los pasos con form embebido (actores y comercial): la
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
@@ -461,12 +466,24 @@ export function TramiteWizard(props: Props) {
       if (parteIdentidad && instanceId) {
         try {
           const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
-          if (ensured.outcome === 'requiere_validacion') {
-            const { provider } = await tramitesClient.getBiometricState(instanceId);
-            if (provider === 'kyverum') {
-              await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
-            } else {
-              await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+          // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
+          // El backend ya deja el paso de identidad completo y la parte aprobada; aquí solo registramos
+          // la cobertura por baúl para que BiometricStep muestre el estado "cubierto por el baúl".
+          if (ensured.outcome === 'firma_baul') {
+            setVaultCoveredPartes((prev) =>
+              prev.includes(parteIdentidad) ? prev : [...prev, parteIdentidad],
+            );
+          } else {
+            // Si la parte deja de estar cubierta (p.ej. se reemplazó el NIT por una persona natural),
+            // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
+            setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
+            if (ensured.outcome === 'requiere_validacion') {
+              const { provider } = await tramitesClient.getBiometricState(instanceId);
+              if (provider === 'kyverum') {
+                await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
+              } else {
+                await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+              }
             }
           }
         } catch (ensureErr) {
@@ -656,6 +673,7 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                vaultCoveredPartes={vaultCoveredPartes}
               />
             </div>
           )}
@@ -1454,6 +1472,7 @@ function StepBody({
   stepFormRef,
   identityOperable = false,
   identityApproved = false,
+  vaultCoveredPartes = [],
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1472,6 +1491,9 @@ function StepBody({
   /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
    * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
   identityApproved?: boolean;
+  /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
+   * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
+  vaultCoveredPartes?: BiometricParte[];
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -1580,6 +1602,7 @@ function StepBody({
           modalidad={modalidad}
           onRefresh={onRefresh}
           hideIntro
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       // Borrador finalizado: reabre la captura SOLO para la biométrica (provider readOnly=false).
@@ -1600,6 +1623,7 @@ function StepBody({
           instanceId={instanceId}
           modalidad={modalidad}
           onRefresh={onRefresh}
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       return (
