@@ -1,5 +1,6 @@
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
@@ -23,6 +24,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<AdminResetPasswordHandler>();
         services.AddScoped<ChangePasswordHandler>();
         services.AddScoped<CreateInvitationHandler>();
+        services.AddScoped<CancelInvitationHandler>();
         services.AddScoped<ActivateAccountHandler>();
 
         // HU #10161 — CRUD módulos dinámicos Super Admin

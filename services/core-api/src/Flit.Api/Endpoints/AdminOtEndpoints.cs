@@ -31,6 +31,7 @@ using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -307,6 +308,17 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        // HU #10627 — cancelar invitación pendiente del tenant OT resuelto (propio para
+        // ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin).
+        group.MapDelete("/invitations/{invitationId:guid}", CancelInvitationAsync)
+            .WithName("AdminOtCancelInvitation")
+            .WithSummary("Cancela una invitación pendiente del tenant OT")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -1428,6 +1440,49 @@ public static class AdminOtEndpoints
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> CancelInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        CancelInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var cancelledBy = ResolveUserId(httpContext.User);
+        if (cancelledBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            await handler.HandleAsync(
+                new CancelInvitationCommand(invitationId, tenantId, cancelledBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.NoContent();
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece a este tenant OT." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotPendingException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_PENDING", message = "La invitación ya no está pendiente (fue aceptada o cancelada previamente)." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>

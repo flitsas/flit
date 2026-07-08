@@ -176,6 +176,92 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // AC1 (HU #10627) — ot_admin cancela una invitación pendiente de su propio tenant: el
+    // enlace de activación deja de funcionar y el email queda disponible para una nueva invitación.
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_PendingInvitation_CancelsAndAllowsNewInvitation()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-cancel-invite-{Guid.NewGuid():N}@flit.local";
+        var inviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Colaborador a cancelar" },
+            TestContext.Current.CancellationToken);
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        Guid invitationId;
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            invitationId = invitation.Id;
+        }
+
+        var cancelResponse = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using (var db = CreateDbContext())
+        {
+            var cancelled = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+            cancelled.Status.Should().Be("cancelled");
+            cancelled.DeletedAt.Should().NotBeNull();
+        }
+
+        // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
+        var reInviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Colaborador a cancelar" },
+            TestContext.Current.CancellationToken);
+        reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    // AC2 (HU #10627) — cancelar una invitación ya aceptada/cancelada previamente → 409.
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_AlreadyCancelled_Returns409()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-cancel-twice-{Guid.NewGuid():N}@flit.local";
+        await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Cancelar Dos Veces OT" },
+            TestContext.Current.CancellationToken);
+
+        Guid invitationId;
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            invitationId = invitation.Id;
+        }
+
+        var firstCancel = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondCancel = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ot_admin no puede cancelar una invitación fuera de su tenant → 404 (mismo alcance que suspender).
+    [Fact]
+    public async Task CancelInvitation_AsOtAdmin_TargetingInvitationOutsideTenant_Returns404()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();

@@ -135,3 +135,29 @@ public sealed class NoRolesSelectedException : Exception
     {
     }
 }
+
+/// <summary>
+/// La invitación no existe, o existe pero no pertenece al alcance (tenant) del caller
+/// (HU #10627). Se usa el mismo error para ambos casos para no revelar la existencia de
+/// invitaciones fuera de alcance — se mapea a 404 en el endpoint.
+/// </summary>
+public sealed class InvitationNotFoundException : Exception
+{
+    public InvitationNotFoundException()
+        : base("The invitation was not found.")
+    {
+    }
+}
+
+/// <summary>
+/// La invitación ya no está en estado "pending" — fue aceptada o cancelada previamente
+/// (HU #10627 AC2). Cancelar una invitación ya no pendiente es un error de negocio explícito,
+/// no un no-op silencioso.
+/// </summary>
+public sealed class InvitationNotPendingException : Exception
+{
+    public InvitationNotPendingException()
+        : base("The invitation is no longer pending (it was already accepted or cancelled).")
+    {
+    }
+}

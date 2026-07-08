@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.UserRoles;
@@ -136,6 +137,54 @@ public static class SecurityEndpoints
                     statusCode: StatusCodes.Status409Conflict);
             }
         });
+
+        // HU #10627 — cancelar invitación pendiente. Distinto de reenviar (HU #10625): anula la
+        // invitación en vez de reenviar el correo. Mismo patrón de alcance que POST /invitations:
+        // SuperAdmin puede cancelar la invitación de cualquier tenant; AdminCompany solo las de
+        // su propio tenant.
+        group.MapDelete("/invitations/{invitationId:guid}", async (
+            Guid invitationId,
+            ClaimsPrincipal caller,
+            CancelInvitationHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var cancelledBy))
+                return Results.Unauthorized();
+
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // SuperAdmin no restringe por tenant (alcance global); AdminCompany solo su propio tenant.
+            Guid? scopeTenantId = isSuperAdmin ? null : callerTenantId;
+
+            try
+            {
+                await handler.HandleAsync(
+                    new CancelInvitationCommand(invitationId, scopeTenantId, cancelledBy),
+                    cancellationToken);
+
+                return Results.NoContent();
+            }
+            catch (InvitationNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_FOUND", "La invitación no existe o no pertenece a tu alcance."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (InvitationNotPendingException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_PENDING", "La invitación ya no está pendiente (fue aceptada o cancelada previamente)."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
         // HU #10504: acepta un query param opcional targetEntityType ("COMPANY" | "TRANSIT_OFFICE")
