@@ -30,6 +30,14 @@ public sealed record CreatePlateRangeResult(bool Success, string? Error, Guid? R
     public static CreatePlateRangeResult Fail(string error) => new(false, error, null, 0);
 }
 
+/// <summary>Resultado de una operación puntual sobre una placa o rango.</summary>
+public sealed record PlateOpResult(bool Success, string? Error)
+{
+    public static readonly PlateOpResult Ok = new(true, null);
+
+    public static PlateOpResult Fail(string error) => new(false, error);
+}
+
 /// <summary>
 /// Inventario de rangos de placas de preasignación (Feature #10587). RLS permisiva a nivel BD;
 /// la autorización (flag de la compañía + allow_plate_preassign del OT + grant) se aplica en la
@@ -58,5 +66,37 @@ public interface IPlateRangeRepository
         Guid companyTenantId,
         Guid? transitOfficeId,
         string? state,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Resuelve el <c>transit_office_id</c> del tenant OT (perfil OT), o null si no aplica.</summary>
+    Task<Guid?> ResolveOfficeIdAsync(Guid otTenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ¿Se puede operar la preasignación entre esta compañía y este OT? Exige: flag de la compañía
+    /// (<c>plate_preassign_enabled</c>) + grant vigente (compañía↔OT) + <c>allow_plate_preassign</c> del OT.
+    /// </summary>
+    Task<bool> IsAssignmentAllowedAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Edita un rango dentro de la ventana de 60 min: revalida y re-explota las placas. Falla si la
+    /// ventana venció o si alguna placa del rango ya está preasignada/utilizada.
+    /// </summary>
+    Task<CreatePlateRangeResult> EditRangeAsync(
+        Guid rangeId,
+        string prefix,
+        int rangeFrom,
+        int rangeTo,
+        Guid? updatedBy,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cambia el estado de una placa validando la máquina de estados (bloquear/desbloquear/revocar).
+    /// </summary>
+    Task<PlateOpResult> SetPlateStateAsync(
+        Guid plateDetailId,
+        string targetState,
         CancellationToken cancellationToken = default);
 }

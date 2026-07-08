@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -146,6 +147,152 @@ public sealed class PlatePreassignTests
         disponibles.Should().HaveCount(3);
         var utilizadas = await repo2.ListDetailsAsync(company, office, PlateState.Utilizada, TestContext.Current.CancellationToken);
         utilizadas.Should().BeEmpty();
+    }
+
+    // ---------- Consola OT (HU #10651): edición 60 min, estado, autorización ----------
+
+    [Fact]
+    public async Task EditRange_ReExplotaDentroDeLaVentana()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        Guid rangeId;
+
+        await using (var a = NewContext(db))
+        {
+            var repo = new PlateRangeRepository(a);
+            var r = await repo.CreateRangeAsync(company, office, "ABC", 100, 102, null, TestContext.Current.CancellationToken);
+            rangeId = r.RangeId!.Value;
+        }
+
+        await using (var b = NewContext(db))
+        {
+            var repo = new PlateRangeRepository(b);
+            var edit = await repo.EditRangeAsync(rangeId, "ABC", 200, 204, null, TestContext.Current.CancellationToken);
+            edit.Success.Should().BeTrue();
+            edit.PlatesCreated.Should().Be(5);
+        }
+
+        await using var verify = NewContext(db);
+        var repo2 = new PlateRangeRepository(verify);
+        var details = await repo2.ListDetailsAsync(company, office, null, TestContext.Current.CancellationToken);
+        details.Should().HaveCount(5);
+        details.Select(d => d.Plate).Should().Contain("ABC200").And.NotContain("ABC100");
+    }
+
+    [Fact]
+    public async Task EditRange_FallaFueraDeLaVentana()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        Guid rangeId;
+
+        await using (var a = NewContext(db))
+        {
+            var repo = new PlateRangeRepository(a);
+            rangeId = (await repo.CreateRangeAsync(company, office, "ABC", 100, 102, null, TestContext.Current.CancellationToken)).RangeId!.Value;
+        }
+
+        await using (var expire = NewContext(db))
+        {
+            var range = await expire.PlateRanges.SingleAsync(r => r.Id == rangeId, TestContext.Current.CancellationToken);
+            range.EditableUntil = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await expire.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var b = NewContext(db);
+        var repo2 = new PlateRangeRepository(b);
+        var edit = await repo2.EditRangeAsync(rangeId, "ABC", 200, 204, null, TestContext.Current.CancellationToken);
+        edit.Success.Should().BeFalse();
+        edit.Error.Should().Contain("60 min");
+    }
+
+    [Fact]
+    public async Task EditRange_FallaSiHayPlacaEnUso()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        Guid rangeId;
+
+        await using (var a = NewContext(db))
+        {
+            var repo = new PlateRangeRepository(a);
+            rangeId = (await repo.CreateRangeAsync(company, office, "ABC", 100, 102, null, TestContext.Current.CancellationToken)).RangeId!.Value;
+        }
+
+        await using (var use = NewContext(db))
+        {
+            var plate = await use.PlateRangeDetails.FirstAsync(d => d.PlateRangeId == rangeId, TestContext.Current.CancellationToken);
+            plate.State = PlateState.Preasignada;
+            await use.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var b = NewContext(db);
+        var repo2 = new PlateRangeRepository(b);
+        var edit = await repo2.EditRangeAsync(rangeId, "ABC", 200, 204, null, TestContext.Current.CancellationToken);
+        edit.Success.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetPlateState_BloquearDesbloquearYRechazarInvalida()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        Guid plateId;
+
+        await using (var a = NewContext(db))
+        {
+            var repo = new PlateRangeRepository(a);
+            await repo.CreateRangeAsync(company, office, "ABC", 100, 100, null, TestContext.Current.CancellationToken);
+        }
+
+        await using (var pick = NewContext(db))
+        {
+            plateId = (await pick.PlateRangeDetails.FirstAsync(TestContext.Current.CancellationToken)).Id;
+        }
+
+        await using var b = NewContext(db);
+        var repo2 = new PlateRangeRepository(b);
+        (await repo2.SetPlateStateAsync(plateId, PlateState.Bloqueada, TestContext.Current.CancellationToken)).Success.Should().BeTrue();
+        (await repo2.SetPlateStateAsync(plateId, PlateState.Disponible, TestContext.Current.CancellationToken)).Success.Should().BeTrue();
+        // disponible → utilizada no es válida.
+        (await repo2.SetPlateStateAsync(plateId, PlateState.Utilizada, TestContext.Current.CancellationToken)).Success.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsAssignmentAllowed_ExigeFlagGrantYAllow()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var otTenant = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(), TenantId = company, PlatePreassignEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
+            {
+                Id = Guid.NewGuid(), TenantId = company, TransitOfficeId = office, IsEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.OtRequirements.Add(new OtRequirementsEntity
+            {
+                Id = Guid.NewGuid(), TenantId = otTenant, TransitOfficeId = office, AllowPlatePreassign = true, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        (await repo.IsAssignmentAllowedAsync(company, office, TestContext.Current.CancellationToken)).Should().BeTrue();
+        // Sin flag de otra compañía → false.
+        (await repo.IsAssignmentAllowedAsync(Guid.NewGuid(), office, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     // ---------- Helpers ----------

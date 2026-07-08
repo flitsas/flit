@@ -145,6 +145,189 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
             },
             cancellationToken);
 
+    public async Task<Guid?> ResolveOfficeIdAsync(Guid otTenantId, CancellationToken cancellationToken = default)
+    {
+        var officeId = await _context.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TenantId == otTenantId)
+            .Select(p => p.TransitOfficeId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return officeId == Guid.Empty ? null : officeId;
+    }
+
+    public async Task<bool> IsAssignmentAllowedAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        var companyFlag = await _context.TenantOperationalPolicies
+            .AsNoTracking()
+            .Where(p => p.TenantId == companyTenantId)
+            .Select(p => (bool?)p.PlatePreassignEnabled)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) ?? false;
+
+        if (!companyFlag)
+        {
+            return false;
+        }
+
+        var grant = await _context.TenantTransitOfficeGrants
+            .AsNoTracking()
+            .AnyAsync(
+                g => g.TenantId == companyTenantId && g.TransitOfficeId == transitOfficeId && g.IsEnabled,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!grant)
+        {
+            return false;
+        }
+
+        return await _context.OtRequirements
+            .AsNoTracking()
+            .Where(r => r.TransitOfficeId == transitOfficeId)
+            .Select(r => (bool?)r.AllowPlatePreassign)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) ?? false;
+    }
+
+    public Task<CreatePlateRangeResult> EditRangeAsync(
+        Guid rangeId,
+        string prefix,
+        int rangeFrom,
+        int rangeTo,
+        Guid? updatedBy,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPrefix = prefix?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        return ExecuteInTenantScopeAsync(
+            Guid.Empty,
+            async () =>
+            {
+                var range = await _context.PlateRanges
+                    .FirstOrDefaultAsync(r => r.Id == rangeId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (range is null)
+                {
+                    return CreatePlateRangeResult.Fail("El rango no existe.");
+                }
+
+                if (DateTimeOffset.UtcNow >= range.EditableUntil)
+                {
+                    return CreatePlateRangeResult.Fail("La ventana de edición del rango (60 min) ya venció.");
+                }
+
+                var inUse = await _context.PlateRangeDetails
+                    .AsNoTracking()
+                    .AnyAsync(
+                        d => d.PlateRangeId == rangeId
+                            && (d.State == PlateState.Preasignada || d.State == PlateState.Utilizada),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (inUse)
+                {
+                    return CreatePlateRangeResult.Fail("No se puede editar: el rango tiene placas preasignadas o utilizadas.");
+                }
+
+                var error = PlateRangeRules.Validate(normalizedPrefix, rangeFrom, rangeTo);
+                if (error is not null)
+                {
+                    return CreatePlateRangeResult.Fail(error);
+                }
+
+                var plates = PlateRangeRules.Enumerate(normalizedPrefix, rangeFrom, rangeTo).ToList();
+
+                // Solapamiento con placas de OTROS rangos del mismo OT (excluye las de este rango).
+                var overlap = await _context.PlateRangeDetails
+                    .AsNoTracking()
+                    .Where(d => d.TransitOfficeId == range.TransitOfficeId
+                        && d.PlateRangeId != rangeId
+                        && plates.Contains(d.Plate))
+                    .Select(d => d.Plate)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (overlap is not null)
+                {
+                    return CreatePlateRangeResult.Fail($"El rango se solapa con placas ya registradas para el OT (ej. {overlap}).");
+                }
+
+                var oldDetails = await _context.PlateRangeDetails
+                    .Where(d => d.PlateRangeId == rangeId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                _context.PlateRangeDetails.RemoveRange(oldDetails);
+
+                var now = DateTimeOffset.UtcNow;
+                range.Prefix = normalizedPrefix;
+                range.RangeFrom = rangeFrom;
+                range.RangeTo = rangeTo;
+                range.UpdatedAt = now;
+                range.UpdatedBy = updatedBy;
+
+                foreach (var plate in plates)
+                {
+                    _context.PlateRangeDetails.Add(new PlateRangeDetailEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        PlateRangeId = range.Id,
+                        TenantId = range.TenantId,
+                        TransitOfficeId = range.TransitOfficeId,
+                        Plate = plate,
+                        State = PlateState.Disponible,
+                        CreatedAt = now,
+                    });
+                }
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return CreatePlateRangeResult.Ok(range.Id, plates.Count);
+            },
+            cancellationToken);
+    }
+
+    public Task<PlateOpResult> SetPlateStateAsync(
+        Guid plateDetailId,
+        string targetState,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantScopeAsync(
+            Guid.Empty,
+            async () =>
+            {
+                var detail = await _context.PlateRangeDetails
+                    .FirstOrDefaultAsync(d => d.Id == plateDetailId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (detail is null)
+                {
+                    return PlateOpResult.Fail("La placa no existe.");
+                }
+
+                if (!PlateStateMachine.IsValidTransition(detail.State, targetState))
+                {
+                    return PlateOpResult.Fail($"Transición de placa no permitida: {detail.State} → {targetState}.");
+                }
+
+                detail.State = targetState;
+                detail.UpdatedAt = DateTimeOffset.UtcNow;
+
+                // Al liberar/revocar, se suelta el vínculo con el trámite.
+                if (targetState is PlateState.Disponible or PlateState.Revocada or PlateState.Bloqueada)
+                {
+                    detail.ProcedureInstanceId = null;
+                    detail.ReservedAt = null;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return PlateOpResult.Ok;
+            },
+            cancellationToken);
+
     private async Task<T> ExecuteInTenantScopeAsync<T>(
         Guid tenantId,
         Func<Task<T>> action,
