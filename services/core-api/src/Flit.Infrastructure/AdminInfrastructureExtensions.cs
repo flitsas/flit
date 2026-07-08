@@ -16,6 +16,7 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
@@ -143,6 +144,9 @@ public static class AdminInfrastructureExtensions
 
         // HU #10466 — historial de improntas generadas (ADR-0022).
         services.AddScoped<IImprontaRepository, ImprontaRepository>();
+
+        // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
+        services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
         return services;
     }
