@@ -19,11 +19,8 @@ public static class ConditionalDocumentRules
     // Reglas compartidas por matrícula y traspaso (aplican por atributo, no por tipología).
     private static IEnumerable<ConditionalRule> Comunes()
     {
-        // RF37 — prenda condicionada (paz y salvo + inscripción) cuando el OT/vehículo la exige.
-        yield return new ConditionalRule("prenda_paz_salvo", c => c.TienePrenda, ConditionalEffect.Require,
-            Item("paz_salvo_prenda", "Paz y salvo de prenda", true, "paz_salvo_prenda"));
-        yield return new ConditionalRule("prenda_inscripcion", c => c.TienePrenda, ConditionalEffect.Require,
-            Item("inscripcion_prenda", "Inscripción / registro de prenda", true, "inscripcion_prenda"));
+        // La prenda (RF37) NO se resuelve aquí: vive en su propio agregado (ProcedureInstancePrenda /
+        // PrendaGate, Feature #10585), que exige su documento de soporte en la radicación del traspaso.
 
         // RF39 — poderes de tramitador solo si hay processor activo.
         yield return new ConditionalRule("tramitador_poder", c => c.TieneTramitador, ConditionalEffect.Require,
