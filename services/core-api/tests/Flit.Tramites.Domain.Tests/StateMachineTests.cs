@@ -12,7 +12,8 @@ public sealed class StateMachineTests
 {
     // ---- Máquina de estados de negocio N 03 (RF01–RF02, RF04 · ADR-0022) ----
 
-    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 6×6 es inválido.</summary>
+    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 8×8 es inválido.
+    /// Incluye la ruta de preasignación de placa (Feature #10587).</summary>
     private static readonly (string From, string To)[] TransicionesValidas =
     [
         (TramiteEstado.Borrador, TramiteEstado.Anulado),
@@ -22,6 +23,14 @@ public sealed class StateMachineTests
         (TramiteEstado.Entregado, TramiteEstado.Rechazado),
         (TramiteEstado.Rechazado, TramiteEstado.Borrador),
         (TramiteEstado.Rechazado, TramiteEstado.Anulado),
+        // Preasignación de placa (Feature #10587):
+        (TramiteEstado.Preparado, TramiteEstado.Asignado),
+        (TramiteEstado.Preparado, TramiteEstado.Preasignado),
+        (TramiteEstado.Preasignado, TramiteEstado.Asignado),
+        (TramiteEstado.Preasignado, TramiteEstado.Anulado),
+        (TramiteEstado.Asignado, TramiteEstado.Aprobado),
+        (TramiteEstado.Asignado, TramiteEstado.Rechazado),
+        (TramiteEstado.Asignado, TramiteEstado.Anulado),
     ];
 
     [Theory]
@@ -32,6 +41,14 @@ public sealed class StateMachineTests
     [InlineData("entregado", "rechazado")]
     [InlineData("rechazado", "borrador")]
     [InlineData("rechazado", "anulado")]
+    // Preasignación de placa (Feature #10587):
+    [InlineData("preparado", "asignado")]
+    [InlineData("preparado", "preasignado")]
+    [InlineData("preasignado", "asignado")]
+    [InlineData("preasignado", "anulado")]
+    [InlineData("asignado", "aprobado")]
+    [InlineData("asignado", "rechazado")]
+    [InlineData("asignado", "anulado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {
         TramiteStateMachine.IsValidTransition(from, to).Should().BeTrue();
@@ -64,6 +81,11 @@ public sealed class StateMachineTests
         TramiteEstado.EsFinal(TramiteEstado.Preparado).Should().BeFalse();
         TramiteEstado.EsFinal(TramiteEstado.Entregado).Should().BeFalse();
         TramiteEstado.EsFinal(TramiteEstado.Rechazado).Should().BeFalse();
+        // Preasignación de placa (Feature #10587): estados intermedios, no finales.
+        TramiteEstado.EsFinal(TramiteEstado.Preasignado).Should().BeFalse();
+        TramiteEstado.EsFinal(TramiteEstado.Asignado).Should().BeFalse();
+        TramiteStateMachine.TransitionsFrom(TramiteEstado.Preasignado).Should().NotBeEmpty();
+        TramiteStateMachine.TransitionsFrom(TramiteEstado.Asignado).Should().NotBeEmpty();
     }
 
     [Fact]
@@ -88,9 +110,11 @@ public sealed class StateMachineTests
     }
 
     [Fact]
-    public void Negocio_EsValidoReconoceSoloLosSeisEstados()
+    public void Negocio_EsValidoReconoceLosEstadosDelCicloDeVida()
     {
-        TramiteEstado.Todos.Should().HaveCount(6);
+        // 6 estados N 03 + 2 de la ruta de preasignación de placa (Feature #10587).
+        TramiteEstado.Todos.Should().HaveCount(8);
+        TramiteEstado.Todos.Should().Contain([TramiteEstado.Preasignado, TramiteEstado.Asignado]);
         foreach (var estado in TramiteEstado.Todos)
             TramiteEstado.EsValido(estado).Should().BeTrue();
         TramiteEstado.EsValido("draft").Should().BeFalse();

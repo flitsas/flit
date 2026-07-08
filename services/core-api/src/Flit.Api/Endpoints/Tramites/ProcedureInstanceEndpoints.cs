@@ -283,8 +283,9 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado) + reason (obligatorio para
-        // anulado/rechazado). Errores: ProblemDetails con title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado|preasignado|asignado) + reason
+        // (obligatorio para anulado/rechazado). preasignado/asignado = ruta de preasignación de placa
+        // (Feature #10587). Errores: ProblemDetails con title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

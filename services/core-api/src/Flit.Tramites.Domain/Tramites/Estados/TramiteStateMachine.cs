@@ -12,8 +12,15 @@ public static class TramiteStateMachine
         new(StringComparer.Ordinal)
         {
             [TramiteEstado.Borrador] = [TramiteEstado.Anulado, TramiteEstado.Preparado],
-            [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
+            // Preparado bifurca: ruta estándar (entregado) o ruta de preasignación de placa
+            // (Feature #10587): asignado si la compañía eligió placa de un rango; preasignado si
+            // no hay rango y el trámite se envía al OT para que la asigne (Flujo B).
+            [TramiteEstado.Preparado] = [TramiteEstado.Entregado, TramiteEstado.Asignado, TramiteEstado.Preasignado],
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
+            // Preasignado: el OT asigna la placa (→ asignado) o se anula.
+            [TramiteEstado.Preasignado] = [TramiteEstado.Asignado, TramiteEstado.Anulado],
+            // Asignado: tras SOAT + recepción del OT, se aprueba o rechaza (o se anula).
+            [TramiteEstado.Asignado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Anulado],
             [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],
