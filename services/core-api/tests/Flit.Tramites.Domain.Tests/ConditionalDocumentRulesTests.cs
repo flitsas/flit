@@ -93,15 +93,15 @@ public sealed class ConditionalDocumentRulesTests
     }
 
     [Fact]
-    public void Prenda_Tramitador_Carroceria_ExigenSusDocumentos()
+    public void Tramitador_Carroceria_ExigenSusDocumentos()
     {
+        // La prenda (RF37) ya no se resuelve por el checklist condicional; vive en su propio
+        // agregado (ProcedureInstancePrenda / PrendaGate, Feature #10585).
         var rules = ConditionalDocumentRules.For(TramiteTipologiaCatalog.CodigoMatriculaInicial);
 
-        var ctx = new TramiteDocumentContext(TienePrenda: true, TieneTramitador: true, CambioCarroceria: true);
+        var ctx = new TramiteDocumentContext(TieneTramitador: true, CambioCarroceria: true);
         var items = ChecklistEngine.ApplyConditional([], ctx, rules);
 
-        items.Should().Contain(i => i.Id == "paz_salvo_prenda" && i.Obligatorio);
-        items.Should().Contain(i => i.Id == "inscripcion_prenda" && i.Obligatorio);
         items.Should().Contain(i => i.Id == "poder_tramitador" && i.Obligatorio);
         items.Should().Contain(i => i.Id == "factura_carroceria" && i.Obligatorio);
     }
