@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { listAvailablePlatesForCompany, type PlateDetail } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
@@ -387,6 +388,8 @@ function OrganismoModal({
   // solo puede elegir de esta lista; ya no es un catálogo estático del frontend.
   const [offices, setOffices] = useState<TransitOfficeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  // Feature #10587 (P-10) — fase de selección de placa preasignada tras elegir el OT.
+  const [platePhase, setPlatePhase] = useState<{ plates: PlateDetail[] } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -437,6 +440,19 @@ function OrganismoModal({
         { formFieldId: null, fieldKey: 'transit_office_name', valueText: org.name },
         { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.cityCode },
       ]);
+      // Feature #10587 — si la compañía tiene placas disponibles en este OT, se ofrece elegir una
+      // (Flujo A). Sin rango disponible, se radica sin placa y el trámite va al OT (Flujo B).
+      let available: PlateDetail[] = [];
+      try {
+        available = await listAvailablePlatesForCompany(org.id);
+      } catch {
+        available = [];
+      }
+      if (available.length > 0) {
+        setPlatePhase({ plates: available });
+        setSaving(false);
+        return;
+      }
       onConfirmed();
     } catch {
       setError('No se pudo guardar el organismo. Inténtalo de nuevo.');
@@ -444,6 +460,72 @@ function OrganismoModal({
       setSaving(false);
     }
   };
+
+  const pickPlate = async (plate: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: plate },
+      ]);
+      onConfirmed();
+    } catch {
+      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (platePhase) {
+    return (
+      <div
+        className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Seleccionar placa preasignada"
+      >
+        <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-bold">Placa preasignada</h3>
+              <p className="text-[11px] opacity-70">
+                Selecciona una placa del rango asignado por el organismo de tránsito.
+              </p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Cerrar">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {error && (
+            <p className="text-[11px] font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+              {error}
+            </p>
+          )}
+          <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-2">
+            {platePhase.plates.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={saving}
+                onClick={() => void pickPlate(p.plate)}
+                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
+              >
+                {p.plate}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onConfirmed}
+            className="mt-3 rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            Radicar sin placa (la asignará el OT)
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

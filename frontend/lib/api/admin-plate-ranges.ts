@@ -109,6 +109,17 @@ export function revokeProcedurePlate(instanceId: string, reason: string): Promis
   return apiFetch(`${base}/procedures/${instanceId}/revoke`, { method: "POST", body: { reason } });
 }
 
+/** Placas DISPONIBLES para la compañía en el OT elegido (company-facing, para el wizard). */
+export function listAvailablePlatesForCompany(
+  transitOfficeId: string,
+  signal?: AbortSignal,
+): Promise<PlateDetail[]> {
+  return apiFetch<PlateDetail[]>("/api/v1/tramites/plate-preassign/available", {
+    query: { transitOfficeId },
+    signal,
+  });
+}
+
 export const PLATE_STATE_LABELS: Record<PlateState, string> = {
   disponible: "Disponible",
   preasignada: "Preasignada",
