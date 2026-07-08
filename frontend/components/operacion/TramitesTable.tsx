@@ -206,6 +206,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       anulado: 0,
       preparado: 0,
       entregado: 0,
+      preasignado: 0,
+      asignado: 0,
       aprobado: 0,
       rechazado: 0,
     };

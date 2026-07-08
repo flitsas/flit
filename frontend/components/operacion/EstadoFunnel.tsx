@@ -21,6 +21,9 @@ const FUNNEL_ORDER: EstadoTramite[] = [
   'borrador',
   'preparado',
   'entregado',
+  // Ruta de preasignación de placa (Feature #10587).
+  'preasignado',
+  'asignado',
   'aprobado',
   'rechazado',
   'anulado',
@@ -40,7 +43,7 @@ export function EstadoFunnel({ counts, active, onSelect }: EstadoFunnelProps) {
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8"
     >
       {FUNNEL_ORDER.map((estado, i) => {
         const style = ESTADO_CHIP_STYLES[estado];

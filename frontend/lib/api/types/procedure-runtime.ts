@@ -15,7 +15,10 @@ export type InstanceStatus =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // Ruta de preasignación de placa (Feature #10587, matrícula inicial).
+  | 'preasignado'
+  | 'asignado';
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {

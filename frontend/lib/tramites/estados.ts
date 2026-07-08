@@ -10,13 +10,18 @@ export type EstadoTramite =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // Ruta de preasignación de placa (Feature #10587, matrícula inicial).
+  | 'preasignado'
+  | 'asignado';
 
 export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'borrador',
   'anulado',
   'preparado',
   'entregado',
+  'preasignado',
+  'asignado',
   'aprobado',
   'rechazado',
 ] as const;
@@ -29,6 +34,8 @@ export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   anulado: 'Anulado',
   preparado: 'Preparado',
   entregado: 'Entregado',
+  preasignado: 'Preasignado',
+  asignado: 'Asignado',
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
 };
@@ -55,6 +62,17 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     bg: 'rgba(85,126,255,0.12)',
     color: '#557eff',
     border: 'rgba(85,126,255,0.3)',
+  },
+  // Preasignación de placa (Feature #10587): preasignado = en cola del OT (cian); asignado = con placa (índigo).
+  preasignado: {
+    bg: 'rgba(6,182,212,0.12)',
+    color: '#0e7490',
+    border: 'rgba(6,182,212,0.3)',
+  },
+  asignado: {
+    bg: 'rgba(99,102,241,0.12)',
+    color: '#4f46e5',
+    border: 'rgba(99,102,241,0.3)',
   },
   aprobado: {
     bg: 'rgba(34,197,94,0.12)',
