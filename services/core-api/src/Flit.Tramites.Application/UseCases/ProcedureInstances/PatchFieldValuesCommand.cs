@@ -92,5 +92,8 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
     private static bool IsPostSubmitTransitOfficeKey(string fieldKey) =>
         string.Equals(fieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase)
         || string.Equals(fieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase)
+        // Feature #10587 — la compañía registra el estado del SOAT tras la asignación de placa
+        // (la máquina de estados / el trigger de BD restringen a 'asignado').
+        || string.Equals(fieldKey, "soat_estado", StringComparison.OrdinalIgnoreCase);
 }

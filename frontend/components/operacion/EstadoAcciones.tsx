@@ -40,6 +40,9 @@ export function EstadoAcciones({
   const [motivo, setMotivo] = useState('');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Feature #10587 (P-15) — estado del SOAT en la ruta de placa (solo estado 'asignado').
+  const [soatEstado, setSoatEstado] = useState<string | null>(null);
+  const [soatWorking, setSoatWorking] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -60,6 +63,22 @@ export function EstadoAcciones({
 
   const acciones = ACCIONES.filter((a) => allowed.includes(a.toStatus));
   const chip = estadoChipStyle(status);
+
+  const registrarSoat = async (estado: 'vigente' | 'vencido') => {
+    setSoatWorking(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'soat_estado', valueText: estado },
+      ]);
+      setSoatEstado(estado);
+      onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar el estado del SOAT.');
+    } finally {
+      setSoatWorking(false);
+    }
+  };
 
   const ejecutar = async (accion: AccionConfig) => {
     const reason = motivo.trim();
@@ -132,6 +151,62 @@ export function EstadoAcciones({
           </button>
         ))}
       </div>
+
+      {status === 'asignado' ? (
+        <div
+          style={{
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          <p style={{ color: '#334155', fontSize: 13, fontWeight: 600, margin: 0 }}>
+            SOAT del vehículo (requerido para que el OT reciba y apruebe)
+          </p>
+          <p style={{ color: '#64748b', fontSize: 12, margin: 0 }}>
+            Carga el PDF del SOAT o valida en línea por consulta RUNT. Con el SOAT vencido el OT
+            NO puede aprobar la matrícula (gate no subsanable).
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={soatWorking}
+              onClick={() => void registrarSoat('vigente')}
+              style={{
+                background: '#557eff', border: 'none', color: '#fff', borderRadius: 8,
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              SOAT vigente (PDF / RUNT)
+            </button>
+            <button
+              type="button"
+              disabled={soatWorking}
+              onClick={() => void registrarSoat('vencido')}
+              style={{
+                background: 'transparent', border: '1px solid #fca5a5', color: '#b91c1c',
+                borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              SOAT vencido
+            </button>
+          </div>
+          {soatEstado === 'vigente' && (
+            <p style={{ color: '#15803d', fontSize: 12, margin: 0 }}>
+              SOAT registrado como vigente. El OT ya puede recibir y aprobar la matrícula.
+            </p>
+          )}
+          {soatEstado === 'vencido' && (
+            <p role="alert" style={{ color: '#c2410c', fontSize: 12, margin: 0 }}>
+              SOAT vencido: el OT no podrá aprobar hasta que esté vigente (gate duro, no subsanable).
+            </p>
+          )}
+        </div>
+      ) : null}
 
       {pending ? (
         <div
