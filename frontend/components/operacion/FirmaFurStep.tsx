@@ -271,6 +271,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
+        soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
       />
 
       <ExpedienteVisor
