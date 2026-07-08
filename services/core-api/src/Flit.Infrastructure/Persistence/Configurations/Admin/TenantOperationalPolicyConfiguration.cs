@@ -24,6 +24,7 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.AllowMiscNewVehicles).HasDefaultValue(true);
         builder.Property(x => x.OnlyOwnVehicles).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);
+        builder.Property(x => x.PlatePreassignEnabled).HasDefaultValue(false);
 
         builder.Property(x => x.NotificationChannel)
             .HasMaxLength(20).HasDefaultValue("flit_smtp").IsRequired();

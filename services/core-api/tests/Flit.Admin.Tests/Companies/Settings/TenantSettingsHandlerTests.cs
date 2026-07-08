@@ -152,6 +152,82 @@ public sealed class TenantSettingsHandlerTests
         (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
+    // ---------- Feature #10587: flag de preasignación de placa por compañía ----------
+
+    [Fact]
+    public async Task Feature10587_PersistsPlatePreassignFlag_AndAudits()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedPolicy(seed, tenantId,
+                allowInit: true, allowMisc: true, onlyOwn: false, vault: false,
+                channel: "flit_smtp", target: "RADICADOR", payments: "[]");
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            // Resto idéntico a lo sembrado: solo cambia el flag de preasignación de placa.
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ChangedBy,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: [],
+                    PreasignacionPlacaActiva: true),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.PreasignacionPlacaActiva.Should().BeTrue();
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.PlatePreassignEnabled.Should().BeTrue();
+
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        audits.Should().ContainSingle()
+            .Which.FieldName.Should().Be("plate_preassign_enabled");
+    }
+
+    [Fact]
+    public async Task Feature10587_DefaultsToFalse_WhenOmitted()
+    {
+        // Retrocompatibilidad: un PUT que no envía el flag (default false) no lo activa
+        // ni genera un cambio de auditoría para ese campo.
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(false, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: []),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.PreasignacionPlacaActiva.Should().BeFalse();
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.PlatePreassignEnabled.Should().BeFalse();
+    }
+
     // ---------- AC2: validación 422 sin persistir ni auditar ----------
 
     [Fact]

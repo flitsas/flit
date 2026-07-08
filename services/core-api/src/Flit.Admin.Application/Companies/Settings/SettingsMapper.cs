@@ -16,7 +16,8 @@ internal static class SettingsMapper
         SettingsWire.ToWire(settings.NotificationTarget),
         settings.PaymentMethods,
         settings.RuntFailoverTimeoutMs,
-        ToChoices(settings.ConsultationProviderConfig));
+        ToChoices(settings.ConsultationProviderConfig),
+        settings.PlatePreassignEnabled);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)
