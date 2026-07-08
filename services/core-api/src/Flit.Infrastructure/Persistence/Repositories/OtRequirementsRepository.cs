@@ -57,6 +57,23 @@ internal sealed class OtRequirementsRepository : IOtRequirementsRepository
 
                 if (entity is null)
                 {
+                    // La constraint uq_ot_requirements_transit_office_id es global (una fila por
+                    // oficina). Si la oficina resuelta ya la configuró otro tenant, un INSERT
+                    // reventaría con 23505 (500 crudo). Lo detectamos y lo reportamos limpio.
+                    var takenByOther = await _context.OtRequirements
+                        .AsNoTracking()
+                        .AnyAsync(
+                            r => r.TransitOfficeId == resolvedOfficeId && r.TenantId != tenantId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (takenByOther)
+                    {
+                        throw new OtRequirementsScopeException(
+                            $"La oficina {resolvedOfficeId} ya tiene requisitos configurados por otro tenant; " +
+                            "el tenant actual no es su organismo de tránsito.");
+                    }
+
                     entity = new OtRequirementsEntity
                     {
                         Id = Guid.NewGuid(),
@@ -118,9 +135,18 @@ internal sealed class OtRequirementsRepository : IOtRequirementsRepository
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return grantOfficeId == Guid.Empty
-            ? OtProfileRepository.DefaultTransitOfficeId
-            : grantOfficeId;
+        if (grantOfficeId != Guid.Empty)
+        {
+            return grantOfficeId;
+        }
+
+        // Sin perfil ni grant el tenant NO es un OT aprovisionado. Antes se caía al OT por defecto
+        // (aaaaaaaa-0001), lo que permitía que una empresa (tenant_type FLIT) ocupara la fila de
+        // requisitos del OT dueño de esa oficina y bloqueara al OT real con un 23505. La escritura
+        // exige una oficina propia; el bootstrap de dev/tests debe sembrar el perfil del OT primero.
+        throw new OtRequirementsScopeException(
+            $"El tenant {tenantId} no está aprovisionado como organismo de tránsito " +
+            "(sin perfil ni grant); no puede configurar requisitos de OT.");
     }
 
     private static OtRequirements Map(OtRequirementsEntity entity) => new()
