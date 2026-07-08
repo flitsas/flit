@@ -74,6 +74,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();
         services.AddScoped<ISignatureVaultRepository, SignatureVaultRepository>();
 
+        // HU #10643 (ADR-0025) — custodia del artefacto de firma en storage (delega en
+        // IAttachmentStorage) + política de consumo que ACTIVA el flag inerte SignatureVaultEnabled.
+        services.AddScoped<Flit.Admin.Application.Companies.SignatureVault.ISignatureVaultArtifactStorage,
+            Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
+        services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 

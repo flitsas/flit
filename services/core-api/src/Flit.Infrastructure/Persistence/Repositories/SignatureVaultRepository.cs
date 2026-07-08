@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -82,9 +83,27 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
         };
 
         _context.SignatureVault.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsActiveUniqueViolation(ex))
+        {
+            // Índice único parcial uq_signature_vault_activa: a lo sumo UNA firma 'activa' por
+            // (tenant, NIT, documento). Se traduce el 23505 a una excepción de dominio (checklist
+            // §B12); el handler la mapea a 422 (firma_activa_existente). Sin PII en el mensaje.
+            throw new SignatureVaultActiveConflictException();
+        }
+
         return entity.Id;
     }
+
+    private const string ActiveUniqueIndex = "uq_signature_vault_activa";
+
+    private static bool IsActiveUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && pg.ConstraintName == ActiveUniqueIndex;
 
     private async Task<bool> PersistRevokeAsync(
         RevokeSignatureVaultData data,
