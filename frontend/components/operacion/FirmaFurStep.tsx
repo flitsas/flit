@@ -200,6 +200,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
 
   const organismo = useMemo(
     () => ({
+      id: fv('transit_office_id'),
       code: fv('transit_office_code'),
       name: fv('transit_office_name'),
       city: fv('transit_office_city'),
@@ -214,11 +215,12 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   useEffect(() => {
     if (!detail || autoOpened) return;
     // Auto-abrir una sola vez al cargar el detalle; el guard `autoOpened` evita el bucle.
-    // En solo lectura nunca se abre el selector de organismo.
+    // En solo lectura nunca se abre el selector de organismo. B11 (HU #10659): en traspaso el OT
+    // proviene del RUNT (auto-bind en preflight) y no se selecciona/cambia → nunca se auto-abre.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!organismoSelected && !readOnly) setOrganismoModalOpen(true);
+    if (!organismoSelected && !readOnly && modalidad !== 'traspaso') setOrganismoModalOpen(true);
     setAutoOpened(true);
-  }, [detail, organismoSelected, autoOpened, readOnly]);
+  }, [detail, organismoSelected, autoOpened, readOnly, modalidad]);
 
   const handleOrganismoConfirmed = async () => {
     setOrganismoModalOpen(false);
@@ -238,6 +240,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
       <OrganismoSection
         organismo={organismo}
         organismoSelected={organismoSelected}
+        modalidad={modalidad}
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
 
@@ -296,7 +299,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
 
       <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
 
-      {organismoModalOpen && instanceId && (
+      {organismoModalOpen && instanceId && modalidad !== 'traspaso' && (
         <OrganismoModal
           instanceId={instanceId}
           suggestedName={fv('transit_office_name')}
@@ -313,13 +316,67 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
 function OrganismoSection({
   organismo,
   organismoSelected,
+  modalidad,
   onOpenModal,
 }: {
-  organismo: { code: string; name: string; city: string };
+  organismo: { id: string; code: string; name: string; city: string };
   organismoSelected: boolean;
+  modalidad: WizardModalidad;
   onOpenModal: () => void;
 }) {
   const readOnly = useWizardReadOnly();
+
+  // B11 (HU #10659) — en TRASPASO el organismo lo fija el RUNT (auto-bind en el preflight): solo
+  // lectura, sin "Seleccionar"/"Cambiar". Si el nombre RUNT no está habilitado para la empresa
+  // (hay nombre pero no id resuelto) se avisa, sin ofrecer selector.
+  if (modalidad === 'traspaso') {
+    const hasId = organismo.id.trim() !== '';
+    const hasName = organismo.name.trim() !== '';
+    return (
+      <section className="space-y-3" aria-label="Organismo de tránsito">
+        <div>
+          <h4 className="text-sm font-bold">Organismo de tránsito</h4>
+          <p className="text-xs opacity-70">
+            El organismo proviene del RUNT y no puede modificarse en un traspaso.
+          </p>
+        </div>
+
+        {hasId ? (
+          <div
+            className="rounded-xl border p-3 flex items-center gap-3"
+            style={{ borderColor: '#8CC63F' }}
+          >
+            <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold">{organismo.name || 'Organismo del RUNT'}</p>
+              <p className="text-[11px] opacity-70">
+                {[organismo.city, organismo.code].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+          </div>
+        ) : hasName ? (
+          <div
+            className="rounded-xl border p-3 text-xs"
+            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
+            role="status"
+          >
+            El organismo registrado en el RUNT ({organismo.name}) no está habilitado para tu empresa.
+            Contacta al administrador para habilitarlo; no es posible cambiarlo manualmente en un
+            traspaso.
+          </div>
+        ) : (
+          <div
+            className="rounded-xl border p-3 text-xs"
+            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
+            role="status"
+          >
+            El organismo de tránsito se tomará del RUNT al ejecutar las validaciones del trámite.
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3" aria-label="Organismo de tránsito">
       <div className="flex items-start justify-between gap-3">

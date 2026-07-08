@@ -484,3 +484,54 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
     expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
   });
 });
+
+describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', () => {
+  // OT resuelto por el auto-bind del preflight: nombre + code + city + id.
+  const TRASPASO_OT_BOUND = {
+    ...INSTANCE_DETAIL,
+    fieldValues: [
+      { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'aaaaaaaa-0001-4000-8000-000000000009', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_code', valueText: '11001', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría Distrital de Movilidad de Bogotá', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_city', valueText: 'Bogotá D.C.', valueJson: null, source: 'consultation' },
+    ],
+  };
+
+  it('traspaso con OT resuelto: solo lectura, sin botón Cambiar/Seleccionar y sin abrir el modal', async () => {
+    mocks.getInstance.mockResolvedValue(TRASPASO_OT_BOUND);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(
+      within(seccion).getByText(/El organismo proviene del RUNT y no puede modificarse en un traspaso\./),
+    ).toBeInTheDocument();
+    // No hay botón para seleccionar/cambiar el organismo.
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+    // En traspaso nunca se abre el modal → no se consulta el catálogo de OT.
+    expect(mocks.listTransitOffices).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
+  });
+
+  it('traspaso con OT del RUNT no habilitado (nombre sin id): avisa, sin selector', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      fieldValues: [
+        { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'OT NO HABILITADO', valueJson: null, source: 'consultation' },
+      ],
+    });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(within(seccion).getByText(/no está habilitado para tu empresa/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+  });
+
+  it('matrícula: sigue ofreciendo seleccionar/cambiar el organismo (sin cambios)', async () => {
+    // Con OT elegido (nombre/código) en matrícula el botón dice "Cambiar".
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(within(seccion).getByRole('button', { name: /Cambiar/ })).toBeInTheDocument();
+    // El texto de solo lectura de traspaso NO aparece en matrícula.
+    expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
+  });
+});

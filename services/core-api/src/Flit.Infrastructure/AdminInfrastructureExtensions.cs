@@ -137,6 +137,10 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
+        // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
+        // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
+        services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

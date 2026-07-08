@@ -133,7 +133,8 @@ public sealed class PreflightHandlerTests
     private RunPreflightHandler BuildHandler(
         ConsultationTenantOverride? tenantOverride,
         (string key, IConsultationProvider provider)[] providers,
-        bool rnmcRequired = false)
+        bool rnmcRequired = false,
+        ITransitOfficeResolver? transitOfficeResolver = null)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
         var registry = new StaticRegistry(dict);
@@ -141,13 +142,28 @@ public sealed class PreflightHandlerTests
         IConsultationTenantOverrideProvider overrideProvider = tenantOverride is null
             ? new NullOverrideProvider()
             : new FixedOverrideProvider(tenantOverride);
-        return new RunPreflightHandler(_repo, registry, resolver, overrideProvider, new StubRnmcPolicy(rnmcRequired));
+        return new RunPreflightHandler(
+            _repo, registry, resolver, overrideProvider, new StubRnmcPolicy(rnmcRequired),
+            transitOfficeResolver ?? NullTransitOfficeResolver.Instance);
     }
 
     private sealed class StubRnmcPolicy(bool required) : IRnmcRequirementPolicy
     {
         public Task<bool> IsRnmcRequiredAsync(Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(required);
+    }
+
+    /// <summary>Resolver de OT que devuelve un match fijo (o null) sin tocar catálogo/grants reales.</summary>
+    private sealed class StubTransitOfficeResolver(ResolvedTransitOffice? match) : ITransitOfficeResolver
+    {
+        public string? LastName { get; private set; }
+
+        public Task<ResolvedTransitOffice?> ResolveEnabledByNameAsync(
+            Guid tenantId, string transitOfficeName, CancellationToken cancellationToken = default)
+        {
+            LastName = transitOfficeName;
+            return Task.FromResult(match);
+        }
     }
 
     // ── 404 / 409 ────────────────────────────────────────────────────────────
@@ -243,6 +259,96 @@ public sealed class PreflightHandlerTests
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // SIMIT no corre en matrícula.
         result.Overall.Should().Be("green");
+    }
+
+    // ── B11 (HU #10659): auto-bind del OT desde RUNT en traspaso ──────────────
+
+    [Fact]
+    public async Task Post_Traspaso_RuntNameMatchesEnabledOffice_BindsTransitOfficeId()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        // El proveedor de vehículo (cadena de placa) hidrata el nombre del OT desde el RUNT.
+        var vehiculo = new StubProvider("kyverum_runt",
+            new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+                [new HydratedField("transit_office_name", "SDM BOGOTÁ", null)]));
+
+        var officeId = Guid.NewGuid();
+        var resolver = new StubTransitOfficeResolver(
+            new ResolvedTransitOffice(officeId, "11001000", "SDM BOGOTÁ", "11001"));
+
+        var handler = BuildHandler(
+            null,
+            [
+                ("kyverum_runt", vehiculo),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ],
+            transitOfficeResolver: resolver);
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        resolver.LastName.Should().Be("SDM BOGOTÁ");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_id" && f.ValueText == officeId.ToString() && f.Source == "consultation");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_code" && f.ValueText == "11001000");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_city" && f.ValueText == "11001");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RuntNameNotEnabled_KeepsNameWithoutInventingId()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var vehiculo = new StubProvider("kyverum_runt",
+            new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+                [new HydratedField("transit_office_name", "OT DESCONOCIDO", null)]));
+        var resolver = new StubTransitOfficeResolver(match: null); // ningún OT habilitado coincide.
+
+        var handler = BuildHandler(
+            null,
+            [
+                ("kyverum_runt", vehiculo),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ],
+            transitOfficeResolver: resolver);
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        // Se conserva el nombre RUNT pero NO se inventa un transit_office_id.
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_name" && f.ValueText == "OT DESCONOCIDO");
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "transit_office_id");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_DoesNotAutoBindTransitOffice()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var vehiculo = new StubProvider("kyverum_runt",
+            new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+                [new HydratedField("transit_office_name", "SDM BOGOTÁ", null)]));
+        var resolver = new StubTransitOfficeResolver(
+            new ResolvedTransitOffice(Guid.NewGuid(), "11001000", "SDM BOGOTÁ", "11001"));
+
+        var handler = BuildHandler(null, [("kyverum_runt", vehiculo)], transitOfficeResolver: resolver);
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        // Matrícula: el operador elige libremente; el preflight NO consulta el resolver ni fija el id.
+        resolver.LastName.Should().BeNull();
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "transit_office_id");
     }
 
     // ── HU #10478: cadena Kyverum-first → Verifik ─────────────────────────────
