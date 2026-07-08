@@ -339,6 +339,60 @@ public sealed class OtClientProcedureHandlerTests
         ran.Should().Be(42);
     }
 
+    // ---------- HU #10654 (Feature #10587): el OT asigna placa a un trámite en preasignado ----------
+
+    [Fact]
+    public async Task AssignPlate_Preasignado_ReservaPlacaYPasaAAsignado()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignado);
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        result.Should().NotBeNull();
+        await using var verify = NewContext(db);
+        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
+            .Status.Should().Be(TramiteEstado.Asignado);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
+        detail.State.Should().Be("preasignada");
+        detail.ProcedureInstanceId.Should().Be(procedureId);
+        (await verify.ProcedureInstanceFieldValues.AnyAsync(
+            f => f.ProcedureInstanceId == procedureId && f.FieldKey == "plate" && f.ValueText == "ABC100",
+            TestContext.Current.CancellationToken)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AssignPlate_NoPreasignado_DevuelveNull()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        result.Should().BeNull();
+    }
+
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)
     {
         ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile

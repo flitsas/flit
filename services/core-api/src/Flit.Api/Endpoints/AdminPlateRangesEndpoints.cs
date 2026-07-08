@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
 
@@ -31,7 +32,31 @@ public static class AdminPlateRangesEndpoints
         group.MapPost("/plates/{plateId:guid}/revoke", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
             => SetStateAsync(plateId, PlateState.Revocada, repo, ct)).WithName("AdminPlateRevoke");
 
+        // HU #10654 — el OT asigna una placa a un trámite en preasignado (Flujo B).
+        group.MapPost("/procedures/{instanceId:guid}/assign-plate", AssignPlateToProcedureAsync)
+            .WithName("AdminPlateAssignToProcedure");
+
         return app;
+    }
+
+    private static async Task<IResult> AssignPlateToProcedureAsync(
+        Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
+        IOtClientProcedureRepository otRepo, CancellationToken ct)
+    {
+        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
+        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        {
+            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
+        }
+
+        var result = await otRepo.AssignPlateAsync(
+            otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", ct)
+            .ConfigureAwait(false);
+
+        return result is null
+            ? Results.Problem(statusCode: 422, title: "Unprocessable",
+                detail: "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.")
+            : Results.Ok(result);
     }
 
     private static async Task<IResult> ListRangesAsync(
@@ -156,3 +181,6 @@ public sealed record AssignPlateRangeRequest(
 
 /// <summary>Payload para editar un rango (dentro de la ventana de 60 min).</summary>
 public sealed record EditPlateRangeRequest(string Prefix, int RangeFrom, int RangeTo);
+
+/// <summary>Payload para asignar una placa a un trámite en preasignado (Flujo B).</summary>
+public sealed record AssignPlateToProcedureRequest(string Plate);

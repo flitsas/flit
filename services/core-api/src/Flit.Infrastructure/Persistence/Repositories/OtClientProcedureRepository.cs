@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -17,11 +18,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 {
     private readonly FlitDbContext _context;
     private readonly ITramiteTransitionPublisher _transitionPublisher;
+    private readonly IPlateRangeRepository? _plateRepo;
 
-    public OtClientProcedureRepository(FlitDbContext context, ITramiteTransitionPublisher transitionPublisher)
+    public OtClientProcedureRepository(
+        FlitDbContext context,
+        ITramiteTransitionPublisher transitionPublisher,
+        IPlateRangeRepository? plateRepo = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
+        _plateRepo = plateRepo;
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -283,6 +289,117 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 var mapped = Map(entity);
                 var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken)
                     .ConfigureAwait(false);
+                return enriched[0];
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // HU #10654 (Feature #10587) — el OT asigna una placa a un trámite en preasignado (Flujo B):
+    // reserva la placa, la escribe en field_values (el trigger lo permite en preasignado) y
+    // transiciona preasignado→asignado, devolviendo el trámite a la compañía.
+    public async Task<OtClientProcedure?> AssignPlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default)
+    {
+        if (_plateRepo is null || string.IsNullOrWhiteSpace(plate))
+        {
+            return null;
+        }
+
+        var accessible = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeId => FindAccessibleProcedureAsync(transitOfficeId, procedureInstanceId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (accessible is null || accessible.TransitOfficeId is not { } officeId)
+        {
+            return null;
+        }
+
+        return await ExecuteInClientTenantScopeAsync(
+            accessible.ClientTenantId,
+            async () =>
+            {
+                var entity = await _context.ProcedureInstances
+                    .FirstOrDefaultAsync(
+                        p => p.Id == procedureInstanceId
+                            && p.TenantId == accessible.ClientTenantId
+                            && p.DeletedAt == null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null || entity.Status != TramiteEstado.Preasignado)
+                {
+                    return null;
+                }
+
+                var reserved = await _plateRepo
+                    .TryReservePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!reserved)
+                {
+                    return null;
+                }
+
+                // Escribe la placa en field_values ESTANDO en preasignado (el trigger lo permite) y
+                // persiste antes de cambiar el estado (evita el orden de operaciones del trigger).
+                var normalizedPlate = plate.Trim().ToUpperInvariant();
+                var fv = await _context.ProcedureInstanceFieldValues
+                    .FirstOrDefaultAsync(
+                        f => f.ProcedureInstanceId == procedureInstanceId && f.FieldKey == "plate",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (fv is null)
+                {
+                    _context.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+                    {
+                        Id = Guid.NewGuid(),
+                        ProcedureInstanceId = procedureInstanceId,
+                        TenantId = accessible.ClientTenantId,
+                        FieldKey = "plate",
+                        ValueText = normalizedPlate,
+                    });
+                }
+                else
+                {
+                    fv.ValueText = normalizedPlate;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+                var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken).ConfigureAwait(false);
+                var now = DateTimeOffset.UtcNow;
+                entity.Status = TramiteEstado.Asignado;
+                entity.UpdatedAt = now;
+                entity.UpdatedBy = resolvedChangedBy;
+
+                await _transitionPublisher.EnqueueAsync(
+                    new TramiteTransitionRecord(
+                        accessible.ClientTenantId, entity.Id,
+                        TramiteEstado.Preasignado, TramiteEstado.Asignado,
+                        $"Placa {normalizedPlate} asignada por el OT.", resolvedChangedBy, now),
+                    cancellationToken).ConfigureAwait(false);
+
+                _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = accessible.ClientTenantId,
+                    ProcedureInstanceId = entity.Id,
+                    FromStatus = TramiteEstado.Preasignado,
+                    ToStatus = TramiteEstado.Asignado,
+                    ChangedAt = now,
+                    ChangedBy = resolvedChangedBy,
+                    Reason = $"Placa {normalizedPlate} asignada por el OT.",
+                    Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, plate = normalizedPlate, source }),
+                });
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                var mapped = Map(entity);
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
                 return enriched[0];
             },
             cancellationToken).ConfigureAwait(false);

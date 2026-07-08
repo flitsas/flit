@@ -65,4 +65,18 @@ public interface IOtClientProcedureRepository
         Guid? rejectedBy,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10654 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c> (Flujo B):
+    /// reserva la placa, la escribe en el trámite y lo transiciona a <c>asignado</c>, devolviéndolo a la
+    /// compañía. Devuelve <c>null</c> si el trámite no es accesible, no está en preasignado o la placa no
+    /// está disponible.
+    /// </summary>
+    Task<OtClientProcedure?> AssignPlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default);
 }
