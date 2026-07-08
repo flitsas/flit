@@ -997,7 +997,6 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
         return (invitationId, email);
     }
-    }
 
     private async Task SeedAsync()
     {
