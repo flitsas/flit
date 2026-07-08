@@ -535,3 +535,25 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
   });
 });
+
+describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
+  it('traspaso: la sección de firma es informativa y aclara que no bloquea el trámite', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Firma de la compraventa' });
+    // Copy alineado a ADR-0028: la firma no bloquea preparar/radicar.
+    expect(within(seccion).getByText('no bloquea')).toBeInTheDocument();
+    expect(
+      within(seccion).getByText(/pendiente de definición de negocio/),
+    ).toBeInTheDocument();
+  });
+
+  it('traspaso: los endpoints de firma siguen disponibles (Solicitar/Simular no se rompen)', async () => {
+    // AC5: aunque la firma sea informativa, las acciones y llamadas API se conservan.
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const card = await screen.findByRole('group', { name: 'Firma Comprador' });
+    await user.click(within(card).getByRole('button', { name: 'Solicitar firma' }));
+    await waitFor(() => expect(mocks.solicitarFirma).toHaveBeenCalledTimes(1));
+  });
+});

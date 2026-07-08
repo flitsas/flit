@@ -554,7 +554,8 @@ export function TramiteWizard(props: Props) {
               Borrador finalizado — esperando validación del cliente.
             </span>{' '}
             Los datos quedaron en solo lectura. Puedes iniciar o compartir la validación de identidad;
-            la firma se procesará automáticamente al aprobarse, y luego podrás radicar a tránsito.
+            al aprobarse podrás radicar a tránsito. La firma de compraventa es informativa y no
+            bloquea la radicación (HU #10661).
           </span>
         </div>
       )}
