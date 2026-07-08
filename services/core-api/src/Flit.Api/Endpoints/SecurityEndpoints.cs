@@ -261,17 +261,12 @@ public static class SecurityEndpoints
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
-        // HU #10504: acepta un query param opcional targetEntityType ("COMPANY" | "TRANSIT_OFFICE")
-        // que usa el constructor de roles SuperAdmin (checklist "Nuevo rol"/"Editar permisos") para
-        // que el checklist de módulos respete el scoping por tipo de tenant (columna "Empresas" en
-        // Módulos y Permisos). Solo tiene efecto para el caller SuperAdmin (includeAll=true); si
-        // viene un valor distinto a esos dos, se ignora silenciosamente (no rompe la pantalla
-        // "Módulos y Permisos", que llama a este mismo endpoint sin el parámetro y debe seguir
-        // viendo todos los módulos).
+        // RBAC puro (HU #10664): los módulos son transversales (sin habilitación por empresa). El
+        // caller SuperAdmin (includeAll=true) ve todos los módulos activos — lo usa el constructor de
+        // roles; el caller tenant ve solo los módulos cuyos slugs están en sus permisos.
         group.MapGet("/modules", async (
             ClaimsPrincipal caller,
             ListAccessibleModulesHandler handler,
-            string? targetEntityType,
             CancellationToken ct) =>
         {
             // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
@@ -280,13 +275,8 @@ public static class SecurityEndpoints
                 c.Type == AdminAuthorization.RoleClaimType
                 && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
-            Guid? tenantId = Guid.TryParse(caller.FindFirstValue("tenant_id"), out var tid) ? tid : null;
 
-            var normalizedTargetEntityType = targetEntityType is "COMPANY" or "TRANSIT_OFFICE"
-                ? targetEntityType
-                : null;
-
-            var modules = await handler.HandleAsync(permissions, isSuperAdmin, tenantId, ct, normalizedTargetEntityType);
+            var modules = await handler.HandleAsync(permissions, isSuperAdmin, ct);
             return Results.Ok(modules);
         }).WithName("ListAccessibleModules");
 

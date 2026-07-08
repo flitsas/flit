@@ -31,7 +31,7 @@ const activeUser = {
   status: "active" as const,
   createdAt: "2026-06-01T00:00:00Z",
   isSuspended: false,
-  rowVersion: 0,
+  rowVersion: 1,
 };
 
 vi.mock("@/lib/api/security", () => ({
