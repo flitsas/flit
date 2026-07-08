@@ -109,6 +109,19 @@ function emptyActor(rol: ActorRol): ProcedureActor {
 // Validación de email pragmática (no exhaustiva): algo@algo.dominio.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Fecha de expedición del documento (RNMC): se persiste en DD/MM/YYYY (contrato del RNMC), pero el
+// input nativo <input type="date"> usa YYYY-MM-DD. Estos helpers convierten entre ambos formatos.
+function dmyToInput(dmy?: string | null): string {
+  if (!dmy) return '';
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dmy.trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+function inputToDmy(iso?: string | null): string {
+  if (!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+
 /** Errores por actor, indexados por campo. Vacío = sin errores. */
 export type ActorErrors = Partial<Record<keyof ProcedureActor, string>>;
 
@@ -249,6 +262,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
+  // Fecha de expedición del documento (RNMC) por índice de actor, en formato de input (YYYY-MM-DD).
+  // Se persiste como field value `{rol}_document_issue_date` en DD/MM/YYYY al guardar.
+  const [issueDates, setIssueDates] = useState<Record<number, string>>({});
 
   // Documento del propietario capturado en el paso 1 (`owner_document_*` en
   // field_values), para sembrar el documento del vendedor cuando aún no lo tiene.
@@ -309,6 +325,51 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors((prev) => prev.map(withOwnerSeed));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerSeed]);
+
+  // Siembra la fecha de expedición (RNMC) de cada actor desde los field_values persistidos
+  // (`{rol}_document_issue_date`, DD/MM/YYYY → input YYYY-MM-DD). Best-effort.
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(instanceId)
+      .then((detail) => {
+        if (!active || !detail?.fieldValues) return;
+        const seed: Record<number, string> = {};
+        roles.forEach((rol, i) => {
+          const dmy = detail.fieldValues.find(
+            (f) => f.fieldKey === `${rol}_document_issue_date`,
+          )?.valueText;
+          const iso = dmyToInput(dmy);
+          if (iso) seed[i] = iso;
+        });
+        if (Object.keys(seed).length > 0) setIssueDates((prev) => ({ ...seed, ...prev }));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId, roles]);
+
+  // Persiste las fechas de expedición (RNMC) de los actores persona natural como field_values
+  // `{rol}_document_issue_date` en DD/MM/YYYY. Best-effort: un fallo no bloquea el guardado (RNMC
+  // no es bloqueante) — el preflight tratará la fecha ausente como dato no crítico.
+  const persistIssueDates = async () => {
+    if (!instanceId) return;
+    const items = actors.flatMap((a, i) => {
+      if (isJuridical(a)) return [];
+      const dmy = inputToDmy(issueDates[i]);
+      return dmy
+        ? [{ formFieldId: null, fieldKey: `${a.rol}_document_issue_date`, valueText: dmy }]
+        : [];
+    });
+    if (items.length === 0) return;
+    try {
+      await tramitesClient.patchFieldValues(instanceId, items);
+    } catch {
+      // RNMC no es bloqueante: no propagamos el error de persistencia de la fecha.
+    }
+  };
 
   // Split implícito: un único comprador. Explícito: layout='split'.
   const isSplit =
@@ -440,7 +501,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (!validateActors(actors, modalidad).valid) return false;
     const normalized = normalizeActors(actors);
     const ok = await save(normalized);
-    if (ok) onSaved?.(normalized);
+    if (ok) {
+      // Fecha de expedición (RNMC) — persistencia best-effort tras guardar los actores.
+      await persistIssueDates();
+      onSaved?.(normalized);
+    }
     return ok;
   };
 
@@ -827,6 +892,33 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
   };
 
+  // ── Campo Fecha de expedición del documento (RNMC, solo persona natural) ───
+  // La consulta RNMC (medidas correctivas) del preflight la exige cuando el OT la requiere. Se
+  // captura aquí y se persiste como field value; RNMC no es bloqueante, por eso es opcional.
+  const issueDateField = (index: number) => {
+    const actor = actors[index];
+    if (isJuridical(actor)) return null;
+    return (
+      <div>
+        <label htmlFor={`${actor.rol}-fechaExpedicion`} className="text-xs font-semibold mb-1.5 block">
+          Fecha de expedición del documento{' '}
+          <span className="opacity-50 font-normal">(opcional)</span>
+        </label>
+        <input
+          id={`${actor.rol}-fechaExpedicion`}
+          type="date"
+          value={issueDates[index] ?? ''}
+          onChange={(e) => setIssueDates((prev) => ({ ...prev, [index]: e.target.value }))}
+          className={INPUT_BASE}
+        />
+        <p className="text-[10px] mt-1 opacity-60">
+          Requerida para la consulta RNMC (medidas correctivas) cuando el organismo de tránsito la
+          exige.
+        </p>
+      </div>
+    );
+  };
+
   // ── Layout SPLIT (un comprador): 2 secciones ──────────────────────────────
   if (isSplit && actors.length === 1) {
     const actor = actors[0];
@@ -981,6 +1073,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
             </div>
+            {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
+            {issueDateField(0)}
             {/* Ciudad (autocomplete) */}
             <div className="relative">
               <label htmlFor="comprador-ciudad" className="text-xs font-semibold mb-1.5 block">
@@ -1204,6 +1298,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     className={INPUT_BASE}
                   />
                 </div>
+
+                {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
+                {issueDateField(index)}
               </div>
             </fieldset>
           );
