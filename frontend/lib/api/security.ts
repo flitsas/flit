@@ -119,48 +119,11 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
   });
 }
 
-/** Tipo de entidad objetivo para filtrar el catálogo de módulos (HU #10504). */
-export type ModulesTargetEntityType = "COMPANY" | "TRANSIT_OFFICE";
-
 /** GET /api/v1/security/modules → módulos accesibles según permisos del caller.
- *  Si se pasa `targetEntityType`, el backend excluye los módulos scoped (vía Empresas)
- *  únicamente al otro tipo de entidad — los módulos sin scope configurado siempre aparecen. */
-export async function getAccessibleModules(
-  targetEntityType?: ModulesTargetEntityType,
-): Promise<AccessibleModule[]> {
-  return apiFetch<AccessibleModule[]>("/api/v1/security/modules", {
-    query: { targetEntityType },
-  });
-}
-
-/** POST /api/v1/security/roles → AdminCompany crea rol en su empresa. */
-export async function createTenantRole(
-  code: string,
-  name: string,
-  description?: string,
-): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>("/api/v1/security/roles", {
-    method: "POST",
-    body: { code, name, description },
-  });
-}
-
-/** PUT /api/v1/security/roles/{roleId}/permissions → AdminCompany asigna permisos (subset del propio). */
-export async function setTenantRolePermissions(
-  roleId: string,
-  permissionIds: string[],
-): Promise<RoleDetail> {
-  return apiFetch<RoleDetail>(`/api/v1/security/roles/${roleId}/permissions`, {
-    method: "PUT",
-    body: { permissionIds },
-  });
-}
-
-/** DELETE /api/v1/security/roles/{roleId} → AdminCompany elimina rol no-sistema de su empresa. */
-export async function deleteTenantRole(roleId: string): Promise<void> {
-  return apiFetch<void>(`/api/v1/security/roles/${roleId}`, {
-    method: "DELETE",
-  });
+ *  RBAC puro (HU #10664): los módulos son transversales; el SuperAdmin ve todos los módulos
+ *  activos (constructor de roles) y el caller tenant solo los de sus slugs. */
+export async function getAccessibleModules(): Promise<AccessibleModule[]> {
+  return apiFetch<AccessibleModule[]>("/api/v1/security/modules");
 }
 
 /** Cuerpo del POST de suspensión/desactivación. `endsAt` nulo = desactivación indefinida
