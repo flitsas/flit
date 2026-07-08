@@ -1,3 +1,5 @@
+using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,6 +17,8 @@ namespace Flit.Infrastructure.Migrations
     /// Los estados <c>preasignado</c>/<c>asignado</c> no requieren tocar CHECK (status es varchar(20)
     /// sin CHECK); su validez es aplicativa (TramiteEstado + TramiteStateMachine).
     /// </remarks>
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260708120000_HU10606_PreasignacionEstadosTrigger")]
     public partial class HU10606_PreasignacionEstadosTrigger : Migration
     {
         /// <inheritdoc />

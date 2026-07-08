@@ -1,3 +1,5 @@
+using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -12,6 +14,8 @@ namespace Flit.Infrastructure.Migrations
     /// un ALTER idempotente: bases nuevas la reciben del DDL 07 y este ALTER es no-op; bases existentes
     /// la reciben aquí. Auto-aplicable en el arranque (Program.cs Database.Migrate).
     /// </remarks>
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260708130000_HU10648_PlatePreassignEnabled")]
     public partial class HU10648_PlatePreassignEnabled : Migration
     {
         /// <inheritdoc />

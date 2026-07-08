@@ -1,3 +1,5 @@
+using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -12,6 +14,8 @@ namespace Flit.Infrastructure.Migrations
     /// del SOAT tras la asignación: PDF o consulta RUNT). El resto sigue inmutable fuera de borrador.
     /// Solo reemplaza la FUNCTION; SQL idempotente. Auto-aplicable en el arranque.
     /// </remarks>
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260708150000_HU10611_SoatFieldInAsignado")]
     public partial class HU10611_SoatFieldInAsignado : Migration
     {
         /// <inheritdoc />
