@@ -254,7 +254,12 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            Observaciones: Get(fv, "fur_observations"),
+            // A4/B4 (HU #10673, ADR-0029) — anexa a las observaciones manuales el texto automático de las
+            // transformaciones de color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            Observaciones: FurTransformationObservations.Compose(
+                Get(fv, "fur_observations"),
+                Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,

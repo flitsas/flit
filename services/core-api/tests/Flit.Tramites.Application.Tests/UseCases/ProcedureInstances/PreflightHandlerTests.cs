@@ -738,4 +738,127 @@ public sealed class PreflightHandlerTests
         result.Overall.Should().Be("green");
         instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
     }
+
+    // ── A4/B4 (HU #10673) — transformaciones color/combustible: snapshots *_runt + no pisar ────
+
+    private RunPreflightHandler VehiculoHydratesHandler(params HydratedField[] hydrated) =>
+        BuildHandler(null,
+        [
+            ("kyverum_runt", new StubProvider("kyverum_runt",
+                new ConsultationResult("kyverum_runt", "green", [Check("ok")], hydrated))),
+        ]);
+
+    private static string? ValueOf(ProcedureInstance instance, string key) =>
+        instance.FieldValues.FirstOrDefault(f => f.FieldKey == key)?.ValueText;
+
+    [Fact]
+    public async Task Preflight_PrimeraConsulta_EscribeEfectivoYSnapshotRunt()
+    {
+        // Primera hidratación: no hay transformación → el efectivo y el snapshot RUNT quedan iguales al RUNT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(
+            new HydratedField("vehicle_color", "PLATA", null),
+            new HydratedField("vehicle_fuel", "GASOLINA", null));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_color" && f.ValueText == "PLATA" && f.Source == "consultation");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_color_runt" && f.ValueText == "PLATA" && f.Source == "consultation");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_fuel" && f.ValueText == "GASOLINA");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_fuel_runt" && f.ValueText == "GASOLINA");
+    }
+
+    [Fact]
+    public async Task Preflight_SinTransformacion_ReconsultaRefrescaEfectivoYSnapshot()
+    {
+        // Re-consulta sin transformación (efectivo == snapshot, sin flag): el RUNT nuevo pisa AMBOS.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "AZUL", null));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("AZUL");
+        ValueOf(instance, "vehicle_color_runt").Should().Be("AZUL");
+    }
+
+    [Fact]
+    public async Task Preflight_FlagCambioActivo_NoPisaEfectivo_RefrescaSnapshot()
+    {
+        // Transformación DECLARADA (cambio_color = true): el efectivo se preserva; el snapshot RUNT sí se refresca.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "NEGRO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_color", ValueText = "true", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "PLATA", null));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("NEGRO");       // cambio declarado intacto
+        ValueOf(instance, "vehicle_color_runt").Should().Be("PLATA");  // snapshot RUNT refrescado
+    }
+
+    [Fact]
+    public async Task Preflight_CambioImplicito_SinFlag_NoPisaEfectivo()
+    {
+        // Sin flag pero el efectivo YA difiere del snapshot previo → se trata como transformación activa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel", ValueText = "ELECTRICO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel_runt", ValueText = "GASOLINA", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_fuel", "GASOLINA", null));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_fuel").Should().Be("ELECTRICO");
+        ValueOf(instance, "vehicle_fuel_runt").Should().Be("GASOLINA");
+    }
+
+    [Fact]
+    public async Task Preflight_ColorYCombustibleSimultaneos_PreservaAmbosCambios()
+    {
+        // Color y combustible declarados a la vez: la re-consulta conserva ambos efectivos y refresca ambos snapshots.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador"), status: TramiteEstado.Borrador);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "NEGRO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_color", ValueText = "true", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel", ValueText = "ELECTRICO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel_runt", ValueText = "GASOLINA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_combustible", ValueText = "true", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(null,
+        [
+            ("kyverum_runt", new StubProvider("kyverum_runt", new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+            [
+                new HydratedField("vehicle_color", "PLATA", null),
+                new HydratedField("vehicle_fuel", "GASOLINA", null),
+            ]))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+        ]);
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("NEGRO");
+        ValueOf(instance, "vehicle_fuel").Should().Be("ELECTRICO");
+        ValueOf(instance, "vehicle_color_runt").Should().Be("PLATA");
+        ValueOf(instance, "vehicle_fuel_runt").Should().Be("GASOLINA");
+    }
 }
