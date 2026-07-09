@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -31,7 +32,14 @@ public sealed record WizardStateDto(
     bool CanSubmit,
     IReadOnlyList<string> Blockers,
     string Status,
-    IReadOnlyList<string> AllowedTransitions);
+    IReadOnlyList<string> AllowedTransitions)
+{
+    /// <summary>
+    /// HU #10548 — si el OT destino tiene la validación de identidad deshabilitada, es <c>false</c>
+    /// y el frontend oculta el paso de identidad (AC3 / HU #10549). Default <c>true</c> (se exige).
+    /// </summary>
+    public bool IdentityValidationEnabled { get; init; } = true;
+}
 
 /// <summary>
 /// Compone el estado del wizard server-driven. Carga el grafo persistido, lo mapea a los
@@ -47,11 +55,18 @@ public sealed record WizardStateDto(
 /// biométrica → <c>null</c> (diferida, slice 6) → los pasos finales se marcan incomplete con
 /// reason explícita ("pendiente_biometria"/"pendiente_firma"), NO se bloquean con error.</para>
 /// </summary>
-public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
+public sealed class GetWizardStateHandler(
+    IProcedureInstanceRepository repo,
+    IIdentityValidationPolicy? identityPolicy = null,
+    ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
     public const string FurPendiente = "fur_pendiente";
+
+    // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
+    private readonly IIdentityValidationPolicy _identityPolicy =
+        identityPolicy ?? NullIdentityValidationPolicy.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -67,7 +82,36 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct);
 
-        return (ComputeState(instance, identidadAprobada), null);
+        // HU #10548 — si el OT destino deshabilita la identidad, se trata como satisfecha (el paso no
+        // bloquea el submit) y se expone el flag para que el wizard oculte el paso (AC3 / HU #10549).
+        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
+            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct);
+        var partesEfectivas = identityRequired
+            ? identidadAprobada
+            : IdentitySatisfiedForAllParties(identidadAprobada);
+
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
+
+        var state = ComputeState(instance, partesEfectivas, docsCompletos) with
+        {
+            IdentityValidationEnabled = identityRequired,
+        };
+        return (state, null);
+    }
+
+    /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
+    private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>
+        new(approved, StringComparer.OrdinalIgnoreCase) { "comprador", "vendedor" };
+
+    /// <summary>Id del OT elegido en el FUR (field_value <c>transit_office_id</c>), o null.</summary>
+    private static Guid? TransitOfficeIdFromFieldValues(ProcedureInstance instance)
+    {
+        var raw = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
     /// <summary>
@@ -76,7 +120,15 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
     /// Signatures). Expuesto para reusar la MISMA lógica de gates por paso desde otros handlers (p.ej. el
     /// listado de trámites computa <c>PasoActual</c> contando los pasos en <c>complete</c>) sin duplicarla.
     /// </summary>
-    public static WizardStateDto ComputeState(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    /// <param name="documentosCompletosOverride">
+    /// HU #10522 (RF17/RF22): completitud documental resuelta desde la matriz del gestor; <c>null</c>
+    /// ⇒ se usa el cómputo actual del catálogo (flag OFF, sin matriz, o llamadores que no lo aportan,
+    /// p. ej. el listado de trámites), sin regresión.
+    /// </param>
+    public static WizardStateDto ComputeState(
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool? documentosCompletosOverride = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -85,20 +137,21 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes)
-            : BuildMatricula(instance, identidadAprobadaPartes);
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride)
+            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildMatricula(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static WizardStateDto BuildMatricula(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
         var runtComprador = RuntOf(instance, "comprador");
         var preflight = PreflightOf(instance);
 
-        var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
         var riesgoAceptado = RiesgoAceptado(instance);
 
         // Matrícula: la única parte (comprador) lleva la biométrica. Aprobación PER-PERSONA (documento),
@@ -210,7 +263,8 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
 
     // ---- Traspaso estándar (6 pasos) ----------------------------------------
 
-    private static WizardStateDto BuildTraspaso(ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes)
+    private static WizardStateDto BuildTraspaso(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -219,7 +273,7 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
         var runtComprador = RuntOf(instance, "comprador");
         var preflight = PreflightOf(instance);
         var simitComprador = SimitOf(instance, comprador, preflight);
-        var docsCompletos = DocumentosObligatoriosCompletos(instance);
+        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
         var riesgoAceptado = RiesgoAceptado(instance);
 
         var ctx = new TraspasoGateContext
@@ -270,22 +324,24 @@ public sealed class GetWizardStateHandler(IProcedureInstanceRepository repo)
             // emite las razones precisas de lo que falta.
             else if (p == 6)
             {
-                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + firma de AMBAS
-                // partes (slice 7) + FUR generado. Los documentos ya se exigen en el paso 2
-                // (paridad con matrícula); aquí NO se listan como reason. El faltante de docs
-                // sigue vetando el submit vía el blocker global documentos_incompletos.
+                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + FUR generado. Los
+                // documentos ya se exigen en el paso 2 (paridad con matrícula); aquí NO se listan
+                // como reason. El faltante de docs sigue vetando el submit vía el blocker global
+                // documentos_incompletos.
+                //
+                // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
+                // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
+                // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
+                // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
                 var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
-                var firmaOk = FirmaAmbasFirmadas(instance);
                 var furOk = FurGenerado(instance);
 
                 if (!biometriaOk)
                     reasons.Add(PendienteBiometria);
-                if (!firmaOk)
-                    reasons.Add(PendienteFirma);
                 if (!furOk)
                     reasons.Add(FurPendiente);
 
-                status = (biometriaOk && firmaOk && furOk) ? "complete" : "incomplete";
+                status = (biometriaOk && furOk) ? "complete" : "incomplete";
             }
             else if (gate.Ok)
             {

@@ -1,0 +1,5 @@
+# Reportes 2.0 (HU-A/HU-B) — los archivos VERBATIM del contrato (docs/contratos-reportes-v2.md §6)
+# definen parámetros `from`/`to` y deben permanecer byte-idénticos entre worktrees, por lo que no
+# pueden renombrarse para satisfacer CA1716 (conflicto con la palabra reservada "To" de VB).
+[*.cs]
+dotnet_diagnostic.CA1716.severity = none

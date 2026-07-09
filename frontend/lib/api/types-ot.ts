@@ -20,6 +20,21 @@ export interface UpdateOtProfileRequest {
   operationMode?: OtOperationMode;
 }
 
+/** Requisitos configurables por OT (HU #10545 / #10546). */
+export interface OtRequirements {
+  transitOfficeId: string;
+  requiresRnmc: boolean;
+  allowPlatePreassign: boolean;
+  identityValidationEnabled: boolean;
+}
+
+/** Los campos omitidos conservan su valor actual (conmutación independiente). */
+export interface UpdateOtRequirementsRequest {
+  requiresRnmc?: boolean;
+  allowPlatePreassign?: boolean;
+  identityValidationEnabled?: boolean;
+}
+
 export interface UpdateOtFeatureFlagRequest {
   isEnabled: boolean;
 }
@@ -35,6 +50,8 @@ export interface OtClientProcedure {
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;
+  /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
+  prioritario?: boolean;
 }
 
 export interface OtClientProcedurePagedResult {
@@ -49,6 +66,16 @@ export interface OtClientProceduresParams {
   procedureTypeId?: string;
   page?: number;
   pageSize?: number;
+}
+
+/** Diagnóstico de la bandeja OT (HU #10540/#10541 — R09): entregados con/sin grant vigente. */
+export interface OtBandejaHealth {
+  transitOfficeResolved: boolean;
+  transitOfficeId: string | null;
+  deliveredTotal: number;
+  deliveredWithGrant: number;
+  deliveredWithoutGrant: number;
+  hasDeliveredWithoutGrant: boolean;
 }
 
 export interface OtWebhook {

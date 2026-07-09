@@ -39,11 +39,15 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
     private readonly Guid _superAdminTenantId = Guid.NewGuid();
 
     private readonly Guid _companyTenantId = Guid.NewGuid();
-    private readonly Guid _companyAdminRoleId = Guid.NewGuid();
+
+    // HU #10505: security.roles es un catálogo GLOBAL — "AdminCompany"/"ot_admin" ya no se
+    // crean por tenant en el seed de este test; se resuelven por Code contra las filas
+    // globales sembradas por DevelopmentAuthSeeder al levantar la WebApplicationFactory.
+    private Guid _companyAdminRoleId;
 
     private readonly Guid _transitOfficeId = Guid.NewGuid();
     private readonly Guid _otTenantId = Guid.NewGuid();
-    private readonly Guid _otAdminRoleId = Guid.NewGuid();
+    private Guid _otAdminRoleId;
 
     public SecurityInvitationsRoleResolutionTests(WebApplicationFactory<Program> factory)
     {
@@ -93,6 +97,189 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         invitation.RoleId.Should().Be(_otAdminRoleId);
     }
 
+    // HU #10625 AC1 — SuperAdmin puede reenviar CUALQUIER invitación del sistema (sin
+    // restricción de tenant), a diferencia de AdminCompany que solo puede su propio tenant.
+    [Fact]
+    public async Task Resend_AsSuperAdmin_InvitationOfAnotherTenant_Returns200()
+    {
+        var (invitationId, email) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        invitation.Email.Should().Be(email);
+        invitation.LastSentAt.Should().NotBeNull();
+    }
+
+    // HU #10625 AC1 — AdminCompany reenvía una invitación pendiente de su propio tenant
+    [Fact]
+    public async Task Resend_AsAdminCompany_OwnTenantInvitation_Returns200()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // HU #10625 AC2 — cooldown activo: reenviada hace menos de 2 minutos → 429 + Retry-After
+    [Fact]
+    public async Task Resend_AsAdminCompany_WithinCooldown_Returns429WithRetryAfterHeader()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _companyTenantId, lastSentAt: DateTimeOffset.UtcNow.AddSeconds(-30));
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    // HU #10625 AC3 — invitación ya cancelada → 409
+    [Fact]
+    public async Task Resend_AsAdminCompany_InvitationCancelled_Returns409()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _companyTenantId, lastSentAt: null, status: "cancelled");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // AdminCompany no puede reenviar una invitación de OTRO tenant → 404 (fuera de alcance)
+    [Fact]
+    public async Task Resend_AsAdminCompany_InvitationOfAnotherTenant_Returns404()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // AC1 (HU #10627) — cancelar una invitación pendiente de mi alcance: el enlace de
+    // activación deja de funcionar (Status ya no es "pending") y el email queda disponible
+    // para una nueva invitación.
+    [Fact]
+    public async Task CancelInvitation_AsSuperAdmin_PendingInvitation_CancelsAndAllowsNewInvitation()
+    {
+        var email = $"cancel-invite-{Guid.NewGuid():N}@flit.local";
+
+        var createResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+            var cancelResponse = await _client.DeleteAsync(
+                $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+            cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        await using (var db = CreateDbContext())
+        {
+            var cancelled = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            cancelled.Status.Should().Be("cancelled");
+            cancelled.DeletedAt.Should().NotBeNull();
+        }
+
+        // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
+        var reInviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Invitación", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+        reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    // AC2 (HU #10627) — cancelar una invitación ya cancelada previamente → 409, error explícito.
+    [Fact]
+    public async Task CancelInvitation_AlreadyCancelled_Returns409()
+    {
+        var email = $"cancel-twice-{Guid.NewGuid():N}@flit.local";
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Cancelar Dos Veces", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+
+        var firstCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondCancel = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitation.Id}", TestContext.Current.CancellationToken);
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // Cancelar una invitación inexistente → 404.
+    [Fact]
+    public async Task CancelInvitation_NotFound_Returns404()
+    {
+        var response = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
+        Guid tenantId, DateTimeOffset? lastSentAt, string status = "pending")
+    {
+        await using var db = CreateDbContext();
+
+        var invitationId = Guid.NewGuid();
+        var email = $"resend-{Guid.NewGuid():N}@flit.local";
+
+        db.UserInvitations.Add(new UserInvitation
+        {
+            Id = invitationId,
+            TenantId = tenantId,
+            Email = email,
+            FullName = "Invitado Reenvío",
+            TokenHash = $"hash-{Guid.NewGuid():N}",
+            Status = status,
+            InvitedBy = _superAdminUserId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastSentAt = lastSentAt,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (invitationId, email);
+    }
+
     private async Task SeedAsync()
     {
         await using var db = CreateDbContext();
@@ -138,32 +325,21 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        // Tenants + Users primero (el Role y el perfil OT dependen del tenant recién
-        // insertado; sin navegaciones EF entre estos agregados, mismo motivo que en
+        // Tenants + Users primero (el perfil OT depende del tenant recién insertado; sin
+        // navegaciones EF entre estos agregados, mismo motivo que en
         // AdminOtUsersEndpointsTests.SeedAsync).
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        db.Roles.Add(new Role
-        {
-            Id = _companyAdminRoleId,
-            TenantId = _companyTenantId,
-            Code = "AdminCompany",
-            Name = "Administrador de Compañía",
-            IsSystem = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            RowVersion = 0,
-        });
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // reutiliza la fila si ya existe (p.ej. sembrada por DevelopmentAuthSeeder) o se crea
+        // aquí mismo si no (BD limpia, como la que usa CI): el test no puede depender de que
+        // el seeder de desarrollo haya corrido antes que este, solo de que exista una única
+        // fila global (violaría UNIQUE(code, target_entity_type) crear una por tenant de prueba).
+        _companyAdminRoleId = await GetOrCreateGlobalRoleAsync(
+            db, "AdminCompany", "Administrador de Compañía", "COMPANY", TestContext.Current.CancellationToken);
 
-        db.Roles.Add(new Role
-        {
-            Id = _otAdminRoleId,
-            TenantId = _otTenantId,
-            Code = "ot_admin",
-            Name = "Administrador OT",
-            IsSystem = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            RowVersion = 0,
-        });
+        _otAdminRoleId = await GetOrCreateGlobalRoleAsync(
+            db, "ot_admin", "Administrador OT", "TRANSIT_OFFICE", TestContext.Current.CancellationToken);
 
         db.TransitOfficeProfiles.Add(new TransitOfficeProfile
         {
@@ -179,6 +355,32 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
 
     private FlitDbContext CreateDbContext() =>
         _factory.Services.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
+
+    private static async Task<Guid> GetOrCreateGlobalRoleAsync(
+        FlitDbContext db, string code, string name, string targetEntityType, CancellationToken ct)
+    {
+        var existingId = await db.Roles.AsNoTracking()
+            .Where(r => r.Code == code && r.TargetEntityType == targetEntityType && r.DeletedAt == null)
+            .Select(r => r.Id)
+            .SingleOrDefaultAsync(ct);
+
+        if (existingId != Guid.Empty)
+            return existingId;
+
+        var role = new Role
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            Name = name,
+            TargetEntityType = targetEntityType,
+            IsSystem = true,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Roles.Add(role);
+        await db.SaveChangesAsync(ct);
+        return role.Id;
+    }
 
     private static string MintToken(string role, Guid tenantId, Guid userId)
     {
@@ -212,9 +414,8 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId));
         db.SaveChanges();
 
-        db.Roles.RemoveRange(
-            db.Roles.Where(r => r.TenantId == _companyTenantId || r.TenantId == _otTenantId));
-        db.SaveChanges();
+        // HU #10505: "AdminCompany"/"ot_admin" son roles del catálogo GLOBAL, sembrados una sola
+        // vez por DevelopmentAuthSeeder — este test NO los crea ni los borra, solo los resuelve.
 
         db.Users.RemoveRange(db.Users.Where(u => u.Id == _superAdminUserId));
         db.Tenants.RemoveRange(

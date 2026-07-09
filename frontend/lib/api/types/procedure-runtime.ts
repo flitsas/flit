@@ -86,6 +86,8 @@ export interface InstanceSummary {
   signaturePending: boolean;
   /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
   canSubmit: boolean;
+  /** HU #10536 — marcado prioritario por el gestor: el OT lo revisa con primacía (ordenamiento). */
+  prioritario: boolean;
   /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
@@ -167,6 +169,13 @@ export type ActorRol = 'comprador' | 'vendedor';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
+/**
+ * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
+ * identidad se incorpora desde la validación biométrica y el checklist no ofrece la carga
+ * manual de cédula; persona jurídica la conserva.
+ */
+export type ActorPersonType = 'natural' | 'juridical';
+
 // HU #10478 — proveedor primario de consulta resuelto para el tenant, por tipo. El wizard lo usa para
 // adaptar la UI (p. ej. en traspaso ocultar el tipo de documento del propietario cuando el proveedor de
 // placa es Kyverum RUNT, que lo resuelve solo y lo devuelve en la respuesta).
@@ -186,6 +195,11 @@ export interface ProcedureActor {
   /** Persistidos en actor.metadata (JSON) — opcionales. */
   ciudad?: string;
   direccion?: string;
+  /**
+   * Tipo de persona (HU #10543). Persona natural omite la carga manual de cédula en el
+   * checklist (el documento llega desde la validación de identidad).
+   */
+  personType?: ActorPersonType;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -330,6 +344,10 @@ export interface ChecklistItemView {
   obligatorio: boolean;
   docTipo?: string;
   satisfied: boolean;
+  /** RF09 — tamaño máximo por tipo (bytes). Ausente ⇒ usar el límite global. */
+  maxSizeBytes?: number;
+  /** RF08 — formatos MIME permitidos por tipo. Ausente/vacío ⇒ formatos globales. */
+  mimeTypesAllowed?: string[];
 }
 
 /** Respuesta de GET /instances/{id}/checklist. */
@@ -386,6 +404,11 @@ export interface WizardState {
   status: InstanceStatus | string;
   /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
   allowedTransitions: string[];
+  /**
+   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
+   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   */
+  identityValidationEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -404,6 +427,33 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+}
+
+// ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
+//   PUT /api/v1/tramites/instances/{id}/prenda -> PrendaData
+//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData | null
+export type PrendaDecision =
+  | 'solicitar'
+  | 'registrar'
+  | 'levantar'
+  | 'omitir'
+  | 'sin_prenda';
+
+/** Decisión de prenda vigente del trámite (o null si no se ha registrado ninguna). */
+export interface PrendaData {
+  id: string;
+  decision: PrendaDecision;
+  estado: 'vigente' | 'reemplazada';
+  acreedorNombre: string | null;
+  acreedorDocumento: string | null;
+  createdAt: string;
+}
+
+/** Payload de PUT /prenda. */
+export interface PrendaInput {
+  decision: PrendaDecision;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
 }
 
 // ── Biométrica (Slice 6) ────────────────────────────────────────────

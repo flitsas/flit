@@ -84,10 +84,10 @@ public sealed class CreateProcedureInstanceHandler
                 $"Ya existe un trámite con el número de referencia '{referenceNumber}' para este cliente.");
         }
 
-        // Congela la matriz resuelta vigente en este instante (el tenant actúa como cliente
-        // para la precedencia CLIENTE > OT > Default).
+        // Congela la matriz resuelta vigente en este instante. RF22: el orden lo sugiere solo el
+        // Organismo de Tránsito (OT > Default); ya no se aplica precedencia por cliente.
         var matrix = await _resolver
-            .ResolveAsync(request.ProcedureTypeId, request.TransitOfficeId, request.TenantId, cancellationToken)
+            .ResolveAsync(request.ProcedureTypeId, request.TransitOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         var payload = new ProcedureDocumentSnapshotPayload(

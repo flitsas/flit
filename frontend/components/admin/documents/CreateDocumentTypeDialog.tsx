@@ -35,6 +35,16 @@ export interface CreateDocumentTypeDialogProps {
 
 type FieldErrors = Partial<Record<"codigo" | "nombre" | "descripcion", string>>;
 
+// RF08 — formatos configurables por tipo (los mismos que el respaldo global del backend).
+const MIME_OPTIONS: { mime: string; label: string }[] = [
+  { mime: "application/pdf", label: "PDF" },
+  { mime: "image/jpeg", label: "JPG" },
+  { mime: "image/png", label: "PNG" },
+  { mime: "image/webp", label: "WEBP" },
+];
+
+const BYTES_PER_MB = 1024 * 1024;
+
 export function CreateDocumentTypeDialog({
   open,
   editing,
@@ -46,6 +56,9 @@ export function CreateDocumentTypeDialog({
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  // RF08/09 — límites por tipo. mimes vacío / MB vacío ⇒ se aplican los globales por defecto.
+  const [mimes, setMimes] = useState<string[]>([]);
+  const [maxSizeMb, setMaxSizeMb] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -56,9 +69,15 @@ export function CreateDocumentTypeDialog({
       setCodigo(editing?.codigo ?? "");
       setNombre(editing?.nombre ?? "");
       setDescripcion(editing?.descripcion ?? "");
+      setMimes(editing?.mimeTypesAllowed ?? []);
+      const bytes = editing?.maxSizeBytes ?? 0;
+      setMaxSizeMb(bytes > 0 ? String(Math.round((bytes / BYTES_PER_MB) * 100) / 100) : "");
       setErrors({});
     }
   }, [open, editing]);
+
+  const toggleMime = (mime: string) =>
+    setMimes((prev) => (prev.includes(mime) ? prev.filter((m) => m !== mime) : [...prev, mime]));
 
   if (!open) {
     return null;
@@ -93,10 +112,14 @@ export function CreateDocumentTypeDialog({
     setSubmitting(true);
     setErrors({});
     try {
+      const mb = maxSizeMb.trim() ? Number(maxSizeMb) : NaN;
       const saved = await onSubmit({
         codigo: codigo.trim(),
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
+        // Vacío ⇒ null ⇒ el backend aplica los límites globales por defecto.
+        mimeTypesAllowed: mimes.length > 0 ? mimes : null,
+        maxSizeBytes: Number.isFinite(mb) && mb > 0 ? Math.round(mb * BYTES_PER_MB) : null,
       });
       onSaved(saved, mode);
     } catch (error) {
@@ -167,6 +190,38 @@ export function CreateDocumentTypeDialog({
               aria-describedby={errors.descripcion ? "dt-desc-error" : undefined}
               className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
+            />
+          </Field>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold">Formatos permitidos</label>
+            <div className="flex flex-wrap gap-3">
+              {MIME_OPTIONS.map(({ mime, label }) => (
+                <label key={mime} className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={mimes.includes(mime)}
+                    onChange={() => toggleMime(mime)}
+                    className="h-3.5 w-3.5 accent-[#557EFF]"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] opacity-60">
+              Sin marcar ninguno ⇒ se aplican los formatos globales por defecto (PDF, JPG, PNG, WEBP).
+            </p>
+          </div>
+
+          <Field label="Tamaño máximo (MB)" htmlFor="dt-maxsize" hint="Opcional; vacío ⇒ tamaño global por defecto (20 MB).">
+            <input
+              id="dt-maxsize"
+              type="number"
+              min={0}
+              step="0.5"
+              value={maxSizeMb}
+              onChange={(e) => setMaxSizeMb(e.target.value)}
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
             />
           </Field>
 

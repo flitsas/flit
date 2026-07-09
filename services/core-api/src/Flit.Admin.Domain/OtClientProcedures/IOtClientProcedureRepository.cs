@@ -19,6 +19,17 @@ public interface IOtClientProcedureRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Diagnóstico de la bandeja (HU #10540 / R09): cuenta los trámites <c>entregado</c> dirigidos
+    /// al organismo del OT (o el <paramref name="transitOfficeIdOverride"/> del SuperAdmin),
+    /// separando los que tienen grant vigente con la empresa cliente de los que no. Devuelve
+    /// <c>null</c> cuando el tenant no resuelve ningún organismo de tránsito.
+    /// </summary>
+    Task<OtBandejaHealth?> GetDeliveryHealthAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Variante con override de organismo para SuperAdmin (mismo contrato que
     /// <see cref="ListAsync"/>): si <paramref name="transitOfficeIdOverride"/> viene, el acceso
     /// se resuelve contra esa oficina del catálogo en lugar del perfil OT del tenant.

@@ -1,10 +1,24 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
 
 public interface IProcedureInstanceRepository
 {
     Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista los trámites de MATRÍCULA INICIAL del tenant (no eliminados) cuyo VIN coincide con
+    /// <paramref name="vinNormalizado"/>, EXCLUYENDO <paramref name="excludeInstanceId"/> (el borrador
+    /// en curso, para que no se detecte a sí mismo). Proyecta a <see cref="VinTramiteExistente"/> con la
+    /// secretaría (nombre del OT) y la fecha del registro previo, ordenado por recencia descendente para
+    /// que <see cref="Tramites.Services.VinPolicyEvaluator.EvaluarConflicto"/> tome el primer bloqueante
+    /// como referencia del mensaje. El VIN almacenado se compara normalizado (mayúsculas + trim) contra
+    /// <paramref name="vinNormalizado"/>, que ya viene de <see cref="Tramites.Services.VinNormalizer"/>.
+    /// Solo lectura (HU #10538, R3). Set vacío si no hay coincidencias.
+    /// </summary>
+    Task<IReadOnlyList<VinTramiteExistente>> FindTramitesByVinAsync(
+        Guid tenantId, string vinNormalizado, Guid excludeInstanceId, CancellationToken ct = default);
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
@@ -14,6 +28,21 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con el grafo necesario para computar el checklist condicional
+    /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
+    /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
+    /// <c>Participants</c> (tramitador). Es el grafo que consume <c>GetChecklistHandler</c>.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con sus <c>Actors</c> y <c>Attachments</c>. Query lean para el
+    /// cómputo del checklist, que necesita los tipos de documento subidos (auto-marca) y el
+    /// tipo de persona de los actores (supresión de <c>cedulas</c> para persona natural, HU #10542).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con TODO el grafo del wizard: actores, field values, adjuntos,
     /// datos comerciales y snapshots de preflight (Slice 4 — wizard server-driven).</summary>

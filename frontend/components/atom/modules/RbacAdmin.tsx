@@ -1,18 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark } from "lucide-react";
-import { superadminClient, RbacModule, RbacPermission, RbacRole, CompanyItem, TenantModuleGrantItem } from "@/lib/api/superadmin-client";
-import { Modal } from "@/components/atom/Modal";
+import { useState, useEffect, useCallback } from "react";
+import { ChevronDown, ChevronRight, Trash2, PowerOff, Power, Building2, Landmark, Pencil } from "lucide-react";
 import {
-  fetchTransitOfficeTenants,
-  type TransitOfficeTenantItem,
-} from "@/lib/api/admin-transit-office-tenants";
+  superadminClient,
+  RbacModule,
+  RbacPermission,
+  RbacRole,
+  RbacRoleDetail,
+  RoleTargetEntityType,
+} from "@/lib/api/superadmin-client";
+import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
+import { Modal } from "@/components/atom/Modal";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
-  { id: "roles", label: "Roles por Tenant" },
+  { id: "roles", label: "Roles del sistema" },
 ] as const;
 type RbacTabId = (typeof RBAC_TABS)[number]["id"];
 
@@ -27,7 +33,6 @@ export function RbacAdmin() {
   const [permissions, setPermissions] = useState<Record<string, RbacPermission[]>>({});
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [createPermissionForModule, setCreatePermissionForModule] = useState<RbacModule | null>(null);
-  const [grantsForModule, setGrantsForModule] = useState<RbacModule | null>(null);
 
   async function loadModules() {
     setLoading(true);
@@ -148,7 +153,7 @@ export function RbacAdmin() {
         <div
           className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
           style={{
-            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
+            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
             background: "#DFE5ED",
             color: "#162744",
           }}
@@ -159,7 +164,6 @@ export function RbacAdmin() {
           <div>Descripción</div>
           <div className="text-center">Permisos</div>
           <div className="text-center">Activo</div>
-          <div className="text-center">Empresas</div>
           <div className="text-right">Acciones</div>
         </div>
 
@@ -183,7 +187,7 @@ export function RbacAdmin() {
               <div
                 className="grid items-center px-4 py-3 border-b text-xs"
                 style={{
-                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 90px 120px",
+                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
                   }}
               >
                 <button
@@ -210,16 +214,6 @@ export function RbacAdmin() {
                   >
                     {mod.isActive ? "Activo" : "Inactivo"}
                   </span>
-                </div>
-                <div className="flex justify-center">
-                  <button
-                    onClick={() => setGrantsForModule(mod)}
-                    aria-label="Gestionar empresas"
-                    className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                    style={{ color: "#557EFF" }}
-                  >
-                    <Building2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
                 <div className="flex justify-end gap-1">
                   {mod.isActive ? (
@@ -292,7 +286,7 @@ export function RbacAdmin() {
           ))}
       </div>}
 
-      {/* ── Pestaña Roles por Tenant ── */}
+      {/* ── Pestaña Roles del sistema (HU #10509) ── */}
       {activeTab === "roles" && <RolesTab />}
 
       {/* Modal crear módulo */}
@@ -303,14 +297,6 @@ export function RbacAdmin() {
             setShowCreateModule(false);
             loadModules();
           }}
-        />
-      )}
-
-      {/* Modal gestión empresas (grants) */}
-      {grantsForModule && (
-        <ModuleGrantsModal
-          module={grantsForModule}
-          onClose={() => setGrantsForModule(null)}
         />
       )}
 
@@ -334,153 +320,218 @@ export function RbacAdmin() {
   );
 }
 
-function RolesTab() {
-  const [companies, setCompanies] = useState<CompanyItem[]>([]);
-  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState("");
-  const [roles, setRoles] = useState<RbacRole[]>([]);
-  const [rolesLoading, setRolesLoading] = useState(false);
-  const [rolesError, setRolesError] = useState<string | null>(null);
-  const [showCreateRole, setShowCreateRole] = useState(false);
+// HU #10509 — el catálogo de roles es GLOBAL por tipo de entidad (HU #10505); ya no se filtra
+// por tenant. Se muestran SIEMPRE ambas tablas (AC2) y la creación/edición vive en modales.
+const ENTITY_TABLES: { type: RoleTargetEntityType; title: string; icon: typeof Building2 }[] = [
+  { type: "COMPANY", title: "Roles de Compañía", icon: Building2 },
+  { type: "TRANSIT_OFFICE", title: "Roles de Organismo de Tránsito", icon: Landmark },
+];
 
-  useEffect(() => {
-    superadminClient.listCompanies()
-      .then((r) => setCompanies(r.data))
-      .catch(() => {});
-    // Tenants OT (refactor adminOT): el SuperAdmin también puede curar los permisos
-    // del rol ot_admin de cada organismo de tránsito, no solo de compañías.
-    fetchTransitOfficeTenants({ pageSize: 100 })
-      .then((r) => setTransitOfficeTenants(r.data))
-      .catch(() => {});
+function RolesTab() {
+  return (
+    <ToastProvider>
+      <RolesTabContent />
+    </ToastProvider>
+  );
+}
+
+function RolesTabContent() {
+  const { show } = useToast();
+  const [companyRoles, setCompanyRoles] = useState<RbacRole[]>([]);
+  const [otRoles, setOtRoles] = useState<RbacRole[]>([]);
+  const [companyStatus, setCompanyStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [otStatus, setOtStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
+  const [showCreateRole, setShowCreateRole] = useState(false);
+  const [editTarget, setEditTarget] = useState<{ role: RbacRole; targetEntityType: RoleTargetEntityType } | null>(null);
+
+  const loadRoles = useCallback((type: RoleTargetEntityType) => {
+    const setStatus = type === "COMPANY" ? setCompanyStatus : setOtStatus;
+    const setRoles = type === "COMPANY" ? setCompanyRoles : setOtRoles;
+    setStatus("loading");
+    superadminClient
+      .listRoles(type)
+      .then((data) => {
+        setRoles(data);
+        setStatus("ready");
+      })
+      .catch(() => setStatus("error"));
   }, []);
 
   useEffect(() => {
-    if (!selectedTenantId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRoles([]);
-      return;
-    }
-    setRolesLoading(true);
-    setRolesError(null);
-    superadminClient.listRoles(selectedTenantId)
-      .then(setRoles)
-      .catch(() => setRolesError("Error al cargar roles."))
-      .finally(() => setRolesLoading(false));
-  }, [selectedTenantId]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRoles("COMPANY");
+    loadRoles("TRANSIT_OFFICE");
+  }, [loadRoles]);
 
-  async function handleDeleteRole(id: string) {
+  async function handleToggleActive(role: RbacRole, targetEntityType: RoleTargetEntityType) {
+    setBusyIds((b) => ({ ...b, [role.id]: true }));
     try {
-      await superadminClient.deleteRole(id);
-      setRoles((r) => r.filter((x) => x.id !== id));
+      if (role.isActive) {
+        await superadminClient.deactivateRole(role.id);
+        show(`Rol «${role.name}» desactivado.`, "success");
+      } else {
+        await superadminClient.activateRole(role.id);
+        show(`Rol «${role.name}» activado.`, "success");
+      }
+      const setRoles = targetEntityType === "COMPANY" ? setCompanyRoles : setOtRoles;
+      setRoles((rows) => rows.map((r) => (r.id === role.id ? { ...r, isActive: !r.isActive } : r)));
+    } catch {
+      show("No se pudo cambiar el estado del rol.", "error");
+    } finally {
+      setBusyIds((b) => ({ ...b, [role.id]: false }));
+    }
+  }
+
+  async function handleDelete(role: RbacRole, targetEntityType: RoleTargetEntityType) {
+    if (!confirm(`¿Eliminar el rol «${role.name}»? Esta acción no se puede deshacer.`)) return;
+    setBusyIds((b) => ({ ...b, [role.id]: true }));
+    try {
+      await superadminClient.deleteRole(role.id);
+      show(`Rol «${role.name}» eliminado.`, "success");
+      const setRoles = targetEntityType === "COMPANY" ? setCompanyRoles : setOtRoles;
+      setRoles((rows) => rows.filter((r) => r.id !== role.id));
     } catch (err: unknown) {
+      // AC3 — el backend rechaza el borrado con 409 { code: "ROLE_HAS_ACTIVE_USERS" } cuando
+      // el rol tiene usuarios asignados (DeleteRoleHandler / RoleHasActiveUsersException).
       const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("ROLE_SYSTEM_LOCKED")) alert("No se puede eliminar: es un rol de sistema.");
-      else if (msg.includes("ROLE_HAS_ACTIVE_USERS")) alert("No se puede eliminar: tiene usuarios activos asignados.");
-      else alert("Error al eliminar el rol.");
+      if (msg.includes("ROLE_HAS_ACTIVE_USERS")) {
+        show("Este rol tiene usuarios asignados y no puede eliminarse.", "error");
+      } else if (msg.includes("ROLE_SYSTEM_LOCKED")) {
+        show("No se puede eliminar: es un rol de sistema.", "error");
+      } else {
+        show("No se pudo eliminar el rol.", "error");
+      }
+    } finally {
+      setBusyIds((b) => ({ ...b, [role.id]: false }));
     }
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Selector de tenant: compañías y tenants OT (refactor adminOT) en un mismo picker */}
-      <div className="flex items-center gap-3">
-        <label htmlFor="tenant-picker" className="text-sm font-semibold shrink-0">Tenant:</label>
-        <select
-          id="tenant-picker"
-          value={selectedTenantId}
-          onChange={(e) => setSelectedTenantId(e.target.value)}
-          className="text-sm px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] dark:text-white outline-none focus:border-[#557EFF]"
-          style={{ minWidth: 280 }}
+    <div className="flex flex-col gap-5">
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowCreateRole(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          <option value="">— Selecciona un tenant —</option>
-          {companies.length > 0 && (
-            <optgroup label="Compañías">
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.razonSocial} ({c.nit})</option>
-              ))}
-            </optgroup>
-          )}
-          {transitOfficeTenants.length > 0 && (
-            <optgroup label="Organismos de Tránsito">
-              {transitOfficeTenants.map((t) => (
-                <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        {selectedTenantId && transitOfficeTenants.some((t) => t.id === selectedTenantId) && (
-          <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#557EFF" }}>
-            <Landmark className="h-3.5 w-3.5" aria-hidden="true" />
-            Organismo de Tránsito
-          </span>
-        )}
-        {selectedTenantId && (
-          <button
-            onClick={() => setShowCreateRole(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            Nuevo rol
-          </button>
-        )}
+          Nuevo rol
+        </button>
       </div>
 
-      {/* Tabla de roles */}
-      {!selectedTenantId && (
-        <div className="py-12 text-center text-sm opacity-60">Selecciona un tenant para ver sus roles.</div>
-      )}
-      {selectedTenantId && (
-        <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden">
-          <div className="grid px-4 py-2.5 text-[10px] font-semibold uppercase" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px", background: "#DFE5ED", color: "#162744" }}>
-            <div>Código</div>
-            <div>Nombre</div>
-            <div>Descripción</div>
-            <div className="text-center">Permisos</div>
-            <div className="text-center">Sistema</div>
-            <div className="text-right">Acciones</div>
-          </div>
-          {rolesLoading && <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>}
-          {!rolesLoading && rolesError && <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{rolesError}</div>}
-          {!rolesLoading && !rolesError && roles.length === 0 && (
-            <div className="py-12 text-center text-sm opacity-60">No hay roles. Crea el primero.</div>
-          )}
-          {!rolesLoading && !rolesError && roles.map((r) => (
-            <div key={r.id} className="grid items-center px-4 py-3 border-b text-xs" style={{ gridTemplateColumns: "120px 1fr 1fr 80px 80px 80px" }}>
-              <div className="font-mono opacity-80">{r.code}</div>
-              <div className="font-semibold">{r.name}</div>
-              <div className="opacity-70">{r.description ?? "—"}</div>
-              <div className="text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
-              <div className="text-center">
-                {r.isSystem ? (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-white" style={{ background: "#557EFF" }}>Sistema</span>
-                ) : (
-                  <span className="opacity-40">—</span>
-                )}
+      {ENTITY_TABLES.map(({ type, title, icon: Icon }) => {
+        const roles = type === "COMPANY" ? companyRoles : otRoles;
+        const status = type === "COMPANY" ? companyStatus : otStatus;
+        return (
+          <section key={type} className="flex flex-col gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <Icon className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden="true" />
+              {title}
+            </h3>
+            <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden">
+              <div
+                className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
+                style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px", background: "#DFE5ED", color: "#162744" }}
+              >
+                <div>Nombre</div>
+                <div>Descripción</div>
+                <div className="text-center">Permisos</div>
+                <div className="text-center">Estado</div>
+                <div className="text-right">Acciones</div>
               </div>
-              <div className="flex justify-end">
-                {!r.isSystem && (
-                  <button
-                    onClick={() => handleDeleteRole(r.id)}
-                    aria-label={`Eliminar rol ${r.name}`}
-                    className="p-1.5 rounded-lg transition hover:opacity-80"
-                    style={{ color: "#FF4E00" }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+              {status === "loading" && (
+                <div className="py-10 text-center text-sm opacity-60">Cargando roles…</div>
+              )}
+              {status === "error" && (
+                <div role="alert" className="py-10 text-center text-sm" style={{ color: "#FF4E00" }}>
+                  Error al cargar roles.
+                </div>
+              )}
+              {status === "ready" && roles.length === 0 && (
+                <div className="py-10 text-center text-sm opacity-60">
+                  No hay roles {type === "COMPANY" ? "de compañía" : "de organismo de tránsito"}. Crea el primero.
+                </div>
+              )}
+              {status === "ready" &&
+                roles.map((r) => {
+                  return (
+                    <div
+                      key={r.id}
+                      className="grid items-center px-4 py-3 border-b last:border-b-0 text-xs"
+                      style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px" }}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">{r.name}</p>
+                        <p className="font-mono text-[10px] opacity-60">{r.code}</p>
+                      </div>
+                      <div className="opacity-70 truncate">{r.description ?? "—"}</div>
+                      <div className="text-center font-bold" style={{ color: "#557EFF" }}>
+                        {r.permissionCount}
+                      </div>
+                      <div className="flex justify-center">
+                        <StatusBadge
+                          label={r.isActive ? "Activo" : "Inactivo"}
+                          bg={r.isActive ? "rgba(0,219,213,0.15)" : "rgba(255,78,0,0.10)"}
+                          color={r.isActive ? "#0f766e" : "#c2410c"}
+                          border={r.isActive ? "rgba(0,219,213,0.35)" : "rgba(255,78,0,0.3)"}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => setEditTarget({ role: r, targetEntityType: type })}
+                          aria-label={`Editar permisos de ${r.name}`}
+                          disabled={busyIds[r.id]}
+                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                          style={{ color: "#557EFF" }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(r, type)}
+                          aria-label={r.isActive ? `Desactivar rol ${r.name}` : `Activar rol ${r.name}`}
+                          disabled={busyIds[r.id]}
+                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                          style={{ color: r.isActive ? undefined : "#00DBD5" }}
+                        >
+                          {r.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r, type)}
+                          aria-label={`Eliminar rol ${r.name}`}
+                          disabled={busyIds[r.id] || r.isSystem}
+                          title={r.isSystem ? "No se puede eliminar: es un rol de sistema" : undefined}
+                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
-          ))}
-        </div>
+          </section>
+        );
+      })}
+
+      {showCreateRole && (
+        <CreateRoleModal
+          onClose={() => setShowCreateRole(false)}
+          onCreated={(targetEntityType) => {
+            setShowCreateRole(false);
+            loadRoles(targetEntityType);
+          }}
+        />
       )}
 
-      {showCreateRole && selectedTenantId && (
-        <CreateRoleModal
-          tenantId={selectedTenantId}
-          onClose={() => setShowCreateRole(false)}
-          onCreated={() => {
-            setShowCreateRole(false);
-            superadminClient.listRoles(selectedTenantId).then(setRoles).catch(() => {});
+      {editTarget && (
+        <EditRolePermissionsModal
+          role={editTarget.role}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            loadRoles(editTarget.targetEntityType);
+            setEditTarget(null);
+            show(`Permisos de «${editTarget.role.name}» actualizados.`, "success");
           }}
         />
       )}
@@ -488,54 +539,288 @@ function RolesTab() {
   );
 }
 
-function CreateRoleModal({
-  tenantId, onClose, onCreated,
+/** Checklist de permisos por módulo (mismo patrón visual de `/empresa/roles` — HU #10509 lo
+ * trae a RbacAdmin.tsx, único lugar con CRUD de roles tras HU #10508). */
+function ModulePermissionsChecklist({
+  modules, modulesLoading, selected, onToggle, onToggleModule,
 }: {
-  tenantId: string;
+  modules: AccessibleModule[];
+  modulesLoading: boolean;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleModule: (m: AccessibleModule) => void;
+}) {
+  if (modulesLoading) {
+    return <p className="text-xs text-center py-6 opacity-60">Cargando módulos…</p>;
+  }
+  if (modules.length === 0) {
+    return <p className="text-xs text-center py-6 opacity-60">No hay módulos con permisos disponibles.</p>;
+  }
+  return (
+    <div className="space-y-4 max-h-64 overflow-y-auto pr-1">
+      {modules.map((m) => {
+        const allSelected = m.actions.length > 0 && m.actions.every((a) => selected.has(a.id));
+        const someSelected = m.actions.some((a) => selected.has(a.id));
+        return (
+          <div key={m.id}>
+            <button
+              type="button"
+              onClick={() => onToggleModule(m)}
+              className="flex items-center gap-2 w-full text-left mb-1.5"
+            >
+              <span
+                className="h-4 w-4 rounded border grid place-items-center flex-shrink-0"
+                style={{
+                  borderColor: allSelected || someSelected ? "#557EFF" : "#DFE5ED",
+                  background: allSelected ? "#557EFF" : someSelected ? "rgba(85,126,255,0.15)" : "transparent",
+                }}
+              >
+                {(allSelected || someSelected) && (
+                  <span className="block h-2 w-2 rounded-sm" style={{ background: allSelected ? "#FFFFFF" : "#557EFF" }} />
+                )}
+              </span>
+              <span className="text-sm font-semibold">{m.name}</span>
+            </button>
+            <div className="ml-6 grid grid-cols-2 gap-x-4 gap-y-1">
+              {m.actions.map((a) => (
+                <label key={a.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(a.id)}
+                    onChange={() => onToggle(a.id)}
+                    className="h-3.5 w-3.5 accent-[#557EFF]"
+                  />
+                  <span className="text-xs">{a.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
+ * El catálogo se carga una sola vez y es el mismo para cualquier rol. */
+function useModulesCatalog() {
+  const [modules, setModules] = useState<AccessibleModule[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getAccessibleModules()
+      .then((m) => { if (active) setModules(m); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  return { modules, loading };
+}
+
+function CreateRoleModal({
+  onClose, onCreated,
+}: {
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (targetEntityType: RoleTargetEntityType) => void;
 }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
+  const { modules, loading: modulesLoading } = useModulesCatalog();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleModule(m: AccessibleModule) {
+    const allSelected = m.actions.every((a) => selected.has(a.id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) m.actions.forEach((a) => next.delete(a.id));
+      else m.actions.forEach((a) => next.add(a.id));
+      return next;
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // HU #10664 AC2 — un rol debe otorgar acceso a al menos un permiso (mínimo uno por módulo).
+    if (selected.size === 0) {
+      setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await superadminClient.createRole({ tenantId, code: code.trim(), name: name.trim(), description: description.trim() || undefined });
-      onCreated();
+      const { id } = await superadminClient.createRole({
+        targetEntityType,
+        code: code.trim(),
+        name: name.trim(),
+        description: description.trim() || undefined,
+      });
+      await superadminClient.setRolePermissions(id, [...selected]);
+      onCreated(targetEntityType);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      setError(msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe en el tenant." : "Error al crear el rol.");
-    } finally {
+      setError(msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe para este tipo de entidad." : "Error al crear el rol.");
       setBusy(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} busy={busy} size="sm" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="admin_tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+            <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
           </div>
           <div>
-            <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
-            <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrador Tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+            <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
+            <select
+              id="role-target-type"
+              required
+              value={targetEntityType}
+              onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+            >
+              <option value="COMPANY">Compañía</option>
+              <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
+            </select>
           </div>
-          <div>
-            <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
-            <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Acceso completo a la configuración del tenant" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
-          </div>
-          {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
-          <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
-            {busy ? "Creando…" : "Crear rol"}
-          </button>
-        </form>
+        </div>
+        <div>
+          <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
+          <input id="role-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+        </div>
+        <div>
+          <label htmlFor="role-desc" className="text-xs font-semibold block mb-1">Descripción</label>
+          <input id="role-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el propósito del rol" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
+        </div>
+        <div>
+          <span className="text-xs font-semibold block mb-1.5">Permisos por módulo</span>
+          <ModulePermissionsChecklist
+            modules={modules}
+            modulesLoading={modulesLoading}
+            selected={selected}
+            onToggle={toggle}
+            onToggleModule={toggleModule}
+          />
+        </div>
+        {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
+        <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+          {busy ? "Creando…" : "Crear rol"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function EditRolePermissionsModal({
+  role, onClose, onSaved,
+}: {
+  role: RbacRole;
+  onClose: () => void;
+  onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
+}) {
+  // HU #10664 — RBAC puro: el checklist muestra todos los módulos (transversal).
+  const { modules, loading: modulesLoading } = useModulesCatalog();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loadingCurrent, setLoadingCurrent] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    superadminClient
+      .getRole(role.id)
+      .then((detail) => {
+        if (cancelled) return;
+        setSelected(new Set(detail.permissions.map((p) => p.id)));
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudieron recuperar los permisos actuales de este rol.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCurrent(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [role.id]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleModule(m: AccessibleModule) {
+    const allSelected = m.actions.every((a) => selected.has(a.id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) m.actions.forEach((a) => next.delete(a.id));
+      else m.actions.forEach((a) => next.add(a.id));
+      return next;
+    });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // HU #10664 AC2 — un rol debe conservar acceso a al menos un permiso (mínimo uno por módulo).
+    if (selected.size === 0) {
+      setError("Selecciona al menos un permiso para el rol (mínimo uno por módulo).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const detail = await superadminClient.setRolePermissions(role.id, [...selected]);
+      onSaved(detail.permissions);
+    } catch {
+      setError("No se pudieron actualizar los permisos.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} busy={busy} size="md" title={`Editar permisos — ${role.name}`} titleClassName="text-lg font-bold text-[#162744] dark:text-white">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {loadingCurrent ? (
+          <div className="py-10 text-center text-sm opacity-60">Cargando permisos actuales…</div>
+        ) : (
+          <ModulePermissionsChecklist
+            modules={modules}
+            modulesLoading={modulesLoading}
+            selected={selected}
+            onToggle={toggle}
+            onToggleModule={toggleModule}
+          />
+        )}
+        {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
+        <button
+          type="submit"
+          disabled={busy || loadingCurrent}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+        >
+          {busy ? "Guardando…" : "Guardar permisos"}
+        </button>
+      </form>
     </Modal>
   );
 }
@@ -653,105 +938,6 @@ function CreateModuleModal({
             {loading ? "Creando…" : "Crear módulo"}
           </button>
         </form>
-    </Modal>
-  );
-}
-
-function ModuleGrantsModal({
-  module,
-  onClose,
-}: {
-  module: RbacModule;
-  onClose: () => void;
-}) {
-  const [companies, setCompanies] = useState<CompanyItem[]>([]);
-  const [grants, setGrants] = useState<TenantModuleGrantItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      setLoading(true);
-      try {
-        const [c, g] = await Promise.all([
-          superadminClient.listCompanies().then((r) => r.data),
-          superadminClient.listModuleGrants(module.id),
-        ]);
-        if (active) { setCompanies(c); setGrants(g); }
-      } catch {
-        // ignore
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    load();
-    return () => { active = false; };
-  }, [module.id]);
-
-  const grantedIds = new Set(grants.map((g) => g.tenantId));
-
-  async function handleToggle(tenantId: string, isGranted: boolean) {
-    setBusy((b) => ({ ...b, [tenantId]: true }));
-    try {
-      if (isGranted) {
-        await superadminClient.revokeModuleFromTenant(module.id, tenantId);
-        setGrants((g) => g.filter((x) => x.tenantId !== tenantId));
-      } else {
-        await superadminClient.grantModuleToTenant(module.id, tenantId);
-        const company = companies.find((c) => c.id === tenantId);
-        if (company) setGrants((g) => [...g, { tenantId, tenantName: company.razonSocial }]);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setBusy((b) => ({ ...b, [tenantId]: false }));
-    }
-  }
-
-  return (
-    <Modal open onClose={onClose} size="sm" title="Empresas con acceso" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
-        <p className="text-xs opacity-60 mb-4">
-          Módulo: <strong>{module.name}</strong> ({module.code})
-        </p>
-        {loading ? (
-          <div className="py-8 text-center text-sm opacity-60">Cargando empresas…</div>
-        ) : companies.length === 0 ? (
-          <div className="py-8 text-center text-sm opacity-60">No hay empresas registradas.</div>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
-            {companies.map((c) => {
-              const granted = grantedIds.has(c.id);
-              return (
-                <label
-                  key={c.id}
-                  className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-[#F8FAFF] border"
-                  style={{ borderColor: granted ? "#00DBD5" : "#DFE5ED" }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={granted}
-                    disabled={busy[c.id]}
-                    onChange={() => handleToggle(c.id, granted)}
-                    className="h-4 w-4 accent-[#557EFF]"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{c.razonSocial}</p>
-                    <p className="text-[11px] opacity-60">{c.nit}</p>
-                  </div>
-                  {busy[c.id] && <span className="ml-auto text-[10px] opacity-50">…</span>}
-                </label>
-              );
-            })}
-          </div>
-        )}
-        <button
-          onClick={onClose}
-          className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          Listo
-        </button>
     </Modal>
   );
 }

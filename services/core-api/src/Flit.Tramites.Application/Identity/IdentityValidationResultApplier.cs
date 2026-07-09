@@ -1,5 +1,9 @@
+using System.Text.Json;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.Identity;
 
@@ -17,8 +21,18 @@ public sealed record IdentityValidationTerminalResult(
 /// Idempotente: si la validación ya está en estado terminal no hace nada. NO persiste — el caller decide
 /// cuándo hacer <c>SaveChanges</c>. Lo usan por igual el webhook y la reconciliación por consulta, para que
 /// ambos caminos apliquen EXACTAMENTE la misma lógica (aprobación + vigencia + evento).
+///
+/// RF40 — política de improntas por IA (informar, no bloquear): cuando el score de coincidencia queda por
+/// debajo del umbral (<see cref="ImprontaValidationPolicyOptions.MatchThreshold"/>), encola un evento de
+/// bitácora <c>validacion_biometrica_advertencia</c> (append-only, visible en el timeline) SIN alterar el
+/// veredicto ni bloquear la radicación. Los parámetros <paramref name="repo"/>/<paramref name="policy"/> son
+/// opcionales: sin ellos (p. ej. en tests que no ejercitan la política) el applier mantiene su comportamiento
+/// previo intacto.
 /// </summary>
-public sealed class IdentityValidationResultApplier(IIdentityValidationEventPublisher events)
+public sealed class IdentityValidationResultApplier(
+    IIdentityValidationEventPublisher events,
+    IProcedureInstanceRepository? repo = null,
+    ImprontaValidationPolicyOptions? policy = null)
 {
     public async Task<bool> ApplyAsync(
         ProcedureInstanceBiometricValidation v,
@@ -53,6 +67,30 @@ public sealed class IdentityValidationResultApplier(IIdentityValidationEventPubl
         v.ProviderStatus = result.ProviderStatus;
         v.ProviderPayload = result.SanitizedPayload;
         v.Score = result.Score;
+
+        // RF40 — política informar: por debajo del umbral se deja constancia en el timeline sin bloquear.
+        if (repo is not null && policy is not null && result.Score is int score)
+        {
+            var decision = ImprontaPolicyEvaluator.Evaluate(score, policy.MatchThreshold, policy.BlockBelowThreshold);
+            if (decision != ImprontaPolicyDecision.Ok)
+            {
+                await repo.AddEventAsync(new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = v.TenantId,
+                    ProcedureInstanceId = v.ProcedureInstanceId,
+                    Tipo = "validacion_biometrica_advertencia",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        score,
+                        threshold = policy.MatchThreshold,
+                        decision = decision.ToString().ToLowerInvariant(),
+                        parte = v.PartyRole,
+                    }),
+                    CreatedAt = now,
+                }, ct);
+            }
+        }
 
         await events.PublishAsync(new IdentityValidationCompleted
         {

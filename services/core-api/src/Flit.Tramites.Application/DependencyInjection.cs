@@ -35,6 +35,8 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
+        // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
+        services.AddScoped<SetPriorityProcedureInstanceHandler>();
 
         // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
         // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher
@@ -44,6 +46,9 @@ public static class DependencyInjection
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
+        // HU #10520 — validación de carga por tipo (MIME/tamaño) con respaldo global. El catálogo
+        // (IDocumentTypeCatalog) se registra en Infraestructura; aquí solo el validador que lo consume.
+        services.AddScoped<AttachmentValidator>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();
@@ -51,7 +56,15 @@ public static class DependencyInjection
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se
+        // registra en Infraestructura SOLO si Rues:Enabled=true; sin él, el handler cae a carga manual.
+        services.AddScoped<GenerarRuesAttachmentHandler>();
+        // HU #10522 (RF17/RF22) — completitud documental "gestor manda" compartida por display y gates.
+        services.AddScoped<UseCases.ProcedureInstances.ChecklistMatrixCompleteness>();
         services.AddScoped<GetChecklistHandler>();
+        // IT-3 (Feature #10585) — prenda: comando base (registrar/leer decisión vigente).
+        services.AddScoped<RegistrarPrendaHandler>();
+        services.AddScoped<GetPrendaVigenteHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
         services.AddScoped<RunPreflightHandler>();

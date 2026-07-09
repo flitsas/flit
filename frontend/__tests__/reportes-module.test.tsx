@@ -3,22 +3,44 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 
 import type { AnalyticsOverviewResponse, CompanyListItem } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/types";
+import type { LiveOverviewResponse } from "@/lib/api/analytics-v2";
 
-// ── Mocks de la capa de datos y del rol (sin red real) ─────────────────────
+// ── Mocks de la capa de datos y de permisos (sin red real) ──────────────────
 const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
+  fetchMonthlyTrend: vi.fn(),
+  fetchTopProducers: vi.fn(),
+  fetchProcedureDetails: vi.fn(),
+  exportAnalyticsExcel: vi.fn(),
+  exportExecutivePdf: vi.fn(),
+  fetchLiveOverview: vi.fn(),
+  fetchOtMetrics: vi.fn(),
+  fetchFunnel: vi.fn(),
+  fetchUsageMetrics: vi.fn(),
   fetchCompaniesIndex: vi.fn(),
-  getToken: vi.fn(() => "token"),
-  isSuperAdmin: vi.fn(() => false),
+  usePermissions: vi.fn(),
 }));
 
-vi.mock("@/lib/api/analytics", () => ({ fetchAnalyticsOverview: mocks.fetchAnalyticsOverview }));
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
-vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
-vi.mock("@/lib/auth/jwt", () => ({
-  decodeJwtPayload: () => ({ role: "x" }),
-  isSuperAdmin: mocks.isSuperAdmin,
+vi.mock("@/lib/api/analytics", () => ({
+  fetchAnalyticsOverview: mocks.fetchAnalyticsOverview,
+  fetchMonthlyTrend: mocks.fetchMonthlyTrend,
+  fetchTopProducers: mocks.fetchTopProducers,
+  fetchProcedureDetails: mocks.fetchProcedureDetails,
+  exportAnalyticsExcel: mocks.exportAnalyticsExcel,
+  exportExecutivePdf: mocks.exportExecutivePdf,
 }));
+vi.mock("@/lib/api/analytics-v2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/analytics-v2")>();
+  return {
+    ...actual,
+    fetchLiveOverview: mocks.fetchLiveOverview,
+    fetchOtMetrics: mocks.fetchOtMetrics,
+    fetchFunnel: mocks.fetchFunnel,
+    fetchUsageMetrics: mocks.fetchUsageMetrics,
+  };
+});
+vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 import { Reportes } from "@/components/atom/modules/Reportes";
 
@@ -44,6 +66,15 @@ const EMPTY: AnalyticsOverviewResponse = {
   ],
 };
 
+const LIVE: LiveOverviewResponse = {
+  generatedAt: "2026-07-07T14:03:22Z",
+  today: { creados: 14, byStatus: [{ status: "borrador", count: 6 }], entregados: 5, aprobados: 3, rechazados: 1 },
+  stuckCount: 7,
+  pendingIdentityValidations: 3,
+  integrationsLastHour: { calls: 25, errors: 1, avgDurationMs: 350 },
+  lastActivityAt: "2026-07-07T13:59:01Z",
+};
+
 const COMPANY: CompanyListItem = {
   id: "22222222-2222-2222-2222-222222222222",
   nit: "900123456",
@@ -55,11 +86,29 @@ const COMPANY: CompanyListItem = {
   rowVersion: 1,
 };
 
+function permissionsState(overrides: Partial<ReturnType<typeof basePermissions>> = {}) {
+  return { ...basePermissions(), ...overrides };
+}
+
+function basePermissions() {
+  return {
+    permissions: ["reportes.read"],
+    isSuperAdmin: false,
+    isAdminCompany: false,
+    isOtAdmin: false,
+    tenantId: null as string | null,
+    userId: null as string | null,
+    roleId: null as string | null,
+    roleCode: null as string | null,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getToken.mockReturnValue("token");
-  mocks.isSuperAdmin.mockReturnValue(false);
+  mocks.usePermissions.mockReturnValue(permissionsState());
   mocks.fetchAnalyticsOverview.mockResolvedValue(FULL);
+  mocks.fetchMonthlyTrend.mockResolvedValue({ items: [] });
+  mocks.fetchLiveOverview.mockResolvedValue(LIVE);
   mocks.fetchCompaniesIndex.mockResolvedValue({ data: [COMPANY], totalCount: 1, page: 1, pageSize: 100 });
 });
 
@@ -74,7 +123,7 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
 
     render(<Reportes />);
 
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    expect(screen.getAllByTestId("ui-loading").length).toBeGreaterThan(0);
 
     resolveFn(FULL);
     await screen.findByText("Total trámites");
@@ -85,7 +134,7 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
 
     render(<Reportes />);
 
-    expect(await screen.findByTestId("ui-empty")).toHaveTextContent(/no hay trámites/i);
+    expect(await screen.findByText(/no hay trámites para el rango/i)).toBeInTheDocument();
   });
 
   it("Error: muestra role=alert con reintento y vuelve a consultar al reintentar", async () => {
@@ -109,7 +158,7 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
     expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     // total = 120 + 30 + 0
     expect(screen.getByText("150")).toBeInTheDocument();
-    // Títulos de los tres gráficos circulares (también aparecen como tarjeta resumen).
+    // Títulos de los gráficos circulares (también aparecen como tarjeta KPI).
     expect(screen.getAllByText("Matrículas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Traspasos").length).toBeGreaterThan(0);
     // Leyenda de estados (fuera del SVG, siempre presente).
@@ -142,8 +191,6 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
 
 describe("Reportes — AC1 acceso por rol", () => {
   it("Tenant Admin: NO ve el selector de compañía", async () => {
-    mocks.isSuperAdmin.mockReturnValue(false);
-
     render(<Reportes />);
 
     await screen.findByText("Total trámites");
@@ -152,7 +199,7 @@ describe("Reportes — AC1 acceso por rol", () => {
   });
 
   it("SuperAdmin: ve el selector con sus compañías y filtra por tenantId", async () => {
-    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.usePermissions.mockReturnValue(permissionsState({ isSuperAdmin: true }));
 
     render(<Reportes />);
 

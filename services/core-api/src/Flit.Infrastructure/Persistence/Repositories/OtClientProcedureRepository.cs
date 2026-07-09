@@ -65,7 +65,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
 
                         var items = await query
-                            .OrderByDescending(p => p.CreatedAt)
+                            // HU #10536 — los trámites prioritarios se revisan con primacía en la bandeja del OT.
+                            .OrderByDescending(p => p.Prioritario)
+                            .ThenByDescending(p => p.CreatedAt)
                             .ThenByDescending(p => p.Id)
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
@@ -79,6 +81,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
+                                Prioritario = p.Prioritario,
                             })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
@@ -110,6 +113,49 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 transitOfficeId,
                 procedureInstanceId,
                 cancellationToken),
+            cancellationToken);
+
+    public Task<OtBandejaHealth?> GetDeliveryHealthAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId =>
+            {
+                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
+                return await ExecuteCrossTenantReadAsync(
+                    async () =>
+                    {
+                        // Todos los 'entregado' dirigidos a este organismo, con o sin grant vigente:
+                        // los "sin grant" son precisamente los que la bandeja no muestra (R09).
+                        var delivered = _context.ProcedureInstances
+                            .AsNoTracking()
+                            .Where(p => p.DeletedAt == null
+                                && p.Status == TramiteEstado.Entregado
+                                && p.TransitOfficeId == transitOfficeId);
+
+                        var deliveredTotal = await delivered
+                            .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        var deliveredWithGrant = grantedClientTenantIds.Count == 0
+                            ? 0
+                            : await delivered
+                                .Where(p => grantedClientTenantIds.Contains(p.TenantId))
+                                .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        return (OtBandejaHealth?)new OtBandejaHealth(
+                            transitOfficeId,
+                            deliveredTotal,
+                            deliveredWithGrant,
+                            deliveredTotal - deliveredWithGrant);
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            },
             cancellationToken);
 
     public Task<OtClientProcedure?> ApproveAsync(
@@ -461,6 +507,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,
+        Prioritario = entity.Prioritario,
     };
 
     private async Task<IReadOnlyList<OtClientProcedure>> EnrichDisplayNamesAsync(

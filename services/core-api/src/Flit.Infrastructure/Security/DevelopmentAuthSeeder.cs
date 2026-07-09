@@ -52,12 +52,13 @@ public static class DevelopmentAuthSeeder
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("12-HU10200-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
-        await SeedTenantModuleGrantsAsync(db, cancellationToken);
+        await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -78,19 +79,21 @@ public static class DevelopmentAuthSeeder
         if (empresaTenant is null)
             return;
 
-        // 1. Rol "Radicador" del tenant (idempotente).
+        // 1. Rol "Radicador" (idempotente). HU #10505 / ADR-0023: security.roles es un catálogo
+        //    GLOBAL (sin tenant_id) — se busca/crea por Code + target_entity_type, no por tenant.
         var role = await db.Roles.FirstOrDefaultAsync(
-            r => r.TenantId == empresaTenant.Id && r.Code == "Radicador" && r.DeletedAt == null,
+            r => r.Code == "Radicador" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null,
             cancellationToken);
         if (role is null)
         {
             role = new Role
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = empresaTenant.Id,
                 Code = "Radicador",
                 Name = "Radicador",
+                TargetEntityType = "COMPANY",
                 IsSystem = false,
+                IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
                 RowVersion = 0,
             };
@@ -115,7 +118,6 @@ public static class DevelopmentAuthSeeder
             db.RoleGrants.AddRange(toGrant.Select(a => new RoleGrant
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = empresaTenant.Id,
                 RoleId = role.Id,
                 PermissionId = a.Id,
                 CreatedAt = grantedAt,
@@ -247,13 +249,19 @@ public static class DevelopmentAuthSeeder
             IsActive = true,
         });
 
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id). SuperAdmin
+        // es transversal a todos los tenants, pero el enum target_entity_type solo admite
+        // COMPANY|TRANSIT_OFFICE (no hay un tercer valor "GLOBAL"/"SYSTEM") — se usa COMPANY como
+        // default y no se expone en las pantallas de gestión de roles por tipo de entidad
+        // (decisión documentada en ADR-0023).
         db.Roles.Add(new Role
         {
             Id = roleId,
-            TenantId = tenantId,
             Code = "SuperAdmin",
             Name = "Super Administrador",
+            TargetEntityType = "COMPANY",
             IsSystem = true,
+            IsActive = true,
             CreatedAt = now,
             RowVersion = 0,
         });
@@ -261,7 +269,6 @@ public static class DevelopmentAuthSeeder
         db.RoleGrants.Add(new RoleGrant
         {
             Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
             RoleId = roleId,
             PermissionId = permissionId,
             CreatedAt = now,
@@ -307,7 +314,6 @@ public static class DevelopmentAuthSeeder
         }
 
         var userId = OtAdminUserId;
-        var roleId = Guid.CreateVersion7();
         var now = DateTimeOffset.UtcNow;
 
         db.Users.Add(new User
@@ -331,23 +337,37 @@ public static class DevelopmentAuthSeeder
             RowVersion = 0,
         });
 
-        db.Roles.Add(new Role
+        await db.SaveChangesAsync(cancellationToken);
+
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // busca/crea "ot_admin" por Code + target_entity_type, nunca por tenant (UNIQUE(code,
+        // target_entity_type) impediría una segunda fila si ya existe de un tenant OT previo).
+        var role = await db.Roles.FirstOrDefaultAsync(
+            r => r.Code == "ot_admin" && r.TargetEntityType == "TRANSIT_OFFICE" && r.DeletedAt == null,
+            cancellationToken);
+        if (role is null)
         {
-            Id = roleId,
-            TenantId = resolvedTenantId,
-            Code = "ot_admin",
-            Name = "Administrador OT",
-            IsSystem = true,
-            CreatedAt = now,
-            RowVersion = 0,
-        });
+            role = new Role
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "ot_admin",
+                Name = "Administrador OT",
+                TargetEntityType = "TRANSIT_OFFICE",
+                IsSystem = true,
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Roles.Add(role);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         db.UserRoleAssignments.Add(new UserRoleAssignment
         {
             Id = Guid.CreateVersion7(),
             TenantId = resolvedTenantId,
             UserId = userId,
-            RoleId = roleId,
+            RoleId = role.Id,
             AssignedAt = now,
             CreatedAt = now,
             RowVersion = 0,
@@ -426,9 +446,11 @@ public static class DevelopmentAuthSeeder
             return;
         }
 
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // busca/crea "ot_admin" por Code + target_entity_type, nunca por tenant.
         var role = await db.Roles
             .FirstOrDefaultAsync(
-                r => r.TenantId == otTenantId && r.Code == "ot_admin",
+                r => r.Code == "ot_admin" && r.TargetEntityType == "TRANSIT_OFFICE" && r.DeletedAt == null,
                 cancellationToken);
 
         if (role is null)
@@ -438,10 +460,11 @@ public static class DevelopmentAuthSeeder
             role = new Role
             {
                 Id = roleId,
-                TenantId = otTenantId,
                 Code = "ot_admin",
                 Name = "Administrador OT",
+                TargetEntityType = "TRANSIT_OFFICE",
                 IsSystem = true,
+                IsActive = true,
                 CreatedAt = now,
                 RowVersion = 0,
             };
@@ -503,19 +526,29 @@ public static class DevelopmentAuthSeeder
         }
 
         var userId = Guid.CreateVersion7();
-        var roleId = Guid.CreateVersion7();
         var now = DateTimeOffset.UtcNow;
 
-        db.Roles.Add(new Role
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id) — se
+        // busca/crea "AdminCompany" por Code + target_entity_type, nunca por tenant (evita
+        // violar UNIQUE(code, target_entity_type) si ya existe de un run/tenant previo).
+        var adminCompanyRole = await db.Roles.FirstOrDefaultAsync(
+            r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null,
+            cancellationToken);
+        if (adminCompanyRole is null)
         {
-            Id = roleId,
-            TenantId = empresaTenant.Id,
-            Code = "AdminCompany",
-            Name = "Administrador de Compañía",
-            IsSystem = true,
-            CreatedAt = now,
-            RowVersion = 0,
-        });
+            adminCompanyRole = new Role
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "AdminCompany",
+                Name = "Administrador de Compañía",
+                TargetEntityType = "COMPANY",
+                IsSystem = true,
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Roles.Add(adminCompanyRole);
+        }
 
         db.Users.Add(new User
         {
@@ -546,7 +579,7 @@ public static class DevelopmentAuthSeeder
             Id = Guid.CreateVersion7(),
             TenantId = empresaTenant.Id,
             UserId = userId,
-            RoleId = roleId,
+            RoleId = adminCompanyRole.Id,
             AssignedAt = now,
             CreatedAt = now,
             RowVersion = 0,
@@ -564,8 +597,9 @@ public static class DevelopmentAuthSeeder
             .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
         if (empresaTenant is null) return;
 
+        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id).
         var adminCompanyRole = await db.Roles
-            .FirstOrDefaultAsync(r => r.TenantId == empresaTenant.Id && r.Code == "AdminCompany" && r.DeletedAt == null, ct);
+            .FirstOrDefaultAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, ct);
         if (adminCompanyRole is null) return;
 
         // La constraint uq_user_role_assignments_user_id_tenant_id es UNIQUE(user_id, tenant_id)
@@ -659,7 +693,6 @@ public static class DevelopmentAuthSeeder
                 .Select(a => new RoleGrant
                 {
                     Id = Guid.CreateVersion7(),
-                    TenantId = superAdminRole.TenantId,
                     RoleId = superAdminRole.Id,
                     PermissionId = a.Id,
                     CreatedAt = now,
@@ -680,7 +713,6 @@ public static class DevelopmentAuthSeeder
                 .Select(a => new RoleGrant
                 {
                     Id = Guid.CreateVersion7(),
-                    TenantId = adminCompanyRole.TenantId,
                     RoleId = adminCompanyRole.Id,
                     PermissionId = a.Id,
                     CreatedAt = now,
@@ -690,33 +722,78 @@ public static class DevelopmentAuthSeeder
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SeedTenantModuleGrantsAsync(FlitDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Reportes 2.0 — permisos por pestaña + administración de programación/alertas
+    /// (docs/contratos-reportes-v2.md §3). Idempotente y separado de SeedBaseModulesAsync
+    /// (que hace early-return en BDs ya sembradas): agrega solo los slugs que falten al
+    /// módulo "reportes" y los concede a SuperAdmin y AdminCompany.
+    /// </summary>
+    private static async Task SeedReportesPermissionsAsync(FlitDbContext db, CancellationToken ct)
     {
-        var empresaTenant = await db.Tenants
-            .FirstOrDefaultAsync(t => t.Code == DemoEmpresaTenantCode, ct);
-        if (empresaTenant is null) return;
-
-        // Módulos que EMPRESA_DEMO tiene habilitados por defecto (omitimos rbac e improntas intencionalmente: improntas sigue siendo SuperAdmin-only)
-        var grantedCodes = new[] { "tramites", "usuarios", "dashboard", "reportes", "validaciones" };
-
-        var modules = await db.SecurityModules
-            .Where(m => grantedCodes.Contains(m.Code) && m.DeletedAt == null)
-            .ToListAsync(ct);
-
-        var existingModuleIds = await db.TenantModuleGrants
-            .Where(g => g.TenantId == empresaTenant.Id)
-            .Select(g => g.ModuleId)
-            .ToListAsync(ct);
+        var reportesModule = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes" && m.DeletedAt == null, ct);
+        if (reportesModule is null)
+            return;
 
         var now = DateTimeOffset.UtcNow;
-        foreach (var m in modules.Where(m => !existingModuleIds.Contains(m.Id)))
+
+        var slugs = new (string Slug, string Name, string RoutePattern)[]
         {
-            db.TenantModuleGrants.Add(new Flit.Infrastructure.Persistence.Entities.Security.TenantModuleGrant
+            ("reportes.resumen.read",        "Ver pestaña Resumen general",        "/api/v1/analytics/overview"),
+            ("reportes.operacion.read",      "Ver pestaña Operación/Trámites",     "/api/v1/analytics/funnel"),
+            ("reportes.ot.read",             "Ver pestaña Organismo de Tránsito",  "/api/v1/analytics/ot-metrics"),
+            ("reportes.uso.read",            "Ver pestaña Uso del aplicativo",     "/api/v1/analytics/usage"),
+            ("reportes.productividad.read",  "Ver pestaña Productividad",          "/api/v1/analytics/productivity/top"),
+            ("reportes.programacion.manage", "Administrar informes programados y alertas", "/api/v1/analytics/report-schedules"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == reportesModule.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
             {
-                TenantId = empresaTenant.Id,
-                ModuleId = m.Id,
-                GrantedAt = now,
-            });
+                Id = Guid.CreateVersion7(),
+                ModuleId = reportesModule.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Slug.EndsWith(".manage", StringComparison.Ordinal) ? "POST" : "GET",
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length == 0)
+            return;
+
+        db.RbacActions.AddRange(newActions);
+        await db.SaveChangesAsync(ct);
+
+        // Grants: SuperAdmin y AdminCompany reciben todos los permisos nuevos de reportes.
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                db.RoleGrants.AddRange(newActions
+                    .Where(a => !existing.Contains(a.Id))
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    }));
+            }
         }
 
         await db.SaveChangesAsync(ct);

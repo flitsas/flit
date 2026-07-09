@@ -13,6 +13,8 @@
     <ProjectReference Include="..\..\src\Flit.Infrastructure\Flit.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\..\src\Flit.Tramites.Domain\Flit.Tramites.Domain.csproj" />
+    <!-- Reportes2 HU-A — tests de integración del endpoint batch de telemetría (WebApplicationFactory). -->
+    <ProjectReference Include="..\..\src\Flit.Api\Flit.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +24,10 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="NSubstitute" />
+    <!-- Reportes2 HU-A — host de pruebas + JWT dummy del endpoint de telemetría. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
   </ItemGroup>
 
 </Project>

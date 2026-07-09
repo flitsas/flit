@@ -278,7 +278,7 @@ public sealed class LicenciaTransitoHandlerTests
         await AddPdf(instance, "impronta");
         await AddPdf(instance, "fur");
         await AddPdf(instance, "licencia_transito");
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).Returns(instance);
 
         var merger = new PassthroughMerger();
         var handler = new GenerarConsolidadoHandler(_repo, merger, _storage);

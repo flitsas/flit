@@ -21,6 +21,7 @@ import {
 } from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
+  ActorPersonType,
   ActorRol,
   ProcedureActor,
   RuntPersonLookupResult,
@@ -82,6 +83,11 @@ function rolesFor(modalidad: ActorsModalidad): ActorRol[] {
     : ['vendedor', 'comprador'];
 }
 
+const PERSON_TYPE_OPTIONS: { value: ActorPersonType; label: string }[] = [
+  { value: 'natural', label: 'Persona natural' },
+  { value: 'juridical', label: 'Persona jurídica' },
+];
+
 function emptyActor(rol: ActorRol): ProcedureActor {
   return {
     rol,
@@ -92,6 +98,9 @@ function emptyActor(rol: ActorRol): ProcedureActor {
     telefono: '',
     ciudad: '',
     direccion: '',
+    // Por defecto persona natural: caso común (compraventa entre particulares); el
+    // gestor puede cambiar a jurídica. HU #10543.
+    personType: 'natural',
   };
 }
 
@@ -400,6 +409,46 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     </div>
   );
 
+  // ── Selector de tipo de persona (HU #10543) ───────────────────────────────
+  // Persona natural: el documento de identidad se incorpora desde la validación
+  // biométrica, por lo que el checklist no ofrece la carga manual de cédula.
+  const personTypeSelector = (index: number) => {
+    const current = actors[index].personType ?? 'natural';
+    return (
+      <div>
+        <span className="text-xs font-semibold mb-1.5 block">Tipo de persona</span>
+        <div
+          className="inline-flex rounded-xl border p-0.5 gap-0.5"
+          role="group"
+          aria-label="Tipo de persona"
+        >
+          {PERSON_TYPE_OPTIONS.map((o) => {
+            const active = current === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => updateActor(index, { personType: o.value })}
+                aria-pressed={active}
+                className={`px-3 py-1.5 rounded-[10px] text-xs font-semibold transition-colors ${
+                  active ? 'text-white' : 'opacity-70'
+                }`}
+                style={active ? { background: GRADIENT } : undefined}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+        {current === 'natural' && (
+          <p className="text-[10px] mt-1 opacity-60">
+            La cédula se toma de la validación de identidad; no se carga manualmente.
+          </p>
+        )}
+      </div>
+    );
+  };
+
   // ── RUNT result block (compartido entre layouts) ──────────────────────────
   const runtResult = (index: number) => {
     const runtState: RuntState = runt[index] ?? { status: 'idle' };
@@ -539,6 +588,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </span>
           </div>
           <div className="p-4 space-y-3">
+            {personTypeSelector(0)}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="flex-1">
                 <input
@@ -760,6 +810,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <fieldset key={actor.rol} className="rounded-xl border p-4">
               <legend className="px-1 text-xs font-bold">{ROL_LABEL[actor.rol]}</legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Tipo de persona (HU #10543) */}
+                <div className="md:col-span-2">{personTypeSelector(index)}</div>
                 {/* Tipo de documento */}
                 <div>
                   <label htmlFor={`${prefix}-tipoDoc`} className="text-xs font-semibold mb-1.5 block">

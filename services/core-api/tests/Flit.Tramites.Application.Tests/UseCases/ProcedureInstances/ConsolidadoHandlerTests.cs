@@ -133,22 +133,55 @@ public sealed class ConsolidadoHandlerTests
         });
     }
 
-    [Fact]
-    public async Task HandleAsync_ModalidadDesconocida_ReturnsModalidadNoSoportada()
+    private string ConsolidadoContent()
     {
-        // AC3 (#10455): una modalidad no habilitada distinta de matrícula/traspaso sigue rechazando.
+        var path = _storage.Saved.Last();
+        return System.Text.Encoding.UTF8.GetString(_storage.Files[path]);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Matricula_OrdenaPorModalidad()
+    {
+        // Matrícula ⇒ factura antes que aduana (precedencia por modalidad, que también ordena
+        // los documentos generados —FUR/licencia— junto a los subidos).
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        var content = ConsolidadoContent();
+        content.IndexOf("factura", StringComparison.Ordinal)
+            .Should().BeLessThan(content.IndexOf("aduana", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ModalidadDistinta_GeneraConOrdenGenerico()
+    {
+        // HU #10522 (RF27/41): una modalidad distinta de matrícula/traspaso YA NO se rechaza;
+        // se genera el consolidado con el orden genérico (documentos generados primero).
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
         instance.ModalidadEntrada = "sucesion";
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
 
-        result.Should().BeNull();
-        error.Should().Be("modalidad_no_soportada");
+        error.Should().NotBe("modalidad_no_soportada");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Document.Tipo.Should().Be("consolidado");
     }
 
     [Fact]
@@ -160,7 +193,7 @@ public sealed class ConsolidadoHandlerTests
         var instance = TraspasoInstance(id, tenantId);
         instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
@@ -180,7 +213,7 @@ public sealed class ConsolidadoHandlerTests
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
@@ -200,7 +233,7 @@ public sealed class ConsolidadoHandlerTests
         var instance = MatriculaInstance(id, tenantId);
         instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
@@ -219,7 +252,7 @@ public sealed class ConsolidadoHandlerTests
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);

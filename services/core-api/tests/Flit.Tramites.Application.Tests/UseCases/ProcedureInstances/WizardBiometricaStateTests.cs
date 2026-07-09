@@ -272,7 +272,7 @@ public sealed class WizardBiometricaStateTests
 
         var s6 = result!.Steps.Single(s => s.Index == 6);
         s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteBiometria);
-        // La firma (slice 7) sigue diferida.
-        s6.Reasons.Should().Contain(GetWizardStateHandler.PendienteFirma);
+        // B12 (HU #10661, ADR-0028): la firma de compraventa ya NO se exige ni aporta pendiente_firma.
+        s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
     }
 }

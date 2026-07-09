@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 import { EstadoTimelinePanel } from '@/components/operacion/EstadoTimeline';
 import { EstadoAcciones } from '@/components/operacion/EstadoAcciones';
+import { PrendaModificar } from '@/components/operacion/PrendaModificar';
 import { setActiveTramitesTenant } from '@/lib/api/tramites-client';
 
 /**
@@ -40,6 +41,8 @@ export default function TramiteInstancePage() {
         instanceId={params.instanceId}
         onChanged={() => setRefreshKey((k) => k + 1)}
       />
+      {/* R17 (HU #10600) — modificar la elección de prenda post-registro (solo si hay prenda vigente). */}
+      <PrendaModificar key={`prenda-${refreshKey}`} instanceId={params.instanceId} />
       {/* HU-2 (N03, RF05) — historial de transiciones bajo el wizard (colapsado por defecto). */}
       <EstadoTimelinePanel key={`timeline-${refreshKey}`} instanceId={params.instanceId} />
     </>

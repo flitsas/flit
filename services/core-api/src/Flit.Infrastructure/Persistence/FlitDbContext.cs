@@ -37,9 +37,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<UserRoleAssignment> UserRoleAssignments => Set<UserRoleAssignment>();
 
-    public DbSet<TenantModuleGrant> TenantModuleGrants => Set<TenantModuleGrant>();
-
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
+
+    // HU #10506 — soporte multi-rol: tabla puente N:M invitación-roles.
+    public DbSet<InvitationRole> InvitationRoles => Set<InvitationRole>();
 
     public DbSet<TenantOperationalPolicy> TenantOperationalPolicies => Set<TenantOperationalPolicy>();
 
@@ -49,12 +50,20 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
+    public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
+
+    public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
+
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 
     public DbSet<OtFeatureFlagEntity> OtFeatureFlags => Set<OtFeatureFlagEntity>();
+
+    // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
+    public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 
     public DbSet<OtWebhookSubscriptionEntity> OtWebhookSubscriptions => Set<OtWebhookSubscriptionEntity>();
 
@@ -75,6 +84,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
 
     public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
+
+    // HU #10521 (RF31) — parámetros documentales por compañía gestora.
+    public DbSet<Entities.Admin.CompanyDocumentParamEntity> CompanyDocumentParams => Set<Entities.Admin.CompanyDocumentParamEntity>();
 
     // Snapshot documental inmutable (HU #10197). Ancla a la instancia canónica del runtime.
     public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();
@@ -119,6 +131,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — portal público de participantes (Slice 7 Part B)
     public DbSet<ProcedureInstanceParticipant> ProcedureInstanceParticipants => Set<ProcedureInstanceParticipant>();
+
+    // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
+    public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
