@@ -19,6 +19,8 @@ internal sealed class OtWebhookProcedureStateChangeNotifier : IProcedureStateCha
     {
         ArgumentNullException.ThrowIfNull(change);
 
+        // N 03 (RF05): el motivo de la transición viaja a la OT; estados en el vocabulario
+        // de negocio (borrador|anulado|preparado|entregado|aprobado|rechazado — ADR-0022).
         var payload = new
         {
             event_type = OtWebhookEventTypes.VehicleStateChanged,
@@ -26,6 +28,7 @@ internal sealed class OtWebhookProcedureStateChangeNotifier : IProcedureStateCha
             from_status = change.FromStatus,
             to_status = change.ToStatus,
             changed_at = change.ChangedAt,
+            reason = change.Reason,
         };
 
         return _dispatchService.DispatchAsync(

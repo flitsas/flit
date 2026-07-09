@@ -2,6 +2,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -82,7 +83,7 @@ public sealed class CreateProcedureInstanceHandler(
             TenantId = request.TenantId,
             ProcedureTypeId = procedureType.Id,
             ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             TransitOfficeId = request.TransitOfficeId,
@@ -97,7 +98,7 @@ public sealed class CreateProcedureInstanceHandler(
             TenantId = request.TenantId,
             ProcedureInstanceId = instance.Id,
             FromStatus = null,
-            ToStatus = ProcedureInstanceStatus.Draft,
+            ToStatus = TramiteEstado.Borrador,
             ChangedAt = now,
             ChangedBy = request.CreatedByUserId
         });

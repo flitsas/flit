@@ -78,7 +78,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
                 TenantId = TenantId,
                 ProcedureTypeId = ProcedureTypeId,
                 ReferenceNumber = "TR-LEGACY",
-                Status = "draft",
+                Status = "borrador",
                 CreatedByUserId = Guid.NewGuid(),
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -112,7 +112,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,
             ReferenceNumber = "TR-2026-0001",
-            Status = "draft",
+            Status = "borrador",
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
         });

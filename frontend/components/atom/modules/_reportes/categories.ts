@@ -23,6 +23,13 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completado",
   rejected: "Rechazado",
   cancelled: "Cancelado",
+  // Estados N03 (ya en español; se capitalizan explícitamente para estabilidad).
+  borrador: "Borrador",
+  anulado: "Anulado",
+  preparado: "Preparado",
+  entregado: "Entregado",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
 };
 
 /** Nombre legible de un estado; capitaliza y normaliza desconocidos sin romper la UI. */
@@ -39,6 +46,13 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "#00DBD5",
   rejected: "#FF4E00",
   cancelled: "#E43D30",
+  // Estados N03 (mismos semáforos que sus equivalentes legados).
+  borrador: "#59677D",
+  anulado: "#E43D30",
+  preparado: "#F9AC00",
+  entregado: "#557EFF",
+  aprobado: "#8CC63F",
+  rechazado: "#FF4E00",
 };
 
 const FALLBACK_PALETTE = ["#557EFF", "#00DBD5", "#F9AC00", "#8CC63F", "#FF4E00", "#9B8AFB", "#59677D"];

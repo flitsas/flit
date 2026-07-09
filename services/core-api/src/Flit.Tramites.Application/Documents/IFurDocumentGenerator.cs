@@ -56,7 +56,19 @@ public sealed record FurDocumentData(
     IReadOnlyList<string> SellosFirma,
     DateTime? FechaTramite = null,
     string? Observaciones = null,
-    IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null)
+    IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
+    // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
+    // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).
+    bool IdentidadValidada = true,
+    // HU #10488 — sello de la validación biométrica por parte ("comprador"/"vendedor"): texto con
+    // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
+    // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
+    IReadOnlyDictionary<string, string>? SellosIdentidad = null,
+    // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
+    // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
+    // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
+    bool TienePrenda = false,
+    string? AcreedorPrenda = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
@@ -67,9 +79,10 @@ public sealed record GeneratedDocument(string Tipo, string Filename, string Mime
 
 /// <summary>
 /// Contrato del generador de documentos del trámite (FUR + contrato de compraventa). La
-/// implementación actual es un MOCK (<see cref="MockFurDocumentGenerator"/>) que produce un
-/// placeholder de texto con los datos reales — SIN librería de PDF. Se reemplaza por un generador
-/// real (plantilla PDF) sin tocar los handlers — mismo patrón contract-first que el scorer/proveedor.
+/// implementación productiva es <c>FurOverlayDocumentGenerator</c> (Infrastructure): FUR por overlay
+/// PdfSharpCore sobre las plantillas blank (HU #10256) y compraventa vía QuestPDF.
+/// <see cref="MockFurDocumentGenerator"/> se conserva SOLO para tests (sin registro en DI). Patrón
+/// contract-first: los handlers no cambian al swapear la implementación.
 /// </summary>
 public interface IFurDocumentGenerator
 {
@@ -93,13 +106,37 @@ public sealed record IdentityCertificateData(
     string Resultado);
 
 /// <summary>
-/// Contrato del generador del Certificado de validación de identidad. La implementación actual es un
-/// MOCK (<see cref="MockIdentityCertificateGenerator"/>) que emite un placeholder de texto con el
-/// comprador y el resultado biométrico — SIN librería de PDF. Swap a generador real (plantilla PDF)
-/// sin tocar los handlers (mismo patrón contract-first que <see cref="IFurDocumentGenerator"/>).
+/// Contrato del generador del Certificado de validación de identidad. La implementación productiva es
+/// <c>IdentityCertificatePdfGenerator</c> (Infrastructure): PDF real vía QuestPDF (HU #10458) que pasa
+/// IsMergeableMime y se fusiona en el Expediente Consolidado. <see cref="MockIdentityCertificateGenerator"/>
+/// se conserva SOLO para tests (sin registro en DI).
 /// </summary>
 public interface IIdentityCertificateGenerator
 {
     /// <summary>Genera el certificado de validación de identidad (tipo 'certificado_identidad').</summary>
     GeneratedDocument GenerateIdentityCertificate(IdentityCertificateData data);
+}
+
+/// <summary>
+/// Datos para el Certificado RUES (HU #10589): razón social + NIT del actor persona jurídica y su
+/// estado en RUES. En modo mock el estado es "ACTIVA"; con el proveedor real se enriquece con
+/// matrícula mercantil / cámara de comercio.
+/// </summary>
+public sealed record RuesCertificateData(
+    Guid ProcedureInstanceId,
+    string ReferenceNumber,
+    string RazonSocial,
+    string Nit,
+    string Estado);
+
+/// <summary>
+/// Contrato del generador del Certificado RUES. La implementación productiva es
+/// <c>RuesCertificatePdfGenerator</c> (Infrastructure): PDF real vía QuestPDF (tipo 'certificado_rues')
+/// que pasa IsMergeableMime y se fusiona en el Expediente Consolidado (mismo patrón que el certificado
+/// de identidad).
+/// </summary>
+public interface IRuesCertificateGenerator
+{
+    /// <summary>Genera el certificado RUES de una persona jurídica (tipo 'certificado_rues').</summary>
+    GeneratedDocument GenerateRuesCertificate(RuesCertificateData data);
 }

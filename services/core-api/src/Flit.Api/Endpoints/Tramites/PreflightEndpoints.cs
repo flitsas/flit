@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -25,7 +26,7 @@ internal static class PreflightEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado draft."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado borrador."),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflight");
@@ -44,6 +45,21 @@ internal static class PreflightEndpoints
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result); // result puede ser null (sin preflight aún).
         }).WithName("GetProcedureInstancePreflight");
+
+        // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
+        // usa para adaptar la UI (p. ej. ocultar el tipo de documento del propietario cuando el
+        // proveedor de placa es Kyverum RUNT, que lo resuelve solo).
+        group.MapGet("/consultation-config", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetConsultationConfigHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleAsync(tenantId.Value, ct);
+            return Results.Ok(result);
+        }).WithName("GetTramitesConsultationConfig");
 
         return app;
     }

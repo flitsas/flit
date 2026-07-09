@@ -1,5 +1,6 @@
 using System.Text;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
@@ -7,8 +8,10 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -16,13 +19,44 @@ public sealed class FurHandlerTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
-    private readonly IIdentityCertificateGenerator _identityGenerator = new MockIdentityCertificateGenerator();
+    private readonly FakeCertClient _certClient = new();
+    private readonly IRuesCertificateGenerator _ruesGenerator = Substitute.For<IRuesCertificateGenerator>();
+    private readonly IProcedureInstancePrendaRepository _prendaRepo = Substitute.For<IProcedureInstancePrendaRepository>();
     private readonly FakeStorage _storage = new();
     private readonly GenerarFurHandler _handler;
 
     public FurHandlerTests()
     {
-        _handler = new GenerarFurHandler(_repo, _generator, _identityGenerator, _storage);
+        _ruesGenerator.GenerateRuesCertificate(Arg.Any<RuesCertificateData>())
+            .Returns(ci =>
+            {
+                var d = ci.Arg<RuesCertificateData>();
+                return new GeneratedDocument("certificado_rues", $"certificado_rues_{d.Nit}.pdf",
+                    "application/pdf", Encoding.UTF8.GetBytes($"RUES {d.RazonSocial} {d.Nit} {d.Estado}"));
+            });
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+    }
+
+    /// <summary>
+    /// Cliente de certificado Kyverum de prueba: por defecto devuelve un PDF; configurable para simular
+    /// "sin certificado" (null / 404) o un fallo (excepción transitoria).
+    /// </summary>
+    private sealed class FakeCertClient : IKyverumCertificateClient
+    {
+        public bool ReturnNull { get; set; }
+        public Exception? Throw { get; set; }
+        public List<string> RequestedIds { get; } = [];
+
+        public Task<KyverumCertificate?> DownloadCertificateAsync(string verificationId, CancellationToken ct = default)
+        {
+            RequestedIds.Add(verificationId);
+            if (Throw is not null)
+                throw Throw;
+            if (ReturnNull)
+                return Task.FromResult<KyverumCertificate?>(null);
+            return Task.FromResult<KyverumCertificate?>(
+                new KyverumCertificate(Encoding.UTF8.GetBytes("%PDF-1.4 fake"), "application/pdf", $"certificado_{verificationId}.pdf"));
+        }
     }
 
     private sealed class FakeStorage : IAttachmentStorage
@@ -57,7 +91,7 @@ public sealed class FurHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -81,6 +115,9 @@ public sealed class FurHandlerTests
             Id = Guid.NewGuid(),
             PartyRole = parte,
             Status = BiometricEstados.Aprobado,
+            // Provider kyverum + id ⇒ GenerarFurHandler descarga el certificado real del comprador.
+            Provider = BiometricProviders.Kyverum,
+            KyverumVerificationId = $"kyv-{parte ?? "titular"}",
             Name = "X",
             DocumentType = "CC",
             DocumentNumber = "1",
@@ -102,19 +139,94 @@ public sealed class FurHandlerTests
     }
 
     [Fact]
-    public async Task Generar_Traspaso_WithoutBiometria_RejectsGate()
+    public async Task Generar_Traspaso_WithoutBiometria_GeneratesFurNoFirmadoWithoutCertificate()
     {
+        // HU #10463 AC1/AC5: sin validación (falta vendedor) el FUR se genera igual (NO biometria_gate)
+        // y NO se emite el certificado de identidad.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
-        instance.BiometricValidations.Add(Bio("comprador")); // falta vendedor
+        WithOrganismo(instance);
+        instance.BiometricValidations.Add(Bio("comprador")); // falta vendedor -> identidad no válida
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
-        error.Should().Be("biometria_gate");
-        _storage.Saved.Should().BeEmpty();
+        error.Should().BeNull();
+        // FUR + compraventa (traspaso), SIN certificado_identidad.
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "compraventa"]);
+        instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    [Fact]
+    public async Task Generar_Matricula_WithoutBiometria_GeneratesOnlyFurNoCertificate()
+    {
+        // HU #10463 AC1/AC5: matrícula sin biométrica del comprador → FUR sin certificado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance); // sin biométrica
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
+        instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    private static ProcedureInstanceActor ActorJuridico(ProcedureInstance instance) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "comprador",
+            DocumentType = "NIT",
+            DocumentNumber = "900123456",
+            FullName = "EMPRESA DEMO S.A.S.",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    [Fact]
+    public async Task Generar_ConActorPersonaJuridica_GeneraCertificadoRuesSystem()
+    {
+        // HU #10589 AC: un actor persona jurídica (NIT) genera el certificado RUES (Source=system)
+        // que se incorpora al consolidado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
+        instance.Attachments.Should().Contain(a => a.Tipo == "certificado_rues" && a.Source == "system");
+    }
+
+    [Fact]
+    public async Task Generar_SinActorPersonaJuridica_NoGeneraCertificadoRues()
+    {
+        // Sin actor NIT no se emite el certificado RUES.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rues");
     }
 
     [Fact]
@@ -158,6 +270,70 @@ public sealed class FurHandlerTests
         error.Should().BeNull();
         // Matrícula: FUR + certificado de identidad (sin compraventa).
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "certificado_identidad"]);
+        _certClient.RequestedIds.Should().ContainSingle().Which.Should().Be("kyv-comprador");
+    }
+
+    [Fact]
+    public async Task Generar_CertificadoDownloadFails_GeneratesFurWithoutCertificate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.BiometricValidations.Add(Bio(parte: "comprador"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        // Kyverum caído: la descarga del certificado lanza. NO debe bloquear ni abortar el FUR.
+        _certClient.Throw = new KyverumCertificateException("Kyverum no disponible.", transient: true);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        // Sin mock: solo el FUR; el certificado se omite tras el warning.
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
+        instance.Attachments.Should().NotContain(a => a.Tipo == "certificado_identidad");
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Generar_CertificadoNotAvailable_GeneratesFurWithoutCertificate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.BiometricValidations.Add(Bio(parte: "comprador"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        // Kyverum sin certificado para ese id (404 → null).
+        _certClient.ReturnNull = true;
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
+    }
+
+    [Fact]
+    public async Task Generar_MockProvider_SkipsCertificateDownload()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        // Validación mock (sin id Kyverum): no hay certificado externo que descargar.
+        var bio = Bio(parte: "comprador");
+        bio.Provider = BiometricProviders.Mock;
+        bio.KyverumVerificationId = null;
+        instance.BiometricValidations.Add(bio);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
+        _certClient.RequestedIds.Should().BeEmpty();
     }
 
     [Fact]
@@ -242,27 +418,6 @@ public sealed class MockFurDocumentGeneratorTests
         content.Should().Contain("11001000");
         content.Should().Contain("Juan");
         content.Should().Contain("MOCK FUR");
-    }
-
-    [Fact]
-    public void GenerateIdentityCertificate_EmbedsBuyerAndScore()
-    {
-        var doc = new MockIdentityCertificateGenerator().GenerateIdentityCertificate(
-            new IdentityCertificateData(
-                ProcedureInstanceId: Guid.NewGuid(),
-                ReferenceNumber: "TRM-2026-000001",
-                CompradorNombre: "Juan Pérez",
-                CompradorDocumento: "123",
-                Score: 95,
-                Resultado: "APROBADO"));
-
-        doc.Tipo.Should().Be("certificado_identidad");
-        doc.Mimetype.Should().Be("text/plain");
-        var content = Encoding.UTF8.GetString(doc.Content);
-        content.Should().Contain("Juan Pérez");
-        content.Should().Contain("123");
-        content.Should().Contain("95");
-        content.Should().Contain("APROBADO");
     }
 
     [Fact]

@@ -75,7 +75,7 @@ internal sealed class AdminProcedureInstanceRepository : IProcedureInstanceRepos
             TenantId = instance.TenantId,
             ProcedureTypeId = instance.ProcedureTypeId,
             ReferenceNumber = instance.ReferenceNumber,
-            Status = "draft",
+            Status = Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador,
             TransitOfficeId = instance.TransitOfficeId,
             CreatedByUserId = instance.CreatedByUserId,
             CreatedAt = now,

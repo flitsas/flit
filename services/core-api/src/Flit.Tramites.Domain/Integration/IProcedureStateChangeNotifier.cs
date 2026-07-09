@@ -1,12 +1,18 @@
 namespace Flit.Tramites.Domain.Integration;
 
-/// <summary>Notificación de cambio de estado de trámite hacia integraciones OT (HU #10216).</summary>
+/// <summary>
+/// Notificación de cambio de estado de trámite hacia integraciones OT (HU #10216).
+/// N 03 (RF05/RNF01): incluye el motivo de la transición y el usuario que la ejecutó
+/// (opcionales con default para no romper a los emisores existentes).
+/// </summary>
 public sealed record ProcedureStateChangeEvent(
     Guid TenantId,
     Guid ProcedureInstanceId,
     string? FromStatus,
     string ToStatus,
-    DateTimeOffset ChangedAt);
+    DateTimeOffset ChangedAt,
+    string? Reason = null,
+    Guid? ChangedByUserId = null);
 
 /// <summary>Puerto para notificar cambios de estado sin acoplar trámites al módulo Admin.</summary>
 public interface IProcedureStateChangeNotifier

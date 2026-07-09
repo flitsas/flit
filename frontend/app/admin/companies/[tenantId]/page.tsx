@@ -10,6 +10,7 @@ import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTab
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
+import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
@@ -86,7 +87,7 @@ function CompanyDetail() {
         subtitle="Edita las políticas operativas y revisa el historial de cambios."
       />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" style={{ borderColor: "#DFE5ED" }}>
+      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
@@ -110,6 +111,7 @@ function CompanyDetail() {
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
                 otSlot={<OTMatrixPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
+                documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
               />
             </>
           )}

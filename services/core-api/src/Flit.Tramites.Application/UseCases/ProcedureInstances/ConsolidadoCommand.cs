@@ -4,7 +4,6 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
-using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -22,29 +21,34 @@ public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document);
 public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    ChecklistMatrixCompleteness? matrixCompleteness = null)
 {
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
+        // reglas condicionales) resuelva la completitud con el mismo contexto que radicación.
+        var instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
-            return (null, "modalidad_no_soportada");
+        // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
+        // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
 
         if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
             return (null, SubmitGate.FurRequerido);
 
-        if (!DocumentosObligatoriosCompletos(instance))
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
+        if (!(docsCompletos ?? DocumentosObligatoriosCompletos(instance)))
             return (null, SubmitGate.DocumentosIncompletos);
 
-        var ordered = MatriculaConsolidadoOrdering.SelectOrdered(instance.Attachments);
+        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -123,9 +127,6 @@ public sealed class GenerarConsolidadoHandler(
 
     private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
-        if (DemoFlags.RelaxDocs)
-            return true;
-
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);

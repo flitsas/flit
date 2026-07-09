@@ -4,7 +4,9 @@ using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Api.Middleware;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -150,11 +152,54 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en estado draft"),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en estado borrador"),
+                // B11 (HU #10659) — en traspaso el OT proviene del RUNT y no puede modificarse.
+                "ot_traspaso_no_modificable" => Results.Problem(statusCode: 409, title: "Conflict", detail: "En un traspaso el organismo de tránsito proviene del RUNT y no puede modificarse."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
                 _ => Results.Ok(result)
             };
         }).WithName("PatchProcedureInstanceFieldValues");
+
+        // R4 (HU #10595) — decisión de prenda (gravamen) del trámite. En matrícula es DECLARATIVA
+        // (informativa: no se añade a SubmitGate, por lo que no bloquea la radicación). En traspaso es
+        // gate (HU #10597) y admite modificación post-registro versionada (HU #10599). El versionado
+        // (nueva vigente reemplaza a la anterior) lo maneja el handler; la prenda vive en su propia
+        // tabla, así que escribir fuera de borrador no viola la inmutabilidad de field_values.
+        group.MapPut("/instances/{id:guid}/prenda", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RegistrarPrendaInput request,
+            HttpContext http,
+            RegistrarPrendaHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
+                // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
+                TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite modificar la prenda."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("PutProcedureInstancePrenda");
+
+        // Lectura de la decisión de prenda vigente del trámite (o null si no hay ninguna).
+        group.MapGet("/instances/{id:guid}/prenda", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetPrendaVigenteHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleAsync(id, tenantId.Value, ct);
+            return Results.Ok(result);
+        }).WithName("GetProcedureInstancePrenda");
 
         // HU #10349 (AC1) — finalizar borrador: datos completos (actores, docs, organismo) sin exigir
         // identidad ni FUR. Deja la instancia en draft con draft_finalized_at sellado.
@@ -171,13 +216,33 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede finalizar un borrador en estado draft."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede finalizar un borrador en estado borrador."),
                 "actores_incompletos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan datos de los actores del trámite."),
                 "documentos_incompletos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan documentos obligatorios para finalizar el borrador."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de finalizar el borrador."),
                 _ => Results.Ok(result)
             };
         }).WithName("FinalizeDraftProcedureInstance");
+
+        // HU #10536 — marcar/desmarcar el trámite como prioritario para que el OT lo revise con
+        // primacía. No cambia el estado del ciclo de vida; solo el flag de ordenamiento de los
+        // listados. Disponible en cualquier estado (el trámite ya radicado también puede priorizarse
+        // para la bandeja del OT).
+        group.MapPatch("/instances/{id:guid}/priority", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            SetPriorityRequest request,
+            SetPriorityProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request.Prioritario, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("SetProcedureInstancePriority");
 
         group.MapPost("/instances/{id:guid}/submit", async (
             Guid id,
@@ -195,18 +260,65 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La instancia ya fue enviada o no está en draft"),
+                // N 03 — el submit radica vía TramiteLifecycleService; códigos del contrato ADR-0022.
+                TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 422, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite radicación."),
+                TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida, detail: "La instancia ya fue entregada o su estado no permite radicar."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia, detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
-                "documentos_incompletos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan documentos obligatorios para radicar."),
-                "identidad_requerida" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación de identidad del comprador no está aprobada."),
+                TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),
+                TramiteEstadoErrores.IdentidadNoAprobada => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.IdentidadNoAprobada, detail: "La validación de identidad no está aprobada o no está vigente."),
+                // HU #10459 — gate completo de traspaso: la firma de compraventa bloquea la radicación.
+                SubmitGate.FirmaCompraventaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.FirmaCompraventaRequerida, detail: "Falta la firma del contrato de compraventa de comprador y vendedor."),
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de radicar."),
+                SubmitGate.ImprontaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.ImprontaRequerida, detail: "Debe generar o cargar la impronta antes de radicar."),
                 "organismo_no_habilitado" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito seleccionado no está habilitado para la compañía."),
+                // HU #10518 — OT con grant pero desactivado/sin tenant a nivel plataforma.
+                "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
+                // R10 (HU #10597) — gate de prenda del traspaso.
+                TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
+                TramiteEstadoErrores.PrendaDocumentoRequerido => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequerido, detail: "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
                 _ => Results.Ok(result)
             };
         }).WithName("SubmitProcedureInstance");
+
+        // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado) + reason (obligatorio para
+        // anulado/rechazado). Errores: ProblemDetails con title = código de error (ADR-0022).
+        group.MapPost("/instances/{id:guid}/transition", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            TransitionProcedureInstanceRequest request,
+            HttpContext http,
+            TransitionProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, errorCode, errorDetail) = await handler.HandleAsync(
+                id, tenantId.Value, request.ToStatus, request.Reason, ResolveUserId(http.User), ct);
+
+            if (errorCode is null)
+                return Results.Ok(result);
+
+            return errorCode switch
+            {
+                TramiteEstadoErrores.NoEncontrado => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: errorDetail ?? "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
+                // R10 (HU #10597) — gate de prenda del traspaso (409, subsanable con la decisión/documento).
+                TramiteEstadoErrores.PrendaDecisionRequerida or TramiteEstadoErrores.PrendaDocumentoRequerido =>
+                    Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
+                _ => Results.Problem(
+                    statusCode: 422, title: errorCode,
+                    detail: errorDetail ?? "La transición solicitada no es válida."),
+            };
+        }).WithName("TransitionProcedureInstance");
 
         return app;
     }
@@ -245,3 +357,9 @@ internal static class ProcedureInstanceEndpoints
 /// que el operador puede elegir en el FUR.
 /// </summary>
 internal sealed record TransitOfficeOptionDto(Guid Id, string Code, string Name, string CityCode);
+
+/// <summary>Body de POST /instances/{id}/transition (N 03). reason es obligatorio para anulado/rechazado.</summary>
+internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, string? Reason);
+
+/// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
+internal sealed record SetPriorityRequest(bool Prioritario);

@@ -3,14 +3,20 @@ using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Improntas;
+using Flit.Infrastructure.KyverumRunt;
+using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Ocr;
+using Flit.Modules.Improntas.Domain;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
@@ -18,10 +24,12 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -61,22 +69,58 @@ public static class InfrastructureExtensions
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // IT-3 (Feature #10585) — persistencia del agregado de prenda.
+        services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
+        // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions.SectionName));
+        // Se expone el POCO resuelto para que Application (IdentityValidationResultApplier) lo consuma
+        // sin depender de Microsoft.Extensions.Options.
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>>().Value);
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
+
+        // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertRuleRepository, AlertRuleRepository>(); // Reportes2 HU-D
+        services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertMetricsReadRepository, Analytics.Scheduling.AlertMetricsReadRepository>(); // Reportes2 HU-D
+        services.AddHostedService<Analytics.Scheduling.AnalyticsSchedulerProcessor>(); // Reportes2 HU-D
+
+        services.Configure<Telemetry.AnalyticsTelemetryOptions>(configuration.GetSection(Telemetry.AnalyticsTelemetryOptions.SectionName)); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.ChannelUsageEventQueue>(); // Reportes2 HU-A
+        services.AddSingleton<Telemetry.IUsageEventQueue>(sp => sp.GetRequiredService<Telemetry.ChannelUsageEventQueue>()); // Reportes2 HU-A
+        services.AddHostedService<Telemetry.UsageEventWriterProcessor>(); // Reportes2 HU-A
+        services.AddScoped<IUsageMetricsReadRepository, UsageMetricsReadRepository>(); // Reportes2 HU-A
 
         AddAttachmentStorage(services, configuration);
 
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
+        // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
+        // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
+        services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
+        services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
+        AddImprontas(services, configuration);
+        AddRues(services, configuration);
+        AddOcr(services, configuration);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -105,6 +149,10 @@ public static class InfrastructureExtensions
 
         // HU #10164 — Asignación única de rol por usuario tenant
         services.AddScoped<IUserRoleAssignmentRepository, UserRoleAssignmentRepository>();
+
+        // HU #10621 — Editar nombre/correo de un usuario; HU #10619 — repositorio compartido de
+        // suspensión/desactivación/reactivación de usuarios (mismo repositorio, IUserManagementRepository).
+        services.AddScoped<IUserManagementRepository, UserManagementRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();
@@ -184,6 +232,7 @@ public static class InfrastructureExtensions
             o.VerifikSimitMode = Cfg("Consultations:VerifikSimitMode", "VERIFIK_SIMIT_MODE") ?? "mock";
             o.VerifikRnmcMode = Cfg("Consultations:VerifikRnmcMode", "VERIFIK_RNMC_MODE") ?? "mock";
             o.VerifikConductorMode = Cfg("Consultations:VerifikConductorMode", "VERIFIK_CONDUCTOR_MODE") ?? "mock";
+            o.VerifikRuesMode = Cfg("Consultations:VerifikRuesMode", "VERIFIK_RUES_MODE") ?? "mock";
             o.IntempoMode = Cfg("Consultations:IntempoMode", "INTEMPO_MODE") ?? "mock";
         });
 
@@ -233,9 +282,27 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        services.AddHttpClient<VerifikRuesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<VerifikOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         services.AddHttpClient<IntempoConsultationProvider>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<IntempoOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        // Kyverum RUNT (HU #10478): cliente de consultas compartido, mismo config que improntas
+        // (ImprontaRuntOptions / KYVERUM_RUNT_*, configurado en AddImprontas). Los providers
+        // kyverum_runt / kyverum_runt_conductor lo consumen; convergen al mismo ConsultationResult
+        // que Verifik para ser intercambiables en la cadena de proveedores (Fase 3).
+        services.AddHttpClient<KyverumRuntApiClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
@@ -245,9 +312,26 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikSimitConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikRnmcConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikConductorConsultationProvider>());
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<VerifikRuesConsultationProvider>());
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
+        services.AddTransient<IConsultationProvider, KyverumRuntVehicleConsultationProvider>();
+        services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
+
+        // Cadena de proveedores Kyverum-first con fallback a Verifik (HU #10478, Fase 3). Defaults en
+        // appsettings (sección Consultations:DefaultChains / FailoverTimeoutMs); si faltan, el propio
+        // ConsultationChainOptions embebe el orden del plan. Aún no lo consumen los handlers (Fase 5).
+        services.Configure<ConsultationChainOptions>(o =>
+            configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
+        services.AddScoped<IConsultationProviderChainResolver>(sp =>
+            new ConsultationProviderChainResolver(
+                sp.GetRequiredService<IConsultationProviderRegistry>(),
+                sp.GetRequiredService<IOptions<ConsultationChainOptions>>().Value));
+
+        // Puente tenant → override de cadena/timeout (HU #10478, Fase 5). Lee
+        // admin.tenant_operational_policies vía ITenantSettingsRepository.
+        services.AddScoped<IConsultationTenantOverrideProvider, TenantConsultationOverrideProvider>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
@@ -287,6 +371,16 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // Descarga del certificado de la validación (PDF) desde la API pública de Kyverum
+        // (GET /v1/validations/{id}/certificado). Reusa el MISMO Bearer API key que el create — sin cookie
+        // ni login admin (el panel /admin/api exige MFA y no aplica para integración server-to-server).
+        services.AddHttpClient<IKyverumCertificateClient, KyverumCertificateClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
         // El keyring se persiste en Postgres (tabla data_protection_keys vía FlitDbContext) y se
         // fija un ApplicationName estable: así todas las réplicas comparten las mismas llaves y
@@ -296,6 +390,9 @@ public static class InfrastructureExtensions
             .PersistKeysToDbContext<FlitDbContext>()
             .SetApplicationName("flit-core-api");
         services.AddSingleton<IWebhookSecretProtector, DataProtectionWebhookSecretProtector>();
+        // Bitácora ÚNICA del ciclo de identidad (envío/webhook/descifrado/errores). Escribe en su propio
+        // scope, así queda registrada aunque el webhook termine en 500/401.
+        services.AddScoped<IIdentityValidationAuditLog, IdentityValidationAuditLog>();
 
         // Publisher de eventos (AC6): in-process por defecto; stub RabbitMQ activable por flag (fase 2).
         var messaging = Cfg("Messaging:IdentityValidation", "MESSAGING_IDENTITY_VALIDATION") ?? "inprocess";
@@ -315,6 +412,121 @@ public static class InfrastructureExtensions
         services.AddScoped<IIdentityValidationProvider, KyverumIdentityValidationProvider>();
         services.AddScoped<IIdentityValidationProviderResolver, IdentityValidationProviderResolver>();
         services.AddHostedService<IdentityValidationSendRetryProcessor>();
+        // Red de seguridad: reconcilia por consulta las validaciones en_proceso colgadas (webhook perdido).
+        services.AddHostedService<IdentityValidationReconcileProcessor>();
+
+        // HU-3 (N03): puerto de publicación del lifecycle de estados. Encola en
+        // procedure_state_change_outbox (misma unidad de trabajo del lifecycle service); el worker
+        // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
+        services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
+        services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+    }
+
+    private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
+    {
+        // HU #10465 — Kyverum RUNT (improntas:generar). Mismo orden de precedencia que Kyverum Verify
+        // (AddIdentityValidation): env var CRUDA primero (override de deploy 12-factor), fallback a
+        // configuration (appsettings/user-secrets/`ImprontaRunt__*`). runt.kyverum.com es un dominio
+        // DISTINTO de verify.kyverum.com (mismo proveedor, otro producto/scope). La API key NUNCA se
+        // loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<ImprontaRuntOptions>(o =>
+        {
+            o.BaseUrl = Cfg("ImprontaRunt:BaseUrl", "KYVERUM_RUNT_BASE_URL") ?? "https://runt.kyverum.com";
+            o.ApiKey = Cfg("ImprontaRunt:ApiKey", "KYVERUM_RUNT_API_KEY") ?? "";
+            o.AuthScheme = Cfg("ImprontaRunt:AuthScheme", "KYVERUM_RUNT_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("ImprontaRunt:TimeoutSeconds", "KYVERUM_RUNT_TIMEOUT_SECONDS"), out var t)
+                ? t : 30;
+        });
+
+        services.AddHttpClient<IImprontaExternalClient, ImprontaRuntClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<ImprontaRuntOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+    }
+
+    private static void AddRues(IServiceCollection services, IConfiguration configuration)
+    {
+        // RF36 — autogeneración del Certificado RUES. Opt-in: solo se registra el cliente HTTP cuando
+        // Rues:Enabled=true y hay BaseUrl. Sin registro, GenerarRuesAttachmentHandler recibe el cliente
+        // opcional en null y responde "rues_autogen_disabled" (respaldo: carga manual). Env var CRUDA
+        // primero (override 12-factor), fallback a configuration. La API key NUNCA se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        var enabled = string.Equals(Cfg("Rues:Enabled", "RUES_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+        var baseUrl = Cfg("Rues:BaseUrl", "RUES_BASE_URL");
+        if (!enabled || string.IsNullOrWhiteSpace(baseUrl))
+            return;
+
+        services.Configure<RuesOptions>(o =>
+        {
+            o.Enabled = true;
+            o.BaseUrl = baseUrl;
+            o.ApiKey = Cfg("Rues:ApiKey", "RUES_API_KEY") ?? "";
+            o.AuthScheme = Cfg("Rues:AuthScheme", "RUES_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("Rues:TimeoutSeconds", "RUES_TIMEOUT_SECONDS"), out var t) ? t : 30;
+        });
+
+        services.AddHttpClient<IRuesExternalClient, RuesApiClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<RuesOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+    }
+
+    private static void AddOcr(IServiceCollection services, IConfiguration configuration)
+    {
+        // OCR semántico de documentos de trámites. Env var CRUDA primero (override 12-factor),
+        // fallback a configuration — mismo orden y motivo que el resto de integraciones externas.
+        // La API key NUNCA se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<AnthropicOptions>(o =>
+        {
+            o.BaseUrl = Cfg("Anthropic:BaseUrl", "ANTHROPIC_BASE_URL") ?? "https://api.anthropic.com";
+            o.ApiKey = Cfg("Anthropic:ApiKey", "ANTHROPIC_API_KEY") ?? "";
+            o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+            o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
+            o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
+        });
+
+        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum).
+        services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+
+        // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
+        // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
+        services.AddSingleton<IPdfPageExtractor, PdfSharpPageExtractor>();
+
+        // Feature flag de proveedor (mock por defecto ⇒ no rompe dev/CI sin API key). Mismo patrón que
+        // BiometricsProviderOptions / ConsultationProviderModeOptions. El MockDocumentOcrAnalyzer vive en
+        // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
+        var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
+        if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+        else
+            services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
     }
 
     public static async Task InitializeInfrastructureAsync(

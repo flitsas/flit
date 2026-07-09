@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -72,7 +73,7 @@ public sealed class BiometricaHandlerTests
     }
 
     private static ProcedureInstance Instance(
-        Guid id, Guid tenantId, string status = ProcedureInstanceStatus.Draft) =>
+        Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
             Id = id,
@@ -390,7 +391,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -422,7 +423,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -454,7 +455,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -484,7 +485,7 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var (result, error) = await _list.HandleAsync(id, tenant, ct);
 
@@ -684,13 +685,13 @@ public sealed class BiometricaHandlerTests
         // KPIs exactos vienen del conteo agrupado, no de las filas (que están acotadas).
         _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
             .Returns(new Dictionary<string, int>
-        {
-            [BiometricEstados.Aprobado] = 3,
-            [BiometricEstados.Enviado] = 1,
-            [BiometricEstados.EnProceso] = 2,
-            [BiometricEstados.Rechazado] = 1,
-            [BiometricEstados.Expirado] = 1,
-        });
+            {
+                [BiometricEstados.Aprobado] = 3,
+                [BiometricEstados.Enviado] = 1,
+                [BiometricEstados.EnProceso] = 2,
+                [BiometricEstados.Rechazado] = 1,
+                [BiometricEstados.Expirado] = 1,
+            });
 
         var (result, error) = await handler.HandleAsync(tenant, ct: ct);
 

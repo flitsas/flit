@@ -7,6 +7,9 @@ namespace Flit.Infrastructure.Documents.Fur;
 /// <summary>Mapea <see cref="FurDocumentData"/> al diccionario de tokens del manifest overlay.</summary>
 public static class FurFieldMapper
 {
+    /// <summary>Sello impreso en el espacio de firma cuando no hay validación de identidad (HU #10463).</summary>
+    private const string NoFirmadoSello = "NO FIRMADO";
+
     public static IReadOnlyDictionary<string, FurFieldValue> Map(FurDocumentData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -54,7 +57,10 @@ public static class FurFieldMapper
             "vehicle_owner_signature",
             data,
             propietario?.Rol,
-            SellosTexto(data.SellosFirma, esTraspaso ? "vendedor" : "comprador", "propietario"));
+            IdentidadOrSello(
+                data,
+                esTraspaso ? "vendedor" : "comprador",
+                esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
         MarkTramite(dict, esTraspaso, data);
         MarkClase(dict, data.Vehiculo.Clase);
@@ -72,11 +78,15 @@ public static class FurFieldMapper
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, SellosTexto(data.SellosFirma, "comprador"));
+            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, IdentidadOrSello(data, "comprador", ["comprador"]));
             MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
         }
         else
         {
+            // AC2 (#10457): traspaso sin comprador resuelto (o matrícula) → la sección comprador
+            // queda EN BLANCO, sin '-' ni basura. Los checkboxes de tipo de documento del comprador
+            // se marcan explícitamente como no seleccionados (simetría con vehicle_owner, que siempre
+            // se marca en L90) para no dejar casillas en estado indefinido en el overlay.
             dict["vehicle_buyer_first_last_name"] = Text("");
             dict["vehicle_buyer_second_last_name"] = Text("");
             dict["vehicle_buyer_name"] = Text("");
@@ -85,9 +95,19 @@ public static class FurFieldMapper
             dict["vehicle_buyer_city"] = Text("");
             dict["vehicle_buyer_phone"] = Text("");
             dict["vehicle_buyer_signature"] = Text("");
+            MarkDocType(dict, null, null, "vehicle_buyer");
         }
 
         MarkDocType(dict, propietario?.Documento, propietario?.DocumentType, "vehicle_owner");
+
+        // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
+        // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
+        if (!data.IdentidadValidada)
+        {
+            dict["vehicle_owner_signature"] = Text(NoFirmadoSello);
+            if (esTraspaso)
+                dict["vehicle_buyer_signature"] = Text(NoFirmadoSello);
+        }
 
         return dict;
     }
@@ -138,8 +158,8 @@ public static class FurFieldMapper
     {
         MarkCheckbox(dict, "requested_process_1", !esTraspaso);
         MarkCheckbox(dict, "requested_process_2", esTraspaso);
-        MarkCheckbox(dict, "requested_process_11", false);
-        _ = data;
+        // HU #10601 — marca el gravamen (prenda) cuando la decisión vigente del trámite lo implica.
+        MarkCheckbox(dict, "requested_process_11", data.TienePrenda);
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
@@ -244,6 +264,22 @@ public static class FurFieldMapper
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Texto del espacio de firma (HU #10488): prioriza el sello de la validación biométrica de la parte
+    /// (<see cref="FurDocumentData.SellosIdentidad"/>, por rol) y, si no hay, cae al sello previo de firma
+    /// electrónica (<see cref="FurDocumentData.SellosFirma"/>). El override "NO FIRMADO" (sin identidad
+    /// validada) se aplica después en <see cref="Map"/> y tiene la última palabra.
+    /// </summary>
+    private static string IdentidadOrSello(FurDocumentData data, string role, string[] fallbackPartes)
+    {
+        if (data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(role, out var sello)
+            && !string.IsNullOrWhiteSpace(sello))
+            return sello;
+
+        return SellosTexto(data.SellosFirma, fallbackPartes);
     }
 
     private static string SellosTexto(IReadOnlyList<string> sellos, params string[] partes)

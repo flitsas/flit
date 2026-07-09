@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, MoreVertical, Ban, RefreshCw, Eraser, Eye } from "lucide-react";
+import { MoreVertical, Ban, RefreshCw, Eraser, Eye } from "lucide-react";
 
 const ROWS = [
   { id: "TRASP-02_FLIT-8841", tipo: "Traspaso (Bilateral)", prop: "Carlos Mendoza Díaz", tenant: "Renting Colombia S.A.", fecha: "14/05/2026", ot: "ST de Sabaneta", estado: "Borrador" },
@@ -46,7 +46,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
           className="rounded-2xl px-5 py-3 text-sm font-semibold text-white flex items-center gap-2 transition hover:scale-[1.02]"
           style={{ background: "linear-gradient(135deg,#557eff,#3b5bdb)", boxShadow: "0 10px 30px -10px rgba(85,126,255,0.6)" }}
         >
-          <Plus className="h-4 w-4" /> Iniciar Nuevo Traspaso Vehicular Avanzado
+          Iniciar Nuevo Traspaso Vehicular Avanzado
         </button>
       </div>
 

@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -103,12 +104,12 @@ public sealed class CreateProcedureInstanceTests
         result.Should().NotBeNull();
         var year = DateTimeOffset.UtcNow.Year;
         result!.ReferenceNumber.Should().Be($"TRM-{year}-000001");
-        result.Status.Should().Be(ProcedureInstanceStatus.Draft);
+        result.Status.Should().Be(TramiteEstado.Borrador);
 
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
-                i.Status == ProcedureInstanceStatus.Draft &&
-                i.StatusHistory.Any(h => h.ToStatus == ProcedureInstanceStatus.Draft && h.FromStatus == null)),
+                i.Status == TramiteEstado.Borrador &&
+                i.StatusHistory.Any(h => h.ToStatus == TramiteEstado.Borrador && h.FromStatus == null)),
             year,
             ct);
     }

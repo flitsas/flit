@@ -4,12 +4,13 @@ namespace Flit.Admin.Application.OtProfile;
 
 /// <summary>
 /// Guard de acciones en modo Quipux read-only (HU #10215 AC4).
-/// Bloquea <c>aprobar</c> y <c>rechazar</c> cuando el perfil OT está en QX read-only.
+/// Bloquea las acciones de escritura del OT (<c>aprobar</c>, <c>rechazar</c>,
+/// <c>generar_consolidado</c>, <c>adjuntar_lt</c>) cuando el perfil OT está en QX read-only.
 /// </summary>
 public sealed class QuipuxReadOnlyGuard : IQuipuxReadOnlyGuard
 {
     private static readonly HashSet<string> RestrictedActions =
-        new(StringComparer.OrdinalIgnoreCase) { "aprobar", "rechazar" };
+        new(StringComparer.OrdinalIgnoreCase) { "aprobar", "rechazar", "generar_consolidado", "adjuntar_lt" };
 
     private readonly IOtProfileRepository _profileRepository;
 

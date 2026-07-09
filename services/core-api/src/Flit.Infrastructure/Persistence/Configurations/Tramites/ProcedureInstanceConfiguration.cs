@@ -24,7 +24,8 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.ReferenceNumber).HasMaxLength(30).IsRequired();
-        builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("draft");
+        // N 03 (ADR-0022): estados de negocio en español (TramiteEstado); default = borrador.
+        builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
         builder.Property(x => x.ModalidadEntrada)
@@ -44,7 +45,18 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(x => new { x.TenantId, x.DraftFinalizedAt })
             .HasDatabaseName("ix_procedure_instances_draft_finalized")
-            .HasFilter("status = 'draft' AND draft_finalized_at IS NOT NULL");
+            .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
+
+        // HU #10536 — prioritario. Columna agregada por migración SQL cruda (la tabla está
+        // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Índice que sostiene el
+        // ordenamiento con primacía de los listados (prioritarios primero, luego por fecha).
+        builder.Property(x => x.Prioritario)
+            .HasColumnName("prioritario")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.HasIndex(x => new { x.TenantId, x.Prioritario, x.CreatedAt })
+            .HasDatabaseName("ix_procedure_instances_prioritario");
 
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()

@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -70,7 +71,7 @@ public sealed class ConsolidadoHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = "matricula_inicial",
             TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -81,6 +82,33 @@ public sealed class ConsolidadoHandlerTests
         AddAttachment(instance, "impronta", "impronta.pdf", "%PDF-impronta");
         AddAttachment(instance, "fur", "fur.pdf", "%PDF-fur");
         AddAttachment(instance, "certificado_identidad", "cert.pdf", "%PDF-cert");
+
+        return instance;
+    }
+
+    private static ProcedureInstance TraspasoInstance(Guid id, Guid tenantId)
+    {
+        var instance = new ProcedureInstance
+        {
+            Id = id,
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000100",
+            Status = TramiteEstado.Borrador,
+            ModalidadEntrada = "traspaso",
+            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        // Obligatorios del checklist de traspaso + FUR + certificado + compraventa.
+        AddAttachment(instance, "fur", "fur.pdf", "%PDF-fur");
+        AddAttachment(instance, "certificado_identidad", "cert.pdf", "%PDF-cert");
+        AddAttachment(instance, "compraventa", "compraventa.pdf", "%PDF-compraventa");
+        AddAttachment(instance, "impronta", "impronta.pdf", "%PDF-impronta");
+        AddAttachment(instance, "soat", "soat.pdf", "%PDF-soat");
+        AddAttachment(instance, "rtm", "rtm.pdf", "%PDF-rtm");
+        AddAttachment(instance, "paz_salvo", "paz_salvo.pdf", "%PDF-pazsalvo");
+        AddAttachment(instance, "cedulas", "cedulas.pdf", "%PDF-cedulas");
 
         return instance;
     }
@@ -105,22 +133,96 @@ public sealed class ConsolidadoHandlerTests
         });
     }
 
-    [Fact]
-    public async Task HandleAsync_Traspaso_ReturnsModalidadNoSoportada()
+    private string ConsolidadoContent()
     {
+        var path = _storage.Saved.Last();
+        return System.Text.Encoding.UTF8.GetString(_storage.Files[path]);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Matricula_OrdenaPorModalidad()
+    {
+        // Matrícula ⇒ factura antes que aduana (precedencia por modalidad, que también ordena
+        // los documentos generados —FUR/licencia— junto a los subidos).
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
-        instance.ModalidadEntrada = "traspaso";
-        instance.TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard;
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage);
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        var content = ConsolidadoContent();
+        content.IndexOf("factura", StringComparison.Ordinal)
+            .Should().BeLessThan(content.IndexOf("aduana", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ModalidadDistinta_GeneraConOrdenGenerico()
+    {
+        // HU #10522 (RF27/41): una modalidad distinta de matrícula/traspaso YA NO se rechaza;
+        // se genera el consolidado con el orden genérico (documentos generados primero).
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ModalidadEntrada = "sucesion";
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().NotBe("modalidad_no_soportada");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Document.Tipo.Should().Be("consolidado");
+    }
+
+    [Fact]
+    public async Task HandleAsync_TraspasoSinFur_ReturnsFurRequerido()
+    {
+        // AC2 (#10455): traspaso sin FUR → fur_requerido, NUNCA modalidad_no_soportada.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
 
         result.Should().BeNull();
-        error.Should().Be("modalidad_no_soportada");
+        error.Should().Be(SubmitGate.FurRequerido);
+    }
+
+    [Fact]
+    public async Task HandleAsync_TraspasoCompleto_IncluyeCompraventa()
+    {
+        // AC1 (#10455): traspaso completo → consolidado con la compraventa en paginas_incluidas.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Document.Tipo.Should().Be("consolidado");
+        instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado")
+            .Which.Payload.Should().Contain("compraventa");
     }
 
     [Fact]
@@ -131,7 +233,7 @@ public sealed class ConsolidadoHandlerTests
         var instance = MatriculaInstance(id, tenantId);
         instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
@@ -150,7 +252,7 @@ public sealed class ConsolidadoHandlerTests
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);

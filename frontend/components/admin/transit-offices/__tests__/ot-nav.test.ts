@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { foldOtSearch, matchesOtOfficeSearch } from "../ot-nav";
+import { foldOtSearch, matchesOtOfficeSearch, OT_HUB_TABS, otHubModulePath } from "../ot-nav";
+
+describe("ot-nav — refactor adminOT", () => {
+  it("incluye el tab 'usuarios' en OT_HUB_TABS", () => {
+    const tab = OT_HUB_TABS.find((t) => t.id === "usuarios");
+    expect(tab).toBeDefined();
+    expect(tab?.label).toBe("Usuarios");
+    expect(tab?.segment).toBe("usuarios");
+  });
+
+  it("otHubModulePath arma la ruta del tab usuarios", () => {
+    expect(otHubModulePath("ot-1", "usuarios")).toBe("/admin/transit-offices/ot-1/usuarios");
+  });
+});
 
 describe("ot-nav — HU #10236", () => {
   it("foldOtSearch ignora tildes", () => {

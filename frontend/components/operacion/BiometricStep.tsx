@@ -1,13 +1,26 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  Download,
+  ExternalLink,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  XCircle,
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
   BiometricParte,
   BiometricValidation,
+  IdentityAuditEvent,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -42,6 +55,20 @@ function formatFecha(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+}
+
+/**
+ * ¿El usuario actual es SuperAdmin? Se resuelve del JWT en cliente (tras montar, para no romper la
+ * hidratación SSR). Gatea la bitácora técnica de la validación, que trae detalle de soporte
+ * (descifrado, error_type, firma) que no debe ver un gestor normal.
+ */
+function useIsSuperAdmin(): boolean {
+  const [is, setIs] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIs(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
+  return is;
 }
 
 /**
@@ -193,7 +220,6 @@ function BiometricSkeleton({ partes }: { partes: BiometricParte[] }) {
         <div
           key={parte}
           className="rounded-xl border p-4"
-          style={{ borderColor: '#DFE5ED' }}
           aria-hidden="true"
         >
           <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
@@ -219,18 +245,27 @@ function ParteCard({
   onChanged: () => void;
 }) {
   const estado = validation?.status;
+  const isAdmin = useIsSuperAdmin();
+  // La bitácora solo aplica a validaciones Kyverum (mock no genera eventos) y solo para soporte.
+  const showAudit = isAdmin && validation != null && validation.provider === KYVERUM;
   return (
     <fieldset
       className="rounded-xl border p-4"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
     >
       <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
 
       {estado === 'aprobado' ? (
-        <VerifiedView validation={validation!} />
-      ) : estado === 'en_proceso' && validation?.captureUrl ? (
-        <KyverumPendingView validation={validation} />
+        <VerifiedView validation={validation!} instanceId={instanceId} />
+      ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
+        // El enlace de captura solo se muestra si NO está vencido. Un enlace vencido (validation.expired:
+        // backend `now > expiresAt`) cae a RejectedView aunque el estado siga en_proceso, para informar el
+        // vencimiento y re-habilitar el botón de reenvío de inmediato (sin esperar a que el worker lo cambie).
+        <KyverumPendingView
+          validation={validation}
+          instanceId={instanceId}
+          onChanged={onChanged}
+        />
       ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
         <RejectedView
           validation={validation!}
@@ -247,30 +282,113 @@ function ParteCard({
           onStarted={onChanged}
         />
       )}
+
+      {showAudit && (
+        <IdentityAuditPanel instanceId={instanceId} validationId={validation!.id} />
+      )}
     </fieldset>
   );
 }
 
 /** Tarjeta verde "Identidad verificada — {score}/100" con el nombre de la parte. */
-function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
+function VerifiedView({
+  validation: v,
+  instanceId,
+}: {
+  validation: BiometricValidation;
+  instanceId: string | null;
+}) {
   return (
-    <div
-      className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
-    >
-      <span
-        className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
-        style={{ background: '#5B8A1F', color: 'white' }}
-        aria-hidden
+    <div className="space-y-3">
+      <div
+        className="flex items-center gap-3 rounded-xl p-3"
+        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
       >
-        <Check className="h-5 w-5" />
-      </span>
-      <div className="space-y-0.5">
-        <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
-          Identidad verificada — {v.score ?? 95}/100
-        </p>
-        <p className="text-[11px] opacity-70">{v.name}</p>
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
+          style={{ background: '#5B8A1F', color: 'white' }}
+          aria-hidden
+        >
+          <Check className="h-5 w-5" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
+            Identidad verificada — {v.score ?? 95}/100
+          </p>
+          <p className="text-[11px] opacity-70">{v.name}</p>
+        </div>
       </div>
+      {/* El certificado oficial (PDF) solo existe para Kyverum; el mock no lo emite. */}
+      {v.provider === KYVERUM && (
+        <CertificadoButton instanceId={instanceId} validationId={v.id} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Descarga best-effort del certificado oficial (PDF) de una validación aprobada. Reusa el patrón
+ * blob → objectURL → anchor de ExpedienteVisor. Si Kyverum no tiene el certificado (404) o falla
+ * el proveedor, se muestra el mensaje inline sin bloquear el resto del paso.
+ */
+function CertificadoButton({
+  instanceId,
+  validationId,
+}: {
+  instanceId: string | null;
+  validationId: string;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    if (!instanceId) return;
+    setError(null);
+    setDownloading(true);
+    try {
+      const { blob, filename } = await tramitesClient.downloadBiometricCertificado(
+        instanceId,
+        validationId,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'No se pudo descargar el certificado.',
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => void handleDownload()}
+        disabled={downloading || !instanceId}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: '#5B8A1F', color: '#5B8A1F' }}
+        aria-label="Descargar certificado de identidad en PDF"
+      >
+        {downloading ? (
+          <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
+        ) : (
+          <Download className="h-3 w-3" aria-hidden />
+        )}
+        {downloading ? 'Descargando…' : 'Descargar certificado'}
+      </button>
+      {error && (
+        <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -280,7 +398,15 @@ function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
  * también aquí (link copiable + QR) para que el gestor pueda reenviarlo/mostrarlo si el correo no
  * llega. El estado se actualiza solo (polling) cuando llegue el webhook.
  */
-function KyverumPendingView({ validation: v }: { validation: BiometricValidation }) {
+function KyverumPendingView({
+  validation: v,
+  instanceId,
+  onChanged,
+}: {
+  validation: BiometricValidation;
+  instanceId: string | null;
+  onChanged: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const captureUrl = v.captureUrl!;
 
@@ -302,12 +428,32 @@ function KyverumPendingView({ validation: v }: { validation: BiometricValidation
           Esperando validación de {v.name}
         </p>
       </div>
+
+      {/* Un intento no pasó pero la validación SIGUE abierta (Kyverum permite reintentar): se informa el motivo
+          real y que el cliente puede volver a intentar en su móvil, sin marcar la validación como rechazada. */}
+      {v.ultimoIntentoMotivo && (
+        <div
+          className="rounded-xl p-2.5 text-[11px]"
+          style={{ background: 'rgba(178,106,0,0.08)', border: '1px solid rgba(178,106,0,0.3)', color: '#B26A00' }}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="font-semibold">
+            Intento {v.intentos} de {v.maxIntentos} no pasó.
+          </span>{' '}
+          {v.ultimoIntentoMotivo}{' '}
+          {v.maxIntentos - v.intentos > 0
+            ? `Quedan ${v.maxIntentos - v.intentos} intento(s): el cliente puede reintentar en su móvil (aquí se actualiza al aprobar o al agotar los intentos).`
+            : ''}
+        </div>
+      )}
+
       <p className="text-[11px] opacity-70">
         Enviamos el enlace de captura al correo del cliente ({v.email}). También puedes compartirlo:
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="rounded-xl border bg-white p-2" style={{ borderColor: '#DFE5ED' }}>
+        <div className="rounded-xl border bg-white p-2">
           <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
@@ -347,6 +493,84 @@ function KyverumPendingView({ validation: v }: { validation: BiometricValidation
           </a>
         </div>
       </div>
+
+      <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
+    </div>
+  );
+}
+
+/**
+ * Acción "Actualizar estado": reconcilia la validación consultando su estado real a Kyverum (self-heal
+ * si el webhook no llegó). El resultado normalmente llega solo por webhook en segundos, así que el botón
+ * aparece únicamente si la validación sigue colgada tras ~15s, para no invitar a consultas innecesarias.
+ * Si la consulta la resuelve (`updated`), notifica al wizard para recomponer el gate.
+ */
+function ReconcileAction({
+  instanceId,
+  validationId,
+  onReconciled,
+}: {
+  instanceId: string | null;
+  validationId: string;
+  onReconciled: () => void;
+}) {
+  const readOnly = useWizardReadOnly();
+  const [visible, setVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 15000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (readOnly || !visible) return null;
+
+  const handleReconcile = async () => {
+    if (!instanceId) return;
+    setError(null);
+    setInfo(null);
+    setSubmitting(true);
+    try {
+      const res = await tramitesClient.reconcileBiometric(instanceId, validationId);
+      if (res.updated) onReconciled();
+      else setInfo('El proveedor aún no resuelve la validación. Intenta de nuevo en unos segundos.');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'No se pudo actualizar el estado.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5 border-t pt-3">
+      <p className="text-[11px] opacity-60">
+        ¿La captura ya se completó y sigue en espera? Consulta el estado directamente al proveedor.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleReconcile()}
+        disabled={submitting || !instanceId}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: '#557EFF', color: '#557EFF' }}
+        aria-label="Actualizar estado de la validación consultando al proveedor"
+      >
+        <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
+        {submitting ? 'Consultando…' : 'Actualizar estado'}
+      </button>
+      {info && (
+        <p className="text-[11px] opacity-70" role="status" aria-live="polite">
+          {info}
+        </p>
+      )}
+      {error && (
+        <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -491,6 +715,134 @@ function StartAction({
         )}
         {submitting ? 'Procesando…' : buttonLabel}
       </button>
+    </div>
+  );
+}
+
+/** Texto del resultado de un evento de bitácora, anexando el código HTTP si lo hay. */
+function auditOutcomeLabel(e: IdentityAuditEvent): string {
+  return e.httpStatus != null ? `${e.outcome} (HTTP ${e.httpStatus})` : e.outcome;
+}
+
+/**
+ * Bitácora técnica (solo soporte/SuperAdmin) del ciclo de una validación de identidad. Disclosure
+ * colapsable que carga los eventos bajo demanda (`GET .../audit`): envío, llegada del webhook, si
+ * descifró el secreto, firma, resultado y reconciliaciones. Diagnóstico de "qué pasó" sin entrar a la
+ * BD ni a los logs del pod. Sin PII ni secretos (el backend ya sanea).
+ */
+function IdentityAuditPanel({
+  instanceId,
+  validationId,
+}: {
+  instanceId: string | null;
+  validationId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAudit = useCallback(async () => {
+    if (!instanceId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await tramitesClient.getBiometricAudit(instanceId, validationId);
+      setEvents(res.events);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar la bitácora.');
+    } finally {
+      setLoading(false);
+    }
+  }, [instanceId, validationId]);
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    // Carga perezosa: solo la primera vez que se abre (o si quedó sin datos por un error previo).
+    if (next && events === null && !loading) void loadAudit();
+  };
+
+  return (
+    <div className="mt-3 border-t pt-3">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        aria-expanded={open}
+        aria-label="Historial técnico de la validación (soporte)"
+      >
+        <ChevronRight
+          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
+          aria-hidden
+        />
+        Historial técnico (soporte)
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          {loading && (
+            <p className="text-[11px] opacity-60" role="status" aria-live="polite">
+              Cargando bitácora…
+            </p>
+          )}
+          {error && (
+            <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+              {error}
+            </p>
+          )}
+          {events && events.length === 0 && (
+            <p className="text-[11px] opacity-60">Sin eventos registrados todavía.</p>
+          )}
+          {events && events.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[10.5px]">
+                <thead>
+                  <tr className="opacity-60">
+                    <th className="py-1 pr-2 font-semibold">Fecha</th>
+                    <th className="py-1 pr-2 font-semibold">Etapa</th>
+                    <th className="py-1 pr-2 font-semibold">Resultado</th>
+                    <th className="py-1 pr-2 font-semibold">Cifrado</th>
+                    <th className="py-1 pr-2 font-semibold">Detalle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((e, i) => (
+                    <tr
+                      key={i}
+                      className="border-t align-top"
+                      style={{ borderColor: '#EEF1F6' }}
+                    >
+                      <td className="whitespace-nowrap py-1 pr-2 opacity-70">
+                        {formatFecha(e.occurredAt)}
+                      </td>
+                      <td className="py-1 pr-2 font-medium">{e.stage}</td>
+                      <td className="py-1 pr-2">{auditOutcomeLabel(e)}</td>
+                      <td className="py-1 pr-2">
+                        {e.decryptOk == null ? '—' : e.decryptOk ? 'OK' : 'Falló'}
+                      </td>
+                      <td className="py-1 pr-2 opacity-70">
+                        {e.errorType ?? e.providerStatus ?? e.message ?? ''}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => void loadAudit()}
+            disabled={loading || !instanceId}
+            className="flex items-center gap-1 text-[10.5px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ color: '#557EFF' }}
+            aria-label="Refrescar bitácora"
+          >
+            <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+            Refrescar
+          </button>
+        </div>
+      )}
     </div>
   );
 }

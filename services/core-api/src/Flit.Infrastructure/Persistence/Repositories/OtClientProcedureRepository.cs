@@ -4,6 +4,7 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -15,10 +16,12 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 {
     private readonly FlitDbContext _context;
+    private readonly ITramiteTransitionPublisher _transitionPublisher;
 
-    public OtClientProcedureRepository(FlitDbContext context)
+    public OtClientProcedureRepository(FlitDbContext context, ITramiteTransitionPublisher transitionPublisher)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -62,7 +65,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
 
                         var items = await query
-                            .OrderByDescending(p => p.CreatedAt)
+                            // HU #10536 — los trámites prioritarios se revisan con primacía en la bandeja del OT.
+                            .OrderByDescending(p => p.Prioritario)
+                            .ThenByDescending(p => p.CreatedAt)
                             .ThenByDescending(p => p.Id)
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
@@ -76,6 +81,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
+                                Prioritario = p.Prioritario,
                             })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
@@ -93,12 +99,63 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid otTenantId,
         Guid procedureInstanceId,
         CancellationToken cancellationToken = default) =>
+        GetByIdAsync(otTenantId, procedureInstanceId, transitOfficeIdOverride: null, cancellationToken);
+
+    public Task<OtClientProcedure?> GetByIdAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
         ExecuteOtScopedAsync(
             otTenantId,
+            transitOfficeIdOverride,
             transitOfficeId => FindAccessibleProcedureAsync(
                 transitOfficeId,
                 procedureInstanceId,
                 cancellationToken),
+            cancellationToken);
+
+    public Task<OtBandejaHealth?> GetDeliveryHealthAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId =>
+            {
+                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
+                return await ExecuteCrossTenantReadAsync(
+                    async () =>
+                    {
+                        // Todos los 'entregado' dirigidos a este organismo, con o sin grant vigente:
+                        // los "sin grant" son precisamente los que la bandeja no muestra (R09).
+                        var delivered = _context.ProcedureInstances
+                            .AsNoTracking()
+                            .Where(p => p.DeletedAt == null
+                                && p.Status == TramiteEstado.Entregado
+                                && p.TransitOfficeId == transitOfficeId);
+
+                        var deliveredTotal = await delivered
+                            .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        var deliveredWithGrant = grantedClientTenantIds.Count == 0
+                            ? 0
+                            : await delivered
+                                .Where(p => grantedClientTenantIds.Contains(p.TenantId))
+                                .CountAsync(cancellationToken).ConfigureAwait(false);
+
+                        return (OtBandejaHealth?)new OtBandejaHealth(
+                            transitOfficeId,
+                            deliveredTotal,
+                            deliveredWithGrant,
+                            deliveredTotal - deliveredWithGrant);
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            },
             cancellationToken);
 
     public Task<OtClientProcedure?> ApproveAsync(
@@ -110,8 +167,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            ProcedureInstanceStatus.PendingOt,
-            ProcedureInstanceStatus.ApprovedOt,
+            TramiteEstado.Entregado,
+            TramiteEstado.Aprobado,
             approvedBy,
             reason: null,
             source,
@@ -127,8 +184,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            ProcedureInstanceStatus.PendingOt,
-            ProcedureInstanceStatus.RejectedOt,
+            TramiteEstado.Entregado,
+            TramiteEstado.Rechazado,
             rejectedBy,
             reason,
             source,
@@ -174,6 +231,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
+                // N 03 (ADR-0022): la decisión OT también obedece la máquina de estados única
+                // (entregado→aprobado|rechazado); un estado inesperado no transiciona.
+                if (!TramiteStateMachine.IsValidTransition(entity.Status, targetStatus))
+                {
+                    return null;
+                }
+
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
                     .ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
@@ -181,6 +245,22 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
+                // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
+                // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).
+                await _transitionPublisher.EnqueueAsync(
+                    new TramiteTransitionRecord(
+                        accessible.ClientTenantId,
+                        entity.Id,
+                        expectedStatus,
+                        targetStatus,
+                        reason,
+                        resolvedChangedBy,
+                        now),
+                    cancellationToken).ConfigureAwait(false);
+
+                // El historial se escribe aquí (no vía ITramiteTransitionRecorder) para conservar
+                // el metadata cross-tenant (ot_tenant_id/source) dentro de la transacción RLS del
+                // tenant cliente; la unificación con el recorder queda para la integración N 03.
                 _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
                 {
                     Id = Guid.NewGuid(),
@@ -372,10 +452,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return await action().ConfigureAwait(false);
     }
 
-    private async Task<T> ExecuteInClientTenantScopeAsync<T>(
+    public async Task<T> ExecuteInClientTenantScopeAsync<T>(
         Guid clientTenantId,
         Func<Task<T>> action,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         if (_context.Database.IsRelational())
         {
@@ -427,6 +507,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,
+        Prioritario = entity.Prioritario,
     };
 
     private async Task<IReadOnlyList<OtClientProcedure>> EnrichDisplayNamesAsync(

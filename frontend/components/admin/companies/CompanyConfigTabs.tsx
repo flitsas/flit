@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, Save, Shuffle, Stamp } from "lucide-react";
+import { Building2, FileClock, FileText, Save, Shuffle, Stamp } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,12 +16,14 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "historial";
+type TabId = "matricula" | "traspasos" | "config" | "documentos" | "historial";
 
 const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[] = [
   { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
   { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
+  // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
+  { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -32,6 +34,7 @@ export interface CompanyConfigTabsProps {
   whitelistSlot?: ReactNode;
   otSlot?: ReactNode;
   auditSlot?: ReactNode;
+  documentosSlot?: ReactNode;
 }
 
 export function CompanyConfigTabs({
@@ -40,6 +43,7 @@ export function CompanyConfigTabs({
   whitelistSlot,
   otSlot,
   auditSlot,
+  documentosSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
@@ -97,7 +101,7 @@ export function CompanyConfigTabs({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" style={{ borderColor: "#DFE5ED" }} role="tablist">
+      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -130,6 +134,7 @@ export function CompanyConfigTabs({
         {tab === "config" && (
           <ConfiguracionEmpresaTab form={form} onChange={patch} otSlot={otSlot} fieldErrors={fieldErrors} />
         )}
+        {tab === "documentos" && documentosSlot}
         {tab === "historial" && auditSlot}
       </div>
 
@@ -147,7 +152,6 @@ export function CompanyConfigTabs({
       {currentTab?.isConfig && (
         <div
           className="sticky bottom-0 flex items-center justify-end gap-3 border-t bg-white/90 py-3 backdrop-blur dark:bg-[#0B0F14]/90"
-          style={{ borderColor: "#DFE5ED" }}
         >
           <button
             type="button"

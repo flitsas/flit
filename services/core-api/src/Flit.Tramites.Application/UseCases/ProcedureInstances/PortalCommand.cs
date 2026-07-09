@@ -2,6 +2,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -251,7 +252,7 @@ public sealed class SubirDocumentoPortalHandler(
             return (null, "file_too_large");
 
         var instance = participant.ProcedureInstance!;
-        if (instance.Status != Domain.Enums.ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();

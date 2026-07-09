@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import { StatusBadge } from '@/components/atom/StatusBadge';
+import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
   InstanceSummary,
@@ -21,41 +25,14 @@ import type {
  * Actualizar y cada vez que cambia `refreshKey`.
  */
 
+// N 03 (RF01) — chip de estado con los 6 estados de negocio en español; labels/colores
+// desde la fuente única lib/tramites/estados.ts (fallback titlecase para valores desconocidos).
 const estadoChip = (
   estado: InstanceStatus,
 ): { label: string; bg: string; color: string; border: string } => {
-  switch (estado) {
-    case 'draft':
-      // En preparación — tono ámbar/neutro.
-      return {
-        label: 'En preparación',
-        bg: 'rgba(245,158,11,0.12)',
-        color: '#b45309',
-        border: 'rgba(245,158,11,0.3)',
-      };
-    case 'submitted':
-      // Enviado a tránsito — tono azul (éxito de envío).
-      return {
-        label: 'Enviado a tránsito',
-        bg: 'rgba(85,126,255,0.12)',
-        color: '#557eff',
-        border: 'rgba(85,126,255,0.3)',
-      };
-    default:
-      // Cualquier otro estado: titlecase del código (in_review, completed, rejected…).
-      return {
-        label: titlecase(estado),
-        bg: 'rgba(100,116,139,0.12)',
-        color: '#475569',
-        border: 'rgba(100,116,139,0.3)',
-      };
-  }
+  const style = estadoChipStyle(estado);
+  return { label: estadoLabel(estado), bg: style.bg, color: style.color, border: style.border };
 };
-
-function titlecase(value: string): string {
-  const text = value.replace(/_/g, ' ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 type Chip = { label: string; bg: string; color: string; border: string };
 
@@ -67,7 +44,7 @@ type Chip = { label: string; bg: string; color: string; border: string };
  * la acción de la fila pase de "Continuar" a "Radicar". Null si no es un borrador finalizado (chip base).
  */
 function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | null {
-  if (item.estado !== 'draft' || !item.draftFinalizedAt) return null;
+  if (item.estado !== 'borrador' || !item.draftFinalizedAt) return null;
   const idv = item.identityValidationStatus;
 
   if (idv === 'rechazado') {
@@ -158,12 +135,20 @@ const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
 
+// Registro de nuevo trámite por modalidad (botones estilo "Nuevo Trámite" del diseño).
+const NEW_TRAMITE_ACTIONS: { id: WizardModalidad; label: string; icon: typeof Car }[] = [
+  { id: 'matricula_inicial', label: 'Matrícula inicial', icon: Car },
+  { id: 'traspaso', label: 'Traspaso estándar', icon: ArrowLeftRight },
+];
+
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
   refreshKey?: number;
+  /** Inicia un nuevo trámite de la modalidad elegida (navega al wizard). */
+  onStartTramite?: (modalidad: WizardModalidad) => void;
 }
 
-export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
+export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,10 +156,14 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
 
   // Filtros client-side.
   const [search, setSearch] = useState('');
+  // La búsqueda por placa/VIN está oculta hasta pulsar "Buscar" (paridad con el diseño).
+  const [searchOpen, setSearchOpen] = useState(false);
   const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   const [compania, setCompania] = useState('');
+  // HU #10536 — filtro "solo prioritarios".
+  const [soloPrioritarios, setSoloPrioritarios] = useState(false);
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
   // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
@@ -208,6 +197,24 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     void load();
   }, [load, refreshKey]);
 
+  // Conteo por estado de negocio (para el funnel de estados). Se calcula sobre el
+  // total de trámites cargados, no sobre `filtered`, para que el embudo muestre
+  // siempre el panorama completo aunque haya un estado seleccionado.
+  const estadoCounts = useMemo(() => {
+    const c: Record<EstadoTramite, number> = {
+      borrador: 0,
+      anulado: 0,
+      preparado: 0,
+      entregado: 0,
+      aprobado: 0,
+      rechazado: 0,
+    };
+    for (const it of items) {
+      if (it.estado in c) c[it.estado as EstadoTramite] += 1;
+    }
+    return c;
+  }, [items]);
+
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
     const set = new Set<string>();
@@ -236,9 +243,10 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
       if (modalidad && item.modalidad !== modalidad) return false;
       if (estado && item.estado !== estado) return false;
       if (compania && item.companiaNombre !== compania) return false;
+      if (soloPrioritarios && !item.prioritario) return false;
       return true;
     });
-  }, [items, search, modalidad, estado, compania]);
+  }, [items, search, modalidad, estado, compania, soloPrioritarios]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Página segura: si los filtros/refetch reducen los resultados por debajo de
@@ -257,6 +265,11 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     setSearch(v);
     setPage(1);
   };
+  const openSearch = () => setSearchOpen(true);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    handleSearchChange('');
+  };
   const handleModalidadChange = (v: '' | WizardModalidad) => {
     setModalidad(v);
     setPage(1);
@@ -269,15 +282,43 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
     setCompania(v);
     setPage(1);
   };
+  const handlePrioritariosChange = (v: boolean) => {
+    setSoloPrioritarios(v);
+    setPage(1);
+  };
+
+  // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
+  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento (el listado ya viene ordenado
+  // con los prioritarios primero; el reordenamiento visual se aplica al siguiente refetch).
+  const handleTogglePriority = useCallback(
+    async (id: string, next: boolean, tenantId: string) => {
+      setItems((prev) =>
+        prev.map((it) => (it.id === id ? { ...it, prioritario: next } : it)),
+      );
+      try {
+        await tramitesClient.setPriority(id, next, isAdmin ? tenantId : undefined);
+      } catch {
+        setItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, prioritario: !next } : it)),
+        );
+      }
+    },
+    [isAdmin],
+  );
 
   const hasActiveFilters =
-    search.trim() !== '' || modalidad !== '' || estado !== '' || compania !== '';
+    search.trim() !== '' ||
+    modalidad !== '' ||
+    estado !== '' ||
+    compania !== '' ||
+    soloPrioritarios;
 
   const clearFilters = () => {
     setSearch('');
     setModalidad('');
     setEstado('');
     setCompania('');
+    setSoloPrioritarios(false);
     setPage(1);
   };
 
@@ -293,23 +334,88 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
   return (
     <section
       className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
     >
       {heading}
 
       <div className="flex flex-col gap-3">
+        {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
+        {!loading && !error && items.length > 0 && (
+          <EstadoFunnel
+            counts={estadoCounts}
+            active={estado}
+            onSelect={handleEstadoChange}
+          />
+        )}
+
+        {/* Fila de acciones (paridad con el diseño): registrar nuevo trámite por
+            modalidad + búsqueda desplegable, en la misma línea y con el mismo estilo
+            (píldora con gradiente). La búsqueda queda oculta hasta pulsar "Buscar". */}
+        <div className="flex flex-wrap items-center gap-2" aria-label="Acciones de trámites">
+          {NEW_TRAMITE_ACTIONS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onStartTramite?.(id)}
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              aria-label={`Iniciar ${label}`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+          {searchOpen ? (
+            <div className="relative min-w-[220px] flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                autoFocus
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') closeSearch();
+                }}
+                placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
+                aria-label="Buscar trámites"
+                className="w-full rounded-xl border bg-white py-2.5 pl-9 pr-9 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                aria-label="Cerrar búsqueda"
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg opacity-60 hover:opacity-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={openSearch}
+              aria-label="Buscar por placa o VIN"
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+              Buscar
+            </button>
+          )}
+        </div>
+
         <TramitesListToolbar
-          search={search}
-          onSearchChange={handleSearchChange}
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
-          estado={estado}
-          onEstadoChange={handleEstadoChange}
           onRefresh={() => void load()}
           onClearFilters={clearFilters}
           loading={loading}
+          hasActiveFilters={hasActiveFilters}
           totalCount={items.length}
           filteredCount={filtered.length}
+          soloPrioritarios={soloPrioritarios}
+          onPrioritariosChange={handlePrioritariosChange}
         />
 
         {/* #1 — Filtro por compañía (solo SuperAdmin, que ve trámites de todas las empresas). */}
@@ -323,7 +429,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
               value={compania}
               onChange={(e) => handleCompaniaChange(e.target.value)}
               className="rounded-xl border px-3 py-1.5 text-xs"
-              style={{ borderColor: '#DFE5ED', color: '#162744' }}
+              style={{ color: '#162744' }}
             >
               <option value="">Todas</option>
               {companias.map((c) => (
@@ -348,6 +454,7 @@ export function TramitesTable({ refreshKey = 0 }: TramitesTableProps) {
           showCompania={isAdmin}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
+          onTogglePriority={handleTogglePriority}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -375,6 +482,7 @@ function TableBody({
   showCompania,
   onRetry,
   onClearFilters,
+  onTogglePriority,
   onOpen,
 }: {
   loading: boolean;
@@ -389,6 +497,7 @@ function TableBody({
   showCompania: boolean;
   onRetry: () => void;
   onClearFilters: () => void;
+  onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
@@ -499,6 +608,7 @@ function TableBody({
               item={item}
               showCompania={showCompania}
               gridCols={gridCols}
+              onTogglePriority={onTogglePriority}
               onOpen={onOpen}
             />
           ))}
@@ -541,7 +651,6 @@ function Pagination({
   return (
     <nav
       className="mt-3 flex items-center justify-between gap-3 border-t pt-3"
-      style={{ borderColor: '#DFE5ED' }}
       aria-label="Paginación de trámites"
     >
       <p className="text-[11px] opacity-60" role="status" aria-live="polite">
@@ -553,7 +662,7 @@ function Pagination({
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ borderColor: '#DFE5ED', color: '#162744' }}
+          style={{ color: '#162744' }}
           aria-label="Página anterior"
         >
           Anterior
@@ -581,11 +690,13 @@ function TramiteRow({
   item,
   showCompania,
   gridCols,
+  onTogglePriority,
   onOpen,
 }: {
   item: InstanceSummary;
   showCompania: boolean;
   gridCols: string;
+  onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
@@ -593,7 +704,7 @@ function TramiteRow({
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
   const chip = async?.chip ?? estadoChip(item.estado);
-  const isDraft = item.estado === 'draft';
+  const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
 
   return (
@@ -617,12 +728,40 @@ function TramiteRow({
             {item.companiaNombre ?? '—'}
           </span>
         )}
-        <span className="min-w-0">
-          <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-            {item.placa ?? '—'}
-          </span>
-          <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-            {item.referenceNumber}
+        <span className="flex min-w-0 items-center gap-2">
+          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePriority(item.id, !item.prioritario, item.tenantId);
+            }}
+            aria-pressed={item.prioritario}
+            aria-label={
+              item.prioritario
+                ? `Quitar prioridad al trámite ${item.referenceNumber}`
+                : `Marcar como prioritario el trámite ${item.referenceNumber}`
+            }
+            title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
+            className="shrink-0 rounded-md p-0.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          >
+            <Star
+              className="h-4 w-4"
+              style={
+                item.prioritario
+                  ? { color: '#F59E0B', fill: '#F59E0B' }
+                  : { color: '#162744', opacity: 0.3 }
+              }
+              aria-hidden="true"
+            />
+          </button>
+          <span className="min-w-0">
+            <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
+              {item.placa ?? '—'}
+            </span>
+            <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
+              {item.referenceNumber}
+            </span>
           </span>
         </span>
         <span className="block text-[#162744] dark:text-white/90 truncate">
@@ -655,18 +794,7 @@ function TramiteRow({
           </span>
         </span>
         <span className="block">
-          <span
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap"
-            style={{
-              background: chip.bg,
-              color: chip.color,
-              borderColor: chip.border,
-            }}
-            role="status"
-            aria-label={`Estado: ${chip.label}`}
-          >
-            {chip.label}
-          </span>
+          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
         </span>
         <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
           {item.organismoTransito ?? '—'}

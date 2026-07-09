@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   Building2,
@@ -24,10 +25,12 @@ import {
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
+import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
+import { PrendaForm } from './PrendaForm';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -36,6 +39,14 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  sanitizeVin,
+  validateVin,
+  sanitizePlate,
+  validatePlate,
+  sanitizeDocNumber,
+  validateDocNumber,
+} from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
   BiometricParte,
@@ -108,7 +119,8 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
     return !fur.reasons.includes('pendiente_biometria');
   }
   const identidad = steps.find((s) => s.key === 'identidad');
-  return identidad?.status === 'complete';
+  // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
+  return identidad ? identidad.status === 'complete' : true;
 }
 
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
@@ -166,19 +178,9 @@ export function TramiteWizard(props: Props) {
     };
   }, [existingInstanceId]);
 
-  // Tres modos del wizard (HU #10350 — desacople de la validación de identidad async):
-  //  • Editable: borrador SIN finalizar (o trámite nuevo) → captura completa de datos.
-  //  • Borrador finalizado (`draft` + draftFinalizedAt): datos en solo lectura, pero el paso de
-  //    Identidad sigue operable (el cliente valida async). Banner informativo; Radicar solo cuando
-  //    el wizard reporte canSubmit + identidad aprobada.
-  //  • Solo visualización (Track C): el trámite ya salió de `draft` (enviado a tránsito, etc.).
-  const fullReadOnly = !!instanceStatus && instanceStatus !== 'draft';
-  const draftFinalized = instanceStatus === 'draft' && !!draftFinalizedAt;
-  // Captura de datos deshabilitada en ambos modos no-editables (provider de solo lectura).
-  const editLocked = fullReadOnly || draftFinalized;
-  // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
-  // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
-  const navViewOnly = fullReadOnly;
+  // Los modos del wizard se derivan más abajo (tras useWizard): el estado de negocio autoritativo
+  // llega en GET /wizard y se re-lee en cada refresh — necesario para que "Preparar" (N 03)
+  // actualice el modo sin re-consultar la instancia.
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
   const startKey = entryModalidad ?? procedureTypeId ?? '';
@@ -212,6 +214,31 @@ export function TramiteWizard(props: Props) {
     refresh,
   } = useWizard(instanceId);
 
+  // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
+  // fallback al fetch inicial de la instancia existente mientras el wizard carga.
+  const estadoTramite = (wizard?.status ?? instanceStatus) as InstanceStatus | null;
+
+  // Modos del wizard (HU #10350 + N 03 radicación en dos pasos):
+  //  • Editable: borrador SIN finalizar (o trámite nuevo) → captura completa de datos.
+  //  • Borrador finalizado (`borrador` + draftFinalizedAt): datos en solo lectura, pero el paso de
+  //    Identidad sigue operable (el cliente valida async). "Preparar" solo cuando el wizard
+  //    reporte canSubmit + identidad aprobada.
+  //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
+  //    paso de decisión.
+  //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
+  const fullReadOnly = !!estadoTramite && estadoTramite !== 'borrador';
+  const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
+  // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
+  const editLocked = fullReadOnly || draftFinalized;
+  // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
+  // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
+  const navViewOnly = fullReadOnly;
+  // N 03 — "Radicar a tránsito" disponible solo en `preparado` y si la máquina lo permite
+  // (el backend manda vía allowedTransitions).
+  const canEntregar =
+    estadoTramite === 'preparado' &&
+    (wizard?.allowedTransitions?.includes('entregado') ?? false);
+
   const [activeIndex, setActiveIndex] = useState(0);
   // Reanudar (Track B): al abrir una instancia existente queremos caer en el
   // paso donde quedó el usuario (la frontera), no en el paso 1. Este ref marca
@@ -233,10 +260,14 @@ export function TramiteWizard(props: Props) {
   const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
+  // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
+  // wizard_step_view al cambiar activeStep?.key y expone los demás eventos).
+  const telemetry = useWizardTelemetry(instanceId, activeStep?.key);
+
   // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
-  // canRadicar gobierna el botón "Radicar a tránsito": el submit de HU #10349 exige identidad, mientras
-  // que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit para radicar.
+  // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
+  // mientras que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit.
   const identityApproved = isIdentityApproved(steps, modalidad);
   const canRadicar = canSubmit && identityApproved;
 
@@ -251,6 +282,9 @@ export function TramiteWizard(props: Props) {
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
     if (!canNavigateToStep(steps, index, navViewOnly)) return;
+    // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
+    // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
+    if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
     setActiveIndex(index);
   };
 
@@ -305,16 +339,40 @@ export function TramiteWizard(props: Props) {
     }
   }, [instanceId, activeStep?.key]);
 
-  // Radicar a tránsito (AC4): submit estricto — exige identidad + FUR + gates (HU #10349). Solo se
-  // habilita cuando el wizard reporta canSubmit Y la identidad está aprobada (ver `canRadicar`).
-  const handleFinish = async () => {
+  // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
+  // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
+  // canSubmit Y la identidad está aprobada (ver `canRadicar`). El wizard permanece abierto: pasa a
+  // solo lectura y ofrece "Radicar a tránsito".
+  const handlePreparar = async () => {
     if (!instanceId || !canRadicar) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await tramitesClient.submitInstance(instanceId);
-      // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato
-      // (onExit redirige a /tramites; el ToastProvider del layout no se desmonta).
+      await tramitesClient.transitionInstance(instanceId, 'preparado');
+      setInstanceStatus('preparado');
+      show('Trámite preparado: validaciones completas, listo para radicar.', 'success');
+      await refresh();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // N 03 (radicación en dos pasos) — Radicar a tránsito: preparado→entregado vía POST /transition
+  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición). Sin
+  // pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
+  // /tramites; el ToastProvider del layout no se desmonta).
+  const handleRadicar = async () => {
+    if (!instanceId || !canEntregar) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await tramitesClient.transitionInstance(instanceId, 'entregado');
+      // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
+      telemetry.trackComplete();
       show(
         modalidad === 'traspaso'
           ? 'Traspaso enviado a tránsito correctamente.'
@@ -376,6 +434,8 @@ export function TramiteWizard(props: Props) {
   // pasos: navegación directa al siguiente.
   const handleContinue = async () => {
     if (!isSavableStep) {
+      // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
+      if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
       return;
     }
@@ -423,6 +483,8 @@ export function TramiteWizard(props: Props) {
 
       const fresh = await refresh();
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+        // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
+        telemetry.trackStepComplete();
         setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       }
     } catch (err) {
@@ -443,12 +505,17 @@ export function TramiteWizard(props: Props) {
           {wizard && (
             <p className="text-[11px] opacity-60 mt-0.5">
               {modalidad === 'traspaso' ? 'Traspaso' : 'Matrícula inicial'} ·{' '}
-              {wizard.totalSteps} pasos
+              {steps.length} pasos
             </p>
           )}
         </div>
         <button
-          onClick={onExit}
+          onClick={() => {
+            // Reportes2 HU-A — salida explícita sin radicar = wizard_abandon
+            // (en solo visualización el trámite ya se radicó: no es abandono).
+            if (!fullReadOnly) telemetry.trackAbandon();
+            onExit();
+          }}
           className="text-xs opacity-70 hover:opacity-100"
           aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
         >
@@ -487,7 +554,8 @@ export function TramiteWizard(props: Props) {
               Borrador finalizado — esperando validación del cliente.
             </span>{' '}
             Los datos quedaron en solo lectura. Puedes iniciar o compartir la validación de identidad;
-            la firma se procesará automáticamente al aprobarse, y luego podrás radicar a tránsito.
+            al aprobarse podrás radicar a tránsito. La firma de compraventa es informativa y no
+            bloquea la radicación (HU #10661).
           </span>
         </div>
       )}
@@ -503,13 +571,14 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4 items-start">
+      {/* AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista de
+          pasos cuando excede el alto disponible; ambos contenedores quedan a la par abajo. */}
+      <div className="grid grid-cols-12 gap-4 items-start md:items-stretch">
         {/* Sidebar de pasos server-driven. */}
         <aside
-          className="col-span-12 md:col-span-3 md:sticky md:top-4 md:self-start rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border"
-          style={{ borderColor: '#DFE5ED' }}
+          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-0 md:max-h-[calc(100vh-120px)]"
         >
-          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
+          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3 shrink-0">
             Asistente de seguimiento
           </p>
           {steps.length === 0 ? (
@@ -517,7 +586,7 @@ export function TramiteWizard(props: Props) {
               {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
             </p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="space-y-3 flex-1 min-h-0 overflow-y-auto">
               {steps.map((s, i) => {
                 const isActive = i === activeIndex;
                 const clickable = canNavigateToStep(steps, i, navViewOnly);
@@ -562,7 +631,6 @@ export function TramiteWizard(props: Props) {
         {/* Cuerpo del paso activo. */}
         <section
           className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
-          style={{ borderColor: '#DFE5ED' }}
         >
           {!activeStep ? (
             <p className="text-xs opacity-60">
@@ -616,7 +684,6 @@ export function TramiteWizard(props: Props) {
 
           <div
             className="flex items-center justify-between mt-6 pt-4 border-t"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
@@ -626,32 +693,46 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
-            {/* Acción derecha del footer según el modo (HU #10350):
-                · Solo visualización (fullReadOnly): sin acciones, solo se recorre.
-                · Paso de decisión (identidad/FUR): "Radicar a tránsito" si la identidad ya está
-                  aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando los datos están
-                  completos. En borrador ya finalizado solo se ofrece "Radicar" (deshabilitado hasta
-                  que el cliente valide su identidad).
+            {/* Acción derecha del footer según el modo (HU #10350 + N 03 dos pasos):
+                · Preparado: "Radicar a tránsito" (preparado→entregado) en el paso de decisión.
+                · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
+                · Paso de decisión (identidad/FUR) en borrador: "Preparar" (borrador→preparado) si la
+                  identidad ya está aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando
+                  los datos están completos. En borrador ya finalizado solo se ofrece "Preparar"
+                  (deshabilitado hasta que el cliente valide su identidad).
                 · Pasos de datos: en borrador finalizado solo se navega; editable usa Continuar/Guardar. */}
-            {fullReadOnly ? null : isDecisionStep ? (
-              canRadicar ? (
+            {fullReadOnly ? (
+              isDecisionStep && canEntregar ? (
                 <button
-                  onClick={() => void handleFinish()}
+                  onClick={() => void handleRadicar()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Entrega el trámite al organismo de tránsito"
                 >
                   {submitting ? 'Radicando…' : 'Radicar a tránsito'}
                 </button>
+              ) : null
+            ) : isDecisionStep ? (
+              canRadicar ? (
+                <button
+                  onClick={() => void handlePreparar()}
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Deja el trámite validado y listo para radicar"
+                >
+                  {submitting ? 'Preparando…' : 'Preparar'}
+                </button>
               ) : draftFinalized ? (
                 <button
-                  onClick={() => void handleFinish()}
+                  onClick={() => void handlePreparar()}
                   disabled
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
                   title="Disponible cuando el cliente valide su identidad"
                 >
-                  Radicar a tránsito
+                  Preparar
                 </button>
               ) : (
                 <button
@@ -751,12 +832,10 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   return (
     <div
       className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 border-b px-4 py-3"
-        style={{ borderColor: '#DFE5ED' }}
       >
         <div className="flex items-center gap-2">
           <span
@@ -819,7 +898,7 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
       {details.length > 0 && (
         <div
           className="grid gap-px border-t sm:grid-cols-2"
-          style={{ borderColor: '#DFE5ED', background: '#DFE5ED' }}
+          style={{ background: '#DFE5ED' }}
         >
           {details.map((d) => {
             const Icon = d.icon;
@@ -843,7 +922,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
       {hasSoatRtm && (
         <div
           className="border-t px-4 py-3"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
             Documentos del vehículo
@@ -852,7 +930,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
             {(soatVencimiento || soatAseguradora) && (
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
                 <div className="min-w-0">
@@ -871,7 +948,6 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
             {rtmVencimiento && (
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-                style={{ borderColor: '#DFE5ED' }}
               >
                 <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
                 <div className="min-w-0">
@@ -913,10 +989,14 @@ function ConsultaStep({
 }) {
   const isVin = step.key === 'consulta_vin';
   const readOnly = useWizardReadOnly();
+  const router = useRouter();
   // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
   const [riesgoSaving, setRiesgoSaving] = useState(false);
+  // Banderas manuales del vehículo (leasing / cambio de carrocería / acción de prenda) que
+  // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
+  const [atributosSaving, setAtributosSaving] = useState(false);
 
   const [vin, setVin] = useState('');
   const [plate, setPlate] = useState('');
@@ -927,6 +1007,11 @@ function ConsultaStep({
   // field_values frescos de la instancia: rehidratan inputs y alimentan la
   // tarjeta "Datos del vehículo · RUNT" tras la consulta.
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  // HU #10478 — proveedor de consulta por placa resuelto para el tenant. Con Kyverum RUNT NO se pide
+  // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
+  // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
+  const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
+  const hideOwnerDocType = !isVin && platePrimaryProvider === 'kyverum_runt';
 
   // Carga (o recarga) la instancia y rehidrata inputs + field_values.
   const loadInstance = async () => {
@@ -954,6 +1039,16 @@ function ConsultaStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
+  // HU #10478 — resuelve el proveedor de consulta por placa del tenant (solo traspaso) para decidir si
+  // se pide el tipo de documento del propietario. Silencioso ante fallo: deja el campo visible.
+  useEffect(() => {
+    if (isVin) return;
+    void tramitesClient
+      .getConsultationConfig()
+      .then((cfg) => setPlatePrimaryProvider(cfg.vehiclePlate))
+      .catch(() => {});
+  }, [isVin]);
+
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
       const value = vin.trim();
@@ -963,6 +1058,12 @@ function ConsultaStep({
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
     if (!plateValue || !docNumber) return null;
+    // owner_document_type SIEMPRE viaja en el payload aunque el campo esté oculto (Kyverum): Kyverum
+    // lo ignora (resuelve el tipo por la placa), pero el FALLBACK a Verifik SÍ lo exige para consultar
+    // por placa (HU #10478). Por defecto 'CC'; tras un primer éxito de Kyverum, el preflight lo hidrata
+    // al tipo real (tipoDocPropietario), así el fallback posterior queda correcto. Ocultarlo de la UI
+    // no debe vaciar el dato o el fallback devolvería "requiere documento" (unknown) y enmascararía el
+    // fallo como pre-vuelo verde.
     return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
       {
@@ -989,6 +1090,14 @@ function ConsultaStep({
           ? 'Ingresa el VIN antes de consultar.'
           : 'Ingresa la placa y el documento del propietario antes de consultar.',
       );
+      return;
+    }
+    // Validación de formato antes de gastar una consulta al RUNT.
+    const formatError = isVin
+      ? validateVin(vin.trim())
+      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), ownerDocType));
+    if (formatError) {
+      setError(formatError);
       return;
     }
     setError(null);
@@ -1059,6 +1168,42 @@ function ConsultaStep({
     }
   };
 
+  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
+  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; carrocería en ambos. Aduana es
+  // obligatorio de base en matrícula (no hay check de importado). La prenda se gestiona aparte con
+  // PrendaForm (Feature #10585).
+  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
+  const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
+
+  const saveAtributo = async (fieldKey: string, valueText: string) => {
+    if (!instanceId) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey, valueText, valueJson: null },
+      ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
+  // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
+  // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
+  // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
+  const handleIniciarTraspaso = () => {
+    const byKeyFv = (key: string) =>
+      fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '';
+    const seedVin = (vin || byKeyFv('vin')).trim();
+    const seedPlaca = (plate || byKeyFv('plate')).trim();
+    const params = new URLSearchParams();
+    if (seedVin) params.set('seedVin', seedVin);
+    if (seedPlaca) params.set('seedPlaca', seedPlaca);
+    const qs = params.toString();
+    router.push(`/tramites/nuevo/traspaso${qs ? `?${qs}` : ''}`);
+  };
+
   // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
   // (unificación de estilos pedida). Disparo único de la consulta.
   const consultButton = (
@@ -1080,20 +1225,18 @@ function ConsultaStep({
       {isVin ? (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               id="consulta-vin"
               type="text"
               value={vin}
-              onChange={(e) => setVin(e.target.value)}
+              onChange={(e) => setVin(sanitizeVin(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleRun();
               }}
               disabled={readOnly}
               className={`${inputClass} sm:flex-1 disabled:opacity-60`}
-              style={{ borderColor: '#DFE5ED' }}
               placeholder="Número VIN…"
               aria-label="Número VIN"
             />
@@ -1103,7 +1246,6 @@ function ConsultaStep({
       ) : (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <div className="grid max-w-xl gap-4 sm:grid-cols-2">
             <div>
@@ -1114,35 +1256,40 @@ function ConsultaStep({
                 id="consulta-plate"
                 type="text"
                 value={plate}
-                onChange={(e) => setPlate(e.target.value)}
+                onChange={(e) => setPlate(sanitizePlate(e.target.value))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. ABC123"
               />
             </div>
-            <div>
-              <label
-                htmlFor="consulta-owner-doc-type"
-                className="mb-1.5 block text-xs font-semibold"
-              >
-                Tipo documento propietario
-              </label>
-              <select
-                id="consulta-owner-doc-type"
-                value={ownerDocType}
-                onChange={(e) => setOwnerDocType(e.target.value as ActorDocumentType)}
-                disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
-              >
-                {DOC_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!hideOwnerDocType && (
+              <div>
+                <label
+                  htmlFor="consulta-owner-doc-type"
+                  className="mb-1.5 block text-xs font-semibold"
+                >
+                  Tipo documento propietario
+                </label>
+                <select
+                  id="consulta-owner-doc-type"
+                  value={ownerDocType}
+                  onChange={(e) => {
+                    const next = e.target.value as ActorDocumentType;
+                    setOwnerDocType(next);
+                    // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
+                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                  }}
+                  disabled={readOnly}
+                  className={`${inputClass} disabled:opacity-60`}
+                >
+                  {DOC_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label
                 htmlFor="consulta-owner-doc-number"
@@ -1154,10 +1301,9 @@ function ConsultaStep({
                 id="consulta-owner-doc-number"
                 type="text"
                 value={ownerDocNumber}
-                onChange={(e) => setOwnerDocNumber(e.target.value)}
+                onChange={(e) => setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType))}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
-                style={{ borderColor: '#DFE5ED' }}
                 placeholder="Ej. 1020304050"
               />
             </div>
@@ -1178,6 +1324,45 @@ function ConsultaStep({
       )}
 
       <VehicleDataCard fieldValues={fieldValues} />
+
+      <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
+        <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
+        <p className="text-[11px] opacity-55 -mt-1.5">
+          Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
+        </p>
+
+        {!isVin && (
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={esLeasing}
+              onChange={(e) => void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')}
+              disabled={readOnly || atributosSaving}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            />
+            <span className="text-xs">
+              <span className="font-semibold">Vehículo en leasing</span>
+              <span className="mt-0.5 block opacity-55">
+                Exige contrato de leasing y declaración de la arrendadora.
+              </span>
+            </span>
+          </label>
+        )}
+
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={cambioCarroceria}
+            onChange={(e) => void saveAtributo('cambio_carroceria', e.target.checked ? 'true' : 'false')}
+            disabled={readOnly || atributosSaving}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+          />
+          <span className="text-xs">
+            <span className="font-semibold">Cambio de carrocería</span>
+            <span className="mt-0.5 block opacity-55">Exige la factura de carrocería.</span>
+          </span>
+        </label>
+      </div>
 
       {mostrarPazSalvo && (
         <label
@@ -1209,6 +1394,7 @@ function ConsultaStep({
         onToggleRiesgo={(v) => void handleRiesgo(v)}
         saving={riesgoSaving}
         showRunButton={false}
+        onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
       />
     </div>
   );
@@ -1270,7 +1456,20 @@ function StepBody({
     // ya pintan el título del paso.
     case 'documentos':
       return (
-        <DocumentChecklist instanceId={instanceId} onChanged={onRefresh} hideHeader />
+        <div className="space-y-4">
+          <DocumentChecklist
+            instanceId={instanceId}
+            onChanged={onRefresh}
+            hideHeader
+            modalidad={modalidad}
+          />
+          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
+              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
+              comercial (HU #10598), no en documentos. */}
+          {modalidad !== 'traspaso' && (
+            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
+          )}
+        </div>
       );
 
     // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
@@ -1312,14 +1511,24 @@ function StepBody({
       // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
       // lo dispara el footer "Guardar y continuar" (vía save() del ref).
       return (
-        <CommercialForm
-          key={step.key}
-          ref={stepFormRef}
-          instanceId={instanceId}
-          onSaved={onRefresh}
-          hideHeader
-          embeddedInWizard
-        />
+        <div className="space-y-4">
+          <CommercialForm
+            key={step.key}
+            ref={stepFormRef}
+            instanceId={instanceId}
+            onSaved={onRefresh}
+            hideHeader
+            embeddedInWizard
+          />
+          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
+              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+          <PrendaForm
+            instanceId={instanceId}
+            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            onSaved={onRefresh}
+          />
+        </div>
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).

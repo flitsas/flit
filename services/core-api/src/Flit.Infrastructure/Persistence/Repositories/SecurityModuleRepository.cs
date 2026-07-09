@@ -117,7 +117,6 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
     public async Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(
         IReadOnlyList<string> permissionSlugs,
         bool includeAll,
-        Guid? tenantId,
         CancellationToken ct)
     {
         var query = from m in db.SecurityModules.AsNoTracking()
@@ -125,18 +124,12 @@ public sealed class SecurityModuleRepository(FlitDbContext db) : ISecurityModule
                     where m.IsActive && m.DeletedAt == null && a.IsActive && a.DeletedAt == null
                     select new { m.Id, m.Code, m.Name, m.SortOrder, ActionId = a.Id, ActionSlug = a.Slug, ActionName = a.Name };
 
+        // RBAC puro (HU #10664): el acceso a módulos se gobierna únicamente por los roles; los módulos
+        // son transversales, sin habilitación por empresa. El constructor de roles SuperAdmin
+        // (includeAll=true) ve todos los módulos activos; el caller tenant (includeAll=false) ve solo
+        // los módulos cuyos slugs están en sus permisos efectivos.
         if (!includeAll)
-        {
             query = query.Where(x => permissionSlugs.Contains(x.ActionSlug));
-
-            if (tenantId.HasValue)
-            {
-                var tid = tenantId.Value;
-                var hasGrants = await db.TenantModuleGrants.AnyAsync(g => g.TenantId == tid, ct);
-                if (hasGrants)
-                    query = query.Where(x => db.TenantModuleGrants.Any(g => g.TenantId == tid && g.ModuleId == x.Id));
-            }
-        }
 
         var rows = await query
             .OrderBy(x => x.SortOrder)

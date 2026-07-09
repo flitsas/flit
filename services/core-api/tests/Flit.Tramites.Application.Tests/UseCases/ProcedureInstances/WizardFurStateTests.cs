@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -30,7 +31,7 @@ public sealed class WizardFurStateTests
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
-            Status = ProcedureInstanceStatus.Draft,
+            Status = TramiteEstado.Borrador,
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -183,7 +184,7 @@ public sealed class WizardFurStateTests
         CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
         instance.BiometricValidations.Add(Bio("comprador", documento: "666"));
         instance.BiometricValidations.Add(Bio("vendedor", documento: "555"));
-        // firma + fur faltan
+        // FUR falta; la firma ya NO se exige (B12, HU #10661, ADR-0028).
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
@@ -191,7 +192,8 @@ public sealed class WizardFurStateTests
         var s6 = result!.Steps.Single(s => s.Index == 6);
         s6.Status.Should().Be("incomplete");
         s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteBiometria);
-        s6.Reasons.Should().Contain(GetWizardStateHandler.PendienteFirma);
+        // B12: la firma de compraventa ya no aporta pendiente_firma.
+        s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
         s6.Reasons.Should().Contain(GetWizardStateHandler.FurPendiente);
     }
 

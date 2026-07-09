@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   invitarParticipante: vi.fn(),
   reinvitarParticipante: vi.fn(),
   generarFur: vi.fn(),
+  generarImpronta: vi.fn(),
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
   listBiometric: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     invitarParticipante: mocks.invitarParticipante,
     reinvitarParticipante: mocks.reinvitarParticipante,
     generarFur: mocks.generarFur,
+    generarImpronta: mocks.generarImpronta,
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
     listBiometric: mocks.listBiometric,
@@ -90,12 +92,23 @@ const FUR_DOC: ProcedureAttachment = {
   uploadedAt: '2026-06-19T00:00:00Z',
 };
 
+const IMPRONTA_DOC: ProcedureAttachment = {
+  id: 'att-impronta',
+  tipo: 'impronta',
+  filename: 'impronta.pdf',
+  mimetype: 'application/pdf',
+  sizeBytes: 200,
+  sha256: 'def456',
+  source: 'user',
+  uploadedAt: '2026-06-19T00:00:00Z',
+};
+
 // Detalle con organismo YA seleccionado: el modal no se auto-abre y no
 // interfiere con las aserciones de las regiones/botones existentes.
 const INSTANCE_DETAIL = {
   id: INSTANCE,
   referenceNumber: 'REF-1',
-  status: 'draft' as const,
+  status: 'borrador' as const,
   procedureTypeId: 'pt-1',
   tenantId: 't-1',
   createdAt: '2026-06-19T00:00:00Z',
@@ -119,7 +132,7 @@ beforeEach(() => {
   mocks.listBiometric.mockResolvedValue([]);
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
-  mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'submitted' });
+  mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'entregado' });
   mocks.downloadAttachment.mockResolvedValue({
     blob: new Blob(['x'], { type: 'text/plain' }),
     filename: 'fur.txt',
@@ -139,6 +152,13 @@ beforeEach(() => {
   });
   mocks.generarFur.mockResolvedValue({
     documents: [{ attachmentId: 'att-fur', tipo: 'fur', filename: 'fur.txt', sha256: 'abc123' }],
+  });
+  mocks.generarImpronta.mockResolvedValue({
+    attachmentId: 'att-impronta',
+    filename: 'impronta.pdf',
+    sha256: 'def456',
+    radicado: 'IMPR-TEST0001',
+    hash: 'hash-abc',
   });
 });
 
@@ -203,6 +223,77 @@ describe('FirmaFurStep — invitar participante', () => {
     await screen.findByText(/Ana Comprador/);
     await user.click(screen.getByRole('button', { name: 'Reinvitar' }));
     expect(await screen.findByText(/Espera 24h antes de reenviar/)).toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — generar impronta', () => {
+  it('muestra el botón "Generar Improntas" cuando aún no hay adjunto tipo impronta', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(await screen.findByRole('button', { name: 'Generar Improntas' })).toBeInTheDocument();
+  });
+
+  it('oculta el botón cuando ya existe un adjunto tipo impronta (manual o generado antes)', async () => {
+    mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByRole('region', { name: 'Generación del FUR' });
+    expect(screen.queryByRole('button', { name: 'Generar Improntas' })).not.toBeInTheDocument();
+  });
+
+  it('genera la impronta, la adjunta, dispara la descarga y muestra el radicado', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    const clickSpy = vi.fn();
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag) as HTMLElement;
+      if (tag === 'a') (el as HTMLAnchorElement).click = clickSpy;
+      return el;
+    });
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    globalThis.URL.revokeObjectURL = vi.fn();
+    const onRefresh = vi.fn();
+    const user = userEvent.setup();
+    try {
+      render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onRefresh={onRefresh} />);
+
+      const button = await screen.findByRole('button', { name: 'Generar Improntas' });
+      mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
+      await user.click(button);
+
+      await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
+      expect(await screen.findByText(/radicado IMPR-TEST0001/)).toBeInTheDocument();
+      await waitFor(() => expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-impronta'));
+      expect(clickSpy).toHaveBeenCalled();
+      expect(onRefresh).toHaveBeenCalled();
+    } finally {
+      vi.mocked(document.createElement).mockRestore();
+    }
+  });
+
+  it('maneja el 409 organismo_requerido con un mensaje específico', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.generarImpronta.mockRejectedValue(
+      new Error('Debe seleccionar el organismo de tránsito antes de generar la impronta.'),
+    );
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Generar Improntas' }));
+    expect(
+      await screen.findByText(/Selecciona el organismo de tránsito antes de generar la impronta/),
+    ).toBeInTheDocument();
+  });
+
+  it('maneja el 409 identificador_vehiculo_requerido con un mensaje específico', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.generarImpronta.mockRejectedValue(
+      new Error('Falta la placa o el VIN del vehículo para generar la impronta.'),
+    );
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Generar Improntas' }));
+    expect(
+      await screen.findByText(/Falta la placa o el VIN del vehículo/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -313,7 +404,8 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
   it('muestra el resumen de la matrícula con el estado de la instancia', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const resumen = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
-    expect(within(resumen).getByText('Borrador (en preparación)')).toBeInTheDocument();
+    // N 03 — label desde la fuente única lib/tramites/estados.ts.
+    expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
   });
 
   it('en traspaso el resumen se rotula "Resumen del traspaso" (no matrícula)', async () => {
@@ -390,5 +482,78 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
       name: 'Línea de tiempo del expediente',
     });
     expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', () => {
+  // OT resuelto por el auto-bind del preflight: nombre + code + city + id.
+  const TRASPASO_OT_BOUND = {
+    ...INSTANCE_DETAIL,
+    fieldValues: [
+      { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'aaaaaaaa-0001-4000-8000-000000000009', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_code', valueText: '11001', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría Distrital de Movilidad de Bogotá', valueJson: null, source: 'consultation' },
+      { formFieldId: null, fieldKey: 'transit_office_city', valueText: 'Bogotá D.C.', valueJson: null, source: 'consultation' },
+    ],
+  };
+
+  it('traspaso con OT resuelto: solo lectura, sin botón Cambiar/Seleccionar y sin abrir el modal', async () => {
+    mocks.getInstance.mockResolvedValue(TRASPASO_OT_BOUND);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(
+      within(seccion).getByText(/El organismo proviene del RUNT y no puede modificarse en un traspaso\./),
+    ).toBeInTheDocument();
+    // No hay botón para seleccionar/cambiar el organismo.
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+    // En traspaso nunca se abre el modal → no se consulta el catálogo de OT.
+    expect(mocks.listTransitOffices).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
+  });
+
+  it('traspaso con OT del RUNT no habilitado (nombre sin id): avisa, sin selector', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      fieldValues: [
+        { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'OT NO HABILITADO', valueJson: null, source: 'consultation' },
+      ],
+    });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(within(seccion).getByText(/no está habilitado para tu empresa/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+  });
+
+  it('matrícula: sigue ofreciendo seleccionar/cambiar el organismo (sin cambios)', async () => {
+    // Con OT elegido (nombre/código) en matrícula el botón dice "Cambiar".
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(within(seccion).getByRole('button', { name: /Cambiar/ })).toBeInTheDocument();
+    // El texto de solo lectura de traspaso NO aparece en matrícula.
+    expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
+  it('traspaso: la sección de firma es informativa y aclara que no bloquea el trámite', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Firma de la compraventa' });
+    // Copy alineado a ADR-0028: la firma no bloquea preparar/radicar.
+    expect(within(seccion).getByText('no bloquea')).toBeInTheDocument();
+    expect(
+      within(seccion).getByText(/pendiente de definición de negocio/),
+    ).toBeInTheDocument();
+  });
+
+  it('traspaso: los endpoints de firma siguen disponibles (Solicitar/Simular no se rompen)', async () => {
+    // AC5: aunque la firma sea informativa, las acciones y llamadas API se conservan.
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const card = await screen.findByRole('group', { name: 'Firma Comprador' });
+    await user.click(within(card).getByRole('button', { name: 'Solicitar firma' }));
+    await waitFor(() => expect(mocks.solicitarFirma).toHaveBeenCalledTimes(1));
   });
 });

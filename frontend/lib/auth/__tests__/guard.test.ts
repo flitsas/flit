@@ -8,6 +8,7 @@ import {
   evaluateAdminAccess,
   evaluateEmpresaAccess,
   evaluateLoginAccess,
+  getUserRole,
   FORBIDDEN_PATH,
   HOME_PATH,
 } from "../guard";
@@ -27,8 +28,15 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.redirectTo).toBeUndefined();
   });
 
-  it("reconoce el rol en el arreglo roles (case-insensitive)", () => {
-    const decision = evaluateAdminAccess(makeToken({ roles: ["operador", "superadmin"] }));
+  it("reconoce el rol en el arreglo roles (case-insensitive, HU #10506: objetos {id, code})", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({
+        roles: [
+          { id: "r1", code: "operador" },
+          { id: "r2", code: "superadmin" },
+        ],
+      }),
+    );
     expect(decision.allowed).toBe(true);
   });
 
@@ -88,6 +96,42 @@ describe("evaluateAdminAccess (AC6)", () => {
     );
     expect(decision.allowed).toBe(false);
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("permite el acceso de SuperAdmin a /admin/improntas (HU #10469 AC1)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "SuperAdmin" }),
+      "/admin/improntas",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("deniega el acceso a /admin/improntas para un rol distinto de SuperAdmin (HU #10469 AC2)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "ot_admin" }),
+      "/admin/improntas",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+});
+
+describe("getUserRole (refactor adminOT)", () => {
+  it("devuelve 'superadmin' para un token SuperAdmin", () => {
+    expect(getUserRole(makeToken({ role: "SuperAdmin" }))).toBe("superadmin");
+  });
+
+  it("devuelve 'admincompany' para un token AdminCompany", () => {
+    expect(getUserRole(makeToken({ role: "AdminCompany" }))).toBe("admincompany");
+  });
+
+  it("devuelve 'ot_admin' para un token ot_admin", () => {
+    expect(getUserRole(makeToken({ sub: "u1", role: "ot_admin" }))).toBe("ot_admin");
+  });
+
+  it("devuelve 'user' para un rol desconocido o sin token", () => {
+    expect(getUserRole(makeToken({ role: "Operador" }))).toBe("user");
+    expect(getUserRole(undefined)).toBe("user");
   });
 });
 

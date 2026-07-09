@@ -7,12 +7,15 @@ import type {
   ProcedureStep,
 } from './procedure-parametrization';
 
+// N 03 (ADR-0022) — estados de NEGOCIO del trámite, vocabulario único de la API.
+// Fuente de verdad de labels/estilos: lib/tramites/estados.ts.
 export type InstanceStatus =
-  | 'draft'
-  | 'submitted'
-  | 'in_review'
-  | 'completed'
-  | 'rejected';
+  | 'borrador'
+  | 'anulado'
+  | 'preparado'
+  | 'entregado'
+  | 'aprobado'
+  | 'rechazado';
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
@@ -83,6 +86,8 @@ export interface InstanceSummary {
   signaturePending: boolean;
   /** Gates de radicación satisfechos (mismo cómputo que el wizard). */
   canSubmit: boolean;
+  /** HU #10536 — marcado prioritario por el gestor: el OT lo revisa con primacía (ordenamiento). */
+  prioritario: boolean;
   /** Compañía dueña (#1): para abrir el trámite como SuperAdmin y para la columna/filtro Compañía. */
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
@@ -164,6 +169,22 @@ export type ActorRol = 'comprador' | 'vendedor';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
+/**
+ * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
+ * identidad se incorpora desde la validación biométrica y el checklist no ofrece la carga
+ * manual de cédula; persona jurídica la conserva.
+ */
+export type ActorPersonType = 'natural' | 'juridical';
+
+// HU #10478 — proveedor primario de consulta resuelto para el tenant, por tipo. El wizard lo usa para
+// adaptar la UI (p. ej. en traspaso ocultar el tipo de documento del propietario cuando el proveedor de
+// placa es Kyverum RUNT, que lo resuelve solo y lo devuelve en la respuesta).
+export interface ConsultationProvidersConfig {
+  vehicleVin: string;
+  vehiclePlate: string;
+  conductor: string;
+}
+
 export interface ProcedureActor {
   rol: ActorRol;
   tipoDocumento: ActorDocumentType;
@@ -174,6 +195,11 @@ export interface ProcedureActor {
   /** Persistidos en actor.metadata (JSON) — opcionales. */
   ciudad?: string;
   direccion?: string;
+  /**
+   * Tipo de persona (HU #10543). Persona natural omite la carga manual de cédula en el
+   * checklist (el documento llega desde la validación de identidad).
+   */
+  personType?: ActorPersonType;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -295,6 +321,22 @@ export interface PresignAttachmentResponse {
   fields: Record<string, string>;
 }
 
+/**
+ * Respuesta de POST /instances.../ocr/{tipo}: análisis semántico del documento con el modelo de
+ * visión, ANTES de subirlo al expediente. No persiste nada en el backend.
+ */
+export interface DocumentOcrResult {
+  ok: boolean;
+  tipo: string;
+  /** JSON extraído por el modelo (campos según el tipo). null si no se pudo interpretar. */
+  data: Record<string, unknown> | null;
+  /**
+   * PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de páginas de un PDF
+   * multi-documento; null/ausente si no hubo recorte. El wizard sube este recorte en vez del original.
+   */
+  extractedPdfBase64?: string | null;
+}
+
 /** Item del checklist guiado por la tipología del trámite. */
 export interface ChecklistItemView {
   key: string;
@@ -302,6 +344,10 @@ export interface ChecklistItemView {
   obligatorio: boolean;
   docTipo?: string;
   satisfied: boolean;
+  /** RF09 — tamaño máximo por tipo (bytes). Ausente ⇒ usar el límite global. */
+  maxSizeBytes?: number;
+  /** RF08 — formatos MIME permitidos por tipo. Ausente/vacío ⇒ formatos globales. */
+  mimeTypesAllowed?: string[];
 }
 
 /** Respuesta de GET /instances/{id}/checklist. */
@@ -354,6 +400,15 @@ export interface WizardState {
   canSubmit: boolean;
   /** Códigos de bloqueo de envío (mapeados a copy en la UI). */
   blockers: string[];
+  /** N 03 — estado de negocio actual del trámite (borrador|anulado|preparado|entregado|aprobado|rechazado). */
+  status: InstanceStatus | string;
+  /** N 03 — transiciones permitidas por la máquina de estados (el backend manda). */
+  allowedTransitions: string[];
+  /**
+   * HU #10549 — si el OT destino tiene la validación de identidad deshabilitada es `false` y el
+   * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
+   */
+  identityValidationEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -372,6 +427,33 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+}
+
+// ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
+//   PUT /api/v1/tramites/instances/{id}/prenda -> PrendaData
+//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData | null
+export type PrendaDecision =
+  | 'solicitar'
+  | 'registrar'
+  | 'levantar'
+  | 'omitir'
+  | 'sin_prenda';
+
+/** Decisión de prenda vigente del trámite (o null si no se ha registrado ninguna). */
+export interface PrendaData {
+  id: string;
+  decision: PrendaDecision;
+  estado: 'vigente' | 'reemplazada';
+  acreedorNombre: string | null;
+  acreedorDocumento: string | null;
+  createdAt: string;
+}
+
+/** Payload de PUT /prenda. */
+export interface PrendaInput {
+  decision: PrendaDecision;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
 }
 
 // ── Biométrica (Slice 6) ────────────────────────────────────────────
@@ -427,6 +509,42 @@ export interface BiometricValidation {
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
   rejectionReason?: string | null;
+  // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
+  // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
+  ultimoIntentoMotivo?: string | null;
+}
+
+/**
+ * Resultado de reconciliar una validación con el proveedor (POST .../biometric/{id}/reconcile):
+ * consulta el estado real en Kyverum y lo aplica si ya es terminal. `updated` = hubo cambio.
+ */
+export interface ReconcileIdentityResult {
+  status: BiometricEstado;
+  updated: boolean;
+}
+
+/**
+ * Un evento de la bitácora (solo lectura) del ciclo de una validación de identidad: envío, llegada del
+ * webhook, si descifró el secreto, firma, resultado y reconciliaciones. Sin PII ni secretos. Espejo de
+ * IdentityAuditEventDto del backend. Diagnóstico de "qué pasó" sin entrar a la BD/pod (solo soporte).
+ */
+export interface IdentityAuditEvent {
+  occurredAt: string;
+  stage: string;
+  outcome: string;
+  httpStatus: number | null;
+  signaturePresent: boolean | null;
+  secretPresent: boolean | null;
+  decryptOk: boolean | null;
+  providerStatus: string | null;
+  errorType: string | null;
+  message: string | null;
+}
+
+/** Respuesta de GET .../biometric/{validationId}/audit (espejo de IdentityAuditResponse). */
+export interface IdentityAuditResponse {
+  validationId: string;
+  events: IdentityAuditEvent[];
 }
 
 /**
@@ -679,6 +797,20 @@ export interface GenerarFurResult {
   documents: FurDocument[];
 }
 
+// ── Impronta integrada al trámite (paso FUR) ─────────────────────────
+// POST /api/v1/tramites/instances/{id}/attachments/generate-impronta -> GenerarImprontaAttachmentResult (201)
+// Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y lo
+// adjunta como documento tipo 'impronta' (mismo flujo que una subida manual).
+
+/** Respuesta de POST /instances/{id}/attachments/generate-impronta. */
+export interface GenerarImprontaAttachmentResult {
+  attachmentId: string;
+  filename: string;
+  sha256: string;
+  radicado: string;
+  hash: string;
+}
+
 // ── Expediente consolidado (matrícula inicial) ───────────────────────
 // POST /api/v1/tramites/instances/{id}/consolidado -> { document } (201)
 // Fusiona FUR + certificado de identidad + adjuntos del trámite en un PDF único.
@@ -823,4 +955,25 @@ export interface PortalFirmaUrl {
 /** Resultado de finalizar la participación. */
 export interface FinalizarPortalResult {
   completedAt: string;
+}
+
+// ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────
+
+/** Fila del historial de transiciones (GET /instances/{id}/status-history). */
+export interface StatusHistoryItem {
+  id: string;
+  fromStatus: string | null;
+  toStatus: string;
+  changedAt: string;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  reason: string | null;
+}
+
+/** Página del historial: más reciente primero. */
+export interface StatusHistoryPage {
+  items: StatusHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

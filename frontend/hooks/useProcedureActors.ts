@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { DEV_TENANT_ID } from '@/lib/api/dev-constants';
 import type { ProcedureActor } from '@/lib/api/types/procedure-runtime';
 
 export interface ProcedureActorsState {
@@ -28,7 +27,8 @@ const INITIAL_STATE: ProcedureActorsState = {
  */
 export function useProcedureActors(
   instanceId: string | null,
-  tenantId: string = DEV_TENANT_ID,
+  // Sin default hardcodeado: el tenant lo resuelve `tenantHeader` (tenant activo del `?t=` → JWT).
+  tenantId?: string,
 ) {
   const [state, setState] = useState<ProcedureActorsState>(INITIAL_STATE);
 

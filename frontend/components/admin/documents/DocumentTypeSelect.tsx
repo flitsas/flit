@@ -40,7 +40,6 @@ export function DocumentTypeSelect({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled || available.length === 0}
         className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-50"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <option value="">
           {available.length === 0 ? "No hay documentos activos disponibles" : placeholder}

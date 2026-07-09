@@ -48,7 +48,6 @@ export function UiStateBoundary({
           <div
             key={i}
             className="h-12 rounded-xl border animate-pulse bg-[#F4F7FC]"
-            style={{ borderColor: "#DFE5ED" }}
           />
         ))}
       </div>
@@ -62,7 +61,6 @@ export function UiStateBoundary({
           "flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center",
           className,
         )}
-        style={{ borderColor: "#DFE5ED" }}
         role="alert"
         data-testid="ui-error"
       >
@@ -89,7 +87,6 @@ export function UiStateBoundary({
           "flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center",
           className,
         )}
-        style={{ borderColor: "#DFE5ED" }}
         data-testid="ui-empty"
       >
         <Inbox className="h-8 w-8 opacity-50" />

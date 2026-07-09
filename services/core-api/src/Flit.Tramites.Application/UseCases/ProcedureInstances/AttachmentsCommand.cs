@@ -4,6 +4,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -43,6 +44,10 @@ public static class AttachmentRules
         // Documentos del checklist de traspaso (antes sin DocTipo → el front subía con el `key`,
         // que no estaba en este set → 400 "tipo inválido").
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
+        // Prenda / gravamen (IT-3, Feature #10585): un DocTipo por decisión que requiere soporte.
+        "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
+        // HU #10604 (R19) — paz y salvo RNMC que desbloquea el envío al OT tras "Imponer Medida".
+        "paz_salvo_rnmc",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -93,7 +98,8 @@ public sealed record RegisterAttachmentInput(
 /// </summary>
 public sealed class UploadAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AttachmentValidator? validator = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -104,14 +110,16 @@ public sealed class UploadAttachmentHandler(
     {
         if (input.Content is null)
             return (null, "missing_file");
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
 
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -160,7 +168,8 @@ public sealed class UploadAttachmentHandler(
 /// </summary>
 public sealed class PresignAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AttachmentValidator? validator = null)
 {
     public async Task<(PresignAttachmentResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -168,14 +177,16 @@ public sealed class PresignAttachmentHandler(
         PresignAttachmentInput input,
         CancellationToken ct = default)
     {
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
 
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -192,7 +203,9 @@ public sealed class PresignAttachmentHandler(
 /// cliente calculó. Aplica las mismas validaciones, estado draft y auto-marca de checklist que la
 /// subida multipart.
 /// </summary>
-public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
+public sealed class RegisterAttachmentHandler(
+    IProcedureInstanceRepository repo,
+    AttachmentValidator? validator = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -201,7 +214,9 @@ public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
         Guid? uploadedBy = null,
         CancellationToken ct = default)
     {
-        var validationError = AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
         if (validationError is not null)
             return (null, validationError);
         if (string.IsNullOrWhiteSpace(input.StoragePath))
@@ -212,7 +227,7 @@ public sealed class RegisterAttachmentHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -313,7 +328,7 @@ public sealed class DeleteAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return "not_found";
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        if (instance.Status != TramiteEstado.Borrador)
             return "not_draft";
 
         var attachment = instance.Attachments.FirstOrDefault(a => a.Id == attachmentId);

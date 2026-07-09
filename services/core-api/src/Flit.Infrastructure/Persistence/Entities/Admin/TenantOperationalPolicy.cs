@@ -29,6 +29,13 @@ public sealed class TenantOperationalPolicy
 
     public int RuntFailoverTimeoutMs { get; set; } = 4000;
 
+    /// <summary>
+    /// Override por tenant de la cadena de proveedores de consulta RUNT (jsonb, HU #10478).
+    /// Forma: <c>{ "vehicle_vin": { "primary": "kyverum_runt", "fallback": ["verifik"] }, ... }</c>.
+    /// <c>'{}'</c> (default) = usar los defaults globales de <c>Consultations:DefaultChains</c>.
+    /// </summary>
+    public string ConsultationProviderConfig { get; set; } = "{}";
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

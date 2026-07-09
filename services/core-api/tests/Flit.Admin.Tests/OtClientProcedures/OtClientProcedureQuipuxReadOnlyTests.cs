@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Admin.Tests.OtClientProcedures;
 
@@ -35,7 +36,7 @@ public sealed class OtClientProcedureQuipuxReadOnlyTests
 
         await using var ctx = NewContext(db);
         var handler = new ApproveOtClientProcedureHandler(
-            new OtClientProcedureRepository(ctx),
+            new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()),
             new QuipuxReadOnlyGuard(new OtProfileRepository(ctx)));
 
         var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
@@ -83,7 +84,7 @@ public sealed class OtClientProcedureQuipuxReadOnlyTests
             TenantId = ClientTenant,
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = "REF-QX",
-            Status = ProcedureInstanceStatus.PendingOt,
+            Status = TramiteEstado.Entregado,
             TransitOfficeId = TransitOffice,
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,

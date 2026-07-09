@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
@@ -21,7 +22,7 @@ public sealed class CommercialHandlerTests
     }
 
     private static ProcedureInstance Instance(
-        string status = ProcedureInstanceStatus.Draft,
+        string status = TramiteEstado.Borrador,
         ProcedureInstanceCommercial? commercial = null) =>
         new()
         {

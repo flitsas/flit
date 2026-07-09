@@ -29,7 +29,6 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
       <div className="space-y-3">
         <div
           className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">Identidad</p>
           <div className="grid grid-cols-3 gap-3">
@@ -50,7 +49,6 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
 
         <div
           className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">
             Aristas activas ({activeRules.length})
@@ -74,7 +72,6 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
 
         <div
           className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
-          style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">
             Pasos ({steps.length})

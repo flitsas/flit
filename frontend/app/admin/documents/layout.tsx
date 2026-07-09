@@ -28,7 +28,7 @@ export default function AdminDocumentsLayout({ children }: { children: ReactNode
 
   return (
     <Shell active="dashboard" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
-      <div className="h-full w-full overflow-y-auto">{children}</div>
+      <div className="app-bg min-h-screen w-full">{children}</div>
     </Shell>
   );
 }

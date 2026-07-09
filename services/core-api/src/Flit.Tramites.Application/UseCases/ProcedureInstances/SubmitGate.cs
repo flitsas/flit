@@ -1,108 +1,117 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
-/// Gate server-side que se evalúa ANTES de transicionar Draft→Submitted. Reusa la misma lógica de
-/// completitud que el wizard server-driven (<see cref="GetWizardStateHandler"/>): documentos
-/// obligatorios y biométrica del comprador. El FUR y el expediente consolidado son opcionales en
-/// radicación y pueden generarse a posteriori vía POST /fur y POST /consolidado.
+/// Gate del ciclo de vida <c>borrador → preparado</c> (N 03, RF03): validación de identidad del
+/// comprador APROBADA y VIGENTE + TODOS los documentos obligatorios cargados. Reusa la misma
+/// lógica de completitud que el wizard server-driven (<see cref="GetWizardStateHandler"/>) —
+/// única fuente de verdad. Lo evalúa <c>TramiteLifecycleService</c> antes de aplicar la transición.
 ///
-/// <para><b>Matrícula</b> exige: documentos completos (factura+aduana+impronta) y biométrica del
-/// comprador aprobada. FUR, consolidado y organismo de tránsito NO bloquean el envío.</para>
-/// <para><b>Traspaso</b> aplica el gate análogo (ambas biométricas + firma compraventa + FUR + docs +
-/// organismo) SOLO en bajo riesgo. Si los datos del traspaso aún no satisfacen el gate, se deja pasar
-/// para no romper los flujos existentes (deuda M5: endurecer traspaso cuando el flujo esté completo).</para>
+/// <para><b>Matrícula</b> exige: documentos completos y biométrica del comprador aprobada+vigente.</para>
+/// <para><b>Traspaso</b> (HU #10459) aplica el gate COMPLETO y bloquea la preparación si falta algo:
+/// documentos obligatorios completos, ambas biométricas aprobadas+vigentes, firma de compraventa de
+/// comprador y vendedor, FUR generado y organismo de tránsito seleccionado.</para>
 ///
-/// Devuelve la lista de códigos de error (vacía = puede radicar). Códigos: documentos_incompletos,
-/// identidad_requerida. Los códigos fur_requerido y organismo_requerido se conservan como constantes
-/// para otros endpoints (p.ej. generación de consolidado) pero no aplican al submit.
+/// Devuelve la lista de códigos de error (vacía = puede prepararse). Códigos (contrato
+/// <see cref="TramiteEstadoErrores"/>): <c>documentos_incompletos</c>, <c>identidad_no_aprobada</c>,
+/// más los propios del traspaso: <c>firma_compraventa_requerida</c>, <c>fur_requerido</c>,
+/// <c>organismo_requerido</c>.
 /// </summary>
 public static class SubmitGate
 {
-    public const string DocumentosIncompletos = "documentos_incompletos";
-    public const string IdentidadRequerida = "identidad_requerida";
+    public const string DocumentosIncompletos = TramiteEstadoErrores.DocumentosIncompletos;
+    public const string IdentidadNoAprobada = TramiteEstadoErrores.IdentidadNoAprobada;
+    public const string FirmaCompraventaRequerida = "firma_compraventa_requerida";
     public const string FurRequerido = "fur_requerido";
     public const string OrganismoRequerido = "organismo_requerido";
+    public const string ImprontaRequerida = "impronta_requerida";
 
     /// <summary>
-    /// Evalúa el gate de radicado. La instancia debe traer cargado el grafo del wizard
+    /// Evalúa el gate de preparación (RF03). La instancia debe traer cargado el grafo del wizard
     /// (FieldValues, Actors, Attachments, BiometricValidations, Signatures, ChecklistEstado).
     /// </summary>
-    public static IReadOnlyList<string> Evaluate(ProcedureInstance instance)
+    /// <param name="documentosCompletosOverride">
+    /// HU #10522 (RF17/RF22): completitud documental resuelta desde la matriz del gestor. Cuando
+    /// viene (no <c>null</c>) manda sobre el cómputo interno del catálogo; <c>null</c> ⇒ se usa el
+    /// gate actual (flag OFF o sin matriz) sin regresión.
+    /// </param>
+    public static IReadOnlyList<string> Evaluate(
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool? documentosCompletosOverride = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
+        var docsCompletos = documentosCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
+
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? EvaluateTraspaso(instance)
-            : EvaluateMatricula(instance);
+            ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos)
+            : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos);
     }
 
-    private static List<string> EvaluateMatricula(ProcedureInstance instance)
+    private static List<string> EvaluateMatricula(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
     {
-        var errors = new List<string>(4);
+        var errors = new List<string>(2);
 
-        if (!DocumentosObligatoriosCompletos(instance))
+        if (!docsCompletos)
             errors.Add(DocumentosIncompletos);
-        if (!BiometriaAprobada(instance, "comprador"))
-            errors.Add(IdentidadRequerida);
+        // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador))
+            errors.Add(IdentidadNoAprobada);
+        if (!ImprontaGenerada(instance))
+            errors.Add(ImprontaRequerida);
 
         return errors;
     }
 
     /// <summary>
-    /// Gate de traspaso (bajo riesgo): ambas biométricas + firma compraventa + FUR + docs + organismo.
-    /// Si NO se cumple todo, NO se bloquea el submit (se deja pasar) para preservar los flujos de
-    /// traspaso existentes; el endurecimiento queda como deuda M5.
+    /// Gate de traspaso (HU #10459): documentos completos + ambas biométricas + firma de compraventa
+    /// de comprador y vendedor + FUR generado + organismo seleccionado. Devuelve todos los códigos
+    /// incumplidos; lista vacía = puede prepararse/radicar.
     /// </summary>
-    private static List<string> EvaluateTraspaso(ProcedureInstance instance)
+    private static List<string> EvaluateTraspaso(
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
     {
-        var lowRiskComplete =
-            DocumentosObligatoriosCompletos(instance)
-            && BiometriaAprobada(instance, "comprador")
-            && BiometriaAprobada(instance, "vendedor")
-            && FirmaCompraventaAmbas(instance)
-            && FurGenerado(instance)
-            && OrganismoSeleccionado(instance);
+        var errors = new List<string>(5);
 
-        // Solo gateamos cuando el trámite ya satisface el flujo completo (no introducimos un blocker
-        // nuevo en traspasos parciales preexistentes).
-        return lowRiskComplete ? [] : [];
+        if (!docsCompletos)
+            errors.Add(DocumentosIncompletos);
+        // Identidad PER-PERSONA (documento de cada parte), referenciada de su validación vigente (HU #10350).
+        if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador)
+            || !identidadAprobadaPartes.Contains(BiometricRules.ParteVendedor))
+            errors.Add(IdentidadNoAprobada);
+        // B12 (HU #10661, ADR-0028): la firma de compraventa NO bloquea el traspaso — negocio aún no
+        // define la lógica ideal de firmas (ZapSign/baúl). Se omite el check FirmaCompraventaAmbas para
+        // desbloquear preparar/radicar; el modelo y los endpoints de firma se conservan intactos.
+        if (!FurGenerado(instance))
+            errors.Add(FurRequerido);
+        if (!OrganismoSeleccionado(instance))
+            errors.Add(OrganismoRequerido);
+        if (!ImprontaGenerada(instance))
+            errors.Add(ImprontaRequerida);
+
+        return errors;
     }
 
     // internal: reutilizado por FinalizeDraftGate (HU #10349) — misma fuente de verdad de completitud
-    // documental para finalizar borrador y para radicar.
+    // documental para finalizar borrador y para preparar el trámite.
     internal static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
     {
-        // DEMO: ver DemoFlags.RelaxDocs — afloja el gating estricto de documentos.
-        if (DemoFlags.RelaxDocs)
-            return true;
-
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
-    }
-
-    private static bool BiometriaAprobada(ProcedureInstance instance, string parte)
-    {
-        // HU #10350 — aprobada Y vigente (≤30 días) Y del DOCUMENTO del actor actual; una aprobación
-        // vencida no radica, y una validación de una persona anterior (documento distinto) tampoco cuenta
-        // (defensa en profundidad: el gate no se fía de que el ensure del frontend haya invalidado la previa).
-        var now = DateTimeOffset.UtcNow;
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        return instance.BiometricValidations.Any(v =>
-            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
     }
 
     private static bool FurGenerado(ProcedureInstance instance) =>
@@ -116,7 +125,7 @@ public static class SubmitGate
         return v is not null && !string.IsNullOrWhiteSpace(v.ValueText);
     }
 
-    private static bool FirmaCompraventaAmbas(ProcedureInstance instance)
+    internal static bool FirmaCompraventaAmbas(ProcedureInstance instance)
     {
         bool Firmada(string parte) => instance.Signatures.Any(s =>
             string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
@@ -125,4 +134,19 @@ public static class SubmitGate
 
         return Firmada(SignatureRules.ParteComprador) && Firmada(SignatureRules.ParteVendedor);
     }
+
+    /// <summary>
+    /// ¿La tipología del trámite tiene un ítem de checklist con <c>DocTipo == "impronta"</c>? Así una
+    /// tipología futura sin impronta en su checklist no queda bloqueada por este gate.
+    /// </summary>
+    private static bool RequiereImpronta(ProcedureInstance instance)
+    {
+        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var tip = TramiteTipologiaCatalog.Get(codigo);
+        return tip is not null && tip.Checklist.Any(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ImprontaGenerada(ProcedureInstance instance) =>
+        !RequiereImpronta(instance)
+        || instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase));
 }

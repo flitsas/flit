@@ -8,11 +8,13 @@ namespace Flit.Infrastructure.Services;
 /// <summary>
 /// Implementación EF Core del resolutor de la matriz documental (HU #10196, RF18; HU #10198).
 ///
-/// Algoritmo de precedencia del <b>orden</b> <b>Cliente &gt; OT &gt; Default</b>:
-/// (1) carga la base del trámite desde <c>procedure_document_requirements</c> (join a
-/// <c>document_types</c>); (2) carga los overrides OT y CLIENTE solo cuando se aporta su
-/// referencia; (3) por cada documento aplica el override de mayor precedencia disponible;
-/// (4) ordena por orden resuelto asc, desempatando por <c>document_type_id</c>.
+/// Algoritmo de precedencia del <b>orden</b> <b>OT &gt; Default</b> (RF22 — el organismo de
+/// tránsito es el ÚNICO nivel que sugiere el orden; se retiró el nivel Cliente y el override
+/// de orden general/por cliente): (1) carga la base del trámite desde
+/// <c>procedure_document_requirements</c> (join a <c>document_types</c>); (2) carga los
+/// overrides OT solo cuando se aporta su referencia; (3) por cada documento aplica el override
+/// OT si existe, si no el orden base del trámite; (4) ordena por orden resuelto asc,
+/// desempatando por <c>document_type_id</c>.
 ///
 /// Para el scope OT, la prelación de <c>admin.ot_document_precedence</c> (consola OT HU #10222)
 /// tiene prioridad sobre <c>tramites.document_order_overrides</c> (HU #10196).
@@ -34,7 +36,6 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
     public async Task<IReadOnlyList<ResolvedDocumentMatrixItem>> ResolveAsync(
         Guid procedureTypeId,
         Guid? transitOfficeId,
-        Guid? clienteId,
         CancellationToken cancellationToken = default)
     {
         var baseDocs = await (
@@ -57,9 +58,6 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 procedureTypeId, transitOfficeId, cancellationToken)
             .ConfigureAwait(false);
         var otOverrides = MergeOtOrder(otLegacyOverrides, otAdminPrecedence);
-        var clienteOverrides = await LoadOverridesAsync(
-                procedureTypeId, DocumentOrderScope.Cliente, clienteId, cancellationToken)
-            .ConfigureAwait(false);
         var otRequirementStates = await LoadOtRequirementStatesAsync(
                 procedureTypeId, transitOfficeId, cancellationToken)
             .ConfigureAwait(false);
@@ -80,15 +78,12 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 obligatorio = requirementState == DocumentRequirementState.Required;
             }
 
+            // RF22 — el OT es el único nivel que reordena; sin override OT se usa el orden base
+            // del trámite (no configurable por cliente ni por un override de orden general).
             short orden;
             string nivel;
 
-            if (clienteOverrides.TryGetValue(doc.DocumentTypeId, out var clienteOrden))
-            {
-                orden = clienteOrden;
-                nivel = DocumentOrderScope.Cliente;
-            }
-            else if (otOverrides.TryGetValue(doc.DocumentTypeId, out var otOrden))
+            if (otOverrides.TryGetValue(doc.DocumentTypeId, out var otOrden))
             {
                 orden = otOrden;
                 nivel = DocumentOrderScope.Ot;

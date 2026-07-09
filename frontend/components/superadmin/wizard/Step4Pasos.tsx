@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripVertical, ChevronUp, ChevronDown, Trash2, Plus } from 'lucide-react';
+import { GripVertical, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import type { ProcedureStep } from '@/lib/api/types/procedure-parametrization';
 
 interface Step4Props {
@@ -33,7 +33,6 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           <div
             key={index}
             className="flex items-center gap-3 rounded-xl p-3 border bg-[rgba(85,126,255,0.03)] dark:bg-white/5"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <GripVertical className="h-4 w-4 opacity-30 shrink-0" aria-hidden="true" />
             <span
@@ -85,7 +84,6 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           onChange={(e) => setNewStepName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
-          style={{ borderColor: '#DFE5ED' }}
         />
         <button
           onClick={handleAdd}
@@ -94,7 +92,6 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           style={{ background: '#557EFF' }}
           aria-label="Agregar nuevo paso"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Agregar
         </button>
       </div>

@@ -11,9 +11,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoints de los overrides de orden documental por OT/Cliente (HU #10196).
-/// Todo el grupo exige rol SuperAdmin. El ámbito (<c>scope=OT|CLIENTE</c>) viaja como
-/// query; la referencia se toma de <c>transitOfficeId</c> o <c>clienteId</c> según el scope.
+/// Endpoints de los overrides de orden documental por OT (HU #10196; RF22 — el OT es el
+/// único ámbito). Todo el grupo exige rol SuperAdmin. El ámbito (<c>scope=OT</c>) viaja como
+/// query; la referencia se toma de <c>transitOfficeId</c>.
 /// </summary>
 public static class AdminDocumentOrderOverridesEndpoints
 {
@@ -30,10 +30,10 @@ public static class AdminDocumentOrderOverridesEndpoints
         // POST ?scope=OT|CLIENTE — crea el override (AC1/AC2 → 201 / 422 / 404 / 400).
         group.MapPost("/", CreateAsync)
             .WithName("AdminDocumentOrderOverrideCreate")
-            .WithSummary("Crea un override de orden por OT o Cliente")
-            .WithDescription("Define un orden personalizado para un documento en un ámbito concreto. "
-                + "El query scope=OT|CLIENTE elige el ámbito; la referencia viaja en transitOfficeId o clienteId. "
-                + "400 si falta scope; 404 si trámite/documento/OT/cliente no existen; 422 si el payload es inválido. "
+            .WithSummary("Crea un override de orden por OT")
+            .WithDescription("Define un orden personalizado para un documento en un organismo de tránsito. "
+                + "El query scope=OT es el único ámbito (RF22); la referencia viaja en transitOfficeId. "
+                + "400 si falta scope; 404 si trámite/documento/OT no existen; 422 si el payload es inválido. "
                 + "Requiere SuperAdmin.")
             .Produces<DocumentOrderOverrideResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
@@ -42,13 +42,12 @@ public static class AdminDocumentOrderOverridesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
-        // GET ?procedureTypeId&scope&transitOfficeId|clienteId — lista por scope (AC5 → 200 / 400).
+        // GET ?procedureTypeId&scope&transitOfficeId — lista por OT (AC5 → 200 / 400).
         group.MapGet("/", ListAsync)
             .WithName("AdminDocumentOrderOverrideList")
-            .WithSummary("Lista overrides de orden por ámbito")
-            .WithDescription("Retorna los overrides de orden de un trámite para un ámbito (OT o CLIENTE). "
-                + "Requiere procedureTypeId, scope y la referencia del ámbito (transitOfficeId para OT, "
-                + "clienteId para CLIENTE); 400 si falta alguno. Requiere SuperAdmin.")
+            .WithSummary("Lista overrides de orden por OT")
+            .WithDescription("Retorna los overrides de orden de un trámite para un organismo de tránsito. "
+                + "Requiere procedureTypeId, scope=OT y transitOfficeId; 400 si falta alguno. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -91,7 +90,7 @@ public static class AdminDocumentOrderOverridesEndpoints
         if (normalizedScope is null)
         {
             return Results.Json(
-                new ErrorResponse("El parámetro scope es obligatorio y debe ser OT o CLIENTE."),
+                new ErrorResponse("El parámetro scope es obligatorio y debe ser OT (RF22)."),
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -114,9 +113,8 @@ public static class AdminDocumentOrderOverridesEndpoints
                 new ErrorResponse($"No existe el tipo de trámite {request.ProcedureTypeId}.")),
             CreateDocumentOrderOverrideOutcome.DocumentTypeNotFound => Results.NotFound(
                 new ErrorResponse($"No existe el tipo de documento {request.DocumentTypeId}.")),
-            _ => Results.NotFound(new ErrorResponse(normalizedScope == DocumentOrderScope.Ot
-                ? $"No existe el organismo de tránsito {request.TransitOfficeId}."
-                : $"No existe el cliente {request.ClienteId}.")),
+            _ => Results.NotFound(new ErrorResponse(
+                $"No existe el organismo de tránsito {request.TransitOfficeId}.")),
         };
     }
 
@@ -125,8 +123,7 @@ public static class AdminDocumentOrderOverridesEndpoints
         CancellationToken cancellationToken,
         [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] string? scope = null,
-        [FromQuery] Guid? transitOfficeId = null,
-        [FromQuery] Guid? clienteId = null)
+        [FromQuery] Guid? transitOfficeId = null)
     {
         if (procedureTypeId is null || procedureTypeId == Guid.Empty)
         {
@@ -136,28 +133,16 @@ public static class AdminDocumentOrderOverridesEndpoints
         var normalizedScope = DocumentOrderScope.Normalize(scope);
         if (normalizedScope is null)
         {
-            return BadRequest("El parámetro scope es obligatorio y debe ser OT o CLIENTE.");
+            return BadRequest("El parámetro scope es obligatorio y debe ser OT (RF22).");
         }
 
-        Guid scopeRefId;
-        if (normalizedScope == DocumentOrderScope.Ot)
+        // RF22 — el único ámbito es OT.
+        if (transitOfficeId is null || transitOfficeId == Guid.Empty)
         {
-            if (transitOfficeId is null || transitOfficeId == Guid.Empty)
-            {
-                return BadRequest("El parámetro transitOfficeId es obligatorio para scope OT.");
-            }
-
-            scopeRefId = transitOfficeId.Value;
+            return BadRequest("El parámetro transitOfficeId es obligatorio para scope OT.");
         }
-        else
-        {
-            if (clienteId is null || clienteId == Guid.Empty)
-            {
-                return BadRequest("El parámetro clienteId es obligatorio para scope CLIENTE.");
-            }
 
-            scopeRefId = clienteId.Value;
-        }
+        var scopeRefId = transitOfficeId.Value;
 
         var result = await handler
             .HandleAsync(

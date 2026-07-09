@@ -44,7 +44,56 @@ internal static class SettingsDiff
                 JsonArray(updated.PaymentMethods)));
         }
 
+        // HU #10478 — timeout de failover (número JSON) y override de proveedores (objeto jsonb).
+        if (previous.RuntFailoverTimeoutMs != updated.RuntFailoverTimeoutMs)
+        {
+            changes.Add(new TenantConfigChange(
+                "runt_failover_timeout_ms",
+                previous.RuntFailoverTimeoutMs.ToString(CultureInfo.InvariantCulture),
+                updated.RuntFailoverTimeoutMs.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        var previousConfig = JsonConsultationConfig(previous.ConsultationProviderConfig);
+        var updatedConfig = JsonConsultationConfig(updated.ConsultationProviderConfig);
+        if (!string.Equals(previousConfig, updatedConfig, StringComparison.Ordinal))
+        {
+            changes.Add(new TenantConfigChange("consultation_provider_config", previousConfig, updatedConfig));
+        }
+
         return changes;
+    }
+
+    /// <summary>
+    /// JSON canónico del override de proveedores para auditoría (orden de tipos fijo, sin
+    /// <c>JsonSerializer</c> para preservar AOT). Solo incluye los tipos presentes; <c>{}</c> si vacío.
+    /// </summary>
+    private static string JsonConsultationConfig(ConsultationProviderConfig config)
+    {
+        var builder = new StringBuilder();
+        builder.Append('{');
+
+        var first = true;
+        foreach (var kind in new[] { "vehicle_vin", "vehicle_plate", "conductor" })
+        {
+            if (!config.ByKind.TryGetValue(kind, out var selection))
+            {
+                continue;
+            }
+
+            if (!first)
+            {
+                builder.Append(',');
+            }
+
+            first = false;
+            builder.Append(JsonString(kind)).Append(":{")
+                .Append(JsonString("primary")).Append(':').Append(JsonString(selection.Primary))
+                .Append(',').Append(JsonString("fallback")).Append(':').Append(JsonArray(selection.Fallback))
+                .Append('}');
+        }
+
+        builder.Append('}');
+        return builder.ToString();
     }
 
     private static void AddBool(List<TenantConfigChange> changes, string field, bool previous, bool updated)

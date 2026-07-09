@@ -1,6 +1,8 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -24,7 +26,17 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != ProcedureInstanceStatus.Draft)
+        // B11 (HU #10659) — en TRASPASO el OT lo fija el RUNT (auto-bind en preflight) y NO es
+        // editable por el usuario: cualquier PATCH de claves transit_office_* se rechaza. La excepción
+        // post-submit (IsPostSubmitTransitOfficeKey) NO aplica en traspaso. Matrícula: sin cambios.
+        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        if (string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
+            && request.Items.Any(i => IsTransitOfficeKey(i.FieldKey)))
+        {
+            return (null, "ot_traspaso_no_modificable");
+        }
+
+        if (instance.Status != TramiteEstado.Borrador)
         {
             // Tras el envío solo se permiten claves de organismo de tránsito (generación
             // diferida del FUR). Cualquier otro campo sigue bloqueado en not_draft.
@@ -92,4 +104,8 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         string.Equals(fieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase)
         || string.Equals(fieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase)
         || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase);
+
+    // B11 — toda clave del organismo de tránsito (incluye transit_office_id), para el bloqueo en traspaso.
+    private static bool IsTransitOfficeKey(string fieldKey) =>
+        fieldKey.StartsWith("transit_office_", StringComparison.OrdinalIgnoreCase);
 }

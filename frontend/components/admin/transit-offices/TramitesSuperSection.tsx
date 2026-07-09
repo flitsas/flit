@@ -5,13 +5,18 @@ import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
+  approveOtClientProcedure,
+  descargarOtConsolidado,
   fetchOtClientProcedures,
   fetchOtProfile,
+  generarOtConsolidado,
+  rejectOtClientProcedure,
   updateOtFeatureFlag,
   updateOtProfile,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure, OtFeatureFlag, OtProfile } from "@/lib/api/types-ot";
 import { TramitesProcedureList } from "./TramitesProcedureList";
+import { OT_INPUT_CLS } from "./ot-form-styles";
 
 export type TramitesPanel = "dashboard" | "quipux";
 
@@ -32,6 +37,11 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const [activePanel, setActivePanel] = useState<TramitesPanel>("dashboard");
   const [switchingMode, setSwitchingMode] = useState(false);
   const [togglingFlagId, setTogglingFlagId] = useState<string | null>(null);
+  const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
+  const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [acting, setActing] = useState(false);
 
   const operationalFlags = (profile?.featureFlags ?? []).filter(
     (f) => !f.flagKey.startsWith("rule:"),
@@ -61,7 +71,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     setListStatus("loading");
     try {
       const data = await fetchOtClientProcedures(
-        { status: "pending_ot", page: 1, pageSize: PAGE_SIZE },
+        { status: "entregado", page: 1, pageSize: PAGE_SIZE },
         signal,
         { transitOfficeId },
       );
@@ -151,6 +161,70 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
   };
 
+  const handleGenerarConsolidado = async (procedure: OtClientProcedure) => {
+    setConsolidadoActingId(procedure.id);
+    try {
+      await generarOtConsolidado(procedure.id, { transitOfficeId });
+      show("Consolidado generado.", "success");
+    } catch {
+      show("No se pudo generar el consolidado (verifica FUR y documentos del trámite).", "error");
+    } finally {
+      setConsolidadoActingId(null);
+    }
+  };
+
+  const handleVerConsolidado = async (procedure: OtClientProcedure) => {
+    setConsolidadoActingId(procedure.id);
+    try {
+      await descargarOtConsolidado(procedure.id, procedure.referenceNumber, { transitOfficeId });
+    } catch {
+      show("El trámite aún no tiene consolidado generado.", "error");
+    } finally {
+      setConsolidadoActingId(null);
+    }
+  };
+
+  const confirmApprove = async () => {
+    if (!approveTarget) {
+      return;
+    }
+    setActing(true);
+    try {
+      const updated = await approveOtClientProcedure(approveTarget.id);
+      const next = procedures.filter((p) => p.id !== updated.id);
+      setProcedures(next);
+      setListStatus(next.length === 0 ? "empty" : "ready");
+      setApproveTarget(null);
+      show("Trámite aprobado.", "success");
+    } catch {
+      show("No se pudo aprobar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTarget || !rejectReason.trim()) {
+      return;
+    }
+    setActing(true);
+    try {
+      const updated = await rejectOtClientProcedure(rejectTarget.id, {
+        reason: rejectReason.trim(),
+      });
+      const next = procedures.filter((p) => p.id !== updated.id);
+      setProcedures(next);
+      setListStatus(next.length === 0 ? "empty" : "ready");
+      setRejectTarget(null);
+      setRejectReason("");
+      show("Trámite rechazado.", "success");
+    } catch {
+      show("No se pudo rechazar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, panel: TramitesPanel) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -206,7 +280,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       {operationalFlags.length > 0 && (
         <div
           className="rounded-2xl border bg-white p-4"
-          style={{ borderColor: "#DFE5ED" }}
           aria-labelledby={`${tabsId}-flags-heading`}
         >
           <h3 id={`${tabsId}-flags-heading`} className="mb-3 text-xs font-bold">
@@ -272,7 +345,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         aria-labelledby={`${tabsId}-tab-dashboard`}
         hidden={activePanel !== "dashboard"}
         className="rounded-2xl border bg-white p-4"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <UiStateBoundary
           status={listStatus}
@@ -284,6 +356,11 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           <TramitesProcedureList
             procedures={procedures}
             showApprovalActions={!isReadOnly}
+            onApprove={(id) => setApproveTarget(procedures.find((p) => p.id === id) ?? null)}
+            onReject={(id) => setRejectTarget(procedures.find((p) => p.id === id) ?? null)}
+            onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
+            onVerConsolidado={handleVerConsolidado}
+            consolidadoActingId={consolidadoActingId}
           />
         </UiStateBoundary>
       </div>
@@ -294,7 +371,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         aria-labelledby={`${tabsId}-tab-quipux`}
         hidden={activePanel !== "quipux"}
         className="rounded-2xl border bg-white p-4"
-        style={{ borderColor: "#DFE5ED" }}
       >
         <UiStateBoundary
           status={listStatus}
@@ -306,12 +382,97 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           <TramitesProcedureList
             procedures={procedures}
             showApprovalActions={false}
+            onVerConsolidado={handleVerConsolidado}
+            consolidadoActingId={consolidadoActingId}
           />
           <p className="mt-3 text-[11px] opacity-60">
             Vista de cola Quipux en modo {isReadOnly ? "solo lectura" : "operativo"}.
           </p>
         </UiStateBoundary>
       </div>
+
+      {approveTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar aprobación"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: "1px solid #DFE5ED" }}
+          >
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+              ¿Aprobar este trámite?
+            </h2>
+            <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                style={{ borderColor: "#DFE5ED" }}
+                onClick={() => setApproveTarget(null)}
+                disabled={acting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "#557EFF" }}
+                disabled={acting}
+                onClick={() => void confirmApprove()}
+              >
+                {acting ? "Procesando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Rechazar trámite"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: "1px solid #DFE5ED" }}
+          >
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+              Motivo del rechazo
+            </h2>
+            <textarea
+              className={`mt-3 ${OT_INPUT_CLS}`}
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                style={{ borderColor: "#DFE5ED" }}
+                onClick={() => setRejectTarget(null)}
+                disabled={acting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "#FF4E00" }}
+                disabled={acting || !rejectReason.trim()}
+                onClick={() => void confirmReject()}
+              >
+                Confirmar rechazo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

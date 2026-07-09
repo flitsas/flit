@@ -11,6 +11,8 @@ import type {
 const mocks = vi.hoisted(() => ({
   getChecklist: vi.fn(),
   getAttachments: vi.fn(),
+  getInstance: vi.fn(),
+  analyzeDocument: vi.fn(),
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
 }));
@@ -19,6 +21,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getChecklist: mocks.getChecklist,
     getAttachments: mocks.getAttachments,
+    getInstance: mocks.getInstance,
+    analyzeDocument: mocks.analyzeDocument,
     uploadAttachment: mocks.uploadAttachment,
     deleteAttachment: mocks.deleteAttachment,
   },
@@ -63,6 +67,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getChecklist.mockResolvedValue(CHECKLIST);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getInstance.mockResolvedValue({ fieldValues: [] });
+  mocks.analyzeDocument.mockResolvedValue({ ok: true, tipo: 'soat', data: { es_valido: true } });
   mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
   mocks.deleteAttachment.mockResolvedValue(undefined);
 });
@@ -158,6 +164,26 @@ describe('DocumentChecklist — upload', () => {
     expect(await screen.findByText(/supera el máximo de 20 MB/)).toBeInTheDocument();
   });
 
+  it('rechaza por tamaño usando el límite por-tipo (inline y dinámico, no 20 MB)', async () => {
+    // El tipo tiene un maxSizeBytes propio (1 MB): un archivo de 2 MB debe rechazarse en el
+    // cliente (inline) con el límite real formateado, sin llegar al backend ni al mensaje global.
+    mocks.getChecklist.mockResolvedValue({
+      ...CHECKLIST,
+      items: [{ ...CHECKLIST.items[0], maxSizeBytes: 1_000_000 }, CHECKLIST.items[1]],
+    });
+    const user = userEvent.setup();
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    await screen.findByText('Cédula del comprador');
+    const input = screen.getByLabelText('Subir Cédula del comprador');
+    await user.upload(input, pngFile('grande.png', 2_000_000));
+
+    expect(mocks.uploadAttachment).not.toHaveBeenCalled();
+    const msg = await screen.findByText(/supera el máximo/);
+    expect(msg.textContent).toMatch(/977 KB/);
+    expect(msg.textContent).not.toMatch(/20 MB/);
+  });
+
   it('rechaza por mime no permitido sin llamar al cliente', async () => {
     render(<DocumentChecklist instanceId={INSTANCE} />);
 
@@ -194,5 +220,31 @@ describe('validateFile — unidad', () => {
     expect(validateFile(pngFile('big.png', MAX_SIZE_BYTES + 1))).toMatch(
       /20 MB/,
     );
+  });
+
+  // HU #10524 (RF08/09/10) — validación por tipo con respaldo a los límites globales.
+  it('límite por tipo más estricto de MIME rechaza un formato antes permitido', () => {
+    // Un tipo restringido a solo PDF rechaza un PNG (que globalmente sí se acepta).
+    expect(validateFile(pngFile('foto.png', 1000), { allowedMimes: ['application/pdf'] }))
+      .toMatch(/no permitido/);
+  });
+
+  it('límite por tipo más estricto de tamaño rechaza por encima del máximo del tipo', () => {
+    const msg = validateFile(pngFile('grande.png', 2_000_000), { maxSizeBytes: 1_000_000 });
+    expect(msg).toMatch(/supera el máximo/);
+  });
+
+  it('límites por tipo vacíos ⇒ respaldo a los globales', () => {
+    expect(validateFile(pngFile('ok.png', 1000), {})).toBeNull();
+    expect(validateFile(pngFile('ok.png', 1000), { allowedMimes: [] })).toBeNull();
+  });
+
+  it('acepta dentro de un límite por tipo permisivo', () => {
+    expect(
+      validateFile(pngFile('ok.png', 1500), {
+        allowedMimes: ['image/png', 'application/pdf'],
+        maxSizeBytes: 5_000_000,
+      }),
+    ).toBeNull();
   });
 });

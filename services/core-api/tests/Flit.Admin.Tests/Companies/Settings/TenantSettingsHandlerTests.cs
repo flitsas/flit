@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
@@ -38,7 +39,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -101,7 +102,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             // Solo cambia un campo (baúl de firmas); el resto es idéntico a lo sembrado.
             await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -130,7 +131,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -168,7 +169,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -198,7 +199,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC2_InvalidEnrutamientoSMTP_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -231,7 +232,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -249,11 +250,180 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC3_Get_ReturnsNull_WhenNoConfiguration()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
+    }
+
+    // ---------- HU #10478: config de proveedores de consulta + failover timeout ----------
+
+    [Fact]
+    public async Task HU10478_PersistsConsultationConfigAndFailoverTimeout_AndAuditsOnlyThose()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedPolicy(seed, tenantId,
+                allowInit: true, allowMisc: true, onlyOwn: false, vault: false,
+                channel: "flit_smtp", target: "RADICADOR", payments: "[]");
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            // Resto idéntico a lo sembrado: solo cambian los 2 campos nuevos.
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ChangedBy,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: [],
+                    RuntFailoverTimeoutMs: 8000,
+                    ConsultationProviderConfig: new Dictionary<string, ConsultationProviderChoice>
+                    {
+                        ["vehicle_vin"] = new("kyverum_runt", ["verifik"]),
+                    }),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.RuntFailoverTimeoutMs.Should().Be(8000);
+            result.Settings.ConsultationProviderConfig.Should().ContainKey("vehicle_vin");
+            result.Settings.ConsultationProviderConfig["vehicle_vin"].Primary.Should().Be("kyverum_runt");
+            result.Settings.ConsultationProviderConfig["vehicle_vin"].Fallback.Should().BeEquivalentTo("verifik");
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.RuntFailoverTimeoutMs.Should().Be(8000);
+        policy.ConsultationProviderConfig.Should().Contain("kyverum_runt").And.Contain("vehicle_vin");
+
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        audits.Should().HaveCount(2);
+        audits.Should().Contain(a => a.FieldName == "runt_failover_timeout_ms" && a.OldValue == "4000" && a.NewValue == "8000");
+        audits.Should().Contain(a =>
+            a.FieldName == "consultation_provider_config" &&
+            a.OldValue == "{}" &&
+            a.NewValue == "{\"vehicle_vin\":{\"primary\":\"kyverum_runt\",\"fallback\":[\"verifik\"]}}");
+    }
+
+    [Fact]
+    public async Task HU10478_InvalidProviderKey_Returns422_AndPersistsNothing()
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+
+        var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+        {
+            TenantId = Guid.NewGuid(),
+            Request = new UpdateTenantSettingsRequest(
+                new SwitchesMatricula(true, true, false),
+                BaulFirmasActivo: false,
+                EnrutamientoSMTP: "FLIT_SMTP",
+                NotificationTarget: "RADICADOR",
+                MetodosRecaudo: [],
+                ConsultationProviderConfig: new Dictionary<string, ConsultationProviderChoice>
+                {
+                    // 'intempo' no es un proveedor permitido para vehicle_vin.
+                    ["vehicle_vin"] = new("intempo", []),
+                }),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "consultationProviderConfig");
+    }
+
+    [Fact]
+    public async Task HU10478_UnknownKind_Returns422()
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+
+        var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+        {
+            TenantId = Guid.NewGuid(),
+            Request = new UpdateTenantSettingsRequest(
+                new SwitchesMatricula(true, true, false),
+                BaulFirmasActivo: false,
+                EnrutamientoSMTP: "FLIT_SMTP",
+                NotificationTarget: "RADICADOR",
+                MetodosRecaudo: [],
+                ConsultationProviderConfig: new Dictionary<string, ConsultationProviderChoice>
+                {
+                    ["simit"] = new("verifik", []),
+                }),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "consultationProviderConfig");
+    }
+
+    [Fact]
+    public async Task HU10478_FailoverTimeoutOutOfRange_Returns422()
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+
+        var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+        {
+            TenantId = Guid.NewGuid(),
+            Request = new UpdateTenantSettingsRequest(
+                new SwitchesMatricula(true, true, false),
+                BaulFirmasActivo: false,
+                EnrutamientoSMTP: "FLIT_SMTP",
+                NotificationTarget: "RADICADOR",
+                MetodosRecaudo: [],
+                RuntFailoverTimeoutMs: 100),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "runtFailoverTimeoutMs");
+    }
+
+    [Fact]
+    public async Task HU10478_Get_ReturnsConfigAndTimeout()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                AllowInitialRegistration = true,
+                AllowMiscNewVehicles = true,
+                OnlyOwnVehicles = false,
+                SignatureVaultEnabled = false,
+                NotificationChannel = "flit_smtp",
+                NotificationTarget = "RADICADOR",
+                PaymentMethods = "[]",
+                RuntFailoverTimeoutMs = 6000,
+                ConsultationProviderConfig =
+                    "{\"conductor\":{\"primary\":\"verifik_conductor\",\"fallback\":[\"kyverum_runt_conductor\"]}}",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+
+        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
+
+        result.Should().NotBeNull();
+        result!.RuntFailoverTimeoutMs.Should().Be(6000);
+        result.ConsultationProviderConfig.Should().ContainKey("conductor");
+        result.ConsultationProviderConfig["conductor"].Primary.Should().Be("verifik_conductor");
+        result.ConsultationProviderConfig["conductor"].Fallback.Should().BeEquivalentTo("kyverum_runt_conductor");
     }
 
     // ---------- Helpers ----------

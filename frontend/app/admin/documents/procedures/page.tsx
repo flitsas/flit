@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ProcedureTypeSelect } from "@/components/admin/documents/ProcedureTypeSelect";
-import { PROCEDURE_TYPES } from "@/lib/constants/procedure-types";
+import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 
-// Selector de tipo de trámite (HU #10198, AC2–AC5). Como no existe endpoint de
-// tipos de trámite, se usa la lista estática; al elegir uno se navega a la consola
-// documental por trámite (`/admin/documents/procedures/[procedureTypeId]`).
+// Selector de tipo de trámite (HU #10198, AC2–AC5). La lista se resuelve desde el API
+// (los ids de procedure_types se generan por ambiente, no se pueden hardcodear); al elegir
+// uno se navega a la consola documental por trámite (`/admin/documents/procedures/[id]`).
 export default function DocumentProceduresPage() {
   const router = useRouter();
   const [procedureTypeId, setProcedureTypeId] = useState("");
+  const { items } = useProcedureTypes();
+  const procedureTypes = items.filter((p) => p.isActive);
 
   const go = (id: string) => {
     if (id) {
@@ -36,7 +38,7 @@ export default function DocumentProceduresPage() {
         subtitle="Selecciona un tipo de trámite para gestionar sus documentos, overrides y matriz resuelta."
       />
 
-      <div className="flex flex-col gap-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" style={{ borderColor: "#DFE5ED" }}>
+      <div className="flex flex-col gap-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <div className="max-w-md">
           <ProcedureTypeSelect value={procedureTypeId} onChange={setProcedureTypeId} />
           <button
@@ -51,13 +53,12 @@ export default function DocumentProceduresPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {PROCEDURE_TYPES.map((p) => (
+          {procedureTypes.map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => go(p.id)}
               className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-[#557EFF] dark:bg-[#0B0F14]"
-              style={{ borderColor: "#DFE5ED" }}
             >
               <span>
                 <span className="block text-xs font-semibold">{p.name}</span>

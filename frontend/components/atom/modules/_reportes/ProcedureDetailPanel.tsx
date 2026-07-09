@@ -12,7 +12,8 @@ import type { DateRange } from "./range";
 const PAGE_SIZE = 10;
 
 interface ProcedureDetailPanelProps {
-  category: AnalyticsCategory;
+  /** Categoría a filtrar; indefinida = todas (drill-down solo por estado, Reportes 2.0). */
+  category?: AnalyticsCategory;
   /** Estado a filtrar; indefinido = toda la categoría. */
   status?: string;
   range: DateRange;
@@ -39,7 +40,7 @@ function formatDate(value?: string | null): string {
  * los filtros de categoría/estado. Implementa los 4 estados de UI vía UiStateBoundary.
  */
 export function ProcedureDetailPanel({ category, status, range, tenantId, onClose }: ProcedureDetailPanelProps) {
-  const meta = CATEGORY_META[category];
+  const meta = category ? CATEGORY_META[category] : undefined;
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProcedureDetailsPage | null>(null);
   const [uiStatus, setUiStatus] = useState<UiStatus>("loading");
@@ -80,7 +81,8 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE)) : 1;
-  const title = status ? `${meta.label} · ${statusLabel(status)}` : meta.label;
+  const categoryLabel = meta?.label ?? "Todos los trámites";
+  const title = status ? `${categoryLabel} · ${statusLabel(status)}` : categoryLabel;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="detalle-panel-title">
@@ -93,7 +95,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
       />
 
       <aside className="relative z-10 h-full w-full max-w-xl bg-white dark:bg-[#0B0F14] shadow-2xl flex flex-col">
-        <header className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "#DFE5ED" }}>
+        <header className="flex items-center justify-between px-5 py-4 border-b shrink-0">
           <div>
             <h2 id="detalle-panel-title" className="text-sm font-bold">
               Detalle de trámites
@@ -108,7 +110,6 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
             onClick={onClose}
             aria-label="Cerrar detalle"
             className="h-8 w-8 grid place-items-center rounded-lg border hover:bg-[#557EFF1A]"
-            style={{ borderColor: "#DFE5ED" }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -134,7 +135,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
               </thead>
               <tbody>
                 {data?.items.map((row) => (
-                  <tr key={row.id} className="border-t" style={{ borderColor: "#DFE5ED" }}>
+                  <tr key={row.id} className="border-t">
                     <td className="px-2 py-2 font-medium">{row.referenceNumber}</td>
                     <td className="px-2 py-2 opacity-80">{row.procedureTypeName}</td>
                     <td className="px-2 py-2">{statusLabel(row.status)}</td>
@@ -148,7 +149,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
         </div>
 
         {uiStatus === "ready" && data && (
-          <footer className="flex items-center justify-between px-5 py-3 border-t shrink-0" style={{ borderColor: "#DFE5ED" }}>
+          <footer className="flex items-center justify-between px-5 py-3 border-t shrink-0">
             <span className="text-[11px] opacity-70">
               Página {data.page} de {totalPages}
             </span>
@@ -158,7 +159,6 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border disabled:opacity-40"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 Anterior
               </button>

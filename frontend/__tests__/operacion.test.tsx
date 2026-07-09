@@ -51,6 +51,8 @@ const TRASPASO_WIZARD: WizardState = {
   totalSteps: 6,
   canSubmit: false,
   blockers: ['documentos_incompletos'],
+  status: 'borrador',
+  allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
     { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
@@ -66,7 +68,7 @@ beforeEach(() => {
   mocks.createInstance.mockResolvedValue({
     id: 'inst-1',
     referenceNumber: 'TR-001',
-    status: 'draft',
+    status: 'borrador',
     procedureTypeId: null,
     tenantId: 'tenant-dev',
     createdAt: '2026-06-18T00:00:00Z',
@@ -96,7 +98,7 @@ const INSTANCE_DRAFT: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
   modalidad: 'traspaso',
-  estado: 'draft',
+  estado: 'borrador',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',
   vehiculoMarca: 'Toyota',
@@ -111,6 +113,7 @@ const INSTANCE_DRAFT: InstanceSummary = {
   identityValidationStatus: null,
   signaturePending: false,
   canSubmit: false,
+  prioritario: false,
   tenantId: '11111111-1111-1111-1111-111111111111',
   companiaNombre: null,
 };
@@ -119,7 +122,7 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
   id: 'inst-2',
   referenceNumber: 'MA-002',
   modalidad: 'matricula_inicial',
-  estado: 'submitted',
+  estado: 'entregado',
   placa: null,
   vin: 'VIN-NEW-002',
   vehiculoMarca: 'Mazda',
@@ -134,6 +137,7 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
   identityValidationStatus: null,
   signaturePending: false,
   canSubmit: false,
+  prioritario: false,
   tenantId: '11111111-1111-1111-1111-111111111111',
   companiaNombre: null,
 };
@@ -153,18 +157,18 @@ describe('M6 — tabla de trámites en curso', () => {
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
 
-    // Fila draft: placa real, comprador, VIN, vehículo concatenado, paso, chip ámbar.
+    // Fila borrador: placa real, comprador, VIN, vehículo concatenado, paso, chip ámbar (N 03).
     expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
     expect(within(rows[0]).getByText('TR-001')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Carlos Mendoza')).toBeInTheDocument();
     expect(within(rows[0]).getByText('VIN-XYZ-001')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Toyota Corolla')).toBeInTheDocument();
     expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('En preparación')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Borrador')).toBeInTheDocument();
 
-    // Fila submitted: placa nula -> "—", chip azul "Enviado a tránsito".
+    // Fila entregado: placa nula -> "—", chip azul "Entregado" (N 03).
     expect(within(rows[1]).getByText('—')).toBeInTheDocument();
-    expect(within(rows[1]).getByText('Enviado a tránsito')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Entregado')).toBeInTheDocument();
     expect(within(rows[1]).getByText('5/5')).toBeInTheDocument();
   });
 
@@ -220,8 +224,10 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
 
     expect(screen.getByRole('button', { name: 'Matrícula inicial' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Traspaso' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'En preparación' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enviado a tránsito' })).toBeInTheDocument();
+    // N 03 — chips de filtro por los 6 estados de negocio.
+    expect(screen.getByRole('button', { name: 'Borrador' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entregado' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Anulado' })).toBeInTheDocument();
   });
 
   it('la búsqueda por placa reduce las filas visibles', async () => {
@@ -232,6 +238,8 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     const list = await screen.findByRole('list', { name: /Trámites en curso/ });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
 
+    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
+    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
 
     const rows = within(
@@ -247,16 +255,17 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     render(<OperacionView onStartTramite={vi.fn()} />);
 
     await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
 
     const rows = within(
       screen.getByRole('list', { name: /Trámites en curso/ }),
     ).getAllByRole('listitem');
     expect(rows).toHaveLength(1);
-    expect(within(rows[0]).getByText('Enviado a tránsito')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
   });
 
-  it('el botón Continuar de una fila draft navega al wizard de esa instancia', async () => {
+  it('el botón Continuar de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
     render(<OperacionView onStartTramite={vi.fn()} />);
@@ -282,6 +291,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     render(<OperacionView onStartTramite={vi.fn()} />);
 
     await screen.findByRole('list', { name: /Trámites en curso/ });
+    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
 
     // Ya no hay lista de resultados; aparece el vacío "Sin resultados".

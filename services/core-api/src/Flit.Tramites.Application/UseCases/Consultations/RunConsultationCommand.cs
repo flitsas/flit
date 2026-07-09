@@ -137,6 +137,7 @@ public sealed class RunConsultationHandler(
         {
             var msg = e.Message;
             if (msg.Contains("check_violation", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("borrador", StringComparison.OrdinalIgnoreCase) ||
                 msg.Contains("draft", StringComparison.OrdinalIgnoreCase))
             {
                 return true;

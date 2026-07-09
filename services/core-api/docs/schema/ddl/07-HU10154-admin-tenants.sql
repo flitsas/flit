@@ -34,6 +34,9 @@ CREATE TABLE admin.tenant_operational_policies (
     payment_methods jsonb NOT NULL DEFAULT '[]',
     runt_provider_strategy varchar(20) NOT NULL DEFAULT 'verifik',
     runt_failover_timeout_ms integer NOT NULL DEFAULT 4000,
+    -- HU #10478: override por tenant de la cadena de proveedores de consulta RUNT.
+    -- Forma: {"vehicle_vin":{"primary":"kyverum_runt","fallback":["verifik"]}, ...}. '{}' = defaults globales.
+    consultation_provider_config jsonb NOT NULL DEFAULT '{}',
     row_version bigint NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     created_by uuid,

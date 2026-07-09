@@ -11,7 +11,12 @@ internal static class MatriculaConsolidadoOrdering
     private static readonly string[] Precedence =
     [
         "fur",
+        // Licencia de Tránsito emitida por el OT al decidir el trámite: entra al consolidado
+        // justo después del FUR (generar o re-generar desde cualquier módulo la incluye).
+        "licencia_transito",
         "certificado_identidad",
+        // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
+        "certificado_rues",
         "factura",
         "aduana",
         "impronta",

@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Routing;
 namespace Flit.Api.Endpoints.Tramites;
 
 /// <summary>
-/// Expediente consolidado (matrícula inicial): fusiona FUR + adjuntos del trámite en un PDF único.
+/// Expediente consolidado (matrícula inicial y traspaso): fusiona FUR + adjuntos del trámite
+/// en un PDF único (en traspaso incluye el contrato de compraventa).
 /// </summary>
 internal static class ConsolidadoEndpoints
 {
@@ -28,7 +29,7 @@ internal static class ConsolidadoEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "modalidad_no_soportada" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El consolidado solo está disponible para matrícula inicial."),
+                "modalidad_no_soportada" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El consolidado solo está disponible para matrícula inicial y traspaso."),
                 SubmitGate.FurRequerido => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes del consolidado."),
                 SubmitGate.DocumentosIncompletos => Results.Problem(statusCode: 409, title: "Conflict", detail: "Sube los documentos obligatorios antes de generar el consolidado."),
                 "sin_adjuntos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay adjuntos para consolidar."),

@@ -1,10 +1,24 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
 
 public interface IProcedureInstanceRepository
 {
     Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista los trámites de MATRÍCULA INICIAL del tenant (no eliminados) cuyo VIN coincide con
+    /// <paramref name="vinNormalizado"/>, EXCLUYENDO <paramref name="excludeInstanceId"/> (el borrador
+    /// en curso, para que no se detecte a sí mismo). Proyecta a <see cref="VinTramiteExistente"/> con la
+    /// secretaría (nombre del OT) y la fecha del registro previo, ordenado por recencia descendente para
+    /// que <see cref="Tramites.Services.VinPolicyEvaluator.EvaluarConflicto"/> tome el primer bloqueante
+    /// como referencia del mensaje. El VIN almacenado se compara normalizado (mayúsculas + trim) contra
+    /// <paramref name="vinNormalizado"/>, que ya viene de <see cref="Tramites.Services.VinNormalizer"/>.
+    /// Solo lectura (HU #10538, R3). Set vacío si no hay coincidencias.
+    /// </summary>
+    Task<IReadOnlyList<VinTramiteExistente>> FindTramitesByVinAsync(
+        Guid tenantId, string vinNormalizado, Guid excludeInstanceId, CancellationToken ct = default);
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
@@ -14,6 +28,21 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con el grafo necesario para computar el checklist condicional
+    /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
+    /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
+    /// <c>Participants</c> (tramitador). Es el grafo que consume <c>GetChecklistHandler</c>.
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga la instancia con sus <c>Actors</c> y <c>Attachments</c>. Query lean para el
+    /// cómputo del checklist, que necesita los tipos de documento subidos (auto-marca) y el
+    /// tipo de persona de los actores (supresión de <c>cedulas</c> para persona natural, HU #10542).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con TODO el grafo del wizard: actores, field values, adjuntos,
     /// datos comerciales y snapshots de preflight (Slice 4 — wizard server-driven).</summary>
@@ -105,6 +134,14 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
+    /// de los tenants indicados, en UNA consulta. Para el listado de trámites: resuelve la identidad por PERSONA
+    /// sin N+1 (HU #10350 — referenciar la identidad vigente, no clonar por trámite). Set vacío si no hay ninguna.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
     /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.
     /// </summary>
@@ -117,6 +154,30 @@ public interface IProcedureInstanceRepository
     /// filtrar existencia (HU #10233, AC2/AC3).
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
+    /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
+    /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.
+    /// Dos entregas paralelas del MISMO webhook (misma clave) cuentan una sola vez: Postgres bloquea la fila
+    /// y la segunda ya no cumple la guarda. Devuelve <c>true</c> si contó (intento nuevo, aún en proceso);
+    /// <c>false</c> si fue un redelivery del mismo intento o la validación ya no está en proceso.
+    /// </summary>
+    Task<bool> TryCountKyverumAttemptAsync(
+        Guid validationId, string attemptKey, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recarga desde la BD los valores de una validación ya rastreada (tras un <c>UPDATE</c> atómico que no
+    /// pasó por el change tracker), para que el caller vea el conteo actualizado antes de terminalizar/enriquecer.
+    /// </summary>
+    Task ReloadBiometricAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bitácora del ciclo de validación de identidad (envío/webhook/descifrado/reconciliación/errores) de una
+    /// validación, ordenada por <c>occurred_at</c>. Solo lectura (AsNoTracking).
+    /// </summary>
+    Task<IReadOnlyList<IdentityValidationAuditEvent>> ListIdentityAuditByValidationAsync(
+        Guid validationId, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con sus participantes del portal (Slice 7 Part B, vista del gestor).</summary>
     Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
@@ -179,4 +240,41 @@ public interface IProcedureInstanceRepository
     Task<bool> UserExistsAsync(Guid userId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Persiste la unidad de trabajo protegiendo la concurrencia optimista de
+    /// <c>procedure_instances.row_version</c> (RNF01, N 03): si otro proceso transicionó la
+    /// instancia entre la carga y el commit, devuelve <c>false</c> SIN efectos parciales
+    /// (la capa Application no referencia EF, por eso el mapeo de
+    /// <c>DbUpdateConcurrencyException</c> vive en el repositorio). <c>true</c> = commit OK.
+    /// </summary>
+    Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Página del historial de transiciones de estado de la instancia (HU-2 N03, RF05), ordenada
+    /// por <c>changed_at</c> DESC, con el nombre del usuario resuelto contra <c>identity.users</c>
+    /// (null si el usuario no existe). Devuelve <c>null</c> si la instancia no existe o no
+    /// pertenece al tenant (→ 404); si existe pero no tiene historial, página vacía con Total 0.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resuelve el <c>DisplayName</c> de un usuario contra <c>identity.users</c> (operador que radica
+    /// una generación de impronta desde el trámite). Null si el usuario no existe.
+    /// </summary>
+    Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre
+/// del usuario que ejecutó la transición ya resuelto (HU-2 N03).
+/// </summary>
+public sealed record ProcedureInstanceStatusHistoryEntry(
+    Guid Id,
+    string? FromStatus,
+    string ToStatus,
+    DateTimeOffset ChangedAt,
+    Guid? ChangedByUserId,
+    string? ChangedByName,
+    string? Reason);

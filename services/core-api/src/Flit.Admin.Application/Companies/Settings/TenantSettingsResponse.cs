@@ -12,4 +12,6 @@ public sealed record TenantSettingsResponse(
     bool BaulFirmasActivo,
     string EnrutamientoSMTP,
     string NotificationTarget,
-    IReadOnlyList<string> MetodosRecaudo);
+    IReadOnlyList<string> MetodosRecaudo,
+    int RuntFailoverTimeoutMs,
+    IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig);

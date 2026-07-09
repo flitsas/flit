@@ -20,7 +20,7 @@ export function ToggleSwitch({
   onChange,
 }: ToggleSwitchProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border bg-white px-4 py-3 dark:bg-[#0B0F14]" style={{ borderColor: "#DFE5ED" }}>
+    <div className="flex items-center justify-between gap-4 rounded-xl border bg-white px-4 py-3 dark:bg-[#0B0F14]">
       <div>
         <label htmlFor={id} className="cursor-pointer text-xs font-semibold">
           {label}

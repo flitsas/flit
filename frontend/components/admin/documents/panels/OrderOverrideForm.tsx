@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info, Loader2, Plus } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import { DocumentTypeSelect } from "@/components/admin/documents/DocumentTypeSelect";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
@@ -55,7 +55,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
   };
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-2xl border p-4">
       <div className="mb-3 flex items-center gap-2">
         <ScopeBadge scope={scope} />
         <h3 className="text-xs font-semibold">Nuevo override de orden</h3>
@@ -106,7 +106,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
           className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Agregar
         </button>
       </div>

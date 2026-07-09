@@ -31,7 +31,6 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             value={identity.family}
             onChange={(e) => onChange({ family: e.target.value as ProcedureFamily })}
             className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           >
             {FAMILIES.map((f) => (
               <option key={f.value} value={f.value}>
@@ -53,7 +52,6 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             value={identity.code}
             onChange={(e) => onChange({ code: e.target.value.toUpperCase().replace(/\s/g, '_') })}
             className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] font-mono tracking-wide"
-            style={{ borderColor: '#DFE5ED' }}
           />
           <p className="text-[10px] opacity-50 mt-1">Solo mayúsculas y guiones bajos.</p>
         </div>
@@ -70,7 +68,6 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             value={identity.name}
             onChange={(e) => onChange({ name: e.target.value })}
             className="w-full md:w-2/3 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
       </div>

@@ -38,7 +38,7 @@ internal static class BiometricaEndpoints
                     "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                     "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                     "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado draft."),
+                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
                     "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de iniciar la validación de identidad."),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
@@ -55,7 +55,7 @@ internal static class BiometricaEndpoints
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado draft."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
                 "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{result!.Validation.Id}", result),
             };
@@ -207,6 +207,79 @@ internal static class BiometricaEndpoints
         })
         .WithName("SimularProcedureInstanceBiometric")
         .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
+
+        // GET descargar el certificado (PDF) de una validación de identidad desde la API pública de Kyverum.
+        // Keyed por validationId ⇒ sirve para comprador o vendedor. 404 si no existe / sin certificado;
+        // 502/503 si el proveedor rechaza / no está disponible.
+        group.MapGet("/instances/{id:guid}/biometric/{validationId:guid}/certificado", async (
+            Guid id,
+            Guid validationId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            DescargarCertificadoIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ => Results.File(result!.Content, result.ContentType, result.FileName),
+            };
+        })
+        .WithName("DescargarCertificadoIdentidad")
+        .Produces(StatusCodes.Status200OK, contentType: "application/pdf");
+
+        // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
+        // secreto o no, firma, resultado y reconciliaciones. Diagnóstico desde la API sin entrar a la BD/pod.
+        group.MapGet("/instances/{id:guid}/biometric/{validationId:guid}/audit", async (
+            Guid id,
+            Guid validationId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetIdentityAuditHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
+                : Results.Ok(result);
+        })
+        .WithName("GetProcedureInstanceIdentityAudit")
+        .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
+
+        // POST reconciliar una validación con Kyverum (fallback si el webhook no llegó): consulta el estado
+        // real en Kyverum y lo aplica si ya es terminal. El frontend puede pollear esto en la pantalla de
+        // espera. 200 { status, updated }; 404 no existe; 409 no es Kyverum; 502/503 proveedor.
+        group.MapPost("/instances/{id:guid}/biometric/{validationId:guid}/reconcile", async (
+            Guid id,
+            Guid validationId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ReconciliarIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("ReconciliarProcedureInstanceIdentity")
+        .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.

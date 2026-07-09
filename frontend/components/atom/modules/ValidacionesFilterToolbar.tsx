@@ -177,7 +177,6 @@ function FilterSelect<T extends string>({
         value={value}
         onChange={(e) => onSelect(e.target.value as T)}
         className={CONTROL_CLASS}
-        style={{ borderColor: '#DFE5ED' }}
       >
         {options.map((o) => (
           <option key={o.value || 'todos'} value={o.value}>
@@ -207,7 +206,7 @@ export function ValidacionesFilterToolbar({
       : `${resultCount} validación${resultCount === 1 ? '' : 'es'}`;
 
   return (
-    <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0" style={{ borderColor: '#DFE5ED' }}>
+    <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0">
       {/* Trámite (búsqueda) + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
@@ -223,7 +222,6 @@ export function ValidacionesFilterToolbar({
             placeholder="Buscar por número de trámite…"
             aria-label="Filtrar por número de trámite"
             className={`${CONTROL_CLASS} pl-9`}
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
         <button
@@ -279,7 +277,6 @@ export function ValidacionesFilterToolbar({
             maxLength={SEARCH_TEXT_MAX_LENGTH}
             placeholder="Nombre…"
             className={CONTROL_CLASS}
-            style={{ borderColor: '#DFE5ED' }}
           />
         </Field>
       </div>
@@ -295,7 +292,6 @@ export function ValidacionesFilterToolbar({
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Texto del motivo…"
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
         </div>
@@ -312,7 +308,6 @@ export function ValidacionesFilterToolbar({
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="CC, CE…"
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Documento">
@@ -323,7 +318,6 @@ export function ValidacionesFilterToolbar({
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Número…"
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Score mín.">
@@ -334,7 +328,6 @@ export function ValidacionesFilterToolbar({
               value={filters.scoreMin}
               onChange={(e) => onChange({ scoreMin: e.target.value })}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Score máx.">
@@ -345,7 +338,6 @@ export function ValidacionesFilterToolbar({
               value={filters.scoreMax}
               onChange={(e) => onChange({ scoreMax: e.target.value })}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Registro desde">
@@ -354,7 +346,6 @@ export function ValidacionesFilterToolbar({
               value={filters.createdFrom}
               onChange={(e) => onChange({ createdFrom: e.target.value }, true)}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Registro hasta">
@@ -363,7 +354,6 @@ export function ValidacionesFilterToolbar({
               value={filters.createdTo}
               onChange={(e) => onChange({ createdTo: e.target.value }, true)}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Vence desde">
@@ -372,7 +362,6 @@ export function ValidacionesFilterToolbar({
               value={filters.expiraDesde}
               onChange={(e) => onChange({ expiraDesde: e.target.value }, true)}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Vence hasta">
@@ -381,7 +370,6 @@ export function ValidacionesFilterToolbar({
               value={filters.expiraHasta}
               onChange={(e) => onChange({ expiraHasta: e.target.value }, true)}
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
           <Field label="Vence en ≤ N días">
@@ -393,14 +381,13 @@ export function ValidacionesFilterToolbar({
               onChange={(e) => onChange({ venceEnDias: e.target.value })}
               placeholder="Ej. 3"
               className={CONTROL_CLASS}
-              style={{ borderColor: '#DFE5ED' }}
             />
           </Field>
         </div>
       )}
 
       {/* Contador + más filtros + limpiar */}
-      <div className="mt-2 flex items-center justify-between gap-3 border-t pt-2" style={{ borderColor: '#DFE5ED' }}>
+      <div className="mt-2 flex items-center justify-between gap-3 border-t pt-2">
         <p className="text-[11px] opacity-60" role="status" aria-live="polite">
           {counterLabel}
           {hasActiveFilters && <span className="ml-2 opacity-70">· filtros activos</span>}

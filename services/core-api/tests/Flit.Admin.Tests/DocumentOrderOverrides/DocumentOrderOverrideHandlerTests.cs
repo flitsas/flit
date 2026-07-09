@@ -1,10 +1,10 @@
-using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.DocumentOrderOverrides.CreateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.DeleteDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides.ListDocumentOrderOverrides;
 using Flit.Admin.Application.DocumentOrderOverrides.UpdateDocumentOrderOverride;
 using Flit.Admin.Application.DocumentOrderOverrides;
 using Flit.Admin.Domain.DocumentOrderOverrides;
+using Flit.Admin.Tests.TestDoubles;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -17,11 +17,11 @@ using Xunit;
 namespace Flit.Admin.Tests.DocumentOrderOverrides;
 
 /// <summary>
-/// API de overrides de orden documental (HU #10196) — AC1 (override OT), AC2 (override
-/// CLIENTE), AC5 (listado por scope) y AC6 (borrado físico). Ejercita handlers reales
-/// sobre repositorios EF reales con proveedor InMemory. La precedencia de la matriz se
-/// prueba en <see cref="ResolvedDocumentMatrixHandlerTests"/> y la seguridad SuperAdmin en
-/// <see cref="AdminDocumentOrderOverridesAuthorizationTests"/>.
+/// API de overrides de orden documental (HU #10196; RF22) — AC1 (override OT, único ámbito),
+/// AC5 (listado por OT) y AC6 (borrado físico). Ejercita handlers reales sobre repositorios EF
+/// reales con proveedor InMemory. Tras RF22 el ámbito CLIENTE quedó eliminado (se rechaza). La
+/// precedencia de la matriz se prueba en <see cref="ResolvedDocumentMatrixHandlerTests"/> y la
+/// seguridad SuperAdmin en <see cref="AdminDocumentOrderOverridesAuthorizationTests"/>.
 /// </summary>
 public sealed class DocumentOrderOverrideHandlerTests
 {
@@ -49,7 +49,7 @@ public sealed class DocumentOrderOverrideHandlerTests
             {
                 Scope = DocumentOrderScope.Ot,
                 CreatedBy = Actor,
-                Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, 2),
+                Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, 2),
             }, TestContext.Current.CancellationToken);
 
             result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.Created);
@@ -78,7 +78,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, Guid.NewGuid(), null, 0),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, Guid.NewGuid(), 0),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ScopeRefNotFound);
@@ -95,46 +95,17 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, null, 0),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, 0),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
         result.Error.Should().NotBeNullOrWhiteSpace();
     }
 
-    // ---------- AC2: POST crea override por Cliente ----------
+    // ---------- RF22: el ámbito CLIENTE se eliminó — cualquier scope distinto de OT se rechaza ----------
 
     [Fact]
-    public async Task AC2_Create_ClienteOverride_PersistsWithScopeCliente_AndScopeRefCliente()
-    {
-        var db = NewDbName();
-        await SeedCatalogAsync(db);
-
-        CreateDocumentOrderOverrideResult created;
-        await using (var act = NewContext(db))
-        {
-            var result = await Create(act).HandleAsync(new CreateDocumentOrderOverrideCommand
-            {
-                Scope = DocumentOrderScope.Cliente,
-                CreatedBy = Actor,
-                Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, ClienteId, 1),
-            }, TestContext.Current.CancellationToken);
-
-            result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.Created);
-            result.Response!.Scope.Should().Be("CLIENTE");
-            result.Response.ScopeRefId.Should().Be(ClienteId);
-            created = result;
-        }
-
-        await using var verify = NewContext(db);
-        var row = await verify.DocumentOrderOverrides.SingleAsync(o => o.Id == created.Response!.Id, cancellationToken: TestContext.Current.CancellationToken);
-        row.ScopeType.Should().Be("CLIENTE");
-        row.ScopeRefId.Should().Be(ClienteId);
-        row.SortOrder.Should().Be((short)1);
-    }
-
-    [Fact]
-    public async Task AC2_Create_ClienteOverride_NonExistentTenant_Returns404()
+    public async Task RF22_Create_NonOtScope_Returns422_WithoutPersisting()
     {
         var db = NewDbName();
         await SeedCatalogAsync(db);
@@ -142,11 +113,24 @@ public sealed class DocumentOrderOverrideHandlerTests
         await using var ctx = NewContext(db);
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
-            Scope = DocumentOrderScope.Cliente,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, null, Guid.NewGuid(), 0),
+            // "CLIENTE" ya no es un ámbito válido; el handler lo rechaza (RF22).
+            Scope = "CLIENTE",
+            CreatedBy = Actor,
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, 1),
         }, TestContext.Current.CancellationToken);
 
-        result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ScopeRefNotFound);
+        result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
+        result.Error.Should().Contain("OT");
+        (await ctx.DocumentOrderOverrides.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public void RF22_DocumentOrderScope_OnlyOtIsValid()
+    {
+        DocumentOrderScope.IsValid("OT").Should().BeTrue();
+        DocumentOrderScope.IsValid("CLIENTE").Should().BeFalse();
+        DocumentOrderScope.Normalize("cliente").Should().BeNull();
+        DocumentOrderScope.Normalize(" ot ").Should().Be("OT");
     }
 
     // ---------- Reglas de negocio del POST ----------
@@ -161,7 +145,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(Guid.NewGuid(), DocId, TransitOfficeId, null, 0),
+            Request = new CreateDocumentOrderOverrideRequest(Guid.NewGuid(), DocId, TransitOfficeId, 0),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ProcedureTypeNotFound);
@@ -177,7 +161,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, Guid.NewGuid(), TransitOfficeId, null, 0),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, Guid.NewGuid(), TransitOfficeId, 0),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.DocumentTypeNotFound);
@@ -194,7 +178,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, SecondDocId, TransitOfficeId, null, 0),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, SecondDocId, TransitOfficeId, 0),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
@@ -226,7 +210,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, 5),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, 5),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
@@ -245,7 +229,7 @@ public sealed class DocumentOrderOverrideHandlerTests
         var result = await Create(ctx).HandleAsync(new CreateDocumentOrderOverrideCommand
         {
             Scope = DocumentOrderScope.Ot,
-            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, null, orden),
+            Request = new CreateDocumentOrderOverrideRequest(ProcedureTypeId, DocId, TransitOfficeId, orden),
         }, TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(CreateDocumentOrderOverrideOutcome.ValidationFailed);
@@ -420,8 +404,7 @@ public sealed class DocumentOrderOverrideHandlerTests
             new ProcedureTypeCatalog(ctx),
             new DocumentTypeRepository(ctx),
             new ProcedureDocumentRequirementRepository(ctx),
-            new StaticTransitOfficeCatalog(),
-            new TenantCatalog(ctx));
+            new StaticTransitOfficeCatalog());
 
     private static string NewDbName() => $"flit-docoverride-{Guid.NewGuid()}";
 

@@ -30,4 +30,10 @@
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Fixture del certificado real (HU #10467) — valida que la decodificación del Data URI
+         base64 devuelto por Kyverum RUNT produce un PDF íntegro. -->
+    <Content Include="Improntas\Fixtures\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

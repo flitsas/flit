@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { DEV_TENANT_ID, DEV_USER_ID } from '@/lib/api/dev-constants';
 import type { FormFieldItem } from '@/lib/api/types/procedure-parametrization';
 import type {
@@ -101,9 +103,16 @@ export function useProcedureInstance() {
       target: { modalidad: WizardModalidad } | { procedureTypeId: string },
     ) => {
       setState((s) => ({ ...s, loading: true, error: null }));
+      // El tenant/usuario del create SALEN del JWT del usuario autenticado, no de constantes de dev.
+      // Para un usuario de compañía el backend igual lo impone desde el token; para un SuperAdmin (que
+      // no manda X-Tenant-Id aquí) el backend usa ESTE tenant del body → debe ser su compañía real, no
+      // el "Flit Dev Tenant" (DEV_TENANT_ID). Con el hardcode, el SuperAdmin creaba siempre contra ese
+      // tenant fantasma —sin política de matrícula— y el gate fallaba aunque habilitara su empresa.
+      // Fallback a las constantes de dev solo cuando no hay sesión (dev local sin auth).
+      const payload = decodeJwtPayload(getToken());
       const body: CreateInstanceRequest = {
-        tenantId: DEV_TENANT_ID,
-        createdByUserId: DEV_USER_ID,
+        tenantId: payload?.tenant_id ?? DEV_TENANT_ID,
+        createdByUserId: payload?.sub ?? DEV_USER_ID,
         ...('modalidad' in target
           ? { modalidad: target.modalidad }
           : { procedureTypeId: target.procedureTypeId }),

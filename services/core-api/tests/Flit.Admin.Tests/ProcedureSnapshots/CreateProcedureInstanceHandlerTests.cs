@@ -36,14 +36,15 @@ public sealed class CreateProcedureInstanceHandlerTests
         await SeedAsync(db);
         await using (var seed = NewContext(db))
         {
-            // Override CLIENTE sobre DocA → orden 1 nivel CLIENTE; DocB queda DEFAULT (20).
+            // RF22 — el OT es el único nivel que reordena: override OT sobre DocA → orden 1 nivel
+            // OT; DocB queda DEFAULT (20).
             seed.DocumentOrderOverrides.Add(new DocumentOrderOverride
             {
                 Id = Guid.NewGuid(),
                 ProcedureTypeId = ProcedureTypeId,
                 DocumentTypeId = DocA,
-                ScopeType = "CLIENTE",
-                ScopeRefId = ClienteId,
+                ScopeType = "OT",
+                ScopeRefId = TransitOfficeId,
                 SortOrder = 1,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -64,7 +65,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         result.Outcome.Should().Be(CreateProcedureInstanceOutcome.Created);
         result.Response.Should().NotBeNull();
         result.Response!.ReferenceNumber.Should().Be("TR-2026-0001");
-        result.Response.Status.Should().Be("draft");
+        result.Response.Status.Should().Be("borrador");
         result.Response.DocumentCount.Should().Be(2);
 
         await using var verify = NewContext(db);
@@ -73,7 +74,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         instance.ProcedureTypeId.Should().Be(ProcedureTypeId);
         instance.TransitOfficeId.Should().Be(TransitOfficeId);
         instance.CreatedByUserId.Should().Be(Actor);
-        instance.Status.Should().Be("draft");
+        instance.Status.Should().Be("borrador");
 
         var snapshot = await verify.ProcedureDocumentSnapshots.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         snapshot.ProcedureInstanceId.Should().Be(instance.Id);
@@ -85,7 +86,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         payload!.ProcedureTypeId.Should().Be(ProcedureTypeId);
         payload.ClienteId.Should().Be(ClienteId);
         payload.Documentos.Should().HaveCount(2);
-        payload.Documentos.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("CLIENTE");
+        payload.Documentos.Single(d => d.DocumentTypeId == DocA).NivelAplicado.Should().Be("OT");
         payload.Documentos.Single(d => d.DocumentTypeId == DocA).OrdenResuelto.Should().Be((short)1);
         payload.Documentos.Single(d => d.DocumentTypeId == DocB).NivelAplicado.Should().Be("DEFAULT");
     }
@@ -164,7 +165,7 @@ public sealed class CreateProcedureInstanceHandlerTests
                 TenantId = ClienteId,
                 ProcedureTypeId = ProcedureTypeId,
                 ReferenceNumber = "TR-DUP",
-                Status = "draft",
+                Status = "borrador",
                 CreatedByUserId = Actor,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

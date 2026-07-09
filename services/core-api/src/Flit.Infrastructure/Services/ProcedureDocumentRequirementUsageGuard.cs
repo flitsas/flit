@@ -9,15 +9,16 @@ namespace Flit.Infrastructure.Services;
 /// Implementación real del guard de uso de una asociación trámite ↔ documento
 /// (HU #10195 AC4, cerrada por HU #10197 RF19). Reemplaza al stub transitorio.
 ///
-/// Una asociación está "en uso" si algún trámite <b>activo</b> (estado distinto de
-/// <c>completed</c>/<c>cancelled</c>) del mismo tipo de trámite tiene un snapshot documental
+/// Una asociación está "en uso" si algún trámite <b>activo</b> (estado distinto de los
+/// finales <c>aprobado</c>/<c>anulado</c>, N 03) del mismo tipo de trámite tiene un snapshot documental
 /// que congeló ese tipo de documento. Como el snapshot es inmutable, borrar la asociación
 /// no afecta a los trámites ya creados, pero sí debe bloquearse para conservar la integridad
 /// del catálogo mientras existan trámites activos que lo referencian.
 /// </summary>
 internal sealed class ProcedureDocumentRequirementUsageGuard : IProcedureDocumentRequirementUsageGuard
 {
-    private static readonly string[] InactiveStatuses = ["completed", "cancelled"];
+    private static readonly string[] InactiveStatuses =
+        [Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Aprobado, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Anulado];
 
     private readonly FlitDbContext _context;
 

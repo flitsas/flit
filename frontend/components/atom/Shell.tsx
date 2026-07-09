@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { decodeJwtPayload, isAdminCompany, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -26,6 +26,7 @@ import {
   Lock,
   Briefcase,
   Landmark,
+  Fingerprint,
 } from "lucide-react";
 
 export type ModuleId =
@@ -74,14 +75,26 @@ function useCurrentUser() {
     const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
     const payload = decodeJwtPayload(token);
     if (!payload) return null;
-    const roleCode =
-      (payload.role_code as string | undefined) ?? (payload.role as string | undefined) ?? "";
-    const roleLabel =
-      roleCode === "SuperAdmin"
-        ? "Super Admin"
-        : roleCode === "AdminCompany"
-          ? "Admin de Compañía"
-          : roleCode || "Usuario";
+    // HU #10506 (multi-rol): con 2+ roles, el backend serializa role_code/role como
+    // ARRAY (colapso de claims .NET), no como string — por eso la fuente confiable es
+    // siempre el claim `roles` (array explícito de {id, code}), con role_code/role como
+    // fallback solo cuando de verdad vienen como string (usuario con un único rol).
+    const roleCodes = Array.isArray(payload.roles)
+      ? payload.roles
+          .map((r) => r?.code)
+          .filter((c): c is string => typeof c === "string")
+      : [];
+    if (roleCodes.length === 0) {
+      if (typeof payload.role_code === "string") roleCodes.push(payload.role_code);
+      else if (typeof payload.role === "string") roleCodes.push(payload.role);
+    }
+    const roleLabel = roleCodes.includes("SuperAdmin")
+      ? "Super Admin"
+      : roleCodes.includes("AdminCompany")
+        ? "Admin de Compañía"
+        : roleCodes.includes("ot_admin")
+          ? "Admin OT"
+          : roleCodes[0] || "Usuario";
     return {
       displayName:
         (payload.display_name as string | undefined) ??
@@ -92,6 +105,7 @@ function useCurrentUser() {
       tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
+      isOtAdmin: isOtAdmin(payload),
     };
   });
   return user;
@@ -170,6 +184,13 @@ export function Shell({
         onClick: () => window.location.assign("/admin/documents"),
       },
       {
+        key: "admin-improntas",
+        label: "Improntas",
+        icon: Fingerprint,
+        active: pathname.startsWith("/admin/improntas"),
+        onClick: () => window.location.assign("/admin/improntas"),
+      },
+      {
         key: "rbac",
         label: "RBAC Admin",
         icon: Lock,
@@ -179,13 +200,27 @@ export function Shell({
     );
   }
 
+  // Bloque independiente del de SuperAdmin: ot_admin solo ve "Tránsito" (su propio
+  // hub OT), nunca "Compañías"/"Documental"/"RBAC Admin" (HU #10218 refactor adminOT).
+  if (currentUser?.isOtAdmin) {
+    entries.push({
+      key: "admin-transit",
+      label: "Tránsito",
+      icon: Landmark,
+      active: pathname.startsWith("/admin/transit-offices"),
+      onClick: () => window.location.assign("/admin/transit-offices"),
+    });
+  }
+
   if (currentUser?.isAdminCompany) {
     entries.push({
       key: "mi-empresa",
       label: "Mi Empresa",
       icon: Briefcase,
-      active: pathname.startsWith("/empresa"),
-      onClick: () => window.location.assign("/empresa/usuarios"),
+      // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
+      // la SPA hacia /empresa/usuarios, ya deprecado).
+      active: !onAdminRoute && active === "usuarios",
+      onClick: () => onNav("usuarios"),
     });
   }
 
@@ -303,7 +338,9 @@ export function Shell({
 
       {/* Main */}
       <main className="flex-1 min-h-0 overflow-hidden relative">
-        <div className="absolute inset-0 overflow-hidden">{children}</div>
+        {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
+            padding inferior libera el dock flotante para que nada quede oculto tras él. */}
+        <div className="absolute inset-0 overflow-y-auto pb-28">{children}</div>
 
         {/* Bottom dock */}
         <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40">

@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FileStack, Building2, Users, Table2 } from "lucide-react";
+import { FileStack, Building2, Table2 } from "lucide-react";
 import { RequirementsTab } from "@/components/admin/documents/tabs/RequirementsTab";
 import { OtOverridesTab } from "@/components/admin/documents/tabs/OtOverridesTab";
-import { ClienteOverridesTab } from "@/components/admin/documents/tabs/ClienteOverridesTab";
 import { MatrixPreviewTab } from "@/components/admin/documents/tabs/MatrixPreviewTab";
 
 // Contenedor multi-pestaña de la consola documental por trámite (HU #10198,
 // AC2–AC5). Clona el patrón de CompanyConfigTabs (tablist/tab/tabpanel WCAG). Cada
 // pestaña gestiona su propia carga y sus 4 estados UI (AC7).
-type TabId = "documentos" | "ot" | "cliente" | "matriz";
+type TabId = "documentos" | "ot" | "matriz";
 
 const TABS: { id: TabId; label: string; icon: typeof FileStack; description: string }[] = [
   {
@@ -18,28 +17,21 @@ const TABS: { id: TabId; label: string; icon: typeof FileStack; description: str
     label: "Documentos",
     icon: FileStack,
     description:
-      "Define qué documentos exige este trámite y en qué orden por defecto, marcando cuáles son obligatorios.",
+      "Define qué documentos exige este trámite y cuáles son obligatorios. El orden lo define exclusivamente la pestaña «Overrides OT».",
   },
   {
     id: "ot",
     label: "Overrides OT",
     icon: Building2,
     description:
-      "Ajusta el orden de los documentos para un organismo de tránsito específico, sin alterar el orden por defecto.",
-  },
-  {
-    id: "cliente",
-    label: "Overrides Cliente",
-    icon: Users,
-    description:
-      "Ajusta el orden de los documentos para un cliente puntual. Tiene mayor precedencia que el override de OT.",
+      "Selecciona el organismo de tránsito y define el orden de los documentos: es el único nivel que ordena (RF22).",
   },
   {
     id: "matriz",
     label: "Matriz resuelta",
     icon: Table2,
     description:
-      "Previsualiza el orden final que verá un trámite combinando la precedencia Cliente › OT › Default.",
+      "Previsualiza el orden final que verá un trámite combinando la precedencia OT › Default.",
   },
 ];
 
@@ -49,7 +41,7 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" style={{ borderColor: "#DFE5ED" }} role="tablist">
+      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -81,7 +73,6 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
       <div role="tabpanel" id={`tabpanel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex-1">
         {tab === "documentos" && <RequirementsTab procedureTypeId={procedureTypeId} />}
         {tab === "ot" && <OtOverridesTab procedureTypeId={procedureTypeId} />}
-        {tab === "cliente" && <ClienteOverridesTab procedureTypeId={procedureTypeId} />}
         {tab === "matriz" && <MatrixPreviewTab procedureTypeId={procedureTypeId} />}
       </div>
     </div>
