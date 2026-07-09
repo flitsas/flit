@@ -178,6 +178,91 @@ public sealed class FurHandlerTests
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
     }
 
+    /// <summary>Generador FUR que captura el <see cref="FurDocumentData"/> ensamblado para aserciones.</summary>
+    private sealed class CapturingFurGenerator : IFurDocumentGenerator
+    {
+        public FurDocumentData? Captured { get; private set; }
+
+        public GeneratedDocument GenerateFur(FurDocumentData data)
+        {
+            Captured = data;
+            return new GeneratedDocument("fur", "fur.pdf", "application/pdf", [1, 2, 3]);
+        }
+
+        public GeneratedDocument GenerateCompraventa(FurDocumentData data)
+        {
+            Captured = data;
+            return new GeneratedDocument("compraventa", "cv.pdf", "application/pdf", [1, 2, 3]);
+        }
+    }
+
+    private static void AddFieldValue(ProcedureInstance instance, string key, string value) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = key,
+            ValueText = value,
+            Source = "user",
+        });
+
+    [Fact]
+    public async Task Generar_ConTransformacion_FurUsaRuntEnCamposYNuevoEnObservaciones()
+    {
+        // A4/B4 (HU #10673, ADR-0029): el FUR imprime el color/combustible ORIGINAL del RUNT en los CAMPOS
+        // del vehículo; la transformación declarada (valor nuevo) va SOLO en observaciones y sin flecha.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color_runt", "PLATA");
+        AddFieldValue(instance, "vehicle_color", "NEGRO");
+        AddFieldValue(instance, "cambio_color", "true");
+        AddFieldValue(instance, "vehicle_fuel_runt", "GASOLINA");
+        AddFieldValue(instance, "vehicle_fuel", "DIESEL");
+        AddFieldValue(instance, "cambio_combustible", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        capturing.Captured!.Vehiculo.Color.Should().Be("PLATA");         // campo del FUR = RUNT original
+        capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA"); // campo del FUR = RUNT original
+        capturing.Captured.Observaciones.Should().Be("Cambio de color: NEGRO. Cambio de combustible: DIESEL.");
+    }
+
+    [Fact]
+    public async Task Generar_SinSnapshotRunt_FurCaeAlEfectivo()
+    {
+        // Trámite previo a la feature (sin *_runt): los campos del FUR caen al valor efectivo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color", "AZUL");
+        AddFieldValue(instance, "vehicle_fuel", "GASOLINA");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Vehiculo.Color.Should().Be("AZUL");
+        capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA");
+        capturing.Captured.Observaciones.Should().BeNull(); // sin cambio declarado, sin texto automático
+    }
+
     private static ProcedureInstanceActor ActorJuridico(ProcedureInstance instance) =>
         new()
         {

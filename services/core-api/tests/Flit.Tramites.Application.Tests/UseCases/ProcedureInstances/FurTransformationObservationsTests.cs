@@ -28,30 +28,31 @@ public sealed class FurTransformationObservationsTests
     }
 
     [Fact]
-    public void SoloColor_ComponeTextoDeColor()
+    public void SoloColor_ComponeSoloElValorNuevo()
     {
+        // Solo el valor NUEVO (efectivo): sin flecha ni valor RUNT (el campo del FUR ya lleva el original).
         var result = FurTransformationObservations.Compose(
             null, colorRunt: "PLATA", colorEfectivo: "NEGRO", fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA");
 
-        result.Should().Be("Cambio de color: PLATA → NEGRO.");
+        result.Should().Be("Cambio de color: NEGRO.");
     }
 
     [Fact]
-    public void SoloCombustible_ComponeTextoDeCombustible()
+    public void SoloCombustible_ComponeSoloElValorNuevo()
     {
         var result = FurTransformationObservations.Compose(
-            null, colorRunt: "PLATA", colorEfectivo: "PLATA", fuelRunt: "GASOLINA", fuelEfectivo: "ELECTRICO");
+            null, colorRunt: "PLATA", colorEfectivo: "PLATA", fuelRunt: "GASOLINA", fuelEfectivo: "DIESEL");
 
-        result.Should().Be("Cambio de combustible: GASOLINA → ELECTRICO.");
+        result.Should().Be("Cambio de combustible: DIESEL.");
     }
 
     [Fact]
-    public void ColorYCombustible_ComponeAmbosEnOrden()
+    public void ColorYCombustible_ComponeAmbosSoloValoresNuevos()
     {
         var result = FurTransformationObservations.Compose(
-            null, colorRunt: "plata", colorEfectivo: "negro", fuelRunt: "gasolina", fuelEfectivo: "electrico");
+            null, colorRunt: "plata metalico", colorEfectivo: "rojo", fuelRunt: "gasolina", fuelEfectivo: "diesel");
 
-        result.Should().Be("Cambio de color: PLATA → NEGRO. Cambio de combustible: GASOLINA → ELECTRICO.");
+        result.Should().Be("Cambio de color: ROJO. Cambio de combustible: DIESEL.");
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public sealed class FurTransformationObservationsTests
             "  Observación previa.  ",
             colorRunt: "PLATA", colorEfectivo: "NEGRO", fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA");
 
-        result.Should().Be("Observación previa. Cambio de color: PLATA → NEGRO.");
+        result.Should().Be("Observación previa. Cambio de color: NEGRO.");
     }
 
     [Fact]

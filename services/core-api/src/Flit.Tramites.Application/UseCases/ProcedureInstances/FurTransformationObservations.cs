@@ -5,8 +5,10 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>
 /// A4/B4 (HU #10673, ADR-0029) — compone el texto automático de observaciones del FUR cuando el operador
 /// declaró una transformación de color y/o combustible durante el trámite. El cambio se DERIVA del diff
-/// entre el snapshot RUNT (<c>*_runt</c>) y el valor efectivo; se anexa (append) a las observaciones
-/// manuales sin borrarlas. Ejemplo: <c>Cambio de color: PLATA → NEGRO. Cambio de combustible: GASOLINA → ELECTRICO.</c>
+/// entre el snapshot RUNT (<c>*_runt</c>) y el valor efectivo, pero SOLO se imprime el valor NUEVO
+/// (efectivo): en el FUR los campos del vehículo conservan el dato original del RUNT, así que la
+/// observación solo debe declarar a qué se transformó. Se anexa (append) a las observaciones manuales sin
+/// borrarlas. Ejemplo: <c>Cambio de color: ROJO. Cambio de combustible: DIESEL.</c>
 /// </summary>
 public static class FurTransformationObservations
 {
@@ -23,9 +25,9 @@ public static class FurTransformationObservations
     {
         var segments = new List<string>(2);
         if (HasChanged(colorRunt, colorEfectivo))
-            segments.Add($"Cambio de color: {Display(colorRunt)} → {Display(colorEfectivo)}.");
+            segments.Add($"Cambio de color: {Display(colorEfectivo)}.");
         if (HasChanged(fuelRunt, fuelEfectivo))
-            segments.Add($"Cambio de combustible: {Display(fuelRunt)} → {Display(fuelEfectivo)}.");
+            segments.Add($"Cambio de combustible: {Display(fuelEfectivo)}.");
 
         if (segments.Count == 0)
             return manualObservations;
