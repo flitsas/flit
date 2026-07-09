@@ -314,29 +314,36 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin: se refuerza SuperAdminPolicy sobre el
+        // OtModulePolicy del grupo (combinación AND → solo SuperAdmin, el ot_admin recibe 403).
         group.MapPost("/users/{userId:guid}/suspend", SuspendUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtSuspendUser")
-            .WithSummary("Suspende temporalmente a un usuario del tenant OT")
+            .WithSummary("Suspende temporalmente a un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
         group.MapDelete("/users/{userId:guid}/suspend", UnsuspendUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtUnsuspendUser")
-            .WithSummary("Levanta la suspensión activa de un usuario del tenant OT")
+            .WithSummary("Levanta la suspensión activa de un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
         // HU #10623 — DELETE /users/{userId} — elimina (soft-delete reversible) a un usuario del
-        // tenant OT resuelto. Restaurar es EXCLUSIVO de SuperAdmin — ver
+        // tenant OT resuelto. Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin recibe 403).
+        // Restaurar también es EXCLUSIVO de SuperAdmin — ver
         // POST /api/v1/superadmin/users/{userId}/restore.
         group.MapDelete("/users/{userId:guid}", DeleteUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtDeleteUser")
-            .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT")
+            .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
