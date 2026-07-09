@@ -1301,6 +1301,87 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/superadmin/audit:
+    get:
+      tags: [Super Admin]
+      operationId: getAdminAuditLog
+      summary: Consulta global del rastro de auditoría administrativa/seguridad (HU #10679)
+      description: >
+        Retorna el rastro unificado de auditoría (`admin.tenant_config_audit_logs`,
+        HU #10678) — config + operaciones administrativas/seguridad sobre usuarios,
+        roles, permisos y autenticación — ordenado por `changedAt` descendente,
+        paginado. Alcance GLOBAL (cross-tenant): la RLS de la tabla admite bypass
+        SuperAdmin. `userId` matchea el actor (`changedBy`) O el afectado
+        (`targetEntityId`). Requiere JWT con rol SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Usuario actor o afectado.
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Compañía gestora u organismo de tránsito.
+        - name: tenantType
+          in: query
+          required: false
+          schema: { type: string, enum: [COMPANY, TRANSIT_OFFICE] }
+        - name: module
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [users, roles, permissions, authentication, security, config]
+        - name: operation
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            Verbo de la operación auditada (p. ej. `create`, `update`, `delete`,
+            `assign_role`, `revoke_role`, `suspend`, `unsuspend`, `invite`,
+            `login`, `login_failed`, `logout`, `reset_password`, …).
+        - name: result
+          in: query
+          required: false
+          schema: { type: string, enum: [success, failure] }
+        - name: dateFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite inferior (inclusive) del rango de `changedAt`.
+        - name: dateTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite superior (inclusive) del rango de `changedAt`.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del rastro unificado de auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuditLogPageResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/ot/invitations/{invitationId}/resend:
     parameters:
       - name: invitationId
@@ -5281,6 +5362,58 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AuditLogEntry"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    AdminAuditLogEntry:
+      type: object
+      description: >
+        Entrada del rastro unificado de auditoría administrativa/seguridad
+        (HU #10679): config (RNF01/ADR-0024) + operaciones sobre usuarios, roles,
+        permisos y autenticación (HU #10678).
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid, nullable: true }
+        tenantType:
+          type: string
+          nullable: true
+          enum: [COMPANY, TRANSIT_OFFICE]
+        module:
+          type: string
+          nullable: true
+          enum: [users, roles, permissions, authentication, security, config]
+        entityName: { type: string }
+        operation: { type: string, nullable: true }
+        result:
+          type: string
+          nullable: true
+          enum: [success, failure]
+        errorCode: { type: string, nullable: true }
+        changedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario actor que ejecutó la operación.
+        targetEntityType: { type: string, nullable: true }
+        targetEntityId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario/rol/permiso afectado por la operación.
+        clientIp: { type: string, nullable: true }
+        changedAt: { type: string, format: date-time }
+      required: [id, entityName, changedAt]
+
+    AdminAuditLogPageResponse:
+      type: object
+      description: Página del rastro unificado de auditoría administrativa/seguridad (HU #10679).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditLogEntry"
         totalCount: { type: integer, format: int64 }
         page: { type: integer }
         pageSize: { type: integer }

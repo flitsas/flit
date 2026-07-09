@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing.GetAdminAuditLog;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
@@ -124,6 +125,11 @@ public static class DependencyInjection
         services.AddScoped<SetTransitOfficeTenantStatusHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
+        // auditoría administrativa/seguridad. IAdminAuditLogRepository se registra en
+        // AddAdminInfrastructure.
+        services.AddScoped<GetAdminAuditLogHandler>();
 
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
         // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.
