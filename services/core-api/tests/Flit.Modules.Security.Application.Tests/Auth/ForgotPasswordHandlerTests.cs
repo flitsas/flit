@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Domain.Auth;
@@ -14,12 +15,15 @@ public sealed class ForgotPasswordHandlerTests
     private readonly ISecureTokenGenerator _tokenGenerator = Substitute.For<ISecureTokenGenerator>();
     private readonly IEmailSender _emailSender = Substitute.For<IEmailSender>();
     private readonly PasswordRecoveryOptions _options = new();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ForgotPasswordHandler _handler;
 
     public ForgotPasswordHandlerTests()
     {
         _handler = new ForgotPasswordHandler(
-            _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options);
+            _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options,
+            _auditWriter, _auditContext);
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using Flit.Admin.Application.Auditing;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Modules.Security.Application.Roles;
 using Flit.Modules.Security.Domain.Roles;
 using Microsoft.AspNetCore.Builder;
@@ -60,7 +62,9 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.BadRequest(new { code = "INVALID_TARGET_ENTITY_TYPE" });
             }
-        }).WithName("CreateRole");
+        }).WithName("CreateRole")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Create, "role", "ROLE"));
 
         // AC7 — PUT /roles/{id}/permissions → reemplaza todos los permisos del rol, retorna 200
         group.MapPut("/roles/{id:guid}/permissions", async (
@@ -80,7 +84,9 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.NotFound();
             }
-        }).WithName("SetRolePermissions");
+        }).WithName("SetRolePermissions")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Update, "role", "ROLE", "id"));
 
         // HU #10508 AC1 — PATCH /roles/{id}/activate y /roles/{id}/deactivate → gobernanza
         // SuperAdmin sobre el ciclo de vida del rol del catálogo global (paralelo a
@@ -99,7 +105,9 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.NotFound();
             }
-        }).WithName("ActivateRole");
+        }).WithName("ActivateRole")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Update, "role", "ROLE", "id"));
 
         group.MapMethods("/roles/{id:guid}/deactivate", ["PATCH"], async (
             Guid id,
@@ -119,7 +127,9 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.Conflict(new { code = "ROLE_SYSTEM_LOCKED" });
             }
-        }).WithName("DeactivateRole");
+        }).WithName("DeactivateRole")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Update, "role", "ROLE", "id"));
 
         // AC3, AC4, AC5 — DELETE /roles/{id}
         group.MapDelete("/roles/{id:guid}", async (
@@ -144,7 +154,9 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.Conflict(new { code = "ROLE_HAS_ACTIVE_USERS" });
             }
-        }).WithName("DeleteRole");
+        }).WithName("DeleteRole")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Delete, "role", "ROLE", "id"));
     }
 
     private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description);
