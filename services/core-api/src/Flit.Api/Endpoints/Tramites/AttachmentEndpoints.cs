@@ -258,6 +258,31 @@ internal static class AttachmentEndpoints
             };
         }).WithName("GetProcedureInstanceChecklist");
 
+        // PATCH diferir/no-diferir la impronta: marca el ítem de checklist como "se generará en el FUR"
+        // (flag manual, sin adjuntar) para poder continuar el paso 2 aunque la impronta sea obligatoria.
+        // NO debilita la radicación: SubmitGate sigue exigiendo el attachment real de impronta.
+        group.MapPatch("/instances/{id:guid}/checklist/impronta-diferida", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] SetImprontaDiferidaRequest? body,
+            SetImprontaDiferidaHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var (_, error) = await handler.HandleAsync(id, tenantId.Value, body.Diferida, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede diferir la impronta en estado borrador."),
+                "impronta_no_aplica" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La tipología del trámite no incluye impronta."),
+                _ => Results.NoContent(),
+            };
+        }).WithName("SetProcedureInstanceImprontaDiferida");
+
         return app;
     }
 
@@ -275,6 +300,9 @@ internal sealed record PresignAttachmentRequest(
     string? Filename,
     string? Mimetype,
     long SizeBytes);
+
+/// <summary>Cuerpo del PATCH /checklist/impronta-diferida (JSON): true = diferir al FUR, false = revertir.</summary>
+internal sealed record SetImprontaDiferidaRequest(bool Diferida);
 
 /// <summary>Cuerpo del POST /attachments/register (JSON): metadata del adjunto ya subido a S3.</summary>
 internal sealed record RegisterAttachmentRequest(

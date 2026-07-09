@@ -123,6 +123,56 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
+    // ── Bloquear/desactivar y eliminar usuarios son EXCLUSIVOS de SuperAdmin ─────
+    // (contexto: AdminCompany/ot_admin dejaron de poder suspender/eliminar en el
+    // repo — solo conservan editar, invitar y reenviar/cancelar invitación).
+
+    [Fact]
+    public async Task SuspendUser_CallerWithoutSuperAdmin_Returns403()
+    {
+        UseToken(_adminUserId, "AdminCompany");
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/security/users/{_targetUserId}/suspend",
+            new { reason = "x", endsAt = (DateTimeOffset?)null },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "bloquear/desactivar usuarios es exclusivo de SuperAdmin; AdminCompany ya no puede");
+    }
+
+    [Fact]
+    public async Task DeleteUser_CallerWithoutSuperAdmin_Returns403()
+    {
+        UseToken(_adminUserId, "AdminCompany");
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/security/users/{_targetUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion = 1 }),
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "eliminar usuarios es exclusivo de SuperAdmin; AdminCompany ya no puede");
+    }
+
+    [Fact]
+    public async Task SuspendUser_AsSuperAdmin_IsAuthorized()
+    {
+        UseToken(_adminUserId, "SuperAdmin");
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/security/users/{_targetUserId}/suspend",
+            new { reason = "x", endsAt = (DateTimeOffset?)null },
+            TestContext.Current.CancellationToken);
+
+        // No debe ser 403/401: la policy se satisface. El resultado exacto (201/409/etc.) depende
+        // del estado previo del usuario objetivo, que no es el foco de este test de autorización.
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void UseToken(Guid userId, string role) =>
@@ -251,6 +301,9 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
         using var db = CreateDbContext();
 
         db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.TenantId == _tenantId));
+        // SuspendUser_AsSuperAdmin_IsAuthorized crea una fila real (endpoint SuperAdmin); sin
+        // limpiarla, el DELETE de Tenants de más abajo viola el FK RESTRICT hacia esta tabla.
+        db.UserTempSuspensions.RemoveRange(db.UserTempSuspensions.Where(s => s.TenantId == _tenantId));
         db.SaveChanges();
 
         db.Users.RemoveRange(db.Users.Where(u =>

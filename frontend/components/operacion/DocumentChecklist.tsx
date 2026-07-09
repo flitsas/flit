@@ -6,6 +6,7 @@ import {
   type OcrUiResult,
 } from '@/hooks/useProcedureDocuments';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -288,6 +289,7 @@ function DocumentSlot({
   ocr,
   onUpload,
   onRemove,
+  onDefer,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
@@ -297,15 +299,39 @@ function DocumentSlot({
   ocr: OcrUiResult | undefined;
   onUpload: (file: File) => void;
   onRemove: (attachmentId: string) => void;
+  /** Difiere (o revierte) la impronta al paso FUR. Solo se pasa para el slot de impronta. */
+  onDefer?: (diferida: boolean) => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [deferring, setDeferring] = useState(false);
   // En solo lectura el checklist es visualización: sin subir/reemplazar/borrar.
   const readOnly = useWizardReadOnly();
 
   const tipo = item.docTipo ?? item.key;
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting;
+
+  // La impronta es un documento que se genera en el paso de firma (FUR), no se carga aquí. Cuando es
+  // obligatoria y aún no hay adjunto, el operador puede diferir su generación marcando este check
+  // (marca el ítem como satisfecho sin archivo). La radicación sigue exigiendo la impronta real.
+  const canDefer =
+    !!onDefer && item.docTipo === 'impronta' && item.obligatorio && !attachment && !readOnly;
+  // Satisfecho sin adjunto ⇒ viene del flag manual de diferido (para impronta es la única vía).
+  const deferred = item.satisfied && !attachment;
+
+  const handleDefer = async (checked: boolean) => {
+    if (!onDefer) return;
+    setLocalError(null);
+    setDeferring(true);
+    try {
+      await onDefer(checked);
+    } catch {
+      setLocalError('No se pudo actualizar la generación diferida de la impronta.');
+    } finally {
+      setDeferring(false);
+    }
+  };
 
   const handlePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -401,6 +427,26 @@ function DocumentSlot({
         )}
       </div>
 
+      {canDefer && (
+        <label className="mt-2 flex items-start gap-2 text-[11px] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={deferred}
+            disabled={deferring}
+            onChange={(e) => void handleDefer(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="opacity-80">
+            La impronta se generará automáticamente en el paso de firma (FUR).
+            {deferred && (
+              <span className="block opacity-60">
+                Marcada como diferida — se generará más adelante; no necesitas cargarla aquí.
+              </span>
+            )}
+          </span>
+        </label>
+      )}
+
       {localError && (
         <p
           className="mt-1.5 text-[10px]"
@@ -429,7 +475,7 @@ export function DocumentChecklist({
   hideHeader = false,
   modalidad,
 }: Props) {
-  const { state, upload, remove, clearError } = useProcedureDocuments(
+  const { state, refresh, upload, remove, clearError } = useProcedureDocuments(
     instanceId,
     { modalidad },
   );
@@ -532,6 +578,18 @@ export function DocumentChecklist({
                   void remove(id).then((ok) => {
                     if (ok) onChanged?.();
                   })
+                }
+                onDefer={
+                  instanceId
+                    ? async (diferida) => {
+                        await tramitesClient.setImprontaDiferida(instanceId, diferida);
+                        // Refresca el checklist propio del componente (de él sale item.satisfied,
+                        // que controla el check); sin esto el estado queda obsoleto y el check no
+                        // se marca aunque el backend haya guardado. Igual que hacen upload/remove.
+                        await refresh();
+                        onChanged?.();
+                      }
+                    : undefined
                 }
               />
             );

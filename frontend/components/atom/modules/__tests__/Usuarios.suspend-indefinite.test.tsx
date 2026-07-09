@@ -10,16 +10,17 @@ import { Usuarios } from "../Usuarios";
 import { getUsers, blockUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
 
+// Bloquear/desactivar es EXCLUSIVO de SuperAdmin, por eso se renderiza como SuperAdmin.
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: true,
+    isSuperAdmin: true,
+    isAdminCompany: false,
     isOtAdmin: false,
     permissions: [],
     tenantId: "tenant-1",
     userId: "user-self",
-    roleId: "role-admin",
-    roleCode: "AdminCompany",
+    roleId: "role-super",
+    roleCode: "SuperAdmin",
   }),
 }));
 
@@ -68,9 +69,9 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /bloquear usuario ana torres/i }));
+    await user.click(screen.getByRole("button", { name: /suspender temporalmente a ana torres/i }));
 
-    expect(await screen.findByLabelText(/bloqueado hasta/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/suspendido hasta/i)).toBeInTheDocument();
   });
 
   it("al marcar 'Desactivar indefinidamente' oculta la fecha de fin y llama a blockUser con endsAt=null", async () => {
@@ -80,16 +81,16 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /bloquear usuario ana torres/i }));
+    await user.click(screen.getByRole("button", { name: /suspender temporalmente a ana torres/i }));
     await user.type(
-      await screen.findByLabelText(/motivo de suspensión/i),
+      await screen.findByLabelText(/motivo/i),
       "Desactivación indefinida de prueba",
     );
-    await user.click(screen.getByRole("checkbox", { name: /desactivar indefinidamente/i }));
+    await user.click(screen.getByRole("checkbox", { name: /sin fecha de fin/i }));
 
-    expect(screen.queryByLabelText(/bloqueado hasta/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/suspendido hasta/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^bloquear usuario$/i }));
+    await user.click(screen.getByRole("button", { name: /^desactivar usuario$/i }));
 
     await waitFor(() =>
       expect(blockUser).toHaveBeenCalledWith(

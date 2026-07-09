@@ -20,16 +20,17 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   resendOtInvitation: vi.fn(),
 }));
 
+// Bloquear/desactivar es EXCLUSIVO de SuperAdmin (el ot_admin ya no puede): se renderiza como SuperAdmin.
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
-    isSuperAdmin: false,
+    isSuperAdmin: true,
     isAdminCompany: false,
-    isOtAdmin: true,
+    isOtAdmin: false,
     permissions: [],
     tenantId: "ot-tenant-1",
     userId: "u-self",
-    roleId: "role-1",
-    roleCode: "ot_admin",
+    roleId: "role-super",
+    roleCode: "SuperAdmin",
   }),
 }));
 
@@ -65,7 +66,7 @@ describe("OtUsersSection — suspender usuario (ajuste QA: desactivación indefi
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /suspender usuario laura garcía/i }));
+    await user.click(screen.getByRole("button", { name: /suspender temporalmente a laura garcía/i }));
 
     expect(await screen.findByLabelText(/suspendido hasta/i)).toBeInTheDocument();
   });
@@ -77,13 +78,13 @@ describe("OtUsersSection — suspender usuario (ajuste QA: desactivación indefi
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /suspender usuario laura garcía/i }));
+    await user.click(screen.getByRole("button", { name: /suspender temporalmente a laura garcía/i }));
     await user.type(await screen.findByLabelText(/motivo/i), "Desactivación indefinida de prueba");
     await user.click(screen.getByRole("checkbox", { name: /desactivar indefinidamente/i }));
 
     expect(screen.queryByLabelText(/suspendido hasta/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^suspender$/i }));
+    await user.click(screen.getByRole("button", { name: /^desactivar usuario$/i }));
 
     await waitFor(() =>
       expect(suspendOtUser).toHaveBeenCalledWith(
