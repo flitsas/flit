@@ -83,11 +83,13 @@ export function VehicleTransformationsCard({
           { fieldKey: 'vehicle_fuel', valueText: fuelRunt },
         ]);
 
+  // El resumen refleja lo que se imprime en el FUR: solo el valor NUEVO (los campos del vehículo del
+  // FUR conservan el original del RUNT; el cambio se declara en observaciones). Sin flecha ni origen.
   const changes: string[] = [];
   if (colorActive && isChanged(colorRunt, colorEff))
-    changes.push(`Color: ${up(colorRunt)} → ${up(colorEff)}`);
+    changes.push(`Color: ${up(colorEff)}`);
   if (fuelActive && isChanged(fuelRunt, fuelEff))
-    changes.push(`Combustible: ${up(fuelRunt)} → ${up(fuelEff)}`);
+    changes.push(`Combustible: ${up(fuelEff)}`);
 
   return (
     <section

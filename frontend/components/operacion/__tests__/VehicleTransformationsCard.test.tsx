@@ -69,8 +69,9 @@ describe('VehicleTransformationsCard', () => {
 
     const select = screen.getByLabelText('Nuevo color') as HTMLSelectElement;
     expect(select.value).toBe('NEGRO');
-    // Diff visible y resumen para el FUR (la línea de resumen usa el separador em-dash).
-    expect(screen.getByText(/Se registrará en el FUR — Color: PLATA → NEGRO/)).toBeInTheDocument();
+    // El resumen para el FUR muestra solo el valor NUEVO (sin flecha ni origen RUNT).
+    expect(screen.getByText(/Se registrará en el FUR — Color: NEGRO/)).toBeInTheDocument();
+    expect(screen.queryByText(/Se registrará en el FUR — Color: PLATA/)).not.toBeInTheDocument();
   });
 
   it('elegir un nuevo combustible persiste el efectivo con el flag activo', async () => {
