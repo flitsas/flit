@@ -67,13 +67,16 @@ public sealed class ConditionalDocumentRulesTests
     // ── Escenarios reales del catálogo ────────────────────────────────────────
 
     [Fact]
-    public void Nit_ExigeRuesYCedula_PersonaNaturalOcultaCedula()
+    public void Nit_NoCargaRuesNiCedula_PersonaNaturalTambienOcultaCedula()
     {
         var rules = ConditionalDocumentRules.For(TramiteTipologiaCatalog.CodigoMatriculaInicial);
 
-        var nit = ChecklistEngine.ApplyConditional([], new TramiteDocumentContext(EsNit: true), rules);
-        nit.Should().Contain(i => i.Id == "rues" && i.Obligatorio);
-        nit.Should().Contain(i => i.Id == "cedulas" && i.Obligatorio);
+        // Ajuste RUES: el actor NIT ya no carga Certificado RUES ni documento de identidad (el sistema
+        // autogenera certificado_rues y lo pega al consolidado). La cédula, si estaba, se oculta.
+        var nit = ChecklistEngine.ApplyConditional(
+            [Obl("cedulas")], new TramiteDocumentContext(EsNit: true), rules);
+        nit.Should().NotContain(i => i.Id == "rues");
+        nit.Should().NotContain(i => i.Id == "cedulas");
 
         // Persona natural: no exige cédula manual (identidad digital) ⇒ se oculta si estaba.
         var pn = ChecklistEngine.ApplyConditional(
