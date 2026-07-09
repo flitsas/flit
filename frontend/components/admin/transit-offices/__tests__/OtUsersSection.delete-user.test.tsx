@@ -18,17 +18,31 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   resendOtInvitation: vi.fn(),
 }));
 
+// Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin ya no puede), por eso los casos de eliminar
+// se renderizan como SuperAdmin. Se conserva userId "u-self" para verificar la exclusión de
+// auto-eliminación. El caso AC4 baja a ot_admin para verificar que NO ve "Ver eliminados".
+const SUPER_ADMIN_PERMS = {
+  isSuperAdmin: true,
+  isAdminCompany: false,
+  isOtAdmin: false,
+  permissions: [] as string[],
+  tenantId: "ot-tenant-1",
+  userId: "u-self",
+  roleId: "role-super",
+  roleCode: "SuperAdmin",
+};
+const OT_ADMIN_PERMS = {
+  ...SUPER_ADMIN_PERMS,
+  isSuperAdmin: false,
+  isOtAdmin: true,
+  roleId: "role-1",
+  roleCode: "ot_admin",
+};
+
+const perms = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+
 vi.mock("@/hooks/usePermissions", () => ({
-  usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: false,
-    isOtAdmin: true,
-    permissions: [],
-    tenantId: "ot-tenant-1",
-    userId: "u-self",
-    roleId: "role-1",
-    roleCode: "ot_admin",
-  }),
+  usePermissions: () => perms.current,
 }));
 
 function renderSection() {
@@ -68,6 +82,7 @@ const selfUser: OtUserItem = {
 describe("OtUsersSection — botón Eliminar (#10623)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    perms.current = { ...SUPER_ADMIN_PERMS };
   });
 
   it("AC2: no muestra el botón Eliminar sobre la propia fila del usuario autenticado", async () => {
@@ -119,11 +134,16 @@ describe("OtUsersSection — botón Eliminar (#10623)", () => {
     await waitFor(() => expect(fetchOtUsers).toHaveBeenCalledTimes(2));
   });
 
-  it("AC4: ot_admin no ve el botón 'Ver eliminados' (exclusivo de SuperAdmin)", async () => {
+  it("AC4: ot_admin no ve el botón 'Ver eliminados' (exclusivo de SuperAdmin) ni el botón Eliminar", async () => {
+    perms.current = { ...OT_ADMIN_PERMS };
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     renderSection();
 
     await screen.findByText("Laura García");
     expect(screen.queryByRole("button", { name: /ver eliminados/i })).not.toBeInTheDocument();
+    // Eliminar es exclusivo de SuperAdmin: el ot_admin no debe ver el botón.
+    expect(
+      screen.queryByRole("button", { name: /eliminar usuario laura garcía/i }),
+    ).not.toBeInTheDocument();
   });
 });

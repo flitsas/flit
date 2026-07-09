@@ -713,8 +713,9 @@ public static class SecurityEndpoints
             return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
         });
 
-        // POST /security/users/{userId}/suspend — AdminCompany/SuperAdmin suspende (temporal, con
+        // POST /security/users/{userId}/suspend — SuperAdmin suspende (temporal, con
         // EndsAt) o desactiva indefinidamente (sin EndsAt) a un usuario (HU #10619).
+        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin: AdminCompany/ot_admin no pueden.
         group.MapPost("/users/{userId:guid}/suspend", async (
             Guid userId,
             [FromBody] SuspendUserRequest request,
@@ -763,9 +764,10 @@ public static class SecurityEndpoints
                 return Results.Conflict(new ErrorResponse(
                     "LAST_ACTIVE_ADMIN", "No es posible suspender/desactivar al último administrador activo."));
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
 
-        // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa
+        // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa.
+        // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
         group.MapDelete("/users/{userId:guid}/suspend", async (
             Guid userId,
             ClaimsPrincipal caller,
@@ -806,12 +808,12 @@ public static class SecurityEndpoints
             {
                 return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
 
-        // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario del
-        // alcance del caller (HU #10623). rowVersion obligatorio (concurrencia optimista, igual
-        // que PATCH /users/{userId}). Restaurar es EXCLUSIVO de SuperAdmin — ver
-        // POST /api/v1/superadmin/users/{userId}/restore.
+        // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario.
+        // Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden). rowVersion
+        // obligatorio (concurrencia optimista, igual que PATCH /users/{userId}). Restaurar
+        // también es EXCLUSIVO de SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore.
         group.MapDelete("/users/{userId:guid}", async (
             Guid userId,
             [FromBody] DeleteUserRequest request,
@@ -866,7 +868,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
 
         return app;
     }
