@@ -184,6 +184,56 @@ export interface AuditLogPageResponse {
   pageSize: number;
 }
 
+// ── Rastro unificado de auditoría administrativa/seguridad (HU #10680) ─────
+// GET /api/v1/superadmin/audit — consulta global SuperAdmin (HU #10679, contrato
+// `AdminAuditLogEntry` / `AdminAuditLogPageResponse`). Config + operaciones sobre
+// usuarios/roles/permisos/autenticación.
+export type AdminAuditTenantType = "COMPANY" | "TRANSIT_OFFICE";
+export type AdminAuditModule = "users" | "roles" | "permissions" | "authentication" | "security" | "config";
+export type AdminAuditResult = "success" | "failure";
+
+export interface AdminAuditLogEntry {
+  id: string;
+  tenantId?: string | null;
+  tenantType?: AdminAuditTenantType | null;
+  module?: AdminAuditModule | null;
+  entityName: string;
+  operation?: string | null;
+  result?: AdminAuditResult | null;
+  errorCode?: string | null;
+  /** Usuario actor (uuid) que ejecutó la operación. */
+  changedBy?: string | null;
+  targetEntityType?: string | null;
+  /** Usuario/rol/permiso afectado (uuid) por la operación. */
+  targetEntityId?: string | null;
+  clientIp?: string | null;
+  changedAt: string;
+}
+
+export interface AdminAuditLogPageResponse {
+  data: AdminAuditLogEntry[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Query params del GET /api/v1/superadmin/audit (todos opcionales). */
+export interface AdminAuditLogQuery {
+  /** Matchea actor (changedBy) O afectado (targetEntityId). */
+  userId?: string;
+  tenantId?: string;
+  tenantType?: AdminAuditTenantType;
+  module?: AdminAuditModule;
+  operation?: string;
+  result?: AdminAuditResult;
+  /** ISO date-time, límite inferior inclusive de changedAt. */
+  dateFrom?: string;
+  /** ISO date-time, límite superior inclusive de changedAt. */
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 // ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
 /** Categoría de trámite normalizada por el backend (RF01). */
 export type AnalyticsCategory = "matriculas" | "traspasos" | "vehicular" | "otros";

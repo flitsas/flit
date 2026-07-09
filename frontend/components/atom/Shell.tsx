@@ -27,6 +27,7 @@ import {
   Briefcase,
   Landmark,
   Fingerprint,
+  ScrollText,
 } from "lucide-react";
 
 export type ModuleId =
@@ -36,7 +37,8 @@ export type ModuleId =
   | "validaciones"
   | "usuarios"
   | "ayuda"
-  | "rbac";
+  | "rbac"
+  | "auditoria";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -196,6 +198,13 @@ export function Shell({
         icon: Lock,
         active: !onAdminRoute && active === "rbac",
         onClick: () => onNav("rbac"),
+      },
+      {
+        key: "auditoria",
+        label: "Auditoría",
+        icon: ScrollText,
+        active: !onAdminRoute && active === "auditoria",
+        onClick: () => onNav("auditoria"),
       },
     );
   }
