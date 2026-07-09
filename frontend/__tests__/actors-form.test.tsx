@@ -343,6 +343,10 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
 });
 
 describe('ActorsForm — prefill documento del propietario (paso vendedor)', () => {
+  beforeEach(() => {
+    mocks.runtPersonLookup.mockResolvedValue({ found: false });
+  });
+
   const renderVendedor = () =>
     render(
       <ActorsForm
@@ -352,10 +356,11 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
         layout="split"
         embeddedInWizard
         seedDocumentoFromOwner
+        autoConsultRunt
       />,
     );
 
-  it('siembra el documento del vendedor desde owner_document_* (editable)', async () => {
+  it('siembra el documento del vendedor desde owner_document_* (solo lectura)', async () => {
     mocks.getInstance.mockResolvedValue({
       fieldValues: [
         { fieldKey: 'plate', valueText: 'ABC123' },
@@ -368,12 +373,45 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
 
     const numero = await screen.findByLabelText('Número de documento');
     await waitFor(() => expect(numero).toHaveValue('1090123456'));
-    // Editable: no deshabilitado ni readonly.
-    expect(numero).not.toBeDisabled();
-    expect(numero).not.toHaveAttribute('readonly');
+    expect(numero).toHaveAttribute('readonly');
+    expect(
+      screen.queryByRole('button', { name: 'Consultar RUNT' }),
+    ).not.toBeInTheDocument();
   });
 
-  it('no pisa el documento del vendedor ya persistido', async () => {
+  it('consulta RUNT automáticamente cuando el documento está sembrado', async () => {
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'ANA VENDEDORA',
+      firstName: 'ANA',
+      lastName: 'VENDEDORA',
+      documentType: 'CC',
+      documentNumber: '1090123456',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'mock',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: false,
+      hasActiveLicense: true,
+    });
+
+    renderVendedor();
+
+    await waitFor(() => expect(mocks.runtPersonLookup).toHaveBeenCalledWith(
+      INSTANCE,
+      { documentType: 'CC', documentNumber: '1090123456' },
+    ));
+    expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Consultar RUNT' })).not.toBeInTheDocument();
+  });
+
+  it('no pisa el documento del vendedor ya persistido y auto-consulta RUNT', async () => {
     mocks.getActors.mockResolvedValue([
       {
         rol: 'vendedor',
@@ -396,9 +434,13 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     await screen.findByDisplayValue('Ana Vendedora');
     // El documento persistido manda: el seed no lo sobreescribe.
     expect(numero).toHaveValue('555');
+    await waitFor(() => expect(mocks.runtPersonLookup).toHaveBeenCalledWith(
+      INSTANCE,
+      { documentType: 'CC', documentNumber: '555' },
+    ));
   });
 
-  it('sin owner_document_number no siembra nada', async () => {
+  it('sin owner_document_number no siembra nada y deja el documento editable', async () => {
     mocks.getInstance.mockResolvedValue({
       fieldValues: [{ fieldKey: 'plate', valueText: 'ABC123' }],
     });
@@ -409,6 +451,11 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     // Da tiempo a que resuelva el fetch del seed; debe quedar vacío.
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
     expect(numero).toHaveValue('');
+    expect(numero).not.toHaveAttribute('readonly');
+    expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Consultar RUNT' }),
+    ).not.toBeInTheDocument();
   });
 
   // El layout split del vendedor no expone un selector de tipo visible: el tipo sembrado se
@@ -431,6 +478,7 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
         layout="split"
         embeddedInWizard
         seedDocumentoFromOwner
+        autoConsultRunt
       />,
     );
 
@@ -469,6 +517,7 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
         layout="split"
         embeddedInWizard
         seedDocumentoFromOwner
+        autoConsultRunt
       />,
     );
 

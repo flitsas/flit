@@ -115,7 +115,7 @@ public sealed class FurHandlerTests
             Id = Guid.NewGuid(),
             PartyRole = parte,
             Status = BiometricEstados.Aprobado,
-            // Provider kyverum + id ⇒ GenerarFurHandler descarga el certificado real del comprador.
+            // Provider kyverum + id ⇒ GenerarFurHandler descarga el certificado real de esa parte.
             Provider = BiometricProviders.Kyverum,
             KyverumVerificationId = $"kyv-{parte ?? "titular"}",
             Name = "X",
@@ -244,12 +244,15 @@ public sealed class FurHandlerTests
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        // FUR + certificado de identidad + compraventa (traspaso).
-        result!.Documents.Should().HaveCount(3);
-        result.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "certificado_identidad", "compraventa"]);
-        instance.Attachments.Should().HaveCount(3);
+        // FUR + certificado de identidad del comprador + del vendedor + compraventa (traspaso).
+        result!.Documents.Should().HaveCount(4);
+        result.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(
+            ["fur", "certificado_identidad", "certificado_identidad_vendedor", "compraventa"]);
+        instance.Attachments.Should().HaveCount(4);
+        // Se descarga el certificado de Kyverum de CADA parte (por su verificationId propio).
+        _certClient.RequestedIds.Should().BeEquivalentTo(["kyv-comprador", "kyv-vendedor"]);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
-        _repo.Received(3).Add(Arg.Any<ProcedureInstanceAttachment>());
+        _repo.Received(4).Add(Arg.Any<ProcedureInstanceAttachment>());
         _repo.Received(1).Add(Arg.Any<ProcedureInstanceEvent>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }

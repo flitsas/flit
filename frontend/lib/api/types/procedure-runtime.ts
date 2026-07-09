@@ -581,6 +581,12 @@ export interface IdentityAuditEvent {
 export interface IdentityAuditResponse {
   validationId: string;
   events: IdentityAuditEvent[];
+  /**
+   * true cuando la identidad está reutilizada de otro trámite del mismo cliente (HU #10350): la
+   * bitácora es la real de esa validación, pero corresponde al trámite donde se realizó. La UI lo
+   * explica en vez de mostrar un error.
+   */
+  referencedFromOtherProcedure?: boolean;
 }
 
 /**

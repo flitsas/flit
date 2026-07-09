@@ -995,6 +995,19 @@ export const tramitesClient = {
       },
     ),
 
+  // PATCH diferir la impronta al paso FUR: marca el ítem de checklist como "se generará
+  // automáticamente" (sin adjuntar) para poder continuar el paso 2 aunque sea obligatoria. `false`
+  // revierte la marca. NO permite radicar sin la impronta real (SubmitGate la sigue exigiendo).
+  setImprontaDiferida: (instanceId: string, diferida: boolean, tenantId?: string) =>
+    request<void>(
+      `/api/v1/tramites/instances/${instanceId}/checklist/impronta-diferida`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ diferida }),
+      },
+    ),
+
   // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
   // POST invitar participante. Devuelve el token CRUDO + magicLinkPath
   // (/portal/{token}) solo aquí (en BD se persiste solo el hash).

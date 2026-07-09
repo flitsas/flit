@@ -2975,7 +2975,9 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: Bitácora de la validación.
+          description: >
+            Bitácora de la validación. Si la identidad está reutilizada de otro trámite del mismo cliente
+            (HU #10350), referencedFromOtherProcedure = true y events es la bitácora real de esa validación.
           content:
             application/json:
               schema:
@@ -2985,6 +2987,12 @@ paths:
                   validationId:
                     type: string
                     format: uuid
+                  referencedFromOtherProcedure:
+                    type: boolean
+                    default: false
+                    description: >
+                      true cuando la validación es del mismo tenant/cliente pero se realizó en otro trámite
+                      (identidad reutilizada). No es un error: la bitácora corresponde a ese trámite de origen.
                   events:
                     type: array
                     items:
@@ -3007,7 +3015,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: La validación no existe para el tenant/instancia.
+          description: La validación no existe o es de otro tenant.
           content:
             application/json:
               schema:

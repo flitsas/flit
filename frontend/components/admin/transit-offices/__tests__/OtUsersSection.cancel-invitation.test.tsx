@@ -21,17 +21,31 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   cancelOtInvitation: vi.fn(),
 }));
 
+// "Cancelar invitación" está disponible para ot_admin (gestión de invitaciones), pero
+// "Eliminar usuario" ahora es exclusivo de SuperAdmin. Permisos mutables: el caso "fila NO
+// pendiente muestra Eliminar" se prueba como SuperAdmin.
+const OT_ADMIN_PERMS = {
+  isSuperAdmin: false,
+  isAdminCompany: false,
+  isOtAdmin: true,
+  permissions: [] as string[],
+  tenantId: "ot-tenant-1",
+  userId: "u-self",
+  roleId: "role-1",
+  roleCode: "ot_admin",
+};
+const SUPER_ADMIN_PERMS = {
+  ...OT_ADMIN_PERMS,
+  isSuperAdmin: true,
+  isOtAdmin: false,
+  roleId: "role-super",
+  roleCode: "SuperAdmin",
+};
+
+const perms = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+
 vi.mock("@/hooks/usePermissions", () => ({
-  usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: false,
-    isOtAdmin: true,
-    permissions: [],
-    tenantId: "ot-tenant-1",
-    userId: "u-self",
-    roleId: "role-1",
-    roleCode: "ot_admin",
-  }),
+  usePermissions: () => perms.current,
 }));
 
 function renderSection() {
@@ -71,6 +85,7 @@ const activeUser: OtUserItem = {
 describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    perms.current = { ...OT_ADMIN_PERMS };
   });
 
   it("AC2: SOLO muestra 'Cancelar invitación' (no 'Eliminar usuario') en una fila Pendiente", async () => {
@@ -86,7 +101,8 @@ describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente", async () => {
+  it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente (SuperAdmin)", async () => {
+    perms.current = { ...SUPER_ADMIN_PERMS };
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     renderSection();
 
