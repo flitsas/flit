@@ -5,7 +5,6 @@ import {
   Check,
   ChevronRight,
   Copy,
-  Download,
   ExternalLink,
   RefreshCw,
   RotateCcw,
@@ -256,7 +255,7 @@ function ParteCard({
       <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
 
       {estado === 'aprobado' ? (
-        <VerifiedView validation={validation!} instanceId={instanceId} />
+        <VerifiedView validation={validation!} />
       ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
         // El enlace de captura solo se muestra si NO está vencido. Un enlace vencido (validation.expired:
         // backend `now > expiresAt`) cae a RejectedView aunque el estado siga en_proceso, para informar el
@@ -291,13 +290,7 @@ function ParteCard({
 }
 
 /** Tarjeta verde "Identidad verificada — {score}/100" con el nombre de la parte. */
-function VerifiedView({
-  validation: v,
-  instanceId,
-}: {
-  validation: BiometricValidation;
-  instanceId: string | null;
-}) {
+function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
   return (
     <div className="space-y-3">
       <div
@@ -318,77 +311,11 @@ function VerifiedView({
           <p className="text-[11px] opacity-70">{v.name}</p>
         </div>
       </div>
-      {/* El certificado oficial (PDF) solo existe para Kyverum; el mock no lo emite. */}
-      {v.provider === KYVERUM && (
-        <CertificadoButton instanceId={instanceId} validationId={v.id} />
-      )}
-    </div>
-  );
-}
-
-/**
- * Descarga best-effort del certificado oficial (PDF) de una validación aprobada. Reusa el patrón
- * blob → objectURL → anchor de ExpedienteVisor. Si Kyverum no tiene el certificado (404) o falla
- * el proveedor, se muestra el mensaje inline sin bloquear el resto del paso.
- */
-function CertificadoButton({
-  instanceId,
-  validationId,
-}: {
-  instanceId: string | null;
-  validationId: string;
-}) {
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleDownload = async () => {
-    if (!instanceId) return;
-    setError(null);
-    setDownloading(true);
-    try {
-      const { blob, filename } = await tramitesClient.downloadBiometricCertificado(
-        instanceId,
-        validationId,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo descargar el certificado.',
-      );
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <button
-        type="button"
-        onClick={() => void handleDownload()}
-        disabled={downloading || !instanceId}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#5B8A1F', color: '#5B8A1F' }}
-        aria-label="Descargar certificado de identidad en PDF"
-      >
-        {downloading ? (
-          <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
-        ) : (
-          <Download className="h-3 w-3" aria-hidden />
-        )}
-        {downloading ? 'Descargando…' : 'Descargar certificado'}
-      </button>
-      {error && (
-        <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
-          {error}
-        </p>
-      )}
+      {/*
+       * El certificado oficial (PDF) NO se descarga aquí: la descarga vive en el flujo de
+       * Generar/Re-generar FUR y de Consolidar (FirmaFurStep), donde el certificado es uno de los
+       * documentos producidos con su propio botón de descarga.
+       */}
     </div>
   );
 }
@@ -739,6 +666,7 @@ function IdentityAuditPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
+  const [referenced, setReferenced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -749,6 +677,7 @@ function IdentityAuditPanel({
     try {
       const res = await tramitesClient.getBiometricAudit(instanceId, validationId);
       setEvents(res.events);
+      setReferenced(res.referencedFromOtherProcedure ?? false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la bitácora.');
     } finally {
@@ -789,6 +718,20 @@ function IdentityAuditPanel({
           {error && (
             <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
               {error}
+            </p>
+          )}
+          {/*
+           * HU #10350 — identidad reutilizada ("apalancada"): la validación se realizó en otro trámite
+           * del mismo cliente. Aviso informativo (no error); debajo se muestra su bitácora real.
+           */}
+          {referenced && (
+            <p
+              className="rounded-lg px-2.5 py-1.5 text-[11px]"
+              style={{ background: 'rgba(85,126,255,0.10)', color: '#3B5BDB' }}
+              role="status"
+            >
+              Validación reutilizada de otro trámite del mismo cliente (identidad ya verificada). El
+              historial técnico corresponde a ese trámite.
             </p>
           )}
           {events && events.length === 0 && (
