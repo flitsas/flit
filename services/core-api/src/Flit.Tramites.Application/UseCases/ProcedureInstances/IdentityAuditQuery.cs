@@ -15,12 +15,21 @@ public sealed record IdentityAuditEventDto(
     string? ErrorType,
     string? Message);
 
-public sealed record IdentityAuditResponse(Guid ValidationId, IReadOnlyList<IdentityAuditEventDto> Events);
+/// <summary>
+/// Respuesta de la bitácora. <paramref name="ReferencedFromOtherProcedure"/> es true cuando la
+/// identidad está "reutilizada": la validación es del mismo tenant/cliente pero se realizó en OTRO
+/// trámite (HU #10350) y aquí solo se referencia. En ese caso la bitácora existe y es válida (es la
+/// misma fila de validación); la UI lo explica en vez de mostrar un error de "no encontrada".
+/// </summary>
+public sealed record IdentityAuditResponse(
+    Guid ValidationId,
+    IReadOnlyList<IdentityAuditEventDto> Events,
+    bool ReferencedFromOtherProcedure = false);
 
 /// <summary>
 /// Devuelve la bitácora (solo lectura) del ciclo de una validación de identidad: envío, llegada del webhook,
 /// si se descifró el secreto o no, firma, resultado y reconciliaciones. Para diagnosticar "qué pasó" desde la
-/// API sin entrar a la BD ni a los logs del pod. Tenant-scoped: valida que la validación sea del tenant/instancia.
+/// API sin entrar a la BD ni a los logs del pod. Tenant-scoped: la validación debe ser del mismo tenant.
 /// </summary>
 public sealed class GetIdentityAuditHandler(IProcedureInstanceRepository repo)
 {
@@ -28,8 +37,15 @@ public sealed class GetIdentityAuditHandler(IProcedureInstanceRepository repo)
         Guid instanceId, Guid tenantId, Guid validationId, CancellationToken ct = default)
     {
         var v = await repo.GetBiometricByIdAsync(validationId, ct);
-        if (v is null || v.TenantId != tenantId || v.ProcedureInstanceId != instanceId)
+        // "No encontrada" real: no existe o es de otro tenant. El tenant sigue siendo la frontera dura.
+        if (v is null || v.TenantId != tenantId)
             return (null, "not_found");
+
+        // HU #10350 — identidad reutilizada ("apalancada"): la validación es del mismo tenant/cliente
+        // pero pertenece a OTRO trámite (aquí solo se referencia). No es un error: es la misma fila de
+        // validación y su bitácora es la real; se marca para que la UI lo explique. La bitácora no
+        // contiene PII ni secretos (ya saneada), por lo que exponerla dentro del mismo tenant es seguro.
+        var referenciada = v.ProcedureInstanceId != instanceId;
 
         var events = await repo.ListIdentityAuditByValidationAsync(validationId, ct);
         var dtos = events
@@ -39,6 +55,6 @@ public sealed class GetIdentityAuditHandler(IProcedureInstanceRepository repo)
                 e.ProviderStatus, e.ErrorType, e.Message))
             .ToList();
 
-        return (new IdentityAuditResponse(validationId, dtos), null);
+        return (new IdentityAuditResponse(validationId, dtos, referenciada), null);
     }
 }

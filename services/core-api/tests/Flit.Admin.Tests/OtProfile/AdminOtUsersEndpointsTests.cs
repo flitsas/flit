@@ -131,8 +131,10 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     [Fact]
     public async Task ListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaborator()
     {
-        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+        // Eliminar es EXCLUSIVO de SuperAdmin: el paso de preparación (borrar al colaborador)
+        // ya no puede hacerlo ot_admin.
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
 
         long rowVersion;
         await using (var db = CreateDbContext())
@@ -144,15 +146,13 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         }
 
         var deleteResponse = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
             TestContext.Current.CancellationToken);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
 
         var response = await _client.GetAsync(
             $"/api/v1/admin/ot/users?transitOfficeId={_transitOfficeId}&onlyDeleted=true",
@@ -198,13 +198,22 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
                 .SingleAsync(TestContext.Current.CancellationToken);
         }
 
+        // Eliminar es EXCLUSIVO de SuperAdmin: el paso de preparación (borrar al colaborador)
+        // ya no puede hacerlo ot_admin.
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
         var deleteResponse = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
             TestContext.Current.CancellationToken);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // El listado (sin onlyDeleted) sigue siendo accesible para ot_admin en su propio tenant.
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await _client.GetAsync("/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -219,8 +228,10 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     [Fact]
     public async Task SecurityListUsers_OnlyDeleted_AsSuperAdmin_ReturnsSoftDeletedCollaboratorFromAnyTenant()
     {
-        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
+        // Eliminar es EXCLUSIVO de SuperAdmin: el paso de preparación (borrar al colaborador)
+        // ya no puede hacerlo ot_admin.
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
 
         long rowVersion;
         await using (var db = CreateDbContext())
@@ -232,15 +243,13 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         }
 
         var deleteResponse = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
             TestContext.Current.CancellationToken);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
 
         var response = await _client.GetAsync(
             "/api/v1/security/users?onlyDeleted=true", TestContext.Current.CancellationToken);
@@ -270,13 +279,14 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     }
 
     [Fact]
-    public async Task Suspend_ThenUnsuspend_AsOtAdmin_TogglesActiveSuspension()
+    public async Task Suspend_ThenUnsuspend_AsSuperAdmin_TogglesActiveSuspension()
     {
-        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        // Bloquear/desactivar y reactivar son EXCLUSIVOS de SuperAdmin.
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var suspendResponse = await _client.PostAsJsonAsync(
-            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend?transitOfficeId={_transitOfficeId}",
             new { reason = "Prueba automatizada", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
             TestContext.Current.CancellationToken);
         suspendResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -292,7 +302,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         }
 
         var unsuspendResponse = await _client.DeleteAsync(
-            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend", TestContext.Current.CancellationToken);
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend?transitOfficeId={_transitOfficeId}",
+            TestContext.Current.CancellationToken);
         unsuspendResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         await using (var db = CreateDbContext())
@@ -307,17 +318,54 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     }
 
     [Fact]
-    public async Task Suspend_AsOtAdmin_TargetingUserOutsideTenant_Returns404()
+    public async Task Suspend_AsSuperAdmin_TargetingUnknownUserId_Returns404()
+    {
+        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin; ot_admin ya no puede hacer esta
+        // llamada (ver Suspend_AsOtAdmin_Returns403). Un userId inexistente dentro del tenant
+        // OT resuelto por transitOfficeId sigue devolviendo 404 (TargetUserNotFound).
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/{Guid.NewGuid()}/suspend?transitOfficeId={_transitOfficeId}",
+            new { reason = "Usuario inexistente", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // Bloquear/desactivar es ahora EXCLUSIVO de SuperAdmin: ot_admin recibe 403 (antes podía
+    // suspender colaboradores de su propio tenant).
+    [Fact]
+    public async Task Suspend_AsOtAdmin_Returns403()
     {
         var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await _client.PostAsJsonAsync(
-            $"/api/v1/admin/ot/users/{Guid.NewGuid()}/suspend",
-            new { reason = "Usuario ajeno", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            new { reason = "ot_admin ya no puede suspender", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // Eliminar es ahora EXCLUSIVO de SuperAdmin: ot_admin recibe 403 (antes podía eliminar
+    // colaboradores de su propio tenant).
+    [Fact]
+    public async Task DeleteUser_AsOtAdmin_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion = 0L }),
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     // HU #10621 AC1 — nombre y correo válidos y distintos → se persisten, y row_version avanza
@@ -560,11 +608,12 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     [Fact]
     public async Task Suspend_WithoutEndsAt_CreatesIndefiniteSuspension()
     {
-        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin.
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await _client.PostAsJsonAsync(
-            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend?transitOfficeId={_transitOfficeId}",
             new { reason = "Desactivación indefinida de prueba" },
             TestContext.Current.CancellationToken);
 
@@ -757,9 +806,10 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     // HU #10623 AC1 — eliminar (soft-delete reversible) a un usuario del tenant OT: 204, se marca
     // DeletedAt/DeletedBy y desaparece del listado activo (GET /users ya filtra DeletedAt == null).
     [Fact]
-    public async Task DeleteUser_AsOtAdmin_WithinScope_Returns204AndSoftDeletes()
+    public async Task DeleteUser_AsSuperAdmin_WithinScope_Returns204AndSoftDeletes()
     {
-        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        // Eliminar es EXCLUSIVO de SuperAdmin.
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         long rowVersion;
@@ -772,7 +822,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         }
 
         var response = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
@@ -784,7 +835,11 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var user = await db2.Users.AsNoTracking()
             .SingleAsync(u => u.Id == _collaboratorUserId, TestContext.Current.CancellationToken);
         user.DeletedAt.Should().NotBeNull();
-        user.DeletedBy.Should().Be(_otAdminUserId);
+        user.DeletedBy.Should().Be(_superAdminUserId);
+
+        // El listado sigue siendo accesible para ot_admin en su propio tenant.
+        var otAdminToken = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otAdminToken);
 
         var listResponse = await _client.GetAsync("/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
         var body = await listResponse.Content.ReadFromJsonAsync<ListUsersBody>(
@@ -792,24 +847,29 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Data.Should().NotContain(u => u.Id == _collaboratorUserId.ToString());
     }
 
-    // HU #10623 AC2 — un usuario no puede eliminarse a sí mismo → 400 SELF_DELETE.
+    // HU #10623 AC2 — un usuario no puede eliminarse a sí mismo → 400 SELF_DELETE. Eliminar es
+    // ahora EXCLUSIVO de SuperAdmin (ot_admin ya no puede llamar este endpoint, ver
+    // Suspend_AsOtAdmin_Returns403 / DeleteUser_AsOtAdmin_Returns403), así que la auto-eliminación
+    // se reproduce con el propio SuperAdmin como caller y target (DeleteUserHandler evalúa
+    // CallerId == UserId sin importar el tenant/scope resuelto).
     [Fact]
-    public async Task DeleteUser_SelfDeletion_Returns400()
+    public async Task DeleteUser_SelfDeletion_AsSuperAdmin_Returns400()
     {
-        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         long rowVersion;
         await using (var db = CreateDbContext())
         {
             rowVersion = await db.Users.AsNoTracking()
-                .Where(u => u.Id == _otAdminUserId)
+                .Where(u => u.Id == _superAdminUserId)
                 .Select(u => u.RowVersion)
                 .SingleAsync(TestContext.Current.CancellationToken);
         }
 
         var response = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_otAdminUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_superAdminUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
@@ -924,12 +984,13 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     [Fact]
     public async Task Restore_AfterDelete_RecoversExactSameRolesAndSuspensionState()
     {
-        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        // Suspender y eliminar son EXCLUSIVOS de SuperAdmin.
+        var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Deja al colaborador con una suspensión activa antes de eliminarlo.
         var suspendResponse = await _client.PostAsJsonAsync(
-            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend",
+            $"/api/v1/admin/ot/users/{_collaboratorUserId}/suspend?transitOfficeId={_transitOfficeId}",
             new { reason = "HU #10623 AC3 — estado previo a eliminar", endsAt = DateTimeOffset.UtcNow.AddDays(1) },
             TestContext.Current.CancellationToken);
         suspendResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -944,7 +1005,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         }
 
         var deleteResponse = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
@@ -1037,13 +1099,22 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             rowVersion = target.RowVersion;
         }
 
+        // Eliminar es EXCLUSIVO de SuperAdmin: el paso de preparación (borrar al colaborador)
+        // ya no puede hacerlo ot_admin.
+        var superAdminToken = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
         var deleteResponse = await _client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}")
+            new HttpRequestMessage(
+                HttpMethod.Delete, $"/api/v1/admin/ot/users/{_collaboratorUserId}?transitOfficeId={_transitOfficeId}")
             {
                 Content = JsonContent.Create(new { rowVersion }),
             },
             TestContext.Current.CancellationToken);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Reinvitar sigue siendo tarea de ot_admin en su propio tenant.
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var inviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
@@ -1115,6 +1186,12 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             Email = $"superadmin-{_superAdminUserId:N}@flit.local",
             DisplayName = "SuperAdmin de prueba",
             Status = "active",
+            // HomeTenantId != null: UserManagementRepository.FindTargetAsync (compartida por
+            // Suspend/Unsuspend/DeleteUser) exige un tenant para resolver al usuario objetivo —
+            // necesario para reproducir la auto-eliminación del propio SuperAdmin (ver
+            // DeleteUser_SelfDeletion_AsSuperAdmin_Returns400). El rol SuperAdmin viaja por el
+            // claim del JWT, no por este HomeTenantId; el resto de tests solo lo usan como caller.
+            HomeTenantId = _otTenantId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
 

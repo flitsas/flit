@@ -18,6 +18,21 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   resendOtInvitation: vi.fn(),
 }));
 
+// Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin, así que este flujo (suspender/
+// reactivar) se prueba como SuperAdmin. Sin este mock el hook real leería un JWT vacío.
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => ({
+    isSuperAdmin: true,
+    isAdminCompany: false,
+    isOtAdmin: false,
+    permissions: [],
+    tenantId: "ot-tenant-1",
+    userId: "superadmin-user",
+    roleId: "role-super",
+    roleCode: "SuperAdmin",
+  }),
+}));
+
 import {
   fetchOtUsers,
   inviteOtUser,

@@ -69,4 +69,23 @@ public sealed class IdentityAuditHandlerTests
 
         error.Should().Be("not_found");
     }
+
+    [Fact]
+    public async Task Audit_Referenced_WhenSameTenantOtherInstance_ReturnsEventsWithFlag()
+    {
+        // HU #10350 — identidad "apalancada"/reutilizada: mismo tenant, OTRO trámite. No es error:
+        // devuelve la bitácora real (misma fila) y marca ReferencedFromOtherProcedure = true.
+        var ct = TestContext.Current.CancellationToken;
+        SeedValidation(instance: Guid.NewGuid());
+        _repo.ListIdentityAuditByValidationAsync(_validation, Arg.Any<CancellationToken>()).Returns(new List<IdentityValidationAuditEvent>
+        {
+            new() { Stage = IdentityValidationAuditStages.WebhookApplied, Outcome = "approved" },
+        });
+
+        var (result, error) = await _handler.HandleAsync(_instance, _tenant, _validation, ct);
+
+        error.Should().BeNull();
+        result!.ReferencedFromOtherProcedure.Should().BeTrue();
+        result.Events.Should().HaveCount(1);
+    }
 }

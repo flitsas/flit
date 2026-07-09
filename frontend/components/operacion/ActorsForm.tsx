@@ -5,6 +5,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Search, UserRound } from 'lucide-react';
@@ -58,9 +59,15 @@ interface Props {
    * propietario capturado en el paso 1 de la consulta (`owner_document_*` en
    * field_values), cuando el actor aún no tiene documento. Pensado para el paso
    * "vendedor" del traspaso: en un traspaso estándar el vendedor ES el
-   * propietario registrado que validó el vehículo. El valor queda editable.
+   * propietario registrado que validó el vehículo.
    */
   seedDocumentoFromOwner?: boolean;
+  /**
+   * Paso vendedor (traspaso): si ya hay número de documento (seed o rehidratación),
+   * consulta RUNT al montar, oculta el botón manual y deja el documento en solo lectura.
+   * Sin documento: el campo sigue editable y no se dispara consulta.
+   */
+  autoConsultRunt?: boolean;
 }
 
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
@@ -213,6 +220,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     embeddedInWizard = false,
     layout,
     seedDocumentoFromOwner = false,
+    autoConsultRunt = false,
   },
   ref,
 ) {
@@ -232,6 +240,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [runt, setRunt] = useState<Record<number, RuntState>>({});
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
+  // Evita doble auto-consulta RUNT para el mismo documento en el mismo montaje.
+  const autoLookupTriggeredRef = useRef<string | null>(null);
 
   // Documento del propietario capturado en el paso 1 (`owner_document_*` en
   // field_values), para sembrar el documento del vendedor cuando aún no lo tiene.
@@ -353,6 +363,32 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
+  // Paso vendedor: dispara la consulta RUNT en cuanto el documento está disponible
+  // (sembrado desde el paso 1 o rehidratado del backend), sin clic manual.
+  useEffect(() => {
+    if (!autoConsultRunt || !instanceId || readOnly || !isSplit || actors.length !== 1) {
+      return;
+    }
+    const actor = actors[0];
+    const documentNumber = actor.numeroDocumento.trim();
+    if (!documentNumber) return;
+    const runtState = runt[0] ?? { status: 'idle' };
+    if (runtState.status !== 'idle') return;
+    const lookupKey = `${actor.tipoDocumento}:${documentNumber}`;
+    if (autoLookupTriggeredRef.current === lookupKey) return;
+    autoLookupTriggeredRef.current = lookupKey;
+    void handleRuntLookup(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRuntLookup lee actors[0] actual
+  }, [
+    autoConsultRunt,
+    instanceId,
+    readOnly,
+    isSplit,
+    actors[0]?.numeroDocumento,
+    actors[0]?.tipoDocumento,
+    runt[0]?.status,
+  ]);
+
   // Valida + guarda. Núcleo compartido por el submit propio y el save() del ref.
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
@@ -452,6 +488,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // ── RUNT result block (compartido entre layouts) ──────────────────────────
   const runtResult = (index: number) => {
     const runtState: RuntState = runt[index] ?? { status: 'idle' };
+    if (runtState.status === 'loading') {
+      return (
+        <p className="text-xs opacity-70" role="status" aria-live="polite">
+          Consultando RUNT…
+        </p>
+      );
+    }
     if (runtState.status === 'found') {
       const r = runtState.result;
       const hasLicenses = r.hasActiveLicense ?? (r.licenseStatus != null);
@@ -567,6 +610,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const actor = actors[0];
     const errors = showErrors ? validation.byActor[0] : {};
     const runtState: RuntState = runt[0] ?? { status: 'idle' };
+    const docLocked = autoConsultRunt && !!actor.numeroDocumento.trim();
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
     const sectionHeader = 'border-b px-4 py-3 flex items-center gap-2';
@@ -595,8 +639,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   id="comprador-numeroDoc"
                   type="text"
                   value={actor.numeroDocumento}
+                  readOnly={docLocked}
                   onChange={(e) => updateActor(0, { numeroDocumento: e.target.value })}
                   onKeyDown={(e) => {
+                    if (docLocked) return;
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       void handleRuntLookup(0);
@@ -606,7 +652,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   aria-invalid={!!errors.numeroDocumento}
                   aria-describedby={errors.numeroDocumento ? 'comprador-numeroDoc-err' : undefined}
                   placeholder={`Número de documento del ${actor.rol}…`}
-                  className={`${INPUT_BASE} font-mono`}
+                  className={`${INPUT_BASE} font-mono${docLocked ? ' opacity-80' : ''}`}
+                  style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                 />
                 {errors.numeroDocumento && (
                   <p id="comprador-numeroDoc-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -614,7 +661,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </p>
                 )}
               </div>
-              {!readOnly && (
+              {!readOnly && !autoConsultRunt && (
                 <button
                   type="button"
                   onClick={() => void handleRuntLookup(0)}
