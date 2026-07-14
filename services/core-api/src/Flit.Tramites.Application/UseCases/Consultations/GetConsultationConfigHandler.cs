@@ -18,7 +18,10 @@ public sealed class GetConsultationConfigHandler(
         return new ConsultationConfigResult(
             PrimaryFor(ConsultationKind.VehicleVin, tenantOverride),
             PrimaryFor(ConsultationKind.VehiclePlate, tenantOverride),
-            PrimaryFor(ConsultationKind.Conductor, tenantOverride));
+            PrimaryFor(ConsultationKind.Conductor, tenantOverride),
+            // FEATURE 02 — el wizard usa este flag para autorrellenar el documento del tenant en la
+            // consulta de traspaso y validar antes de consultar el RUNT. Sin fila ⇒ false.
+            tenantOverride?.OnlyOwnVehicles ?? false);
     }
 
     private string PrimaryFor(ConsultationKind kind, ConsultationTenantOverride? tenantOverride)
@@ -28,5 +31,8 @@ public sealed class GetConsultationConfigHandler(
     }
 }
 
-/// <summary>Proveedor primario de consulta por tipo, resuelto para el tenant (claves como en la cadena).</summary>
-public sealed record ConsultationConfigResult(string VehicleVin, string VehiclePlate, string Conductor);
+/// <summary>
+/// Proveedor primario de consulta por tipo, resuelto para el tenant (claves como en la cadena), más el
+/// flag <c>OnlyOwnVehicles</c> (FEATURE 02) para que el wizard adapte la captura del propietario.
+/// </summary>
+public sealed record ConsultationConfigResult(string VehicleVin, string VehiclePlate, string Conductor, bool OnlyOwnVehicles);
