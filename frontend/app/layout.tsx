@@ -26,8 +26,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}>
-      <body className="h-full font-sans antialiased">
+    <html
+      lang="es"
+      suppressHydrationWarning
+      className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}
+    >
+      <body suppressHydrationWarning className="h-full font-sans antialiased">
         {children}
         <SessionExpiredListener />
       </body>
