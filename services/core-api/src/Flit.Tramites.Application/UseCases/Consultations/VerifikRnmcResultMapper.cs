@@ -2,7 +2,9 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
 /// Mapper puro Verifik RNMC (§3.1) → <see cref="ConsultationResult"/> normalizado.
-/// Semáforo: correctiveMeasures[] vacío → ok (sin medidas); con medidas → fail.
+/// Semáforo: correctiveMeasures[] vacío → ok (sin medidas); con medidas → warn (informativo).
+/// RNMC NO es bloqueante: una medida correctiva NO pinta el preflight en rojo ni veta el envío al OT;
+/// solo informa (y deja la señal informativa <c>rnmc_medida_pendiente</c> para visibilidad del OT).
 /// Nunca lanza; robusto ante nulls.
 /// </summary>
 public static class VerifikRnmcResultMapper
@@ -10,6 +12,7 @@ public static class VerifikRnmcResultMapper
     private const string Provider = "verifik_rnmc";
 
     private const string Ok = "ok";
+    private const string Warn = "warn";
     private const string Fail = "fail";
     private const string Unknown = "unknown";
 
@@ -63,10 +66,12 @@ public static class VerifikRnmcResultMapper
             ? $"{measures.Count} medida(s): {string.Join(", ", resumen)}"
             : $"{measures.Count} medida(s) correctiva(s) registrada(s)";
 
+        // RNMC no es bloqueante: la medida se reporta como warn (informativo, amarillo), no como
+        // fail (rojo). El preflight persiste la señal informativa rnmc_medida_pendiente para el OT.
         return new ConsultationCheck(
             "medidas_correctivas",
             "Medidas correctivas (Policía)",
-            Fail,
+            Warn,
             Provider,
             desc);
     }

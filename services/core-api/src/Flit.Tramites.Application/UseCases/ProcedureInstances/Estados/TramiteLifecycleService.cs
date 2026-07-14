@@ -165,14 +165,9 @@ public sealed class TramiteLifecycleService(
         if (procedureType is null || procedureType.PublicationStatus != PublicationStatus.Published)
             return (TramiteEstadoErrores.TipoNoPublicado, "El tipo de trámite no está publicado.");
 
-        // HU #10604 (R19) — "Imponer Medida": si el preflight detectó una medida correctiva RNMC
-        // pendiente (señal rnmc_medida_pendiente), el trámite se puede REGISTRAR pero NO enviar al OT
-        // hasta cargar el paz y salvo RNMC. La señal solo se pone cuando el OT exige RNMC (HU #10602),
-        // así que su presencia ya implica la condición; no hace falta re-consultar la config del OT.
-        if (RnmcMedidaPendiente(instance) && !TienePazSalvoRnmc(instance))
-            return (TramiteEstadoErrores.RnmcMedidaBloqueaEnvio,
-                "Hay una medida correctiva RNMC pendiente. Cargue el paz y salvo RNMC para poder enviar " +
-                "el trámite al organismo de tránsito.");
+        // HU #10604 (R19) — RNMC NO es bloqueante: una medida correctiva pendiente NO veta el envío
+        // al OT (antes exigía cargar el paz y salvo RNMC). La señal rnmc_medida_pendiente se conserva
+        // como dato INFORMATIVO (visibilidad del OT), pero no gatea aquí.
 
         // #2 (R09) — el OT elegido en el FUR (transit_office_id en field_values) debe estar
         // HABILITADO para la empresa. Se promueve a la columna TransitOfficeId para que el motor de
@@ -317,15 +312,4 @@ public sealed class TramiteLifecycleService(
         return false;
     }
 
-    // HU #10604 — señal server-driven puesta por el preflight cuando hay una medida correctiva RNMC.
-    private static bool RnmcMedidaPendiente(ProcedureInstance instance) =>
-        string.Equals(
-            instance.FieldValues.FirstOrDefault(f =>
-                string.Equals(f.FieldKey, "rnmc_medida_pendiente", StringComparison.OrdinalIgnoreCase))?.ValueText,
-            "true",
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool TienePazSalvoRnmc(ProcedureInstance instance) =>
-        instance.Attachments.Any(a =>
-            string.Equals(a.Tipo, "paz_salvo_rnmc", StringComparison.OrdinalIgnoreCase));
 }
