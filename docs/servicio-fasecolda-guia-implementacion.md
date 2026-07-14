@@ -91,7 +91,7 @@ Cliente
   ```
 - **Respuesta real (OAuth2 password grant, validada):**
   ```json
-  { "access_token": "tGGdEZ_32mIhSQ8sB5P_...", "token_type": "bearer", "expires_in": 86399 }
+  { "access_token": "<ACCESS_TOKEN>", "token_type": "bearer", "expires_in": 86399 }
   ```
   - `expires_in` real ≈ **86399 segundos (~24 h)**, no 3600. Aprovecha esta duración para cachear el token (§7).
   - `token_type` = `"bearer"` (minúscula); al construir el header usa `Authorization: Bearer {token}`.
