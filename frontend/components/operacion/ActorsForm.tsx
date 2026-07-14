@@ -160,6 +160,14 @@ export function validateActors(
     }
     if (!a.email.trim()) e.email = 'Correo requerido';
     else if (!EMAIL_RE.test(a.email.trim())) e.email = 'Correo no válido';
+    // HU #10688 (Fase 1): en persona jurídica el correo del representante legal es obligatorio
+    // (es quien valida la identidad de la PJ). Nombre/documento del RL siguen opcionales.
+    if (isJuridical(a)) {
+      const rlEmail = a.representanteLegal?.email?.trim() ?? '';
+      if (!rlEmail) e.representanteLegal = 'Correo del representante legal requerido';
+      else if (!EMAIL_RE.test(rlEmail))
+        e.representanteLegal = 'Correo del representante legal no válido';
+    }
     return e;
   });
 
@@ -813,6 +821,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (!isJuridical(actor)) return null;
     const rl = actor.representanteLegal ?? {};
     const rlState: LookupState = rlRunt[index] ?? { status: 'idle' };
+    const rlErrors = showErrors ? validation.byActor[index] : {};
     return (
       <div className="md:col-span-2 rounded-xl border p-4 space-y-3" style={{ background: 'rgba(85,126,255,0.03)' }}>
         <div>
@@ -903,10 +912,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className={INPUT_BASE}
             />
           </div>
-          {/* Email */}
+          {/* Email — obligatorio en persona jurídica (HU #10688): el RL valida la identidad. */}
           <div>
             <label htmlFor={`${index}-rl-email`} className="text-xs font-semibold mb-1.5 block">
-              Correo electrónico <span className="opacity-50 font-normal">(opcional)</span>
+              Correo electrónico <span style={{ color: '#FF4E00' }}>*</span>
             </label>
             <input
               id={`${index}-rl-email`}
@@ -915,7 +924,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               onChange={(e) => updateRepLegal(index, { email: e.target.value })}
               placeholder="correo@ejemplo.com"
               className={INPUT_BASE}
+              aria-invalid={!!rlErrors.representanteLegal}
             />
+            {rlErrors.representanteLegal && (
+              <p className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                {rlErrors.representanteLegal}
+              </p>
+            )}
           </div>
           {/* Teléfono */}
           <div>

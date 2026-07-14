@@ -283,22 +283,24 @@ public sealed class GenerarFurHandler(
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
-        // Fila propia aprobada+vigente del rol Y del documento del actor actual. El filtro por documento es
+        // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
         // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
         // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
             && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
+            && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
 
-        // Identidad vigente REFERENCIADA por documento del actor (HU #10350, sin clonar).
-        if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+        // Identidad vigente REFERENCIADA por documento del sujeto (HU #10350, sin clonar).
+        if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             return await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
 
         return null;
     }
@@ -367,10 +369,12 @@ public sealed class GenerarFurHandler(
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+            var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+            if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             {
                 var source = await repo.FindVigenteApprovedByDocumentAsync(
-                    instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), DateTimeOffset.UtcNow, ct);
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
                 if (source is not null && EsKyverumConId(source))
                     bio = source;
             }
@@ -408,6 +412,9 @@ public sealed class GenerarFurHandler(
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
         var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
+        var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
+            || string.Equals(a?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
         partes.Add(new DocumentParte(
             rol,
             a?.FullName,
@@ -416,7 +423,8 @@ public sealed class GenerarFurHandler(
             string.IsNullOrWhiteSpace(a?.DocumentType) ? null : a.DocumentType.Trim(),
             string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
             direccion,
-            ciudad));
+            ciudad,
+            esJuridica));
     }
 
     private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);

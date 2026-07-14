@@ -125,6 +125,15 @@ public sealed class PutActorsHandler(
             // HU #10542: tipo de persona opcional; si viene, debe ser natural|juridical.
             if (!string.IsNullOrWhiteSpace(a.PersonType) && !ActorPersonTypes.IsValid(a.PersonType))
                 return (null, "invalid_person_type");
+            // HU #10688 (Fase 1): en persona jurídica el correo del representante legal es
+            // obligatorio (es quien valida la identidad de la PJ y recibe el correo de validación).
+            // Nombre/documento del RL siguen opcionales. No aplica a persona natural.
+            if (ActorPersonTypes.IsJuridical(a.PersonType))
+            {
+                var rlEmail = a.RepresentanteLegal?.Email;
+                if (string.IsNullOrWhiteSpace(rlEmail) || !TramiteDocumento.EmailValido(rlEmail))
+                    return (null, "rl_email_requerido");
+            }
         }
 
         // 2. Roles permitidos según modalidad_entrada (matriz de dominio, no hardcode).

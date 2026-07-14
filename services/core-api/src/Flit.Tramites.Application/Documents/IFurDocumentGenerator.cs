@@ -1,6 +1,10 @@
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
+/// <param name="EsJuridica">
+/// HU #10688 — persona jurídica: el <see cref="Nombre"/> es la razón social y NO debe trocearse en
+/// apellidos/nombres; el mapper la escribe completa en la casilla de nombre.
+/// </param>
 public sealed record DocumentParte(
     string Rol,
     string? Nombre,
@@ -9,7 +13,8 @@ public sealed record DocumentParte(
     string? DocumentType = null,
     string? Phone = null,
     string? Address = null,
-    string? City = null);
+    string? City = null,
+    bool EsJuridica = false);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
