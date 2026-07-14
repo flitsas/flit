@@ -18,7 +18,10 @@ import {
 import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { Modal } from "@/components/atom/Modal";
+import { FolderOpen } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
 const PAGE_SIZE = 20;
@@ -51,6 +54,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
+  // HU #10705 — panel de documentos del expediente
+  const [documentosProcedure, setDocumentosProcedure] = useState<OtClientProcedure | null>(null);
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
 
@@ -318,6 +323,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               : undefined
           }
           consolidadoActingId={consolidadoActingId}
+          onVerDocumentos={setDocumentosProcedure}
         />
       </UiStateBoundary>
 
@@ -465,6 +471,25 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             </div>
           </div>
         </div>
+      )}
+
+      {/* HU #10705 — Modal de documentos del expediente */}
+      {documentosProcedure && (
+        <Modal
+          open
+          onClose={() => setDocumentosProcedure(null)}
+          title={`Documentos — ${documentosProcedure.referenceNumber}`}
+          icon={FolderOpen}
+          size="lg"
+          zClassName="z-[90]"
+        >
+          <OtDocumentosTab
+            procedureId={documentosProcedure.id}
+            referenceNumber={documentosProcedure.referenceNumber}
+            scope={transitOfficeId ? { transitOfficeId } : undefined}
+            readOnly={isReadOnly}
+          />
+        </Modal>
       )}
     </div>
   );

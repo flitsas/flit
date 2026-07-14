@@ -117,6 +117,33 @@ internal sealed class FileManagerAttachmentStorage(
         return new MemoryStream(data, writable: false);
     }
 
+    public async Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+        string storagePath,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+            return null;
+
+        // GET /files/{id}/presigned-url?disposition=inline → presigned de visualización inline.
+        // TTL se fija en 10 minutos (ExpiresAt calculado localmente; el file-manager determina el TTL
+        // real del objeto firmado en S3). No loguear la URL completa (contiene firma HMAC).
+        var path = $"{_options.FilesPath}/{Uri.EscapeDataString(storagePath)}/presigned-url?disposition=inline";
+        using var req = new HttpRequestMessage(HttpMethod.Get, path);
+        ApplyAuth(req);
+        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound)
+            return null;
+        resp.EnsureSuccessStatusCode();
+
+        var body = await resp.Content.ReadFromJsonAsync<FilePresignedResponse>(JsonOptions, ct);
+        var url = body?.PresignedUrl?.Url;
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(10);
+        return (url, expiresAt);
+    }
+
     public void Delete(string storagePath)
     {
         // No-op: el file-manager no expone borrado. El objeto en S3 queda huérfano y lo recupera

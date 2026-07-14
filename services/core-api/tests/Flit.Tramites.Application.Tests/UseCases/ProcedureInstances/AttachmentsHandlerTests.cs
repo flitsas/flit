@@ -74,6 +74,13 @@ public sealed class AttachmentsHandlerTests
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(
                 Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(
+                string.IsNullOrWhiteSpace(storagePath)
+                    ? null
+                    : ($"https://s3.test/view/{Uri.EscapeDataString(storagePath)}", DateTimeOffset.UtcNow.AddMinutes(10)));
     }
 
     private static ProcedureInstance Instance(

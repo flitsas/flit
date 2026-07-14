@@ -580,6 +580,18 @@ export const tramitesClient = {
     return { blob, filename: filename || attachmentId, mimetype };
   },
 
+  // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
+  // El backend valida tenant + ownership antes de emitir { url, expiresAt }.
+  fetchAttachmentPreviewUrl: (
+    instanceId: string,
+    attachmentId: string,
+    tenantId?: string,
+  ) =>
+    request<{ url: string; expiresAt: string }>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/preview-url`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
   // DELETE adjunto -> 204.
   deleteAttachment: (
     instanceId: string,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Star, X } from "lucide-react";
+import { Check, FolderOpen, Star, X } from "lucide-react";
 import { OtStatusBadge } from "./OtStatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -24,6 +24,8 @@ export interface ClientProceduresTableProps {
   onAdjuntarLt?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
+  /** Abre el panel de documentos del expediente para el trámite. */
+  onVerDocumentos?: (row: OtClientProcedure) => void;
 }
 
 /** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
@@ -40,6 +42,7 @@ export function ClientProceduresTable({
   onVerConsolidado,
   onAdjuntarLt,
   consolidadoActingId = null,
+  onVerDocumentos,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -99,6 +102,17 @@ export function ClientProceduresTable({
               </td>
               <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
+                  {onVerDocumentos && (
+                    <button
+                      type="button"
+                      className="rounded-lg border p-1.5"
+                      style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                      aria-label={`Ver documentos del trámite ${row.referenceNumber}`}
+                      onClick={() => onVerDocumentos(row)}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  )}
                   {row.status === "entregado" && showApprovalActions && (
                     <RowActions
                       actions={[

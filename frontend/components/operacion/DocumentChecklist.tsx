@@ -1,12 +1,14 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { Eye } from 'lucide-react';
 import {
   useProcedureDocuments,
   type OcrUiResult,
 } from '@/hooks/useProcedureDocuments';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -290,6 +292,7 @@ function DocumentSlot({
   onUpload,
   onRemove,
   onDefer,
+  onPreview,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
@@ -301,6 +304,8 @@ function DocumentSlot({
   onRemove: (attachmentId: string) => void;
   /** Difiere (o revierte) la impronta al paso FUR. Solo se pasa para el slot de impronta. */
   onDefer?: (diferida: boolean) => Promise<void>;
+  /** Abre el modal de previsualización para este adjunto. */
+  onPreview?: (attachment: ProcedureAttachment) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -383,11 +388,35 @@ function DocumentSlot({
         </div>
 
         {readOnly ? (
-          <span className="shrink-0 text-[11px] font-semibold opacity-60">
-            {done ? 'Adjunto' : 'Sin adjuntar'}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-[11px] font-semibold opacity-60">
+              {done ? 'Adjunto' : 'Sin adjuntar'}
+            </span>
+            {attachment && onPreview && (
+              <button
+                type="button"
+                onClick={() => onPreview(attachment)}
+                className="rounded-lg border p-1.5 disabled:opacity-60"
+                style={{ borderColor: '#DFE5ED', color: '#557EFF' }}
+                aria-label={`Previsualizar ${item.label}`}
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         ) : (
           <div className="flex shrink-0 items-center gap-2">
+            {attachment && onPreview && (
+              <button
+                type="button"
+                onClick={() => onPreview(attachment)}
+                className="rounded-lg border p-1.5 disabled:opacity-60"
+                style={{ borderColor: '#DFE5ED', color: '#557EFF' }}
+                aria-label={`Previsualizar ${item.label}`}
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
             <input
               ref={inputRef}
               type="file"
@@ -489,7 +518,60 @@ export function DocumentChecklist({
 
   const items = checklist?.items ?? [];
 
+  // Preview modal state (HU #10703)
+  const [previewAttachment, setPreviewAttachment] = useState<ProcedureAttachment | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const handlePreview = async (attachment: ProcedureAttachment) => {
+    setPreviewAttachment(attachment);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    try {
+      const result = await tramitesClient.fetchAttachmentPreviewUrl(
+        instanceId ?? '',
+        attachment.id,
+      );
+      setPreviewUrl(result.url);
+    } catch {
+      setPreviewError('No se pudo obtener la URL de previsualización. Descarga el archivo en su lugar.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleDownloadFromPreview = async () => {
+    if (!instanceId || !previewAttachment) return;
+    try {
+      const { blob, filename, mimetype } = await tramitesClient.downloadAttachment(
+        instanceId,
+        previewAttachment.id,
+      );
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: mimetype }));
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // silencioso — el usuario puede reintentar desde el listado
+    }
+  };
+
   return (
+    <>
+    <DocumentPreviewModal
+      open={!!previewAttachment}
+      onClose={() => { setPreviewAttachment(null); setPreviewUrl(null); setPreviewError(null); }}
+      title={previewAttachment?.filename ?? 'Previsualización'}
+      mimetype={previewAttachment?.mimetype ?? null}
+      url={previewUrl}
+      loading={previewLoading}
+      error={previewError}
+      onDownload={previewAttachment ? () => void handleDownloadFromPreview() : undefined}
+    />
     <section
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
       aria-label="Documentos del trámite"
@@ -591,11 +673,13 @@ export function DocumentChecklist({
                       }
                     : undefined
                 }
+                onPreview={instanceId ? (att) => void handlePreview(att) : undefined}
               />
             );
           })}
         </ul>
       )}
     </section>
+    </>
   );
 }
