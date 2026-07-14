@@ -24,6 +24,9 @@ internal static class SettingsDiff
         AddBool(changes, "only_own_vehicles", previous.OnlyOwnVehicles, updated.OnlyOwnVehicles);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
 
+        // FEATURE 02 — fuente de comparendos (internal | external).
+        AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);
+
         AddString(
             changes,
             "notification_channel",
