@@ -135,6 +135,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
     public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
 
+    // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
+    public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
