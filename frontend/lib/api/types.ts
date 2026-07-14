@@ -95,6 +95,13 @@ export interface SwitchesMatricula {
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
 export type NotificationTarget = "COMPRADOR" | "RADICADOR" | "NINGUNO";
 
+/**
+ * Fuente de la consulta de comparendos de la compañía (FEATURE 02): `internal` (módulo de
+ * comparendos con fuente base) o `external` (consulta en línea al SIMIT). Su USO en el flujo
+ * del trámite llega en FEATURE 05.
+ */
+export type FinesQuerySource = "internal" | "external";
+
 /** Proveedor primario + orden de fallback para un tipo de consulta RUNT (HU #10478). */
 export interface ConsultationProviderChoice {
   primary: string;
@@ -117,6 +124,8 @@ export interface TenantSettings {
   // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // FEATURE 02 — opcional por compatibilidad; el backend siempre lo devuelve.
+  finesQuerySource?: FinesQuerySource;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -129,6 +138,8 @@ export interface TenantSettingsUpdate {
   // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // FEATURE 02 — si se omite el backend conserva el valor previo.
+  finesQuerySource?: FinesQuerySource;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
