@@ -1073,12 +1073,13 @@ function ConsultaStep({
   // vez y solo si el campo está vacío: no pisa lo hidratado de la instancia ni lo que el gestor escriba.
   useEffect(() => {
     if (isVin || !onlyOwnVehicles || !tenantNitDigits || ownershipAutofilled.current) return;
-    if (!ownerDocNumber.trim()) {
-      setOwnerDocType('NIT');
-      setOwnerDocNumber(tenantNitDigits);
-    }
     ownershipAutofilled.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (ownerDocNumber.trim()) return;
+    // Autorrelleno del NIT del tenant: set state en efecto, misma excepción aceptada en el wizard
+    // que la rehidratación de la instancia (el valor viene de una consulta async, no del render).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOwnerDocType('NIT');
+    setOwnerDocNumber(tenantNitDigits);
   }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
 
   const buildItems = (): FieldValueInput[] | null => {
