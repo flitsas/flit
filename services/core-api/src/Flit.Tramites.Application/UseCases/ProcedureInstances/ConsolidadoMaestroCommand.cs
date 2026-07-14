@@ -29,21 +29,36 @@ public sealed class GenerarConsolidadoMaestroHandler(
         "consolidado_maestro",
     };
 
+    /// <param name="matrizPrecedencia">
+    /// Orden resuelto de la matriz documental del tenant/OT (<c>ResolvedDocumentMatrixResolver</c> /
+    /// <c>ot_document_precedence</c>, HU #10706 AC1). Lo resuelve y compone <c>AdminOtEndpoints</c>
+    /// (la capa Application no referencia Admin). Si es null/vacío, se cae al orden por modalidad
+    /// (<see cref="ConsolidadoOrderingResolver"/>) como respaldo.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia = null,
         CancellationToken ct = default)
     {
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
-        // Excluir todos los consolidados previos del maestro y del wizard para no fusionarlos.
+        // Fuente = tabla maestra de adjuntos de la instancia (AC2), excluyendo solo los consolidados
+        // previos (wizard y maestro) para no fusionarlos consigo mismos. Los resolvers de orden
+        // descartan además la evidencia biométrica (tipos "biometric_*", que no forma parte del
+        // expediente legal) y los MIME no fusionables (solo pdf/jpeg/png/webp llegan al merge); los
+        // adjuntos subidos ya están acotados a esos MIME por AttachmentRules.
         var fuentes = instance.Attachments
             .Where(a => !ConsolidadoTipos.Contains(a.Tipo))
             .ToList();
 
-        var ordered = ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
+        // AC1: orden por la matriz resuelta (documentos no clasificados al final como "Anexos"); si
+        // no hay matriz disponible, respaldo al orden por modalidad.
+        var ordered = matrizPrecedencia is { Count: > 0 }
+            ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
+            : ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -61,6 +76,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
             }
             catch (NotSupportedException)
             {
+                // Defensa en profundidad: el ordering ya filtró los MIME no fusionables, pero si un
+                // documento generado trajera otro MIME, se responde 409 en vez de propagar un 500.
                 return (null, "mimetype_no_soportado");
             }
         }

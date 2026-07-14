@@ -223,6 +223,67 @@ public sealed class LicenciaTransitoHandlerTests
         result.Mimetype.Should().Be("application/pdf");
     }
 
+    [Fact]
+    public async Task DescargarConsolidado_SoloMaestro_LoDevuelve()
+    {
+        // F2 (Feature #10701): "Ver consolidado" debe mostrar el maestro cuando es lo único
+        // que el OT generó (antes solo consideraba el tipo "consolidado").
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        _storage.Contents["path/maestro"] = Encoding.UTF8.GetBytes("pdf-maestro");
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado_maestro",
+            Filename = "consolidado_maestro_TRM.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/maestro",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _descargar.HandleAsync(id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Filename.Should().Be("consolidado_maestro_TRM.pdf");
+    }
+
+    [Fact]
+    public async Task DescargarConsolidado_MaestroMasReciente_GanaSobreConsolidado()
+    {
+        // Entre {consolidado, consolidado_maestro} devuelve el más reciente por UploadedAt.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        _storage.Contents["path/std"] = Encoding.UTF8.GetBytes("pdf-std");
+        _storage.Contents["path/maestro"] = Encoding.UTF8.GetBytes("pdf-maestro");
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado",
+            Filename = "consolidado_std.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/std",
+            UploadedAt = DateTimeOffset.UtcNow.AddHours(-1),
+        });
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado_maestro",
+            Filename = "consolidado_maestro.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/maestro",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _descargar.HandleAsync(id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Filename.Should().Be("consolidado_maestro.pdf");
+    }
+
     // ── Trazabilidad: historial ordenado + LT en el consolidado ───────────────
 
     [Fact]

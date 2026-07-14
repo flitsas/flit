@@ -48,30 +48,30 @@ export function ClientProceduresTable({
     <div className="flex flex-1 flex-col">
       <table className="w-full border-separate border-spacing-y-2 text-xs">
         <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-            <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+          <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+            <th className="rounded-l-xl px-4 py-2.5 bg-muted">
               Radicado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Tipo tramite
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Empresa cliente
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Estado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Fecha radicacion
             </th>
-            <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+            <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
               Acciones
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
+            <tr key={row.id} className="bg-card">
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 <span className="flex items-center gap-1.5">
                   {/* HU #10536 — distintivo de prioridad (solo lectura para el OT). */}
@@ -106,8 +106,9 @@ export function ClientProceduresTable({
                     <button
                       type="button"
                       className="rounded-lg border p-1.5"
-                      style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                      style={{ color: "#557EFF" }}
                       aria-label={`Ver documentos del trámite ${row.referenceNumber}`}
+                      title="Ver documentos del expediente"
                       onClick={() => onVerDocumentos(row)}
                     >
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
@@ -146,8 +147,7 @@ export function ClientProceduresTable({
                       {onGenerarConsolidado && (
                         <button
                           type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
-                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
                           disabled={consolidadoActingId === row.id}
                           onClick={() => onGenerarConsolidado(row)}
                         >
@@ -157,8 +157,7 @@ export function ClientProceduresTable({
                       {onVerConsolidado && (
                         <button
                           type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
-                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
                           disabled={consolidadoActingId === row.id}
                           onClick={() => onVerConsolidado(row)}
                         >

@@ -526,7 +526,10 @@ export function DocumentChecklist({
 
   const handlePreview = async (attachment: ProcedureAttachment) => {
     setPreviewAttachment(attachment);
-    setPreviewUrl(null);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setPreviewError(null);
     setPreviewLoading(true);
     try {
@@ -534,12 +537,29 @@ export function DocumentChecklist({
         instanceId ?? '',
         attachment.id,
       );
-      setPreviewUrl(result.url);
+      // El file-manager sirve el objeto como binary/octet-stream sin Content-Disposition, por lo que
+      // un <iframe> con la URL directa fuerza descarga. Re-empaquetamos los bytes como Blob con el
+      // mimetype real para forzar el render inline en el navegador (S3 permite CORS GET).
+      const blob = await fetch(result.url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const typed = attachment.mimetype ? new Blob([blob], { type: attachment.mimetype }) : blob;
+      setPreviewUrl(URL.createObjectURL(typed));
     } catch {
       setPreviewError('No se pudo obtener la URL de previsualización. Descarga el archivo en su lugar.');
     } finally {
       setPreviewLoading(false);
     }
+  };
+
+  const closePreview = () => {
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewAttachment(null);
+    setPreviewError(null);
   };
 
   const handleDownloadFromPreview = async () => {
@@ -564,7 +584,7 @@ export function DocumentChecklist({
     <>
     <DocumentPreviewModal
       open={!!previewAttachment}
-      onClose={() => { setPreviewAttachment(null); setPreviewUrl(null); setPreviewError(null); }}
+      onClose={closePreview}
       title={previewAttachment?.filename ?? 'Previsualización'}
       mimetype={previewAttachment?.mimetype ?? null}
       url={previewUrl}

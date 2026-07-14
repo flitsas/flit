@@ -11,14 +11,16 @@ import { X, type LucideIcon } from "lucide-react";
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
 // `children`; el título lo renderiza el propio Modal para garantizar el contraste.
 
-export type ModalSize = "sm" | "md" | "lg";
+export type ModalSize = "sm" | "md" | "lg" | "xl";
 
 // Anchos como clases literales (Tailwind JIT necesita el nombre completo).
 // AC1: ancho estándar, "no angosto" → por defecto `md` (max-w-lg).
+// `xl` (max-w-4xl) para contenido ancho como tablas (p. ej. documentos del expediente OT).
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-md",
   md: "max-w-lg",
   lg: "max-w-2xl",
+  xl: "max-w-4xl",
 };
 
 export interface ModalProps {

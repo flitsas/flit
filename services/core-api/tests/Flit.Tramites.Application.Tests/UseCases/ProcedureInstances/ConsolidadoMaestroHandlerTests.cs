@@ -106,7 +106,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         _repo.GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+        var (result, error) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct: ct);
 
         error.Should().Be("not_found");
         result.Should().BeNull();
@@ -124,7 +124,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("consolidado_maestro", "maestro.pdf"));
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
         error.Should().Be("sin_adjuntos");
         result.Should().BeNull();
@@ -144,7 +144,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("consolidado_maestro", "maestro_prev.pdf"));
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -168,7 +168,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("fur", "fur.pdf"));
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -208,7 +208,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         instance.Attachments.Add(prevAttachment);
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -231,10 +231,44 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("impronta", "impronta.pdf"));
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
         result!.Document.Tipo.Should().Be("consolidado_maestro");
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConMatrizPrecedencia_OrdenaSegunLaMatriz()
+    {
+        // HU #10706 AC1 — con una precedencia resuelta de matriz, el orden la sigue (tras los
+        // documentos generados de cabecera) y los no clasificados van al final como "Anexos".
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("fur", "fur.pdf"),
+            ("factura", "factura.pdf"),
+            ("aduana", "aduana.pdf"),
+            ("soat", "soat.pdf"));
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        // Matriz OT: SOAT antes que factura. "aduana" no está en la matriz → va al final (Anexos).
+        var precedencia = new[] { "soat", "factura" };
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, precedencia, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        var payload = instance.Events
+            .Should().ContainSingle(e => e.Tipo == "consolidado_maestro_generado").Which.Payload;
+        // Orden esperado en paginas_incluidas: fur (generado, cabecera) → soat → factura → aduana (anexo).
+        payload.IndexOf("fur", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("soat", StringComparison.Ordinal));
+        payload.IndexOf("soat", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("factura", StringComparison.Ordinal));
+        payload.IndexOf("factura", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("aduana", StringComparison.Ordinal));
     }
 }

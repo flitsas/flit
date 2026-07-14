@@ -79,7 +79,7 @@ export function DocumentPreviewModal({
               {[...Array(4)].map((_, i) => (
                 <div
                   key={i}
-                  className="h-10 rounded-xl animate-pulse bg-[#F4F7FC]"
+                  className="h-10 rounded-xl animate-pulse bg-[#F4F7FC] dark:bg-white/5"
                 />
               ))}
             </div>
@@ -145,7 +145,7 @@ export function DocumentPreviewModal({
               <iframe
                 src={url}
                 title={title}
-                className="w-full flex-1 rounded-xl border border-[#DFE5ED]"
+                className="w-full flex-1 rounded-xl border border-[#DFE5ED] dark:border-white/10"
                 style={{ minHeight: 480 }}
                 data-testid="preview-iframe"
               />
@@ -158,7 +158,7 @@ export function DocumentPreviewModal({
                 <img
                   src={url}
                   alt={title}
-                  className="max-w-full max-h-[520px] rounded-xl border border-[#DFE5ED] object-contain"
+                  className="max-w-full max-h-[520px] rounded-xl border border-[#DFE5ED] dark:border-white/10 object-contain"
                   data-testid="preview-image"
                 />
               </div>
@@ -197,8 +197,7 @@ export function DocumentPreviewModal({
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
-                  style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                  className="flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] dark:border-white/15 px-3 py-1.5 text-[11px] font-semibold text-[#162744] dark:text-slate-100"
                   aria-label="Descargar documento"
                   onClick={onDownload}
                 >

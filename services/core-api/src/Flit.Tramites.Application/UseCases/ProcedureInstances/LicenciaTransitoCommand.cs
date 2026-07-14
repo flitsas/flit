@@ -107,13 +107,22 @@ public sealed class AdjuntarLicenciaTransitoHandler(
 
 /// <summary>
 /// Resuelve el PDF del expediente consolidado más reciente del trámite para descarga
-/// (lo consume el perfil OT para VISUALIZAR el consolidado sin regenerarlo).
+/// (lo consume el perfil OT para VISUALIZAR el consolidado sin regenerarlo). Considera tanto
+/// el consolidado del wizard (<c>consolidado</c>) como el consolidado maestro
+/// (<c>consolidado_maestro</c>, Feature #10701) y devuelve el más reciente entre ambos: así
+/// "Ver consolidado" muestra el maestro cuando es lo único que el OT generó.
 /// Errores: <c>not_found</c> (instancia), <c>consolidado_no_generado</c>, <c>file_missing</c>.
 /// </summary>
 public sealed class DescargarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage)
 {
+    private static readonly HashSet<string> ConsolidadoTipos = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "consolidado",
+        "consolidado_maestro",
+    };
+
     public async Task<(AttachmentDownload? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -124,7 +133,7 @@ public sealed class DescargarConsolidadoHandler(
             return (null, "not_found");
 
         var consolidado = instance.Attachments
-            .Where(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase))
+            .Where(a => ConsolidadoTipos.Contains(a.Tipo))
             .OrderByDescending(a => a.UploadedAt)
             .FirstOrDefault();
         if (consolidado is null)

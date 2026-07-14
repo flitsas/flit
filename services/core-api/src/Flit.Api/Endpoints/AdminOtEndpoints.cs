@@ -220,6 +220,14 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/download", DownloadClientProcedureDocumentAsync)
+            .WithName("AdminOtDownloadClientProcedureDocument")
+            .WithSummary("Descarga el binario de un adjunto del trámite de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("/client-procedures/{id:guid}/attachments", UploadClientProcedureLicenciaTransitoAsync)
             .WithName("AdminOtUploadClientProcedureLicenciaTransito")
             .WithSummary("Adjunta la Licencia de Tránsito (LT) al trámite de un cliente OT")
@@ -1087,6 +1095,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
         ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
         Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
@@ -1105,7 +1114,29 @@ public static class AdminOtEndpoints
 
         var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => handler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            async () =>
+            {
+                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
+                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
+                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
+                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
+                IReadOnlyList<string> precedencia;
+                try
+                {
+                    var matriz = await matrixResolver
+                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    precedencia = matriz.Select(m => m.Codigo).ToList();
+                }
+                catch
+                {
+                    precedencia = [];
+                }
+
+                return await handler
+                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .ConfigureAwait(false);
+            },
             cancellationToken).ConfigureAwait(false);
 
         return error switch
@@ -1183,6 +1214,35 @@ public static class AdminOtEndpoints
                 new { error = "storage_unavailable" },
                 statusCode: StatusCodes.Status503ServiceUnavailable),
             _ => Results.Ok(new { url = previewResult!.Url, expiresAt = previewResult.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> DownloadClientProcedureDocumentAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.DownloadAttachmentHandler downloadHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (download, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => downloadHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "file_missing" => Results.NotFound(new { error = "file_missing" }),
+            _ => Results.File(download!.Content, download.Mimetype, download.Filename),
         };
     }
 

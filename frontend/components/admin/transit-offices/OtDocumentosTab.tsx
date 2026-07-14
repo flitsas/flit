@@ -3,7 +3,8 @@
 /**
  * HU #10705 — Tab de documentos del expediente de un trámite de cliente OT.
  * Tabla: filename, tipo, tamaño, fecha, acciones (previsualizar + descargar).
- * Botón de consolidado (estándar o maestro).
+ * Consolidado: "Generar consolidado" (expediente completo del trámite) + "Ver consolidado"
+ * (previsualización inline, sin descarga).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -12,10 +13,8 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import {
-  descargarOtConsolidado,
   fetchOtAttachmentPreviewUrl,
   fetchOtDocuments,
-  generarOtConsolidado,
   generarOtConsolidadoMaestro,
 } from "@/lib/api/admin-ot";
 import { downloadFile } from "@/lib/api/download";
@@ -53,7 +52,6 @@ function formatDate(iso: string): string {
 
 export function OtDocumentosTab({
   procedureId,
-  referenceNumber,
   scope,
   readOnly = false,
 }: OtDocumentosTabProps) {
@@ -89,12 +87,23 @@ export function OtDocumentosTab({
 
   const handlePreview = async (item: OtProcedureAttachment) => {
     setPreviewItem(item);
-    setPreviewUrl(null);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setPreviewError(null);
     setPreviewLoading(true);
     try {
       const result = await fetchOtAttachmentPreviewUrl(procedureId, item.id, scope);
-      setPreviewUrl(result.url);
+      // El file-manager sirve el objeto como binary/octet-stream sin Content-Disposition, por lo que
+      // un <iframe> con la URL directa fuerza descarga. Re-empaquetamos los bytes como Blob con el
+      // mimetype real para forzar el render inline en el navegador (S3 permite CORS GET).
+      const blob = await fetch(result.url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const typed = item.mimetype ? new Blob([blob], { type: item.mimetype }) : blob;
+      setPreviewUrl(URL.createObjectURL(typed));
     } catch {
       setPreviewError("No se pudo obtener la URL de previsualización. Descarga el archivo.");
     } finally {
@@ -102,10 +111,19 @@ export function OtDocumentosTab({
     }
   };
 
+  const closePreview = () => {
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewItem(null);
+    setPreviewError(null);
+  };
+
   const handleDownload = async (item: OtProcedureAttachment) => {
     try {
       await downloadFile(
-        `/api/v1/admin/ot/client-procedures/${procedureId}/attachments/${item.id}/download`,
+        `/api/v1/admin/ot/client-procedures/${procedureId}/documents/${item.id}/download`,
         {
           query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
           fallbackFilename: item.filename,
@@ -116,16 +134,13 @@ export function OtDocumentosTab({
     }
   };
 
-  const handleConsolidado = async (maestro = false) => {
+  const handleGenerarConsolidado = async () => {
     setConsolidadoActing(true);
     try {
-      if (maestro) {
-        await generarOtConsolidadoMaestro(procedureId, scope);
-        show("Consolidado maestro generado.", "success");
-      } else {
-        await generarOtConsolidado(procedureId, scope);
-        show("Consolidado generado.", "success");
-      }
+      // El consolidado del OT es el expediente completo: incluye el 100% de los documentos
+      // cargados y generados del trámite (endpoint "maestro"), ordenados por la matriz documental.
+      await generarOtConsolidadoMaestro(procedureId, scope);
+      show("Consolidado generado.", "success");
       void load();
     } catch {
       show("No se pudo generar el consolidado.", "error");
@@ -134,26 +149,23 @@ export function OtDocumentosTab({
     }
   };
 
-  const handleVerConsolidado = async () => {
-    setConsolidadoActing(true);
-    try {
-      await descargarOtConsolidado(procedureId, referenceNumber, scope);
-    } catch {
-      show("El trámite aún no tiene consolidado generado.", "error");
-    } finally {
-      setConsolidadoActing(false);
+  const handleVerConsolidado = () => {
+    // Previsualiza el consolidado INLINE (sin forzar descarga), reusando el modal de preview.
+    const consolidado =
+      attachments.find((a) => a.tipo === "consolidado_maestro") ??
+      attachments.find((a) => a.tipo === "consolidado");
+    if (!consolidado) {
+      show("Primero genera el consolidado.", "error");
+      return;
     }
+    void handlePreview(consolidado);
   };
 
   return (
     <>
       <DocumentPreviewModal
         open={!!previewItem}
-        onClose={() => {
-          setPreviewItem(null);
-          setPreviewUrl(null);
-          setPreviewError(null);
-        }}
+        onClose={closePreview}
         title={previewItem?.filename ?? "Previsualización"}
         mimetype={previewItem?.mimetype ?? null}
         url={previewUrl}
@@ -168,31 +180,21 @@ export function OtDocumentosTab({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-50"
               disabled={consolidadoActing}
-              aria-label="Generar consolidado estándar"
-              onClick={() => void handleConsolidado(false)}
+              aria-label="Generar consolidado del expediente completo"
+              title="Genera el expediente consolidado con todos los documentos del trámite"
+              onClick={() => void handleGenerarConsolidado()}
             >
               {consolidadoActing ? "Generando…" : "Generar consolidado"}
             </button>
             <button
               type="button"
-              className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
-              disabled={consolidadoActing}
-              aria-label="Generar consolidado maestro"
-              onClick={() => void handleConsolidado(true)}
-            >
-              {consolidadoActing ? "Generando…" : "Generar consolidado maestro"}
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-              style={{ borderColor: "#DFE5ED", color: "#162744" }}
+              className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-50"
               disabled={consolidadoActing}
               aria-label="Ver consolidado"
-              onClick={() => void handleVerConsolidado()}
+              title="Previsualiza el consolidado sin descargarlo"
+              onClick={() => handleVerConsolidado()}
             >
               Ver consolidado
             </button>
@@ -206,38 +208,33 @@ export function OtDocumentosTab({
           onRetry={() => void load()}
           skeletonRows={4}
         >
+          <div className="overflow-x-auto">
           <table
-            className="w-full border-separate border-spacing-y-2 text-xs"
+            className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs"
             aria-label="Documentos del expediente"
           >
             <thead>
-              <tr
-                className="text-left text-[10px] font-semibold uppercase"
-                style={{ color: "#162744" }}
-              >
-                <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+                <th className="rounded-l-xl px-4 py-2.5 bg-muted">
                   Archivo
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th className="px-4 py-2.5 bg-muted">
                   Tipo
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th className="px-4 py-2.5 bg-muted">
                   Tamaño
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th className="px-4 py-2.5 bg-muted">
                   Fecha
                 </th>
-                <th
-                  className="rounded-r-xl px-4 py-2.5 text-right"
-                  style={{ background: "#DFE5ED" }}
-                >
+                <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
                   Acciones
                 </th>
               </tr>
             </thead>
             <tbody>
               {attachments.map((att) => (
-                <tr key={att.id} className="bg-white dark:bg-[#0B0F14]">
+                <tr key={att.id} className="bg-card">
                   <td className="rounded-l-xl border-y border-l px-4 py-3">
                     <div className="flex items-center gap-2">
                       <FileText
@@ -260,18 +257,18 @@ export function OtDocumentosTab({
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
-                        className="rounded-lg border p-1.5"
-                        style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+                        className="rounded-lg border border-border p-1.5 text-[#557EFF]"
                         aria-label={`Previsualizar ${att.filename}`}
+                        title="Previsualizar"
                         onClick={() => void handlePreview(att)}
                       >
                         <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-lg border p-1.5"
-                        style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                        className="rounded-lg border border-border p-1.5 text-foreground"
                         aria-label={`Descargar ${att.filename}`}
+                        title="Descargar"
                         onClick={() => void handleDownload(att)}
                       >
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -282,6 +279,7 @@ export function OtDocumentosTab({
               ))}
             </tbody>
           </table>
+          </div>
         </UiStateBoundary>
       </div>
     </>

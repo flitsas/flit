@@ -12,8 +12,9 @@ vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
-  generarOtConsolidado: vi.fn(),
-  descargarOtConsolidado: vi.fn(),
+  generarOtConsolidadoMaestro: vi.fn(),
+  fetchOtDocuments: vi.fn(),
+  fetchOtAttachmentPreviewUrl: vi.fn(),
   adjuntarOtLicenciaTransito: vi.fn(),
 }));
 
@@ -44,11 +45,12 @@ vi.mock("@/lib/api/tramites-client", () => ({
 import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
-  descargarOtConsolidado,
+  fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
+  fetchOtDocuments,
   fetchOtProfile,
-  generarOtConsolidado,
+  generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 
@@ -188,19 +190,48 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.queryByRole("button", { name: /^Rechazar$/i })).not.toBeInTheDocument();
   });
 
-  it("consolidado — generar y ver invocan la API con el trámite", async () => {
-    vi.mocked(generarOtConsolidado).mockResolvedValue({
-      document: { attachmentId: "att-1", tipo: "consolidado", filename: "c.pdf", sha256: "x" },
+  it("consolidado — generar usa el maestro y ver previsualiza inline (sin descarga)", async () => {
+    vi.mocked(generarOtConsolidadoMaestro).mockResolvedValue({
+      document: { attachmentId: "att-1", tipo: "consolidado_maestro", filename: "c.pdf", sha256: "x" },
     });
-    vi.mocked(descargarOtConsolidado).mockResolvedValue(undefined);
+    vi.mocked(fetchOtDocuments).mockResolvedValue({
+      data: [
+        {
+          id: "att-cm",
+          tipo: "consolidado_maestro",
+          filename: "consolidado.pdf",
+          mimetype: "application/pdf",
+          sizeBytes: 1000,
+          sha256: "x",
+          source: "system",
+          uploadedAt: "2026-07-06T10:00:00Z",
+        },
+      ],
+      consolidado: false,
+      consolidado_maestro: true,
+    });
+    vi.mocked(fetchOtAttachmentPreviewUrl).mockResolvedValue({
+      url: "https://s3.test/consolidado",
+      expiresAt: "2026-07-06T10:10:00Z",
+    });
+    // El re-empaquetado a Blob usa fetch + URL.createObjectURL del navegador (stub en jsdom).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(["%PDF"])) }),
+    );
+    URL.createObjectURL = vi.fn(() => "blob:mock");
+    URL.revokeObjectURL = vi.fn();
+
     const user = userEvent.setup();
     renderSection();
     await user.click(await screen.findByRole("button", { name: /Generar consolidado/i }));
-    await waitFor(() => expect(generarOtConsolidado).toHaveBeenCalledWith("proc-1", undefined));
+    await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined));
     await user.click(screen.getByRole("button", { name: /Ver consolidado/i }));
+    // "Ver consolidado" toma la ruta de previsualización inline (no descarga).
     await waitFor(() =>
-      expect(descargarOtConsolidado).toHaveBeenCalledWith("proc-1", "RAD-2026-001", undefined),
+      expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-cm", undefined),
     );
+    vi.unstubAllGlobals();
   });
 
   it("aprobar con LT seleccionada adjunta la licencia ANTES de aprobar", async () => {
@@ -216,7 +247,8 @@ describe("ClientProceduresSection — HU #10220", () => {
     });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /^Aprobar$/i }));
+    // RowActions expone la acción como botón-icono con aria-label "Aprobar tramite {ref}".
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));

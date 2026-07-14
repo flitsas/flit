@@ -125,8 +125,9 @@ internal sealed class FileManagerAttachmentStorage(
             return null;
 
         // GET /files/{id}/presigned-url?disposition=inline → presigned de visualización inline.
-        // TTL se fija en 10 minutos (ExpiresAt calculado localmente; el file-manager determina el TTL
-        // real del objeto firmado en S3). No loguear la URL completa (contiene firma HMAC).
+        // El ExpiresAt reportado se calcula localmente con FileManager:PreviewUrlTtlMinutes (≤15 min,
+        // debe alinearse con el TTL real que firma el file-manager en S3, que no viene en la respuesta).
+        // No loguear la URL completa (contiene firma HMAC).
         var path = $"{_options.FilesPath}/{Uri.EscapeDataString(storagePath)}/presigned-url?disposition=inline";
         using var req = new HttpRequestMessage(HttpMethod.Get, path);
         ApplyAuth(req);
@@ -140,7 +141,8 @@ internal sealed class FileManagerAttachmentStorage(
         if (string.IsNullOrWhiteSpace(url))
             return null;
 
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(10);
+        var ttlMinutes = _options.PreviewUrlTtlMinutes > 0 ? _options.PreviewUrlTtlMinutes : 10;
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(ttlMinutes);
         return (url, expiresAt);
     }
 
