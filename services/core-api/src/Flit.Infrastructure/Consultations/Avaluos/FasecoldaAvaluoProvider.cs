@@ -60,9 +60,10 @@ internal sealed class FasecoldaAvaluoProvider(
 
     private async Task<AvaluoResult> GetRealAsync(AvaluoContext ctx, string vin, CancellationToken ct)
     {
-        // 1) Búsqueda por VIN → códigos (sin auth).
+        // 1) Búsqueda por VIN → códigos (sin auth). URL absoluta (ver FasecoldaUrl).
         var vinClient = httpFactory.CreateClient("fasecolda-vin");
-        using var vinResp = await vinClient.GetAsync($"{_options.ByVinPath}/{Uri.EscapeDataString(vin)}", ct);
+        var vinUrl = FasecoldaUrl.Absolute(_options.ByVinBaseUrl, $"{_options.ByVinPath}/{Uri.EscapeDataString(vin)}");
+        using var vinResp = await vinClient.GetAsync(vinUrl, ct);
         if (vinResp.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
             return AvaluoResult.NoData(SourceKey, "VIN sin coincidencia en Fasecolda");
         if (!vinResp.IsSuccessStatusCode)
@@ -79,10 +80,11 @@ internal sealed class FasecoldaAvaluoProvider(
         if (string.IsNullOrWhiteSpace(token))
             return AvaluoResult.Error(SourceKey, "No fue posible autenticar contra Fasecolda");
 
-        // 3) Consulta por códigos (Bearer).
+        // 3) Consulta por códigos (Bearer). URL absoluta; los códigos van separados por coma en el path
+        // (la API acepta comas literales y %2C — validado). Son numéricos, no requieren escaping.
         using var req = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{_options.ListCodePath}/{Uri.EscapeDataString(string.Join(",", codigos))}");
+            FasecoldaUrl.Absolute(_options.ApiBaseUrl, $"{_options.ListCodePath}/{string.Join(",", codigos)}"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -102,9 +104,14 @@ internal sealed class FasecoldaAvaluoProvider(
     }
 
     /// <summary>
-    /// Réplica de la lógica <c>analisis</c>: filtra por cilindraje/combustible/pasajeros/puertas
-    /// (comparación laxa: solo aplica el filtro si el atributo está presente) y, para el año del
-    /// vehículo, elige el menor <c>valor</c> entre las fichas restantes; ×1000 → pesos reales.
+    /// Réplica de la lógica <c>analisis</c> de la referencia: compara las fichas del VIN contra los
+    /// atributos del vehículo (cilindraje / combustible / pasajeros; laxo: solo filtra si ambos lados
+    /// tienen el dato) y, para el año del vehículo, elige el MENOR <c>valor</c>; ×1000 → pesos reales.
+    ///
+    /// Robustez (RUNT-fed): si el filtro por atributos no deja ninguna ficha con el año del vehículo
+    /// (p. ej. el cilindraje del RUNT no coincide exacto con el del catálogo Fasecolda), se cae a un
+    /// fallback que selecciona el menor valor del año entre TODAS las fichas del VIN. Así nunca queda
+    /// en <c>null</c> cuando el catálogo sí tiene el año — todas las fichas provienen del mismo VIN.
     /// </summary>
     private static long? SelectValue(List<FasecoldaCodeItem> items, AvaluoContext ctx)
     {
@@ -116,17 +123,33 @@ internal sealed class FasecoldaAvaluoProvider(
         var combustible = Field(ctx, "vehicle_fuel")?.Trim();
         var pasajeros = ParseInt(Field(ctx, "vehicle_passengers"));
 
+        bool MatchesAttributes(FasecoldaCodeItem item)
+        {
+            if (cilindraje is not null && item.Cilindraje is not null && item.Cilindraje != cilindraje)
+                return false;
+            if (!string.IsNullOrWhiteSpace(combustible) && !string.IsNullOrWhiteSpace(item.Combustible) &&
+                !string.Equals(item.Combustible.Trim(), combustible, StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (pasajeros is not null && item.CapacidadPasajeros is not null && item.CapacidadPasajeros != pasajeros)
+                return false;
+            return true;
+        }
+
+        // 1) Preferido: fichas que matchean los atributos del vehículo.
+        var min = MinValueForYear(items.Where(MatchesAttributes), year);
+
+        // 2) Fallback: si el match estricto no dio valor, seleccionar por año entre todas las fichas del VIN.
+        min ??= MinValueForYear(items, year);
+
+        return min is null ? null : (long)(min.Value * ThousandsToPesos);
+    }
+
+    /// <summary>Menor <c>valor</c> (&gt; 0) entre los <c>valorModelo</c> del año dado; null si ninguno.</summary>
+    private static decimal? MinValueForYear(IEnumerable<FasecoldaCodeItem> items, string year)
+    {
         decimal? min = null;
         foreach (var item in items)
         {
-            if (cilindraje is not null && item.Cilindraje is not null && item.Cilindraje != cilindraje)
-                continue;
-            if (!string.IsNullOrWhiteSpace(combustible) && !string.IsNullOrWhiteSpace(item.Combustible) &&
-                !string.Equals(item.Combustible.Trim(), combustible, StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (pasajeros is not null && item.CapacidadPasajeros is not null && item.CapacidadPasajeros != pasajeros)
-                continue;
-
             var forYear = item.ValorModelo?.Where(v => string.Equals(v.Modelo?.Trim(), year, StringComparison.Ordinal));
             if (forYear is null)
                 continue;
@@ -138,7 +161,7 @@ internal sealed class FasecoldaAvaluoProvider(
             }
         }
 
-        return min is null ? null : (long)(min.Value * ThousandsToPesos);
+        return min;
     }
 
     private static string? Field(AvaluoContext ctx, string key) =>

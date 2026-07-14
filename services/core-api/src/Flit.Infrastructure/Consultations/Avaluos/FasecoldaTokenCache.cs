@@ -35,7 +35,10 @@ internal sealed class FasecoldaTokenCache : IDisposable
                 ["password"] = options.Password,
             });
 
-            using var resp = await apiClient.PostAsync(options.AuthPath, form, ct);
+            // URL ABSOLUTA: el BaseAddress del cliente incluye el path base (/apifasecolda) y una ruta
+            // relativa con '/' inicial lo descartaría (new Uri(base, "/token") → host/token, sin base path).
+            var authUrl = FasecoldaUrl.Absolute(options.ApiBaseUrl, options.AuthPath);
+            using var resp = await apiClient.PostAsync(authUrl, form, ct);
             if (!resp.IsSuccessStatusCode)
                 return null;
 

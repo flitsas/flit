@@ -19,3 +19,14 @@ public sealed class FasecoldaOptions
     public string Password { get; set; } = "";
     public int TimeoutSeconds { get; set; } = 55;
 }
+
+/// <summary>
+/// Arma URLs ABSOLUTAS para Fasecolda. Necesario porque el <c>ApiBaseUrl</c> incluye un path base
+/// (<c>/apifasecolda</c>) y, con <c>HttpClient.BaseAddress</c>, una ruta relativa con '/' inicial lo
+/// descartaría (<c>new Uri(base, "/token")</c> → <c>host/token</c>, perdiendo <c>/apifasecolda</c>).
+/// </summary>
+internal static class FasecoldaUrl
+{
+    public static string Absolute(string baseUrl, string path) =>
+        $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+}
