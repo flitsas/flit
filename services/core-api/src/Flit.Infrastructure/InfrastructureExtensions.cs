@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
+using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
@@ -28,6 +29,7 @@ using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
@@ -234,6 +236,7 @@ public static class InfrastructureExtensions
             o.VerifikConductorMode = Cfg("Consultations:VerifikConductorMode", "VERIFIK_CONDUCTOR_MODE") ?? "mock";
             o.VerifikRuesMode = Cfg("Consultations:VerifikRuesMode", "VERIFIK_RUES_MODE") ?? "mock";
             o.IntempoMode = Cfg("Consultations:IntempoMode", "INTEMPO_MODE") ?? "mock";
+            o.FasecoldaMode = Cfg("Consultations:FasecoldaMode", "FASECOLDA_MODE") ?? "mock";
         });
 
         // Config Verifik. Clave de config `Verifik:BearerToken` (alineada con el
@@ -332,6 +335,48 @@ public static class InfrastructureExtensions
         // Puente tenant → override de cadena/timeout (HU #10478, Fase 5). Lee
         // admin.tenant_operational_policies vía ITenantSettingsRepository.
         services.AddScoped<IConsultationTenantOverrideProvider, TenantConsultationOverrideProvider>();
+
+        // Avalúo comercial multi-proveedor (Feature #10707, ADR-0029): capa aparte de la de
+        // consultas (verificación) — agrega VALOR de varias fuentes en paralelo.
+        AddAvaluoProviders(services, configuration);
+    }
+
+    private static void AddAvaluoProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        string? Cfg(string key, string env) =>
+            configuration[key] ?? Environment.GetEnvironmentVariable(env);
+
+        services.Configure<FasecoldaOptions>(o =>
+        {
+            o.ByVinBaseUrl = Cfg("Fasecolda:ByVinBaseUrl", "FASECOLDA_BY_VIN_API_BASE_URL") ?? o.ByVinBaseUrl;
+            o.ByVinPath = Cfg("Fasecolda:ByVinPath", "FASECOLDA_BY_VIN_API_PATH") ?? o.ByVinPath;
+            o.ApiBaseUrl = Cfg("Fasecolda:ApiBaseUrl", "FASECOLDA_API_BASE_URL") ?? o.ApiBaseUrl;
+            o.AuthPath = Cfg("Fasecolda:AuthPath", "FASECOLDA_AUTH_API_PATH") ?? o.AuthPath;
+            o.ListCodePath = Cfg("Fasecolda:ListCodePath", "FASECOLDA_LIST_CODE_API_PATH") ?? o.ListCodePath;
+            o.GrantType = Cfg("Fasecolda:GrantType", "FASECOLDA_API_GRANT_TYPE") ?? o.GrantType;
+            o.Username = Cfg("Fasecolda:Username", "FASECOLDA_API_USERNAME") ?? "";
+            o.Password = Cfg("Fasecolda:Password", "FASECOLDA_API_PASSWORD") ?? "";
+            o.TimeoutSeconds = int.TryParse(Cfg("Fasecolda:TimeoutSeconds", "FASECOLDA_API_SECONDS_TIMEOUT"), out var t) ? t : o.TimeoutSeconds;
+        });
+
+        // Dos hosts (búsqueda por VIN sin auth; guía de valores con token). Clientes con nombre.
+        services.AddHttpClient("fasecolda-vin", (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FasecoldaOptions>>().Value;
+            c.BaseAddress = new Uri(o.ByVinBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddHttpClient("fasecolda-api", (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FasecoldaOptions>>().Value;
+            c.BaseAddress = new Uri(o.ApiBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        services.AddSingleton<FasecoldaTokenCache>();
+        services.AddScoped<AvaluoMockValueReader>();
+        services.AddScoped<IAvaluoProvider, FasecoldaAvaluoProvider>();
+        services.AddScoped<IAvaluoProviderRegistry, AvaluoProviderRegistry>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
