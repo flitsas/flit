@@ -376,6 +376,9 @@ public static class InfrastructureExtensions
         services.AddSingleton<FasecoldaTokenCache>();
         services.AddScoped<AvaluoMockValueReader>();
         services.AddScoped<IAvaluoProvider, FasecoldaAvaluoProvider>();
+        // Fase 1: mock, activables por configuración a real sin tocar el handler (ADR-0029).
+        services.AddScoped<IAvaluoProvider, BaseGravableAvaluoProvider>();
+        services.AddScoped<IAvaluoProvider, MercadoLibreAvaluoProvider>();
         services.AddScoped<IAvaluoProviderRegistry, AvaluoProviderRegistry>();
     }
 
