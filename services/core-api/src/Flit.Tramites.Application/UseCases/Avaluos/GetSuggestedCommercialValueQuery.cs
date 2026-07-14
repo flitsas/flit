@@ -10,10 +10,11 @@ namespace Flit.Tramites.Application.UseCases.Avaluos;
 /// </summary>
 public sealed class GetSuggestedCommercialValueHandler(
     IProcedureInstanceRepository instanceRepo,
-    IAvaluoProviderRegistry registry)
+    IAvaluoProviderRegistry registry,
+    IAvaluoProviderPolicy? policy = null)
 {
-    // Prioridad del valor sugerido y del orden del desglose.
-    private static readonly string[] Priority = ["fasecolda", "base_gravable", "mercado_libre"];
+    // Orden base del desglose (fallback si el tenant no fija un sugerido).
+    private static readonly string[] BasePriority = ["fasecolda", "base_gravable", "mercado_libre"];
 
     public async Task<(SuggestedCommercialValue? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -28,21 +29,47 @@ public sealed class GetSuggestedCommercialValueHandler(
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var ctx = new AvaluoContext(instance.Id, instance.TenantId, fieldValues);
 
-        // Ejecución en paralelo con aislamiento de fallos por fuente (AC#3).
-        var results = await Task.WhenAll(registry.All().Select(p => RunSafeAsync(p, ctx, ct)));
+        // Proveedores habilitados + sugerido según la config del tenant (Feature #10707). Sin política
+        // registrada (p. ej. tests que construyen el handler directo) ⇒ se corren todos los registrados.
+        var set = policy is not null ? await policy.GetAsync(tenantId, ct) : null;
+        var providers = registry.All();
+        if (set is not null)
+        {
+            providers = providers
+                .Where(p => set.Enabled.Contains(p.Key, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+        }
 
-        var (sugerido, fuente) = PickSuggested(results);
+        // Prioridad efectiva: el sugerido del tenant primero, luego el orden base.
+        var priority = EffectivePriority(set?.Primary);
+
+        // Ejecución en paralelo con aislamiento de fallos por fuente (AC#3).
+        var results = await Task.WhenAll(providers.Select(p => RunSafeAsync(p, ctx, ct)));
+
+        var (sugerido, fuente) = PickSuggested(results, priority);
 
         var ordered = results
-            .OrderBy(r => IndexOf(r.Source))
+            .OrderBy(r => IndexOf(r.Source, priority))
             .ToList();
 
         return (new SuggestedCommercialValue(sugerido, fuente, ordered), null);
     }
 
-    private static (long? Sugerido, string? Fuente) PickSuggested(IReadOnlyList<AvaluoResult> results)
+    /// <summary>Orden de prioridad con el sugerido del tenant al frente (sin duplicar).</summary>
+    private static string[] EffectivePriority(string? primary)
     {
-        foreach (var key in Priority)
+        if (string.IsNullOrWhiteSpace(primary))
+            return BasePriority;
+
+        var rest = BasePriority.Where(k => !string.Equals(k, primary, StringComparison.OrdinalIgnoreCase));
+        return [primary, .. rest];
+    }
+
+    private static (long? Sugerido, string? Fuente) PickSuggested(
+        IReadOnlyList<AvaluoResult> results,
+        string[] priority)
+    {
+        foreach (var key in priority)
         {
             var hit = results.FirstOrDefault(r =>
                 string.Equals(r.Source, key, StringComparison.OrdinalIgnoreCase) &&
@@ -73,9 +100,9 @@ public sealed class GetSuggestedCommercialValueHandler(
 #pragma warning restore CA1031
     }
 
-    private static int IndexOf(string source)
+    private static int IndexOf(string source, string[] priority)
     {
-        var i = Array.IndexOf(Priority, source);
+        var i = Array.IndexOf(priority, source);
         return i >= 0 ? i : int.MaxValue;
     }
 }

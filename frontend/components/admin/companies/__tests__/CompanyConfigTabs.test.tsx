@@ -57,6 +57,11 @@ describe("CompanyConfigTabs (AC2)", () => {
         vehicle_plate: { primary: "kyverum_runt", fallback: ["verifik"] },
         conductor: { primary: "kyverum_runt_conductor", fallback: ["verifik_conductor"] },
       },
+      // Feature #10707 — default sin config: solo Fasecolda, sugerido Fasecolda.
+      avaluoProviderConfig: {
+        primary: "fasecolda",
+        enabled: ["fasecolda"],
+      },
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.

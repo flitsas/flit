@@ -36,6 +36,13 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public string ConsultationProviderConfig { get; set; } = "{}";
 
+    /// <summary>
+    /// Proveedores de avalúo comercial habilitados por tenant (jsonb, Feature #10707).
+    /// Forma: <c>{ "primary": "fasecolda", "enabled": ["fasecolda","mercado_libre"] }</c>.
+    /// <c>'{}'</c> (default) = solo Fasecolda (proveedor base).
+    /// </summary>
+    public string AvaluoProviderConfig { get; set; } = "{}";
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

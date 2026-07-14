@@ -107,6 +107,16 @@ export interface ConsultationProviderChoice {
  */
 export type ConsultationProviderConfig = Record<string, ConsultationProviderChoice>;
 
+/**
+ * Proveedores de avalúo habilitados por tenant (Feature #10707). `primary` es el sugerido por
+ * defecto; `enabled` incluye siempre a `fasecolda` (proveedor base). Los demás (`base_gravable`,
+ * `mercado_libre`) se habilitan por compañía.
+ */
+export interface AvaluoProviderConfig {
+  primary: string;
+  enabled: string[];
+}
+
 export interface TenantSettings {
   tenantId: string;
   switchesMatricula: SwitchesMatricula;
@@ -117,6 +127,8 @@ export interface TenantSettings {
   // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // Feature #10707 — proveedores de avalúo (el backend siempre lo devuelve).
+  avaluoProviderConfig?: AvaluoProviderConfig;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -129,6 +141,8 @@ export interface TenantSettingsUpdate {
   // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // Feature #10707 — proveedores de avalúo (si se omite el backend conserva el valor previo).
+  avaluoProviderConfig?: AvaluoProviderConfig;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────

@@ -60,7 +60,29 @@ internal static class SettingsDiff
             changes.Add(new TenantConfigChange("consultation_provider_config", previousConfig, updatedConfig));
         }
 
+        // Feature #10707 — proveedores de avalúo (objeto jsonb).
+        var previousAvaluo = JsonAvaluoConfig(previous.AvaluoProviderConfig);
+        var updatedAvaluo = JsonAvaluoConfig(updated.AvaluoProviderConfig);
+        if (!string.Equals(previousAvaluo, updatedAvaluo, StringComparison.Ordinal))
+        {
+            changes.Add(new TenantConfigChange("avaluo_provider_config", previousAvaluo, updatedAvaluo));
+        }
+
         return changes;
+    }
+
+    /// <summary>
+    /// JSON canónico de la config de avalúo para auditoría (<c>primary</c> + <c>enabled</c>), sin
+    /// <c>JsonSerializer</c> para preservar AOT.
+    /// </summary>
+    private static string JsonAvaluoConfig(AvaluoProviderConfig config)
+    {
+        var builder = new StringBuilder();
+        builder.Append('{')
+            .Append(JsonString("primary")).Append(':').Append(JsonString(config.Primary))
+            .Append(',').Append(JsonString("enabled")).Append(':').Append(JsonArray(config.Enabled))
+            .Append('}');
+        return builder.ToString();
     }
 
     /// <summary>

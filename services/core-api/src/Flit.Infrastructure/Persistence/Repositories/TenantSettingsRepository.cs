@@ -155,6 +155,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
+        policy.AvaluoProviderConfig = SerializeAvaluoConfig(settings.AvaluoProviderConfig);
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -169,6 +170,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
+        AvaluoProviderConfig = DeserializeAvaluoConfig(entity.AvaluoProviderConfig),
     };
 
     private static List<string> DeserializePaymentMethods(string json)
@@ -205,5 +207,29 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         }
 
         return new ConsultationProviderConfig(byKind);
+    }
+
+    // ── Avalúo (Feature #10707) ─────────────────────────────────────────────
+    private sealed record AvaluoConfigJson(string? Primary, List<string>? Enabled);
+
+    private static string SerializeAvaluoConfig(AvaluoProviderConfig config) =>
+        JsonSerializer.Serialize(new AvaluoConfigJson(config.Primary, [.. config.Enabled]), WebJson);
+
+    private static AvaluoProviderConfig DeserializeAvaluoConfig(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return AvaluoProviderConfig.Default;
+        }
+
+        var raw = JsonSerializer.Deserialize<AvaluoConfigJson>(json, WebJson);
+        if (raw is null || raw.Enabled is null || raw.Enabled.Count == 0)
+        {
+            return AvaluoProviderConfig.Default;
+        }
+
+        return new AvaluoProviderConfig(
+            raw.Primary ?? AvaluoProviderConfig.BaseProvider,
+            raw.Enabled);
     }
 }

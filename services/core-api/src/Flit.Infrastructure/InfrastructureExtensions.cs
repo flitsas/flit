@@ -380,6 +380,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IAvaluoProvider, BaseGravableAvaluoProvider>();
         services.AddScoped<IAvaluoProvider, MercadoLibreAvaluoProvider>();
         services.AddScoped<IAvaluoProviderRegistry, AvaluoProviderRegistry>();
+        // Feature #10707 — proveedores habilitados por tenant (lee tenant_operational_policies).
+        services.AddScoped<IAvaluoProviderPolicy, TenantAvaluoPolicyProvider>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)

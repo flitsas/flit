@@ -40,6 +40,9 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.ConsultationProviderConfig)
             .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
 
+        builder.Property(x => x.AvaluoProviderConfig)
+            .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
     }

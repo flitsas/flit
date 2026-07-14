@@ -68,6 +68,9 @@ public sealed class UpdateTenantSettingsHandler
         // HU #10478 — override de proveedores (opcional): valida kinds y provider keys por tipo.
         var consultationConfig = ConsultationConfigValidator.TryBuild(request.ConsultationProviderConfig, errors);
 
+        // Feature #10707 — proveedores de avalúo (opcional): valida keys y el sugerido.
+        var avaluoConfig = AvaluoConfigValidator.TryBuild(request.AvaluoProviderConfig, errors);
+
         // AC2: cualquier error de validación corta el flujo antes de persistir.
         if (errors.Count > 0)
         {
@@ -91,6 +94,7 @@ public sealed class UpdateTenantSettingsHandler
             // Campos opcionales HU #10478: si el request los omite, se conserva el valor previo.
             RuntFailoverTimeoutMs = request.RuntFailoverTimeoutMs ?? previous.RuntFailoverTimeoutMs,
             ConsultationProviderConfig = consultationConfig ?? previous.ConsultationProviderConfig,
+            AvaluoProviderConfig = avaluoConfig ?? previous.AvaluoProviderConfig,
         };
 
         var changes = SettingsDiff.Compute(previous, updated);

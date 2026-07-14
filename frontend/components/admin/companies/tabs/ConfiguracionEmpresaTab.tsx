@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
+import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
 import {
   METODOS_RECAUDO,
   NOTIFICATION_TARGET_LABELS,
@@ -136,6 +137,8 @@ export function ConfiguracionEmpresaTab({
       </fieldset>
 
       <ConsultaProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
+
+      <AvaluoProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
 
       {otSlot && (
         <div className="rounded-2xl border p-4">
