@@ -237,6 +237,9 @@ public static class InfrastructureExtensions
             o.VerifikRuesMode = Cfg("Consultations:VerifikRuesMode", "VERIFIK_RUES_MODE") ?? "mock";
             o.IntempoMode = Cfg("Consultations:IntempoMode", "INTEMPO_MODE") ?? "mock";
             o.FasecoldaMode = Cfg("Consultations:FasecoldaMode", "FASECOLDA_MODE") ?? "mock";
+            // FEATURE 05 — comparendos. Ambos en mock por defecto: ver ConsultationProviderModeOptions.
+            o.FlitFinesMode = Cfg("Consultations:FlitFinesMode", "FLIT_FINES_MODE") ?? "mock";
+            o.KyverumFinesMode = Cfg("Consultations:KyverumFinesMode", "KYVERUM_FINES_MODE") ?? "mock";
         });
 
         // Config Verifik. Clave de config `Verifik:BearerToken` (alineada con el
@@ -254,6 +257,27 @@ public static class InfrastructureExtensions
         {
             o.BaseUrl = Cfg("Intempo:BaseUrl", "INTEMPO_BASE_URL") ?? "https://www.moviliza.com.co";
             o.TimeoutSeconds = int.TryParse(Cfg("Intempo:TimeoutSeconds", "INTEMPO_TIMEOUT_SECONDS"), out var t) ? t : 15;
+        });
+
+        // FEATURE 05 — API de registro de FLIT (fuente interna de comparendos). Sin credenciales.
+        services.Configure<FlitRegistrationApiOptions>(o =>
+        {
+            o.BaseUrl = Cfg("RegistrationApi:BaseUrl", "REGISTRATION_API_BASE_URL")
+                        ?? "https://knli4dcix0.execute-api.us-east-1.amazonaws.com/pdn";
+            o.InfractionPath = Cfg("RegistrationApi:InfractionPath", "REGISTRATION_API_INFRACTION_PATH")
+                        ?? "api/v1/registration/simit";
+            o.TimeoutSeconds = int.TryParse(Cfg("RegistrationApi:TimeoutSeconds", "REGISTRATION_API_TIMEOUT_SECONDS"), out var t) ? t : 30;
+        });
+
+        // FEATURE 05 — KYVERUM comparendos (persona jurídica). URL/ruta provisionales; en mock
+        // hasta que el proveedor entregue especificación y credenciales.
+        services.Configure<KyverumFinesOptions>(o =>
+        {
+            o.BaseUrl = Cfg("KyverumFines:BaseUrl", "KYVERUM_FINES_BASE_URL") ?? "https://runt.kyverum.com";
+            o.InfractionPath = Cfg("KyverumFines:InfractionPath", "KYVERUM_FINES_INFRACTION_PATH") ?? "/v1/comparendos:consultar";
+            o.ApiKey = Cfg("KyverumFines:ApiKey", "KYVERUM_FINES_API_KEY") ?? "";
+            o.AuthScheme = Cfg("KyverumFines:AuthScheme", "KYVERUM_FINES_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("KyverumFines:TimeoutSeconds", "KYVERUM_FINES_TIMEOUT_SECONDS"), out var t) ? t : 30;
         });
 
         // Typed HttpClients (compatibles con PublishAot).
@@ -299,6 +323,23 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // FEATURE 05 — fuente interna de comparendos. NormalizedBaseUrl conserva la barra final:
+        // el BaseUrl trae el stage del API Gateway (/pdn) y sin ella la ruta relativa lo descarta.
+        services.AddHttpClient<FlitFinesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FlitRegistrationApiOptions>>().Value;
+            c.BaseAddress = new Uri(o.NormalizedBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        // FEATURE 05 — KYVERUM comparendos (persona jurídica). Config propia, no la del RUNT.
+        services.AddHttpClient<KyverumFinesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumFinesOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Kyverum RUNT (HU #10478): cliente de consultas compartido, mismo config que improntas
         // (ImprontaRuntOptions / KYVERUM_RUNT_*, configurado en AddImprontas). Los providers
         // kyverum_runt / kyverum_runt_conductor lo consumen; convergen al mismo ConsultationResult
@@ -319,6 +360,10 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
         services.AddTransient<IConsultationProvider, KyverumRuntVehicleConsultationProvider>();
         services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();
+        // FEATURE 05 — comparendos por fuente. Quedan registrados pero SIN TRÁFICO hasta HU10758,
+        // que es la que cablea fines_query_source al preflight y empieza a resolverlos.
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<FlitFinesConsultationProvider>());
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<KyverumFinesConsultationProvider>());
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
 
