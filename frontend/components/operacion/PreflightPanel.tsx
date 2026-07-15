@@ -53,6 +53,14 @@ const SOURCE_LABEL: Record<string, string> = {
   verifik_simit: 'SIMIT',
   verifik_rnmc: 'RNMC',
   intempo: 'RUNT',
+  kyverum_runt: 'RUNT',
+  // El origen último del dato es el SIMIT; Kyverum es solo la pasarela.
+  kyverum_fines: 'SIMIT',
+  // Cartera propia de FLIT: aquí la fuente sí es interna.
+  flit_fines: 'Comparendos FLIT',
+  // Checks derivados por la plataforma, no por un proveedor externo
+  // (p. ej. `vin_matricula`, o una consulta omitida por configuración del OT).
+  system: 'FLIT',
 };
 
 export function sourceLabel(source: string | null | undefined): string {
@@ -98,6 +106,10 @@ export function PreflightPanel({
   // Se saca de la lista genérica de checks: su mensaje se muestra —de forma accionable— en la
   // tarjeta CTA de abajo, para no duplicarlo. El resto del semáforo se pinta normal.
   const visibleChecks = checks.filter((c) => c.key !== 'vin_matricula');
+  // Hallazgos no bloqueantes (multas, SOAT/RTM, consultas omitidas por el OT): se resumen para que
+  // el gestor los vea de un vistazo. Se toman de `visibleChecks` para no repetir `vin_matricula`,
+  // que ya tiene su propia tarjeta accionable arriba.
+  const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
 
   return (
     <div
@@ -107,7 +119,7 @@ export function PreflightPanel({
         <div>
           <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
           <p className="text-[11px] opacity-60">
-            RUNT · SIMIT — consulta antes de radicar el trámite
+            RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -226,6 +238,36 @@ export function PreflightPanel({
             ejecutar la consulta antes de continuar; no es posible avanzar sin
             estos datos.
           </span>
+        </div>
+      )}
+
+      {/* Amarillo = hay observaciones, no bloqueos: se informan y se sigue. Por eso `status` y no
+          `alert`, y por eso NO se ofrece aceptar riesgo (no hay nada que levantar). */}
+      {overall === 'yellow' && warnChecks.length > 0 && (
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: 'rgba(249,172,0,0.08)', border: '1px solid rgba(249,172,0,0.30)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-xs font-bold" style={{ color: '#F9AC00' }}>
+            Advertencias del pre-vuelo
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {warnChecks.map((c) => (
+              <li key={c.key} className="text-[11px]">
+                <span className="font-semibold">
+                  {c.label}
+                  {checkRoleSuffix(c.key)}
+                </span>
+                {c.message && <span className="opacity-70"> — {c.message}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] opacity-70">
+            Puedes continuar con el trámite; el organismo de tránsito verá estas
+            observaciones.
+          </p>
         </div>
       )}
 
