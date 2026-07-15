@@ -517,19 +517,28 @@ public sealed class GetWizardStateHandler(
     }
 
     /// <summary>
-    /// SIMIT del comprador. Si el último preflight es green/yellow (no red por multas), se considera
-    /// consultado sin comparendos. Sin preflight aún → null (el gate exige consulta SIMIT).
+    /// SIMIT del comprador. Los comparendos se derivan del check SIMIT ESPECÍFICO del comprador
+    /// (<c>simit_comprador*</c>) del último preflight, NO del <c>Overall</c> del vehículo (Bug #10728):
+    /// el overall se pone rojo por SOAT/RTM/estado del vehículo, ajenos a las multas de la persona, así
+    /// que inferir comparendos del overall producía un falso <c>simit_multas</c>. Sin preflight aún →
+    /// null (el gate exige consulta SIMIT). Solo <c>fail</c> del check del comprador cuenta como
+    /// comparendo; <c>unknown</c> (sin documento al correr el preflight) o <c>error</c> (proveedor caído,
+    /// bloqueo duro aparte vía ProviderError) NO se infieren como multas.
     /// </summary>
     private static SimitSnapshot? SimitOf(ProcedureInstance instance, ParteDatos? comprador, PreflightSnapshot? preflight)
     {
         if (comprador is null || string.IsNullOrWhiteSpace(comprador.Documento) || preflight is null)
             return null;
 
-        // El preflight ya corrió SIMIT del comprador. red por multas se refleja vía Overall;
-        // aquí reportamos 0 comparendos salvo que el overall sea red (multas → bloqueo). Un red por
-        // ERROR de proveedor (consulta no verificable) NO implica comparendos: no se infiere.
-        var totalComparendos = preflight.Overall == "red" && !preflight.ProviderError ? 1 : 0;
-        return new SimitSnapshot(Consultado: true, Documento: comprador.Documento, TotalComparendos: totalComparendos);
+        var checks = LatestPreflightChecks(instance);
+        var hasComparendos = checks.Any(c =>
+            c.Key.StartsWith("simit_comprador", StringComparison.Ordinal) &&
+            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
+
+        return new SimitSnapshot(
+            Consultado: true,
+            Documento: comprador.Documento,
+            TotalComparendos: hasComparendos ? 1 : 0);
     }
 
     private static PreflightSnapshot? PreflightOf(ProcedureInstance instance)
@@ -546,6 +555,15 @@ public sealed class GetWizardStateHandler(
             string.Equals(c.Status, "unknown", StringComparison.OrdinalIgnoreCase));
         var providerError = checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
         return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError);
+    }
+
+    /// <summary>Checks del último preflight (por fecha); lista vacía si aún no se ha corrido.</summary>
+    private static IReadOnlyList<PreflightCheckDto> LatestPreflightChecks(ProcedureInstance instance)
+    {
+        var latest = instance.PreflightSnapshots
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+        return latest is null ? [] : GetPreflightHandler.DeserializeChecks(latest.Checks);
     }
 
     // Heurísticas de field_values (RUNT/VIN se hidratan en Slice 5).

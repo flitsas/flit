@@ -17,8 +17,8 @@ public static class FurFieldMapper
         var propietario = ResolvePropietario(data, esTraspaso);
         var comprador = esTraspaso ? ResolveComprador(data) : null;
         var (placaLetras, placaNumeros) = SplitPlaca(data.Placa);
-        var (propAp1, propAp2, propNom) = SplitName(propietario?.Nombre);
-        var (compAp1, compAp2, compNom) = SplitName(comprador?.Nombre);
+        var (propAp1, propAp2, propNom) = NameParts(propietario);
+        var (compAp1, compAp2, compNom) = NameParts(comprador);
         var fecha = data.FechaTramite ?? DateTime.UtcNow;
 
         var dict = new Dictionary<string, FurFieldValue>(StringComparer.OrdinalIgnoreCase)
@@ -367,6 +367,18 @@ public static class FurFieldMapper
         var letras = new string(clean.TakeWhile(char.IsLetter).ToArray());
         var numeros = new string(clean.SkipWhile(char.IsLetter).ToArray());
         return (letras, numeros);
+    }
+
+    /// <summary>
+    /// HU #10688 — reparte el nombre de la parte en las casillas del FUR. Persona jurídica: la razón social
+    /// va COMPLETA en la casilla de nombre (sin trocear), apellidos vacíos. Persona natural: se trocea con
+    /// <see cref="SplitName"/> como antes.
+    /// </summary>
+    private static (string Ap1, string Ap2, string Nom) NameParts(DocumentParte? parte)
+    {
+        if (parte is null)
+            return ("", "", "");
+        return parte.EsJuridica ? ("", "", parte.Nombre?.Trim() ?? "") : SplitName(parte.Nombre);
     }
 
     private static (string Ap1, string Ap2, string Nom) SplitName(string? full)

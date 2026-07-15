@@ -37,9 +37,9 @@ const REASON_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
-  // R19 (HU #10604/#10605) — medida correctiva RNMC: se puede registrar, pero no enviar al OT.
-  rnmc_medida_bloquea_envio:
-    'Medida correctiva RNMC: carga el paz y salvo RNMC para poder enviar al OT',
+  // R19 (HU #10604/#10605/#10697) — RNMC ya NO bloquea: la medida correctiva es informativa.
+  rnmc_medida_pendiente:
+    'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -62,9 +62,7 @@ const BLOCKER_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
-  // R19 (HU #10604/#10605) — gate de envío al OT por medida correctiva RNMC ("Imponer Medida").
-  rnmc_medida_bloquea_envio:
-    'Medida correctiva RNMC pendiente: carga el paz y salvo RNMC para poder enviar el trámite al organismo de tránsito',
+  // R19 (HU #10697) — RNMC ya NO bloquea el envío al OT; no hay blocker de medida correctiva.
 };
 
 /** Convierte un código a copy legible (fallback: el código humanizado). */

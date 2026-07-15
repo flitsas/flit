@@ -183,6 +183,22 @@ export interface ConsultationProvidersConfig {
   vehicleVin: string;
   vehiclePlate: string;
   conductor: string;
+  // FEATURE 02 — política "solo vehículos propios" del tenant. Cuando es true, el wizard autorrellena
+  // el documento del tenant (NIT) en la consulta de traspaso y bloquea la consulta si se edita a otro.
+  onlyOwnVehicles: boolean;
+}
+
+/**
+ * Representante legal / apoderado de una persona jurídica (persona natural). Solo aplica cuando
+ * el actor es jurídico (NIT). Se captura manualmente o se autopobla desde el RUNT y viaja embebido
+ * en actor.metadata (sin columnas nuevas). No es un actor de primera clase.
+ */
+export interface RepresentanteLegal {
+  tipoDocumento?: ActorDocumentType;
+  numeroDocumento?: string;
+  nombreCompleto?: string;
+  email?: string;
+  telefono?: string;
 }
 
 export interface ProcedureActor {
@@ -200,6 +216,8 @@ export interface ProcedureActor {
    * checklist (el documento llega desde la validación de identidad).
    */
   personType?: ActorPersonType;
+  /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
+  representanteLegal?: RepresentanteLegal;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -232,6 +250,27 @@ export interface RuntPersonLookupResult {
   nroPazYSalvo?: string | null;     // Número del paz y salvo
   hasActiveLicense?: boolean;       // true si tiene al menos 1 licencia ACTIVA
   licenseCategories?: string | null; // "B1" o "B1,C1"
+}
+
+// ── Autopopulado JURÍDICO desde RUES (persona jurídica / NIT) ───────
+// POST /instances/{id}/rues-lookup  body { documentNumber }
+// Bifurcación del "Consultar RUNT" cuando el actor es persona jurídica. Siempre 200 ante una
+// petición válida; `found` indica si RUES halló la empresa. Si no, el usuario completa la razón
+// social manualmente (fallback).
+export interface RuesPersonLookupInput {
+  documentNumber: string;
+}
+
+export interface RuesPersonLookupResult {
+  found: boolean;
+  razonSocial: string | null;
+  estado: string | null;             // ACTIVA / INACTIVA / …
+  documentNumber: string;
+  matriculaMercantil: string | null;
+  camaraComercio: string | null;
+  documentType: 'NIT';
+  source: 'RUES';
+  mode: 'real' | 'mock';
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -427,6 +466,30 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+  // Feature #10707 — trazabilidad del avalúo (opcional; el back las persiste).
+  valueOrigin?: 'suggestion' | 'manual' | null;
+  suggestedSource?: string | null;
+  suggestedValue?: number | null;
+}
+
+// ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+
+export type AvaluoSourceKey = 'fasecolda' | 'base_gravable' | 'mercado_libre';
+export type AvaluoStatus = 'ok' | 'no_data' | 'error';
+
+export interface AvaluoSource {
+  source: AvaluoSourceKey | string;
+  status: AvaluoStatus | string;
+  value: number | null;
+  currency: string;
+  message: string | null;
+  muestras: number | null;
+}
+
+export interface SuggestedCommercialValue {
+  sugerido: number | null;
+  fuentePrincipal: string | null;
+  sources: AvaluoSource[];
 }
 
 // ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────

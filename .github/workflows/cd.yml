@@ -298,7 +298,9 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
           source: docker-compose.prod.yml
-          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+          # target debe ser directorio (trailing slash) para no anidar rutas.
+          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}/
+          overwrite: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -308,8 +310,15 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
           script: |
-            set -euo pipefail
-            cd "${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+            set -eo pipefail
+            DEPLOY_PATH="${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
+
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "::error::docker-compose.prod.yml no encontrado en $DEPLOY_PATH"
+              ls -la "$DEPLOY_PATH" || true
+              exit 1
+            fi
 
             # Tag + puertos segun ambiente (override del .env del VPS).
             # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
@@ -321,8 +330,21 @@ jobs:
             export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
 
-            # Authenticate to GHCR on the VPS to pull private images
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
+            # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
+            GHCR_USER="${{ secrets.GHCR_USERNAME }}"
+            if [ -z "$GHCR_USER" ]; then
+              GHCR_USER="${{ vars.GHCR_USERNAME }}"
+            fi
+            if [ -z "$GHCR_USER" ]; then
+              # Fallback histórico: PAT del equipo asociado a deploys exitosos previos.
+              GHCR_USER="jormancopeteflit"
+              echo "::warning::GHCR_USERNAME no configurado; usando fallback $GHCR_USER. Configura secret GHCR_USERNAME en el repo."
+            fi
+            if ! echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+              echo "::error::docker login ghcr.io falló para usuario $GHCR_USER"
+              exit 1
+            fi
 
             # Pull latest images and restart services
             docker compose -f docker-compose.prod.yml pull

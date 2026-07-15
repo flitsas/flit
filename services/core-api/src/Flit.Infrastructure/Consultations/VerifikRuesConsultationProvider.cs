@@ -13,7 +13,8 @@ namespace Flit.Infrastructure.Consultations;
 /// Resuelve el template <c>RUES_ACTOR_JURIDICAL</c> (entity_scope=actor, person_type=juridical).
 /// Mode=mock (default) devuelve datos canónicos de una empresa activa con la misma forma del
 /// contrato → swap transparente al modo real (<c>VERIFIK_RUES_MODE=real</c>). El modo real consulta
-/// <c>GET /v2/co/rues/complete</c> en Verifik (misma config que RUNT). NUNCA lanza excepciones de
+/// <c>GET /v3/co/rues-complete?documentType=NIT&amp;documentNumber={nit}&amp;category=RM</c> en Verifik
+/// (misma config/token que RUNT; <c>category=RM</c> es fijo). NUNCA lanza excepciones de
 /// transporte al handler (contrato <see cref="IConsultationProvider"/>): errores de red se
 /// mapean a un check "error" (bloqueo duro). El certificado RUES en PDF se genera e incorpora
 /// al consolidado en HU #10589.
@@ -46,10 +47,11 @@ internal sealed class VerifikRuesConsultationProvider(
 
         try
         {
-            // Endpoint real Verifik RUES (misma config que RUNT por Verifik: BaseUrl/ApiToken/AuthScheme).
+            // Endpoint real Verifik RUES v3 (misma config que RUNT por Verifik: BaseUrl/ApiToken/AuthScheme).
+            // category=RM es un parámetro estático obligatorio del servicio v3 (registro mercantil).
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
-                $"/v2/co/rues/complete?documentType=NIT&documentNumber={Uri.EscapeDataString(nit)}");
+                $"/v3/co/rues-complete?documentType=NIT&documentNumber={Uri.EscapeDataString(nit)}&category=RM");
             if (!string.IsNullOrWhiteSpace(_opts.ApiToken))
                 request.Headers.Authorization = new AuthenticationHeaderValue(_opts.AuthScheme, _opts.ApiToken);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -92,18 +94,25 @@ internal sealed class VerifikRuesConsultationProvider(
         Map(
             new VerifikRuesResponse
             {
-                RazonSocial = "EMPRESA DEMO S.A.S.",
-                Estado = "ACTIVA",
-                MatriculaMercantil = "0000000",
-                CamaraComercio = "Cámara de Comercio de Bogotá",
-                Nit = nit,
+                Data = new VerifikRuesData
+                {
+                    CommercialRegistry = new VerifikRuesCommercialRegistry
+                    {
+                        BusinessName = "EMPRESA DEMO S.A.S.",
+                        RegistrationStatus = "ACTIVA",
+                        RegistrationNumber = "0000000",
+                        ChamberCommerce = "Cámara de Comercio de Bogotá",
+                        Nit = nit,
+                    },
+                },
             },
             nit);
 
     private static ConsultationResult Map(VerifikRuesResponse payload, string? nit)
     {
-        var razonSocial = string.IsNullOrWhiteSpace(payload.RazonSocial) ? "Sin razón social" : payload.RazonSocial!;
-        var estado = string.IsNullOrWhiteSpace(payload.Estado) ? "DESCONOCIDO" : payload.Estado!;
+        var registry = payload.Data?.CommercialRegistry;
+        var razonSocial = string.IsNullOrWhiteSpace(registry?.BusinessName) ? "Sin razón social" : registry!.BusinessName!;
+        var estado = string.IsNullOrWhiteSpace(registry?.RegistrationStatus) ? "DESCONOCIDO" : registry!.RegistrationStatus!;
         var activa = estado.Equals("ACTIVA", StringComparison.OrdinalIgnoreCase);
 
         var check = new ConsultationCheck(
@@ -119,11 +128,13 @@ internal sealed class VerifikRuesConsultationProvider(
         {
             new("rues_razon_social", razonSocial, null),
             new("rues_estado", estado, null),
-            new("rues_matricula_mercantil", payload.MatriculaMercantil, null),
-            new("rues_camara_comercio", payload.CamaraComercio, null),
+            new("rues_matricula_mercantil", registry?.RegistrationNumber, null),
+            new("rues_camara_comercio", registry?.ChamberCommerce, null),
         };
-        if (!string.IsNullOrWhiteSpace(nit))
-            hydrated.Add(new HydratedField("rues_nit", nit, null));
+        // El NIT del contexto tiene prioridad; si no vino, se usa el que devuelve RUES.
+        var nitValue = !string.IsNullOrWhiteSpace(nit) ? nit : registry?.Nit;
+        if (!string.IsNullOrWhiteSpace(nitValue))
+            hydrated.Add(new HydratedField("rues_nit", nitValue, null));
 
         return new ConsultationResult(Key_, activa ? "green" : "yellow", [check], hydrated);
     }
@@ -159,23 +170,36 @@ internal sealed class VerifikRuesConsultationProvider(
 }
 
 /// <summary>
-/// Respuesta mínima del endpoint RUES (contrato provisional hasta que exista el proveedor real;
-/// mode=mock genera esta misma forma). Los nombres cubren lo que el certificado RUES necesita.
+/// Respuesta del endpoint Verifik RUES v3 (<c>GET /v3/co/rues-complete</c>). La info del registro
+/// mercantil viaja anidada en <c>data.commercialRegistry</c>; aquí solo se modelan los campos que
+/// el certificado/checklist RUES necesita (mode=mock genera esta misma forma).
 /// </summary>
 internal sealed class VerifikRuesResponse
 {
-    [JsonPropertyName("razonSocial")]
-    public string? RazonSocial { get; set; }
+    [JsonPropertyName("data")]
+    public VerifikRuesData? Data { get; set; }
+}
 
-    [JsonPropertyName("estado")]
-    public string? Estado { get; set; }
+internal sealed class VerifikRuesData
+{
+    [JsonPropertyName("commercialRegistry")]
+    public VerifikRuesCommercialRegistry? CommercialRegistry { get; set; }
+}
 
-    [JsonPropertyName("matriculaMercantil")]
-    public string? MatriculaMercantil { get; set; }
+internal sealed class VerifikRuesCommercialRegistry
+{
+    [JsonPropertyName("businessName")]
+    public string? BusinessName { get; set; }
 
-    [JsonPropertyName("camaraComercio")]
-    public string? CamaraComercio { get; set; }
+    [JsonPropertyName("registrationStatus")]
+    public string? RegistrationStatus { get; set; }
 
-    [JsonPropertyName("nit")]
+    [JsonPropertyName("registrationNumber")]
+    public string? RegistrationNumber { get; set; }
+
+    [JsonPropertyName("chamberCommerce")]
+    public string? ChamberCommerce { get; set; }
+
+    [JsonPropertyName("NIT")]
     public string? Nit { get; set; }
 }
