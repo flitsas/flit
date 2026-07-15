@@ -134,7 +134,8 @@ public sealed class PreflightHandlerTests
         ConsultationTenantOverride? tenantOverride,
         (string key, IConsultationProvider provider)[] providers,
         bool rnmcRequired = false,
-        ITransitOfficeResolver? transitOfficeResolver = null)
+        ITransitOfficeResolver? transitOfficeResolver = null,
+        IConsultationRestrictionPolicy? restrictionPolicy = null)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
         var registry = new StaticRegistry(dict);
@@ -144,6 +145,8 @@ public sealed class PreflightHandlerTests
             : new FixedOverrideProvider(tenantOverride);
         return new RunPreflightHandler(
             _repo, registry, resolver, overrideProvider, new StubRnmcPolicy(rnmcRequired),
+            // Permisivo por defecto: los tests que no ejercitan HU #10760 no cambian de comportamiento.
+            restrictionPolicy ?? NullConsultationRestrictionPolicy.Instance,
             transitOfficeResolver ?? NullTransitOfficeResolver.Instance);
     }
 
@@ -151,6 +154,22 @@ public sealed class PreflightHandlerTests
     {
         public Task<bool> IsRnmcRequiredAsync(Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(required);
+    }
+
+    /// <summary>
+    /// Restricciones fijas, contando invocaciones para probar que el preflight lee la política UNA
+    /// sola vez por corrida (las guardas del fan-out son lookups en memoria, no I/O por consulta).
+    /// </summary>
+    private sealed class CountingRestrictionPolicy(params string[] disabledKinds) : IConsultationRestrictionPolicy
+    {
+        public int Calls { get; private set; }
+
+        public Task<ConsultationRestrictions> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(ConsultationRestrictions.From(disabledKinds));
+        }
     }
 
     /// <summary>Resolver de OT que devuelve un match fijo (o null) sin tocar catálogo/grants reales.</summary>
@@ -926,5 +945,280 @@ public sealed class PreflightHandlerTests
         error.Should().BeNull();
         result!.Overall.Should().Be("yellow");
         result.Checks.Should().Contain(c => c.Key == $"simit_comprador_{FinesCheckFactory.KeyMultas}" && c.Status == "warn");
+    }
+
+    // ── FEATURE 05 (HU #10760) — el preflight omite lo que la compañía inhabilitó para el OT ─────
+
+    /// <summary>Traspaso con OT destino ya elegido: es el par (tenant, OT) sobre el que hay política.</summary>
+    private static ProcedureInstance TraspasoConOtDestino()
+    {
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_id",
+            ValueText = Guid.NewGuid().ToString(),
+            Source = "user",
+        });
+        return instance;
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RnmcRestringido_NoConsultaRnmc_YLoIndicaSinRomperElVerde()
+    {
+        // AC1: el OT exige RNMC pero la compañía lo inhabilitó para ese OT → no se llama al proveedor,
+        // se deja constancia y el semáforo NO se altera (unknown preserva el verde).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var rnmc = new CapturingProvider("verifik_rnmc", Result("green", RnmcCheck("ok")));
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+                ("verifik_rnmc", rnmc),
+            ],
+            rnmcRequired: true,
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Rnmc));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        rnmc.LastContext.Should().BeNull(); // el proveedor NUNCA se invocó.
+        result!.Provider.Should().NotContain("verifik_rnmc");
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("rnmc_", StringComparison.Ordinal)
+            && c.Key.EndsWith("medidas_correctivas", StringComparison.Ordinal));
+
+        var omitida = result.Checks.Should().ContainSingle(c => c.Key == "rnmc_omitida").Subject;
+        omitida.Status.Should().Be("unknown");
+        omitida.Source.Should().Be("system");
+        omitida.Label.Should().Be("Consulta RNMC omitida");
+        omitida.Message.Should().Be(
+            "No se consultó el RNMC: la compañía tiene esta consulta inhabilitada para el organismo de tránsito de destino.");
+        result.Overall.Should().Be("green"); // el semáforo NO se altera.
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_RnmcRestringidoPeroOtNoLoExige_NoAnunciaOmision()
+    {
+        // AC1 (guarda crítica): si el OT no exige RNMC, la consulta no iba a correr de todas formas.
+        // Decir "omitida por restricción de la compañía" sería FALSO y confundiría al gestor.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))),
+            ],
+            rnmcRequired: false,
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Rnmc));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().NotContain(c => c.Key == "rnmc_omitida");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_RnmcRestringidoPeroOtNoLoExige_NoAnunciaOmision()
+    {
+        // La MISMA guarda crítica, en el fan-out de matrícula: es una rama distinta de la de traspaso,
+        // así que necesita su propia prueba (una mutación aquí sobrevive al test de traspaso).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_id", ValueText = Guid.NewGuid().ToString(), Source = "user",
+        });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))),
+            ],
+            rnmcRequired: false,
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Rnmc));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().NotContain(c => c.Key == "rnmc_omitida");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_RnmcRestringido_NoConsultaRnmc_YLoIndica()
+    {
+        // AC1 en la otra modalidad: RNMC también corre en matrícula (R18), así que también se omite.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_id", ValueText = Guid.NewGuid().ToString(), Source = "user",
+        });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))),
+            ],
+            rnmcRequired: true,
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Rnmc));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().ContainSingle(c => c.Key == "rnmc_omitida" && c.Status == "unknown");
+        result.Checks.Should().NotContain(c => c.Key == "rnmc_comprador_medidas_correctivas");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ComparendosRestringidos_NoConsultaNingunActor_YLoIndica()
+    {
+        // AC2: la restricción es del par (tenant, OT), no del rol → ni comprador ni vendedor se
+        // consultan, y se deja UN solo check de omisión (no uno por actor).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var simit = new CapturingProvider("verifik_simit", Result("green", Check("ok")));
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", simit),
+            ],
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Fines));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        simit.LastContext.Should().BeNull(); // ningún actor se consultó.
+        result!.Provider.Should().NotContain("verifik_simit");
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("simit_comprador", StringComparison.Ordinal));
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("simit_vendedor", StringComparison.Ordinal));
+
+        var omitida = result.Checks.Should().ContainSingle(c => c.Key == "simit_omitida").Subject;
+        omitida.Status.Should().Be("unknown");
+        omitida.Source.Should().Be("system");
+        omitida.Label.Should().Be("Consulta de comparendos omitida");
+        omitida.Message.Should().Be(
+            "No se consultaron los comparendos: la compañía tiene esta consulta inhabilitada para el organismo de tránsito de destino.");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Restricciones_SeLeenUnaSolaVezPorCorrida()
+    {
+        // AC3: una sola lectura por corrida, aunque el fan-out consulte varios actores y tipos.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var policy = new CountingRestrictionPolicy(); // sin restricciones: corre todo el fan-out.
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))),
+            ],
+            rnmcRequired: true,
+            restrictionPolicy: policy);
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        policy.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Post_RnmcRestringido_NoCreaLaSenalDeMedidaPendiente()
+    {
+        // Con RNMC omitido no hay checks rnmc_*_medidas_correctivas ⇒ la señal no se crea
+        // (createIfMissing:false la baja sin insertar filas).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_id", ValueText = Guid.NewGuid().ToString(), Source = "user",
+        });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                // El proveedor devolvería una medida correctiva... si llegara a invocarse.
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("yellow", RnmcCheck("warn")))),
+            ],
+            rnmcRequired: true,
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Rnmc));
+
+        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().NotContain(f => f.FieldKey == "rnmc_medida_pendiente");
+    }
+
+    [Fact]
+    public async Task Post_SinOtResoluble_SinRestricciones_LasConsultasCorrenNormalmente()
+    {
+        // Sin OT destino en field_values la política no tiene par al que aplicar → default permisivo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+                ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))),
+            ],
+            rnmcRequired: true,
+            restrictionPolicy: new CountingRestrictionPolicy()); // sin kinds inhabilitados.
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit").And.Contain("verifik_rnmc");
+        result.Checks.Should().NotContain(c => c.Key == "rnmc_omitida" || c.Key == "simit_omitida");
+    }
+
+    [Fact]
+    public void ComposeOverall_SoloUnknownDeOmision_EsGreen()
+    {
+        // La razón de elegir unknown y no warn: una compañía con restricciones activas NO vive en
+        // amarillo permanente (el amarillo sigue significando "hallazgo").
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("rnmc_omitida", "Consulta RNMC omitida", "unknown", "system", null),
+            new PreflightCheckDto("simit_omitida", "Consulta de comparendos omitida", "unknown", "system", null),
+        ]).Should().Be("green");
+    }
+
+    [Fact]
+    public void ComposeOverall_OmisionMasWarn_SigueSiendoYellow()
+    {
+        // La omisión no ENMASCARA un hallazgo real de otra consulta.
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("rnmc_omitida", "Consulta RNMC omitida", "unknown", "system", null),
+            new PreflightCheckDto("b", "B", "warn", "s", null),
+        ]).Should().Be("yellow");
+    }
+
+    [Fact]
+    public void ComposeOverall_OmisionMasFail_SigueSiendoRed()
+    {
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("simit_omitida", "Consulta de comparendos omitida", "unknown", "system", null),
+            new PreflightCheckDto("b", "B", "fail", "s", null),
+        ]).Should().Be("red");
     }
 }

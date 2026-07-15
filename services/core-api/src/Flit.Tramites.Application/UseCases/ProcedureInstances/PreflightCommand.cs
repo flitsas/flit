@@ -54,6 +54,7 @@ public sealed class RunPreflightHandler(
     IConsultationProviderChainResolver chainResolver,
     IConsultationTenantOverrideProvider overrideProvider,
     IRnmcRequirementPolicy rnmcPolicy,
+    IConsultationRestrictionPolicy restrictionPolicy,
     ITransitOfficeResolver transitOfficeResolver)
 {
     // FEATURE 05 — el proveedor de comparendos ya no es una constante: lo resuelve
@@ -64,6 +65,8 @@ public sealed class RunPreflightHandler(
     private const string FieldVinConflictoTraspaso = "vin_conflicto_traspaso";
     private const string CheckVinMatricula = "vin_matricula";
     private const string FieldRnmcMedidaPendiente = "rnmc_medida_pendiente";
+    private const string CheckRnmcOmitida = "rnmc_omitida";
+    private const string CheckSimitOmitida = "simit_omitida";
 
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -95,10 +98,18 @@ public sealed class RunPreflightHandler(
         // salen de la config del tenant; null ⇒ defaults globales.
         var tenantOverride = await overrideProvider.GetAsync(tenantId, ct);
 
+        var otId = TransitOfficeIdFromFieldValues(instance);
+
         // HU #10602 (R18) — RNMC condicionado por el OT destino (admin.ot_requirements.requires_rnmc)
         // y SOLO para actores persona natural (comprador/vendedor). El jurídico (NIT) nunca consulta RNMC.
-        var requiresRnmc = await rnmcPolicy.IsRnmcRequiredAsync(
-            tenantId, TransitOfficeIdFromFieldValues(instance), ct);
+        var requiresRnmc = await rnmcPolicy.IsRnmcRequiredAsync(tenantId, otId, ct);
+
+        // HU #10760 — consultas que la compañía inhabilitó para ese mismo OT. Eje ORTOGONAL al
+        // anterior: el OT declara qué exige, la compañía qué no quiere consultar. Una sola lectura
+        // por corrida; las guardas del fan-out son lookups en memoria sobre el resultado.
+        var restrictions = await restrictionPolicy.GetAsync(tenantId, otId, ct);
+        var finesDisabled = restrictions.IsDisabled(ConsultationRestrictionKinds.Fines);
+        var rnmcDisabled = restrictions.IsDisabled(ConsultationRestrictionKinds.Rnmc);
 
         if (modalidad == TramiteModalidadEntrada.Traspaso)
         {
@@ -108,13 +119,30 @@ public sealed class RunPreflightHandler(
             vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
             // Comparendos del comprador y del vendedor. El proveedor se resuelve por actor según la
             // fuente configurada por la compañía (FEATURE 05).
-            await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
-            await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+            if (finesDisabled)
+            {
+                AddOmittedCheck(checks, CheckSimitOmitida, "Consulta de comparendos omitida", "No se consultaron los comparendos");
+            }
+            else
+            {
+                await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
+                await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+            }
+
             // RNMC (medidas correctivas) por cada actor persona natural, si el OT lo exige.
             if (requiresRnmc)
             {
-                await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
-                await RunRnmcAsync(checks, providersUsed, "vendedor", vendedor, fieldValues, ct);
+                // El aviso de omisión va ANIDADO aquí: si el OT no exige RNMC la consulta no iba a
+                // correr de todas formas, y decir "omitida por restricción" sería falso.
+                if (rnmcDisabled)
+                {
+                    AddOmittedCheck(checks, CheckRnmcOmitida, "Consulta RNMC omitida", "No se consultó el RNMC");
+                }
+                else
+                {
+                    await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
+                    await RunRnmcAsync(checks, providersUsed, "vendedor", vendedor, fieldValues, ct);
+                }
             }
         }
         else
@@ -126,7 +154,14 @@ public sealed class RunPreflightHandler(
             // RNMC del comprador/propietario persona natural, si el OT lo exige (ambas modalidades, R18).
             if (requiresRnmc)
             {
-                await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
+                if (rnmcDisabled)
+                {
+                    AddOmittedCheck(checks, CheckRnmcOmitida, "Consulta RNMC omitida", "No se consultó el RNMC");
+                }
+                else
+                {
+                    await RunRnmcAsync(checks, providersUsed, "comprador", comprador, fieldValues, ct);
+                }
             }
         }
 
@@ -209,6 +244,23 @@ public sealed class RunPreflightHandler(
             return "yellow";
         return "green";
     }
+
+    /// <summary>
+    /// HU #10760 — deja constancia de una consulta que NO se corrió porque la compañía la inhabilitó
+    /// para el OT destino. UN solo check por tipo de consulta (la restricción es del par tenant+OT,
+    /// no del rol), con Source="system": no hubo proveedor que la atendiera.
+    ///
+    /// Status <c>unknown</c> y NO <c>warn</c>: <see cref="ComposeOverall"/> solo pinta amarillo con
+    /// warn, así que unknown PRESERVA el verde. Con warn, toda compañía con una restricción activa
+    /// viviría en amarillo permanente y el amarillo dejaría de significar "hallazgo".
+    /// </summary>
+    private static void AddOmittedCheck(
+        List<PreflightCheckDto> checks,
+        string key,
+        string label,
+        string noSeConsulto) =>
+        checks.Add(new PreflightCheckDto(key, label, "unknown", SystemSource,
+            $"{noSeConsulto}: la compañía tiene esta consulta inhabilitada para el organismo de tránsito de destino."));
 
     /// <summary>
     /// En MATRÍCULA INICIAL el estado del vehículo en RUNT suele ser <c>"REGISTRADO"</c> (registrado

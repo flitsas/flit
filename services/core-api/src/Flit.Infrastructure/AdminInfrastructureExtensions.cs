@@ -20,6 +20,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -139,6 +140,10 @@ public static class AdminInfrastructureExtensions
 
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
+
+        // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
+        // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
+        services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
 
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
