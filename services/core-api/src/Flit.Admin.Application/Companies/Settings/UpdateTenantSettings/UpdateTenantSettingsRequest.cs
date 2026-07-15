@@ -15,4 +15,8 @@ public sealed record UpdateTenantSettingsRequest(
     int? RuntFailoverTimeoutMs = null,
     IReadOnlyDictionary<string, ConsultationProviderChoice>? ConsultationProviderConfig = null,
     // Feature #10587 — preasignación de placa por compañía (opcional: default false = retrocompatible).
-    bool PreasignacionPlacaActiva = false);
+    bool PreasignacionPlacaActiva = false,
+    // Feature #10707 — proveedores de avalúo (opcional: si llega null se conserva el valor previo).
+    AvaluoProviderConfigDto? AvaluoProviderConfig = null,
+    // FEATURE 02 — fuente de comparendos (internal | external); null conserva el valor previo.
+    string? FinesQuerySource = null);

@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // Diferir la impronta al paso FUR: marca el ítem de checklist sin adjuntar para no bloquear el paso 2.
+        services.AddScoped<SetImprontaDiferidaHandler>();
         // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se
         // registra en Infraestructura SOLO si Rues:Enabled=true; sin él, el handler cae a carga manual.
         services.AddScoped<GenerarRuesAttachmentHandler>();
@@ -67,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<GetPrendaVigenteHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
+        services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();
@@ -144,6 +147,8 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
+        // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
+        services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
 
         // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
         // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura

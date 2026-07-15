@@ -211,6 +211,27 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void FurFieldMapper_PersonaJuridica_RazonSocialSinTrocear()
+    {
+        // HU #10688 (AC3): parte jurídica → la razón social va COMPLETA en la casilla de nombre,
+        // sin repartirse en apellidos (que quedan vacíos).
+        var data = TraspasoData() with
+        {
+            Partes =
+            [
+                new DocumentParte("vendedor", "VENDEDOR TEST", "1000445459", null, DocumentType: "CC"),
+                new DocumentParte("comprador", "ACME SOLUCIONES LOGISTICAS S.A.S.", "900123456", null,
+                    DocumentType: "NIT", EsJuridica: true),
+            ],
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_buyer_name"].Text.Should().Be("ACME SOLUCIONES LOGISTICAS S.A.S.");
+        values["vehicle_buyer_first_last_name"].Text.Should().BeEmpty();
+        values["vehicle_buyer_second_last_name"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
     public void FurFieldMapper_PlateWithHyphen_SplitsLettersAndNumbers()
     {
         // AC3: placa con guion → SplitPlaca separa letras/números en plate_letter/plate_number.

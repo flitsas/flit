@@ -16,6 +16,8 @@ internal static class TraspasoConsolidadoOrdering
         // Licencia de Tránsito emitida por el OT al decidir el trámite (misma posición que en matrícula).
         "licencia_transito",
         "certificado_identidad",
+        // Certificado de identidad del vendedor (traspaso), tras el del comprador.
+        "certificado_identidad_vendedor",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
         "compraventa",

@@ -9,6 +9,7 @@ import type {
   BiometricValidationsResponse,
   ChecklistView,
   CommercialData,
+  SuggestedCommercialValue,
   CompletarBiometriaResult,
   ConsultationProvidersConfig,
   ConsultationResult,
@@ -46,6 +47,8 @@ import type {
   RuntPersonLookupInput,
   RuntPersonLookupResult,
   ValidateSoatResult,
+  RuesPersonLookupInput,
+  RuesPersonLookupResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -408,6 +411,22 @@ export const tramitesClient = {
       },
     ),
 
+  // Autopopulado JURÍDICO del actor desde RUES por NIT (bifurcación del "Consultar RUNT" para
+  // persona jurídica). Siempre 200 ante petición válida; `found=false` => fallback manual.
+  ruesPersonLookup: (
+    instanceId: string,
+    input: RuesPersonLookupInput,
+    tenantId?: string,
+  ) =>
+    request<RuesPersonLookupResult>(
+      `/api/v1/tramites/instances/${instanceId}/rues-lookup`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
   // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
   // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
   // placa es Kyverum RUNT, que lo resuelve solo).
@@ -665,6 +684,13 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(data),
       },
+    ),
+
+  // ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+  getSuggestedCommercialValue: (instanceId: string, tenantId?: string) =>
+    request<SuggestedCommercialValue>(
+      `/api/v1/tramites/instances/${instanceId}/commercial/suggested-value`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
@@ -983,6 +1009,19 @@ export const tramitesClient = {
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // PATCH diferir la impronta al paso FUR: marca el ítem de checklist como "se generará
+  // automáticamente" (sin adjuntar) para poder continuar el paso 2 aunque sea obligatoria. `false`
+  // revierte la marca. NO permite radicar sin la impronta real (SubmitGate la sigue exigiendo).
+  setImprontaDiferida: (instanceId: string, diferida: boolean, tenantId?: string) =>
+    request<void>(
+      `/api/v1/tramites/instances/${instanceId}/checklist/impronta-diferida`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ diferida }),
       },
     ),
 

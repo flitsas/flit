@@ -15,6 +15,7 @@ internal static class GenericConsolidadoOrdering
         "fur",
         "licencia_transito",
         "certificado_identidad",
+        "certificado_identidad_vendedor",
     ];
 
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase)

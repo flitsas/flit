@@ -427,6 +427,55 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
+    public async Task Get_Traspaso_PreflightRedPorSoat_NoBloqueaComprador_ConSimitMultas()
+    {
+        // Bug #10728: el paso 4 (comprador) NO debe bloquearse con simit_multas cuando el preflight
+        // está en rojo por el VEHÍCULO (SOAT vencido) pero el check SIMIT del comprador no es fail
+        // (aquí unknown: el preflight corrió antes de que el comprador tuviera documento). El riesgo
+        // aceptado levanta el rojo subsanable del paso 2 para poder evaluar el paso 4.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "riesgo_aceptado", ValueText = "true", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("red",
+            "[{\"Key\":\"soat\",\"Label\":\"SOAT\",\"Status\":\"fail\",\"Source\":\"kyverum_runt\",\"Message\":\"SOAT vencido o no vigente\"}," +
+            "{\"Key\":\"simit_comprador\",\"Label\":\"SIMIT comprador\",\"Status\":\"unknown\",\"Source\":\"verifik_simit\",\"Message\":\"Actor sin documento para consultar SIMIT\"}]"));
+        CompletarDocsTraspaso(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var paso4 = result!.Steps.Single(s => s.Index == 4);
+        paso4.Reasons.Should().NotContain("simit_multas");
+        paso4.Status.Should().Be("complete");
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_SimitCompradorFail_BloqueaConSimitMultas()
+    {
+        // Bug #10728 (contraparte): cuando el check SIMIT ESPECÍFICO del comprador es fail (comparendos
+        // reales), el paso 4 SÍ debe bloquearse con simit_multas. Preserva la detección real de multas.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "riesgo_aceptado", ValueText = "true", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("red",
+            "[{\"Key\":\"simit_comprador_multas\",\"Label\":\"Comparendos SIMIT\",\"Status\":\"fail\",\"Source\":\"verifik_simit\",\"Message\":\"El comprador tiene comparendos\"}]"));
+        CompletarDocsTraspaso(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var paso4 = result!.Steps.Single(s => s.Index == 4);
+        paso4.Status.Should().Be("incomplete");
+        paso4.Reasons.Should().Contain("simit_multas");
+    }
+
+    [Fact]
     public async Task Get_Matricula_AllNonDeferredComplete_CanSubmitTrue()
     {
         var ct = TestContext.Current.CancellationToken;

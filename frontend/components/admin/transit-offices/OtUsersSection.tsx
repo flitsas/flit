@@ -346,7 +346,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           <Pencil className="h-4 w-4" />
                         </button>
                       )}
-                      {u.status !== "pending" &&
+                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
+                          El ot_admin no puede suspender ni reactivar usuarios de su OT. */}
+                      {u.status !== "pending" && isSuperAdmin &&
                         (u.isSuspended ? (
                           <button
                             type="button"
@@ -382,9 +384,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                             </button>
                           </div>
                         ))}
-                      {/* AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
+                      {/* Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin no puede).
+                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
                           puede auto-eliminarse. */}
-                      {u.status !== "pending" && u.id !== currentUserId && (
+                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
                         <button
                           type="button"
                           title="Eliminar usuario"

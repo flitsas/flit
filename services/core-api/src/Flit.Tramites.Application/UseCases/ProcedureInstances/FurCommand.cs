@@ -98,17 +98,26 @@ public sealed class GenerarFurHandler(
 
         if (identidadValidada)
         {
-            // Certificado de identidad: PDF REAL de Kyverum (best-effort). Si falla, warning + omitir (sin mock).
-            var certificado = await TryDownloadIdentityCertificateAsync(instance, ct);
-            if (certificado is not null)
-                generated.Add(certificado);
+            // Certificado de identidad: PDF REAL de Kyverum (best-effort) POR PARTE. Traspaso emite el del
+            // comprador y el del vendedor; matrícula solo el del comprador (mismo patrón que los sellos).
+            // Si falla la descarga de una parte, warning + omitir esa parte (sin mock).
+            var rolesCert = esTraspaso
+                ? new[] { BiometricRules.ParteComprador, BiometricRules.ParteVendedor }
+                : new[] { BiometricRules.ParteComprador };
+            foreach (var role in rolesCert)
+            {
+                var certificado = await TryDownloadIdentityCertificateAsync(instance, role, ct);
+                if (certificado is not null)
+                    generated.Add(certificado);
+            }
         }
         else
         {
             // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
-            // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5).
+            // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5). StartsWith
+            // cubre ambas variantes por parte (certificado_identidad y certificado_identidad_vendedor).
             foreach (var prev in instance.Attachments
-                         .Where(a => string.Equals(a.Tipo, "certificado_identidad", StringComparison.OrdinalIgnoreCase))
+                         .Where(a => a.Tipo.StartsWith("certificado_identidad", StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -274,22 +283,24 @@ public sealed class GenerarFurHandler(
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
-        // Fila propia aprobada+vigente del rol Y del documento del actor actual. El filtro por documento es
+        // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
         // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
         // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
             && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
+            && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
 
-        // Identidad vigente REFERENCIADA por documento del actor (HU #10350, sin clonar).
-        if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+        // Identidad vigente REFERENCIADA por documento del sujeto (HU #10350, sin clonar).
+        if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             return await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
 
         return null;
     }
@@ -334,12 +345,15 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// Descarga best-effort el certificado (PDF) de la validación de identidad del COMPRADOR desde Kyverum.
+    /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
+    /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
+    /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
+    /// <c>certificado_identidad_vendedor</c>, de modo que ambos coexistan en el expediente.
     /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
     /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
     /// </summary>
     private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
-        ProcedureInstance instance, CancellationToken ct)
+        ProcedureInstance instance, string role, CancellationToken ct)
     {
         static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
             v.Status == BiometricEstados.Aprobado
@@ -347,18 +361,20 @@ public sealed class GenerarFurHandler(
             && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
 
         var bio = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, "comprador", StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
 
         // Sin fila propia (identidad REFERENCIADA de otro trámite de la persona): se busca la validación
-        // vigente del comprador por documento para tomar su certificado Kyverum (HU #10350, sin clonar).
+        // vigente de la parte por documento para tomar su certificado Kyverum (HU #10350, sin clonar).
         if (bio is null)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
-            if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+            var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+            if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             {
                 var source = await repo.FindVigenteApprovedByDocumentAsync(
-                    instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), DateTimeOffset.UtcNow, ct);
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
                 if (source is not null && EsKyverumConId(source))
                     bio = source;
             }
@@ -376,9 +392,13 @@ public sealed class GenerarFurHandler(
                 return null;
             }
 
+            // Comprador: certificado_identidad (retrocompatible). Otras partes: sufijo de rol.
+            var tipo = string.Equals(role, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase)
+                ? "certificado_identidad"
+                : $"certificado_identidad_{role}";
             var safeRef = instance.ReferenceNumber.Replace('/', '-');
             return new GeneratedDocument(
-                "certificado_identidad", $"certificado_identidad_{safeRef}.pdf", cert.ContentType, cert.Content);
+                tipo, $"{tipo}_{safeRef}.pdf", cert.ContentType, cert.Content);
         }
         catch (KyverumCertificateException ex)
         {
@@ -392,6 +412,9 @@ public sealed class GenerarFurHandler(
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
         var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
+        var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
+            || string.Equals(a?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
         partes.Add(new DocumentParte(
             rol,
             a?.FullName,
@@ -400,7 +423,8 @@ public sealed class GenerarFurHandler(
             string.IsNullOrWhiteSpace(a?.DocumentType) ? null : a.DocumentType.Trim(),
             string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
             direccion,
-            ciudad));
+            ciudad,
+            esJuridica));
     }
 
     private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);

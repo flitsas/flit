@@ -17,7 +17,11 @@ internal static class SettingsMapper
         settings.PaymentMethods,
         settings.RuntFailoverTimeoutMs,
         ToChoices(settings.ConsultationProviderConfig),
-        settings.PlatePreassignEnabled);
+        settings.PlatePreassignEnabled,
+        new AvaluoProviderConfigDto(
+            settings.AvaluoProviderConfig.Primary,
+            settings.AvaluoProviderConfig.Enabled),
+        settings.FinesQuerySource);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

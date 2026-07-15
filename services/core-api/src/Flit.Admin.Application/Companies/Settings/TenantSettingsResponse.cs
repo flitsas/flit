@@ -16,4 +16,7 @@ public sealed record TenantSettingsResponse(
     int RuntFailoverTimeoutMs,
     IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig,
     // Feature #10587 — preasignación de placa por compañía.
-    bool PreasignacionPlacaActiva);
+    bool PreasignacionPlacaActiva,
+    AvaluoProviderConfigDto AvaluoProviderConfig,
+    // FEATURE 02 — fuente de comparendos (internal | external).
+    string FinesQuerySource);

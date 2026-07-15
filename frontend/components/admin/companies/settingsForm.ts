@@ -2,10 +2,14 @@
 // Las 4 pestañas de config comparten este estado para un único PUT atómico.
 import type {
   EnrutamientoSMTP,
+  FinesQuerySource,
   NotificationTarget,
   TenantSettings,
   TenantSettingsUpdate,
 } from "@/lib/api/types";
+
+// FEATURE 02 — fuente de comparendos. Default 'external' (SIMIT en línea).
+export const DEFAULT_FINES_QUERY_SOURCE: FinesQuerySource = "external";
 
 // ── HU #10478: proveedores de consulta RUNT ─────────────────────────────────
 export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
@@ -45,6 +49,48 @@ export const CONSULTATION_PROVIDER_LABELS: Record<string, string> = {
   intempo: "Intempo",
 };
 
+// ── Feature #10707: proveedores de avalúo comercial ─────────────────────────
+export const AVALUO_MODULE = "Proveedores de avalúos";
+/** Proveedor base: siempre habilitado y sugerido por defecto. */
+export const AVALUO_BASE_PROVIDER = "fasecolda";
+export const DEFAULT_AVALUO_PRIMARY = AVALUO_BASE_PROVIDER;
+
+/** Opción de proveedor de avalúo. `locked` = base (Fasecolda), no se puede desactivar. */
+export interface AvaluoProviderOption {
+  value: string;
+  label: string;
+  locked: boolean;
+  /** Nota bajo la etiqueta (p. ej. "estimación por tabla" / "publicaciones"). */
+  hint?: string;
+}
+
+/**
+ * Proveedores de avalúo soportados. Fasecolda es el base (siempre activo); los demás se habilitan
+ * por compañía. Para sumar un proveedor nuevo basta con agregarlo aquí y registrar su IAvaluoProvider
+ * en backend (ADR-0029) — la UI y el guardado lo toman automáticamente.
+ */
+export const AVALUO_PROVIDERS: AvaluoProviderOption[] = [
+  { value: "fasecolda", label: "Fasecolda", locked: true, hint: "Guía de valores por VIN" },
+  { value: "base_gravable", label: "Base gravable", locked: false, hint: "Estimación por base gravable" },
+  { value: "mercado_libre", label: "Mercado Libre", locked: false, hint: "Mediana de publicaciones" },
+];
+
+export const AVALUO_PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
+  AVALUO_PROVIDERS.map((p) => [p.value, p.label]),
+);
+
+const KNOWN_AVALUO_PROVIDERS = AVALUO_PROVIDERS.map((p) => p.value);
+
+/** Normaliza la lista de habilitados: solo keys conocidas y Fasecolda siempre presente. */
+function normalizeAvaluoEnabled(enabled: string[] | undefined): string[] {
+  const set = new Set<string>([AVALUO_BASE_PROVIDER]);
+  for (const key of enabled ?? []) {
+    if (KNOWN_AVALUO_PROVIDERS.includes(key)) set.add(key);
+  }
+  // Orden estable según AVALUO_PROVIDERS.
+  return KNOWN_AVALUO_PROVIDERS.filter((k) => set.has(k));
+}
+
 // El fallback se deriva del primario elegido: el "otro" proveedor real de la misma familia, para
 // que siempre exista contingencia (la cadena que consume el backend es [primary, ...fallback]).
 const VEHICLE_FALLBACK: Record<string, string[]> = {
@@ -75,6 +121,11 @@ export interface SettingsForm {
   consultaPlaca: string;
   consultaConductor: string;
   runtFailoverTimeoutMs: number;
+  // Feature #10707 — proveedores de avalúo habilitados (incluye siempre Fasecolda) + sugerido.
+  avaluoEnabled: string[];
+  avaluoPrimary: string;
+  // FEATURE 02 — fuente de comparendos (internal | external).
+  finesQuerySource: FinesQuerySource;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -93,7 +144,22 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     consultaPlaca: cfg.vehicle_plate?.primary ?? DEFAULT_VEHICLE_PROVIDER,
     consultaConductor: cfg.conductor?.primary ?? DEFAULT_CONDUCTOR_PROVIDER,
     runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
+    ...avaluoFromSettings(settings.avaluoProviderConfig),
+    finesQuerySource: settings.finesQuerySource ?? DEFAULT_FINES_QUERY_SOURCE,
   };
+}
+
+/** Deriva el estado de avalúo (habilitados + sugerido) de la config, con defaults sanos. */
+function avaluoFromSettings(config: TenantSettings["avaluoProviderConfig"]): {
+  avaluoEnabled: string[];
+  avaluoPrimary: string;
+} {
+  const avaluoEnabled = normalizeAvaluoEnabled(config?.enabled);
+  const primary =
+    config?.primary && avaluoEnabled.includes(config.primary)
+      ? config.primary
+      : DEFAULT_AVALUO_PRIMARY;
+  return { avaluoEnabled, avaluoPrimary: primary };
 }
 
 /** Serializa el formulario al payload del PUT settings. */
@@ -115,6 +181,11 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       vehicle_plate: { primary: form.consultaPlaca, fallback: fallbackFor("vehicle", form.consultaPlaca) },
       conductor: { primary: form.consultaConductor, fallback: fallbackFor("conductor", form.consultaConductor) },
     },
+    avaluoProviderConfig: {
+      primary: form.avaluoPrimary,
+      enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
+    },
+    finesQuerySource: form.finesQuerySource,
   };
 }
 
@@ -196,6 +267,15 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     }),
   },
   {
+    key: "finesQuerySource",
+    module: "Configuración Empresa",
+    label: "Fuente de comparendos",
+    describe: (i, c) => ({
+      detail: `${FINES_QUERY_SOURCE_LABELS[i.finesQuerySource]} → ${FINES_QUERY_SOURCE_LABELS[c.finesQuerySource]}`,
+      tone: "neutral",
+    }),
+  },
+  {
     key: "metodosRecaudo",
     module: "Configuración Empresa",
     label: "Métodos de recaudo",
@@ -233,7 +313,32 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       tone: "neutral",
     }),
   },
+  {
+    key: "avaluoEnabled",
+    module: AVALUO_MODULE,
+    label: "Proveedores de avalúo habilitados",
+    describe: (i, c) => {
+      const added = c.avaluoEnabled.filter((m) => !i.avaluoEnabled.includes(m));
+      const removed = i.avaluoEnabled.filter((m) => !c.avaluoEnabled.includes(m));
+      const parts = [
+        ...added.map((m) => `+ ${avaluoLabel(m)}`),
+        ...removed.map((m) => `− ${avaluoLabel(m)}`),
+      ];
+      return { detail: parts.join(", "), tone: "neutral" };
+    },
+  },
+  {
+    key: "avaluoPrimary",
+    module: AVALUO_MODULE,
+    label: "Proveedor de avalúo sugerido",
+    describe: (i, c) => ({
+      detail: `${avaluoLabel(i.avaluoPrimary)} → ${avaluoLabel(c.avaluoPrimary)}`,
+      tone: "neutral",
+    }),
+  },
 ];
+
+const avaluoLabel = (key: string) => AVALUO_PROVIDER_LABELS[key] ?? key;
 
 const providerLabel = (key: string) => CONSULTATION_PROVIDER_LABELS[key] ?? key;
 
@@ -250,6 +355,7 @@ const MODULE_ORDER = [
   "Traspasos",
   "Configuración Empresa",
   CONSULTA_MODULE,
+  AVALUO_MODULE,
 ];
 
 function fieldEquals(a: unknown, b: unknown): boolean {
@@ -292,4 +398,13 @@ export const NOTIFICATION_TARGET_LABELS: Record<NotificationTarget, string> = {
   COMPRADOR: "Comprador del vehículo",
   RADICADOR: "Radicador del trámite",
   NINGUNO: "Sin notificaciones",
+};
+
+/** Opciones de fuente de comparendos (FEATURE 02). El valor enviado es el enum (internal|external). */
+export const FINES_QUERY_SOURCES: FinesQuerySource[] = ["internal", "external"];
+
+/** Etiquetas legibles para la fuente de comparendos. */
+export const FINES_QUERY_SOURCE_LABELS: Record<FinesQuerySource, string> = {
+  internal: "Interna (módulo de comparendos)",
+  external: "Externa (SIMIT en línea)",
 };

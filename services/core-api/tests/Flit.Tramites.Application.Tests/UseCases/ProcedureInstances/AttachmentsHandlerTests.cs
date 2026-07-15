@@ -116,7 +116,7 @@ public sealed class AttachmentsHandlerTests
     [Fact]
     public void AttachmentRules_AceptaPazSalvoRnmc()
     {
-        // HU #10604: el DocTipo paz_salvo_rnmc (que desbloquea el envío) es válido para subida.
+        // HU #10604: el DocTipo paz_salvo_rnmc (paz y salvo de medidas correctivas) es válido para subida.
         AttachmentRules.Validate("paz_salvo_rnmc", "application/pdf", 100).Should().BeNull();
     }
 

@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -26,6 +27,22 @@ internal static class CommercialEndpoints
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result); // result puede ser null (sin comercial aún).
         }).WithName("GetProcedureInstanceCommercial");
+
+        // Feature #10707 — sugerencia de valor comercial (avalúo multi-fuente en paralelo).
+        group.MapGet("/instances/{id:guid}/commercial/suggested-value", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetSuggestedCommercialValueHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "instance_not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("GetSuggestedCommercialValue");
 
         group.MapPut("/instances/{id:guid}/commercial", async (
             Guid id,
