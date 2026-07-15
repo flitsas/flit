@@ -10,7 +10,12 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, string Filename, string Sha256);
 
-public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document);
+/// <param name="Regenerado">
+/// <c>true</c> si el PDF se (re)construyó en esta petición; <c>false</c> si se reutilizó el
+/// consolidado maestro vigente sin regenerarlo (Feature #10701, botón único). El consolidado del
+/// wizard siempre regenera, así que su default es <c>true</c>.
+/// </param>
+public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document, bool Regenerado = true);
 
 /// <summary>
 /// Genera el expediente consolidado de matrícula inicial: fusiona el FUR, el certificado de

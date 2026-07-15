@@ -32,6 +32,17 @@ public sealed class ProcedureInstance
     /// </summary>
     public bool Prioritario { get; set; }
 
+    /// <summary>
+    /// Feature #10701 / HU #10706 — marca de vigencia del expediente consolidado maestro. En
+    /// <c>true</c> el <c>consolidado_maestro</c> persistido refleja el estado actual del expediente:
+    /// el botón único "Ver consolidado" lo muestra tal cual (sin regenerar). Cualquier cambio
+    /// importante —transición de estado (aprobar/rechazar/…) o adjuntar la Licencia de Tránsito—
+    /// la baja a <c>false</c>, y la siguiente petición regenera el PDF antes de mostrarlo. Default
+    /// false (un trámite sin consolidado vigente se genera al primer clic). Columna agregada por
+    /// migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public bool ConsolidadoMaestroVigente { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

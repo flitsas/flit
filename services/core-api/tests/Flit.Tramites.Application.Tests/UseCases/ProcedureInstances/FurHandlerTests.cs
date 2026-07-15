@@ -82,6 +82,10 @@ public sealed class FurHandlerTests
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>

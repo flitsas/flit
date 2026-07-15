@@ -4355,6 +4355,46 @@ paths:
               schema: { type: string, format: binary }
         "404": { description: "Trámite o adjunto no encontrado, o binario perdido." }
 
+  /api/v1/tramites/instances/{id}/attachments/{attachmentId}/preview-url:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Presigned URL inline para previsualización de adjunto
+      operationId: getProcedureInstanceAttachmentPreviewUrl
+      description: |
+        Devuelve una presigned GET URL con `Content-Disposition: inline` para visualizar el
+        adjunto en el navegador sin forzar descarga (Feature #10701 / ADR-0029). TTL ≈ 10 min.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: URL de previsualización firmada y su tiempo de expiración.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    description: URL presigned con Content-Disposition inline.
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: Momento de expiración de la URL (UTC, ≈ +10 min).
+                required: [url, expiresAt]
+        "404": { description: "Trámite o adjunto no encontrado." }
+        "503": { description: "No se pudo obtener la URL de previsualización del backend de almacenamiento." }
+
   /api/v1/tramites/instances/{id}/attachments/{attachmentId}:
     parameters:
       - $ref: "#/components/parameters/TenantIdHeader"
@@ -4423,6 +4463,141 @@ paths:
               schema: { $ref: "#/components/schemas/AttachmentDto" }
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
+
+  # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
+
+  /api/v1/admin/ot/client-procedures/{id}/documents:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del trámite del cliente.
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+        description: ID de la OT a la que pertenece el trámite (requerido para superadmin; opcional para OT admin).
+    get:
+      tags: [Admin · OT · Documentos]
+      summary: Listar adjuntos del trámite de cliente OT (sin binarios)
+      operationId: adminOtListClientProcedureDocuments
+      description: |
+        Devuelve la lista de adjuntos del trámite del cliente sin incluir los binarios,
+        junto con flags que indican si existe un consolidado y/o un consolidado maestro
+        (Feature #10701 / HU #10704).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de adjuntos con flags de consolidado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttachmentDto" }
+                  consolidado:
+                    type: boolean
+                    description: Indica si existe un adjunto de tipo "consolidado".
+                  consolidado_maestro:
+                    type: boolean
+                    description: Indica si existe un adjunto de tipo "consolidado_maestro".
+                required: [data, consolidado, consolidado_maestro]
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin acceso a este trámite." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/admin/ot/client-procedures/{id}/documents/{attachmentId}/preview-url:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del trámite del cliente.
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del adjunto.
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+        description: ID de la OT a la que pertenece el trámite (requerido para superadmin).
+    get:
+      tags: [Admin · OT · Documentos]
+      summary: Presigned URL inline para previsualizar adjunto de trámite de cliente OT
+      operationId: adminOtGetClientProcedureDocumentPreviewUrl
+      description: |
+        Devuelve una presigned GET URL con `Content-Disposition: inline` para visualizar el adjunto
+        del trámite en el navegador sin forzar descarga (Feature #10701 / HU #10704 / ADR-0029).
+        TTL ≈ 10 min. Valida grant de acceso de la OT antes de emitir la URL.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: URL de previsualización firmada y su tiempo de expiración.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    description: URL presigned con Content-Disposition inline.
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: Momento de expiración de la URL (UTC, ≈ +10 min).
+                required: [url, expiresAt]
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin acceso a este trámite." }
+        "404": { description: "Adjunto no encontrado." }
+        "503": { description: "No se pudo obtener la URL de previsualización del backend de almacenamiento." }
+
+  /api/v1/admin/ot/client-procedures/{id}/consolidado-maestro:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del trámite del cliente.
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+        description: ID de la OT a la que pertenece el trámite (requerido para superadmin).
+    post:
+      tags: [Admin · OT · Documentos]
+      summary: Generar/regenerar el consolidado maestro del trámite de cliente OT
+      operationId: adminOtGenerateClientProcedureConsolidadoMaestro
+      description: |
+        Fusiona todos los adjuntos activos del trámite del cliente (tabla maestra) en un PDF único,
+        excluyendo consolidados previos. No requiere gate FUR a diferencia del consolidado del wizard.
+        Si ya existe un consolidado_maestro previo, se reemplaza (Feature #10701 / HU #10706).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Consolidado maestro generado (adjunto tipo "consolidado_maestro").
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  tipo: { type: string, example: consolidado_maestro }
+                  filename: { type: string }
+                  sha256: { type: string }
+                required: [id, tipo, filename, sha256]
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin acceso a este trámite o entidad en modo sólo lectura (QUIPUX_READONLY)." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
 components:
   securitySchemes:

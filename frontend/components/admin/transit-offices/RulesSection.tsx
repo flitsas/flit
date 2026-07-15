@@ -88,27 +88,27 @@ export function RulesSection() {
       >
         <table className="w-full border-separate border-spacing-y-2 text-xs">
           <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-              <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+              <th className="rounded-l-xl px-4 py-2.5 bg-muted">
                 Nombre
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Lógica
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Acción
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Estado
               </th>
-              <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+              <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
                 Toggle
               </th>
             </tr>
           </thead>
           <tbody>
             {rules.map((rule) => (
-              <tr key={rule.id} className="bg-white dark:bg-[#0B0F14]">
+              <tr key={rule.id} className="bg-card">
                 <td className="rounded-l-xl border-y border-l px-4 py-3">
                   {rule.name}
                 </td>
