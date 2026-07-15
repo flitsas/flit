@@ -2,10 +2,14 @@
 // Las 4 pestañas de config comparten este estado para un único PUT atómico.
 import type {
   EnrutamientoSMTP,
+  FinesQuerySource,
   NotificationTarget,
   TenantSettings,
   TenantSettingsUpdate,
 } from "@/lib/api/types";
+
+// FEATURE 02 — fuente de comparendos. Default 'external' (SIMIT en línea).
+export const DEFAULT_FINES_QUERY_SOURCE: FinesQuerySource = "external";
 
 // ── HU #10478: proveedores de consulta RUNT ─────────────────────────────────
 export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
@@ -74,6 +78,8 @@ export interface SettingsForm {
   consultaPlaca: string;
   consultaConductor: string;
   runtFailoverTimeoutMs: number;
+  // FEATURE 02 — fuente de comparendos (internal | external).
+  finesQuerySource: FinesQuerySource;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -91,6 +97,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     consultaPlaca: cfg.vehicle_plate?.primary ?? DEFAULT_VEHICLE_PROVIDER,
     consultaConductor: cfg.conductor?.primary ?? DEFAULT_CONDUCTOR_PROVIDER,
     runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
+    finesQuerySource: settings.finesQuerySource ?? DEFAULT_FINES_QUERY_SOURCE,
   };
 }
 
@@ -112,6 +119,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       vehicle_plate: { primary: form.consultaPlaca, fallback: fallbackFor("vehicle", form.consultaPlaca) },
       conductor: { primary: form.consultaConductor, fallback: fallbackFor("conductor", form.consultaConductor) },
     },
+    finesQuerySource: form.finesQuerySource,
   };
 }
 
@@ -183,6 +191,15 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     label: "Destinatario de notificaciones",
     describe: (i, c) => ({
       detail: `${NOTIFICATION_TARGET_LABELS[i.notificationTarget]} → ${NOTIFICATION_TARGET_LABELS[c.notificationTarget]}`,
+      tone: "neutral",
+    }),
+  },
+  {
+    key: "finesQuerySource",
+    module: "Configuración Empresa",
+    label: "Fuente de comparendos",
+    describe: (i, c) => ({
+      detail: `${FINES_QUERY_SOURCE_LABELS[i.finesQuerySource]} → ${FINES_QUERY_SOURCE_LABELS[c.finesQuerySource]}`,
       tone: "neutral",
     }),
   },
@@ -283,4 +300,13 @@ export const NOTIFICATION_TARGET_LABELS: Record<NotificationTarget, string> = {
   COMPRADOR: "Comprador del vehículo",
   RADICADOR: "Radicador del trámite",
   NINGUNO: "Sin notificaciones",
+};
+
+/** Opciones de fuente de comparendos (FEATURE 02). El valor enviado es el enum (internal|external). */
+export const FINES_QUERY_SOURCES: FinesQuerySource[] = ["internal", "external"];
+
+/** Etiquetas legibles para la fuente de comparendos. */
+export const FINES_QUERY_SOURCE_LABELS: Record<FinesQuerySource, string> = {
+  internal: "Interna (módulo de comparendos)",
+  external: "Externa (SIMIT en línea)",
 };

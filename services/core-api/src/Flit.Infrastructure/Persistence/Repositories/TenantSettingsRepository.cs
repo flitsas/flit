@@ -155,6 +155,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
+        policy.FinesQuerySource = settings.FinesQuerySource;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -169,6 +170,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
+        FinesQuerySource = TenantSettingsCodes.ParseFinesSource(entity.FinesQuerySource) ?? TenantSettingsCodes.FinesSourceExternal,
     };
 
     private static List<string> DeserializePaymentMethods(string json)

@@ -29,6 +29,6 @@ internal sealed class TenantConsultationOverrideProvider(ITenantSettingsReposito
             }
         }
 
-        return new ConsultationTenantOverride(chains, settings.RuntFailoverTimeoutMs);
+        return new ConsultationTenantOverride(chains, settings.RuntFailoverTimeoutMs, settings.OnlyOwnVehicles);
     }
 }
