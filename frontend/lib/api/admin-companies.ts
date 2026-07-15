@@ -7,7 +7,9 @@ import type {
   CompaniesIndexParams,
   CompanyListItem,
   CompanyPagedResult,
+  ConsultationRestrictionKind,
   CreateCompanyRequest,
+  OtConsultationRestriction,
   TenantSettings,
   TenantSettingsUpdate,
   TransitGrantsResponse,
@@ -121,6 +123,37 @@ export function removeTransitGrant(tenantId: string, transitOfficeId: string): P
   return apiFetch<void>(`${base}/${tenantId}/transit-grants/${transitOfficeId}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * GET /{tenantId}/ot-consultation-restrictions — restricciones de consulta por OT
+ * (HU #10759 AC1/AC5). Tabla dispersa: solo vuelven los pares configurados
+ * explícitamente; la ausencia de fila equivale a consulta permitida.
+ */
+export function fetchOtConsultationRestrictions(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<OtConsultationRestriction[]> {
+  return apiFetch<OtConsultationRestriction[]>(`${base}/${tenantId}/ot-consultation-restrictions`, {
+    signal,
+  });
+}
+
+/**
+ * PUT /{tenantId}/ot-consultation-restrictions/{transitOfficeId}/{kind} — fija el estado
+ * deseado de una consulta (HU #10759 AC1–AC4). Idempotente en ambos sentidos (sin 404).
+ * Lanza ApiValidationError en 422 si el OT no está habilitado para la compañía.
+ */
+export function setOtConsultationRestriction(
+  tenantId: string,
+  transitOfficeId: string,
+  kind: ConsultationRestrictionKind,
+  enabled: boolean,
+): Promise<void> {
+  return apiFetch<void>(
+    `${base}/${tenantId}/ot-consultation-restrictions/${transitOfficeId}/${kind}`,
+    { method: "PUT", body: { enabled } },
+  );
 }
 
 /** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */

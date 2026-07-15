@@ -192,6 +192,20 @@ export interface TransitGrantsResponse {
   transitOfficeIds: string[];
 }
 
+// ── Restricciones de consulta por OT (HU #10759/#10761) ─────────────────────
+/** Consultas restringibles. `vehicle` queda fuera: rompería la hidratación del FUR. */
+export type ConsultationRestrictionKind = "rnmc" | "fines";
+
+/**
+ * Fila de restricción configurada explícitamente. La tabla es DISPERSA: solo existen
+ * filas para los pares que el admin tocó, y la ausencia de fila = consulta PERMITIDA.
+ */
+export interface OtConsultationRestriction {
+  transitOfficeId: string;
+  consultationKind: ConsultationRestrictionKind;
+  enabled: boolean;
+}
+
 // ── Audit log (AC5) ─────────────────────────────────────────────────────────
 export interface AuditLogEntry {
   entityName: string;

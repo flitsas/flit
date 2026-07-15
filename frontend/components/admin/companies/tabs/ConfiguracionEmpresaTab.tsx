@@ -21,11 +21,13 @@ import type {
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
 // enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + matriz
-// OT (slot, endpoint propio).
+// OT y restricciones de consulta por OT (slots, endpoint propio).
 export interface ConfiguracionEmpresaTabProps {
   form: SettingsForm;
   onChange: (patch: Partial<SettingsForm>) => void;
   otSlot?: ReactNode;
+  /** HU #10761 — refina la matriz OT: qué consultas se hacen en cada organismo. */
+  otRestrictionsSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
 }
 
@@ -33,6 +35,7 @@ export function ConfiguracionEmpresaTab({
   form,
   onChange,
   otSlot,
+  otRestrictionsSlot,
   fieldErrors,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
@@ -186,6 +189,13 @@ export function ConfiguracionEmpresaTab({
       {otSlot && (
         <div className="rounded-2xl border p-4">
           {otSlot}
+        </div>
+      )}
+
+      {/* Va después de la matriz OT: solo tiene sentido sobre los organismos ya habilitados. */}
+      {otRestrictionsSlot && (
+        <div className="rounded-2xl border p-4">
+          {otRestrictionsSlot}
         </div>
       )}
     </div>
