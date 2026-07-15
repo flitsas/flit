@@ -29,6 +29,12 @@ internal sealed class TenantConsultationOverrideProvider(ITenantSettingsReposito
             }
         }
 
-        return new ConsultationTenantOverride(chains, settings.RuntFailoverTimeoutMs, settings.OnlyOwnVehicles);
+        // FEATURE 05 — proyecta fines_query_source al dominio de Trámites. Aquí es donde se cruzan
+        // los vocabularios: TenantSettingsCodes (Admin.Domain) ↔ FinesSourceCodes (Tramites.Application).
+        return new ConsultationTenantOverride(
+            chains,
+            settings.RuntFailoverTimeoutMs,
+            settings.OnlyOwnVehicles,
+            FinesSourceCodes.Normalize(settings.FinesQuerySource));
     }
 }

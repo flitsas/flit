@@ -56,7 +56,8 @@ public sealed class RunPreflightHandler(
     IRnmcRequirementPolicy rnmcPolicy,
     ITransitOfficeResolver transitOfficeResolver)
 {
-    private const string ProviderVerifikSimit = "verifik_simit";
+    // FEATURE 05 — el proveedor de comparendos ya no es una constante: lo resuelve
+    // FinesProviderResolver por (fuente del tenant, tipo de persona del actor).
     private const string ProviderVerifikRnmc = "verifik_rnmc";
     private const string ConsultationSource = "consultation";
     private const string SystemSource = "system";
@@ -105,9 +106,10 @@ public sealed class RunPreflightHandler(
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
             // antes de que exista el actor vendedor); de ahí lo toma el provider.
             vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
-            // SIMIT del comprador y del vendedor (comparendos).
-            await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, ct);
-            await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, ct);
+            // Comparendos del comprador y del vendedor. El proveedor se resuelve por actor según la
+            // fuente configurada por la compañía (FEATURE 05).
+            await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
+            await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
             // RNMC (medidas correctivas) por cada actor persona natural, si el OT lo exige.
             if (requiresRnmc)
             {
@@ -280,29 +282,47 @@ public sealed class RunPreflightHandler(
         }
     }
 
+    /// <summary>
+    /// FEATURE 05 (HU #10758) — consulta de comparendos del actor. El proveedor ya NO es
+    /// <c>verifik_simit</c> fijo: lo elige <see cref="FinesProviderResolver"/> a partir de la fuente
+    /// configurada por la compañía (<c>fines_query_source</c>, que viaja en el override del tenant que
+    /// el handler ya leyó una vez) y del tipo de persona del actor.
+    ///
+    /// La resolución es POR ACTOR: en un traspaso con comprador jurídico y vendedor natural, cada uno
+    /// va a un proveedor distinto. Por eso las guardas van en este orden — hace falta el actor para
+    /// saber a quién preguntarle y con qué proveedor.
+    /// </summary>
     private async Task RunSimitAsync(
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
         string fallbackKey,
         string fallbackLabel,
         ActorRef? actor,
+        ConsultationTenantOverride? tenantOverride,
         CancellationToken ct)
     {
-        var provider = registry.Resolve(ProviderVerifikSimit);
-        if (provider is null)
-        {
-            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "error", ProviderVerifikSimit,
-                "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos."));
-            return;
-        }
+        // Sin actor no hay a quién consultar NI con qué elegir el externo: se asume natural solo
+        // para etiquetar el Source del check con un proveedor coherente.
+        var providerKey = FinesProviderResolver.Resolve(
+            tenantOverride?.FinesQuerySource,
+            actor is null || IsNaturalPerson(actor));
 
         if (actor is null)
         {
-            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "unknown", ProviderVerifikSimit, "Actor sin documento para consultar SIMIT"));
+            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "unknown", providerKey,
+                "Actor sin documento para consultar comparendos"));
             return;
         }
 
-        providersUsed.Add(ProviderVerifikSimit);
+        var provider = registry.Resolve(providerKey);
+        if (provider is null)
+        {
+            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "error", providerKey,
+                "No fue posible verificar la información de comparendos en este momento. Vuelve a intentarlo en unos minutos."));
+            return;
+        }
+
+        providersUsed.Add(providerKey);
         var fv = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["owner_document_type"] = actor.DocumentType,

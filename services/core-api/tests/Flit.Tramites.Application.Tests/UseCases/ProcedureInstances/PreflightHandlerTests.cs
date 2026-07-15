@@ -738,4 +738,193 @@ public sealed class PreflightHandlerTests
         result.Overall.Should().Be("green");
         instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
     }
+
+    // ── FEATURE 05 (HU #10758) — fuente de comparendos → proveedor ───────────
+
+    /// <summary>Override del tenant con solo la fuente de comparendos (sin cadenas ni timeout).</summary>
+    private static ConsultationTenantOverride FuenteDeComparendos(string source) =>
+        new(null, null, false, source);
+
+    /// <summary>Los tres proveedores de comparendos registrados, cada uno devolviendo green.</summary>
+    private static (string, IConsultationProvider)[] TodosLosProveedoresDeComparendos() =>
+    [
+        ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+        ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+        ("flit_fines", new StubProvider("flit_fines", Result("green", Check("ok")))),
+        ("kyverum_fines", new StubProvider("kyverum_fines", Result("green", Check("ok")))),
+    ];
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteInterna_UsaFlitFinesParaAmbosActores()
+    {
+        // AC1: con fuente interna, ambos actores se consultan contra el API de FLIT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("flit_fines");
+        result.Provider.Should().NotContain("verifik_simit");
+        result.Provider.Should().NotContain("kyverum_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteInterna_ActorJuridico_TambienUsaFlitFines()
+    {
+        // AC1: la fuente manda — el tipo de persona NO desvía a Kyverum cuando la fuente es interna.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("flit_fines");
+        result.Provider.Should().NotContain("kyverum_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorNatural_UsaVerifikSimit()
+    {
+        // AC2: fuente externa + persona natural → proveedor SIMIT actual.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit");
+        result.Provider.Should().NotContain("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorConNit_UsaKyverumFines()
+    {
+        // AC2: fuente externa + persona jurídica → KYVERUM.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), ActorNit("vendedor", "900999888")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("kyverum_fines");
+        result.Provider.Should().NotContain("verifik_simit");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorNitVendedorCc_UsaUnProveedorDistintoPorActor()
+    {
+        // AC3 — el caso que rompería un resolver "por trámite" en vez de "por actor": en el MISMO
+        // traspaso, el comprador jurídico va a Kyverum y el vendedor natural a Verifik.
+        // Se verifica con providers que capturan su contexto: cada uno debe recibir EL DOCUMENTO DEL
+        // ACTOR QUE LE CORRESPONDE, que es la prueba real del enrutado (el Source de los checks lo
+        // pone el provider real, no el orquestador, así que no sirve para asertarlo aquí).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var kyverum = new CapturingProvider("kyverum_fines", Result("green", Check("ok")));
+        var verifikSimit = new CapturingProvider("verifik_simit", Result("green", Check("ok")));
+        var handler = HandlerWith(FuenteDeComparendos("external"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("kyverum_fines", kyverum),
+            ("verifik_simit", verifikSimit));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        // El comprador (NIT) fue a Kyverum...
+        kyverum.LastContext!.FieldValues["owner_document_type"].Should().Be("NIT");
+        kyverum.LastContext.FieldValues["owner_document_number"].Should().Be("900123456");
+        // ...y el vendedor (CC) a Verifik, en el mismo trámite.
+        verifikSimit.LastContext!.FieldValues["owner_document_type"].Should().Be("CC");
+        verifikSimit.LastContext.FieldValues["owner_document_number"].Should().Be("222");
+        // Ambos proveedores quedan registrados en la traza del snapshot.
+        result!.Provider.Should().Contain("kyverum_fines").And.Contain("verifik_simit");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_SinOverrideDeTenant_CaeAExterna()
+    {
+        // AC4: compañía sin fila de configuración operativa (GetAsync ⇒ null) ⇒ fuente externa,
+        // el default del DDL. Es un camino distinto al de "fila con el valor por defecto".
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(TodosLosProveedoresDeComparendos()); // NullOverrideProvider
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit");
+        result.Provider.Should().NotContain("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ProveedorDeComparendosNoRegistrado_AgregaCheckError()
+    {
+        // Si el resolver apunta a un proveedor ausente del registro, degrada a check "error" con la
+        // key del actor, sin lanzar. Es la ventana que evita registrar los proveedores antes de
+        // cablear el resolver (HU10756/10757 van antes que esta).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        // flit_fines NO registrado, pero la compañía pide fuente interna.
+        var handler = HandlerWith(FuenteDeComparendos("internal"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key == "simit_comprador" && c.Status == "error");
+        result.Checks.Single(c => c.Key == "simit_comprador").Source.Should().Be("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ActorSinDocumento_AgregaUnknownConElProveedorResuelto()
+    {
+        // Sin actor no hay a quién consultar: unknown (no bloquea), etiquetado con el proveedor que
+        // la fuente resolvería. Las guardas van en este orden porque elegir proveedor exige el actor.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador", "111")); // sin vendedor
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        var vendedor = result!.Checks.Single(c => c.Key == "simit_vendedor");
+        vendedor.Status.Should().Be("unknown");
+        vendedor.Source.Should().Be("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ComparendosWarn_OverallEsYellowNoRed()
+    {
+        // AC5 del Feature, end-to-end en el orquestador: los comparendos advierten y el pre-vuelo
+        // queda amarillo, así que el wizard no añade el blocker preflight_red.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var multasWarn = Result("yellow",
+            new ConsultationCheck(FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas, "warn", "flit_fines",
+                "2 multa(s) pendiente(s) por $500.000 COP"));
+        var handler = HandlerWith(FuenteDeComparendos("internal"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("flit_fines", new StubProvider("flit_fines", multasWarn)));
+
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Overall.Should().Be("yellow");
+        result.Checks.Should().Contain(c => c.Key == $"simit_comprador_{FinesCheckFactory.KeyMultas}" && c.Status == "warn");
+    }
 }
