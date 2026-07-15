@@ -521,9 +521,20 @@ public sealed class GetWizardStateHandler(
     /// (<c>simit_comprador*</c>) del último preflight, NO del <c>Overall</c> del vehículo (Bug #10728):
     /// el overall se pone rojo por SOAT/RTM/estado del vehículo, ajenos a las multas de la persona, así
     /// que inferir comparendos del overall producía un falso <c>simit_multas</c>. Sin preflight aún →
-    /// null (el gate exige consulta SIMIT). Solo <c>fail</c> del check del comprador cuenta como
-    /// comparendo; <c>unknown</c> (sin documento al correr el preflight) o <c>error</c> (proveedor caído,
-    /// bloqueo duro aparte vía ProviderError) NO se infieren como multas.
+    /// null (el gate exige consulta SIMIT).
+    ///
+    /// FEATURE 05 — el gate se deriva de la CLAVE del check, no de su severidad. Los comparendos ya
+    /// no pintan rojo (pasaron de <c>fail</c> a <c>warn</c> en <see cref="Consultations.FinesCheckFactory"/>:
+    /// no bloquean CREAR el trámite), pero sí siguen bloqueando la RADICACIÓN al OT. Se aceptan ambas
+    /// severidades: <c>warn</c> (actual) y <c>fail</c> (snapshots persistidos antes del cambio, que son
+    /// JSON inmutable y hay que seguir leyendo bien).
+    ///
+    /// El sufijo <c>_multas</c> es OBLIGATORIO en la coincidencia:
+    /// <c>simit_comprador_acuerdos_pago</c> TAMBIÉN es <c>warn</c> y NO es un comparendo — sin este
+    /// guard, todo comprador con un acuerdo de pago activo dispararía un <c>simit_multas</c> falso.
+    /// Y <c>unknown</c> (sin documento al correr el preflight) o <c>error</c> (proveedor caído, cuya
+    /// clave es el prefijo pelado <c>simit_comprador</c>, bloqueo duro aparte vía ProviderError) NO se
+    /// infieren como multas.
     /// </summary>
     private static SimitSnapshot? SimitOf(ProcedureInstance instance, ParteDatos? comprador, PreflightSnapshot? preflight)
     {
@@ -533,7 +544,9 @@ public sealed class GetWizardStateHandler(
         var checks = LatestPreflightChecks(instance);
         var hasComparendos = checks.Any(c =>
             c.Key.StartsWith("simit_comprador", StringComparison.Ordinal) &&
-            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
+            c.Key.EndsWith($"_{Consultations.FinesCheckFactory.KeyMultas}", StringComparison.Ordinal) &&
+            (string.Equals(c.Status, "warn", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase)));
 
         return new SimitSnapshot(
             Consultado: true,

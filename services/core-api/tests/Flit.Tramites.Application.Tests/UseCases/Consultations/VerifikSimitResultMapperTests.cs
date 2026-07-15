@@ -42,6 +42,10 @@ public sealed class VerifikSimitResultMapperTests
     private static VerifikSimitMulta MultaPagada() =>
         new() { Placa = "ABC123", EstadoComparendo = "Pagado", ValorPagar = 0 };
 
+    // Estado real del SIMIT (observado en la fuente interna): multa en curso pedagógico, sin deuda.
+    private static VerifikSimitMulta MultaPendienteCurso() =>
+        new() { Placa = "ABC123", EstadoComparendo = "Pendiente Curso", ValorPagar = 0 };
+
     private static VerifikSimitAcuerdoPago AcuerdoActivo(decimal pendiente = 837_716m) =>
         new()
         {
@@ -65,19 +69,34 @@ public sealed class VerifikSimitResultMapperTests
     }
 
     [Fact]
-    public void MultaPendiente_ProduceFailRed()
+    public void MultaPendiente_ProduceWarnYellow()
     {
+        // FEATURE 05 (AC5) — tener comparendos ADVIERTE, ya no bloquea la creación del trámite:
+        // warn/yellow en vez de fail/red. El gate de RADICACIÓN al OT no cambia: se deriva de la
+        // clave del check (ver WizardStateQuery.SimitOf), no de esta severidad.
         var result = VerifikSimitResultMapper.Map(Response(multas: [MultaPendiente()]));
 
-        Check(result, "multas").Status.Should().Be("fail");
-        result.Overall.Should().Be("red");
+        Check(result, "multas").Status.Should().Be("warn");
+        result.Overall.Should().Be("yellow");
     }
 
     [Fact]
     public void MultaPagada_NoContaComoPendiente_OkGreen()
     {
-        // Solo la pendiente cuenta como fail.
+        // Solo la pendiente cuenta como comparendo.
         var result = VerifikSimitResultMapper.Map(Response(multas: [MultaPagada()]));
+
+        Check(result, "multas").Status.Should().Be("ok");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public void MultaPendienteCurso_NoCuentaComoPendiente_OkGreen()
+    {
+        // "Pendiente Curso" (estado real del SIMIT, sin deuda: valorPagar = 0) NO es un comparendo
+        // pendiente. La coincidencia del estado es exacta y deliberada: ampliarla a "Pendiente*"
+        // haría que más trámites se bloqueen en la RADICACIÓN, que cuelga de este check.
+        var result = VerifikSimitResultMapper.Map(Response(multas: [MultaPendienteCurso()]));
 
         Check(result, "multas").Status.Should().Be("ok");
         result.Overall.Should().Be("green");
@@ -93,12 +112,31 @@ public sealed class VerifikSimitResultMapperTests
     }
 
     [Fact]
-    public void MultaPendienteYAcuerdo_OverallRed()
+    public void MultaPendienteYAcuerdo_OverallYellow()
     {
+        // FEATURE 05 — ninguno de los dos hallazgos pinta rojo: el SIMIT ya no puede, por sí solo,
+        // dejar el pre-vuelo en rojo. Solo un error de transporte lo consigue.
         var result = VerifikSimitResultMapper.Map(
             Response(multas: [MultaPendiente()], acuerdos: [AcuerdoActivo()]));
 
-        result.Overall.Should().Be("red");
+        result.Overall.Should().Be("yellow");
+    }
+
+    [Fact]
+    public void MultasYAcuerdos_UsanLasClavesDelContratoCompartido()
+    {
+        // Amarre del contrato con el gate de radicación: la clave de multas debe terminar en
+        // "_multas" al prefijarse por actor, y la de acuerdos NO debe terminar así (si lo hiciera,
+        // un acuerdo de pago dispararía un simit_multas falso en WizardStateQuery.SimitOf).
+        var result = VerifikSimitResultMapper.Map(
+            Response(multas: [MultaPendiente()], acuerdos: [AcuerdoActivo()]));
+
+        result.Checks.Select(c => c.Key).Should().BeEquivalentTo([
+            FinesCheckFactory.KeyMultas,
+            FinesCheckFactory.KeyAcuerdos,
+        ]);
+        $"simit_comprador_{FinesCheckFactory.KeyAcuerdos}"
+            .Should().NotEndWith($"_{FinesCheckFactory.KeyMultas}");
     }
 
     [Fact]

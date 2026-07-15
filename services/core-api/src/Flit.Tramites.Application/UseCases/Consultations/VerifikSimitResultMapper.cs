@@ -3,21 +3,25 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// <summary>
 /// Mapper puro Verifik SIMIT → <see cref="ConsultationResult"/> normalizado.
 /// Aplica para respuestas por documento (§3.5) y por placa (§3.6): misma forma.
-/// Semáforo: multas pendientes → fail; acuerdos de pago activos → warn; sin deudas → ok.
+/// Semáforo: multas pendientes → warn; acuerdos de pago activos → warn; sin deudas → ok.
 /// Nunca lanza; robusto ante nulls.
+///
+/// FEATURE 05: los checks se construyen en <see cref="FinesCheckFactory"/>, compartida con los
+/// demás proveedores de comparendos, para que la clave del check (de la que cuelga el gate de
+/// radicación) sea invariante al proveedor. Las multas pasaron de <c>fail</c> a <c>warn</c>:
+/// tener comparendos ya no impide CREAR el trámite (AC5). La radicación al OT conserva su gate.
 /// </summary>
 public static class VerifikSimitResultMapper
 {
     private const string Provider = "verifik_simit";
 
-    private const string Ok = "ok";
-    private const string Warn = "warn";
-    private const string Fail = "fail";
-    private const string Unknown = "unknown";
-
-    private const string Green = "green";
-    private const string Yellow = "yellow";
-    private const string Red = "red";
+    /// <summary>
+    /// Estado del SIMIT que cuenta como comparendo pendiente. Coincidencia EXACTA, deliberada:
+    /// el SIMIT también devuelve "Pendiente Curso" (multa en curso pedagógico, con valorPagar en
+    /// cero) y estados nulos. Ampliar esta coincidencia haría que más trámites se bloqueen en la
+    /// RADICACIÓN, que sigue derivándose de este check.
+    /// </summary>
+    private const string EstadoPendiente = "Pendiente";
 
     public static ConsultationResult Map(VerifikSimitResponse response)
     {
@@ -29,55 +33,28 @@ public static class VerifikSimitResultMapper
             MapAcuerdosPago(data),
         };
 
-        var overall = ComputeOverall(checks);
+        var overall = FinesCheckFactory.ComputeOverall(checks);
         return new ConsultationResult(Provider, overall, checks, []);
     }
 
     private static ConsultationCheck MapMultas(VerifikSimitData? data)
     {
         if (data is null)
-            return new ConsultationCheck("multas", "Multas SIMIT", Unknown, Provider, "Sin datos SIMIT");
+            return FinesCheckFactory.SinDatos(Provider, FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas);
 
-        var multas = data.Multas ?? [];
-        var pendientes = multas
-            .Where(m => string.Equals(m.EstadoComparendo, "Pendiente", StringComparison.OrdinalIgnoreCase))
+        var pendientes = (data.Multas ?? [])
+            .Where(m => string.Equals(m.EstadoComparendo, EstadoPendiente, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (pendientes.Count == 0)
-            return new ConsultationCheck("multas", "Multas SIMIT", Ok, Provider, null);
-
-        var total = pendientes.Sum(m => m.ValorPagar ?? 0);
-        return new ConsultationCheck(
-            "multas",
-            "Multas SIMIT",
-            Fail,
-            Provider,
-            $"{pendientes.Count} multa(s) pendiente(s) por ${total:N0} COP");
+        return FinesCheckFactory.Multas(Provider, pendientes.Count, pendientes.Sum(m => m.ValorPagar ?? 0));
     }
 
     private static ConsultationCheck MapAcuerdosPago(VerifikSimitData? data)
     {
         if (data is null)
-            return new ConsultationCheck("acuerdos_pago", "Acuerdos de pago SIMIT", Unknown, Provider, "Sin datos SIMIT");
+            return FinesCheckFactory.SinDatos(Provider, FinesCheckFactory.KeyAcuerdos, FinesCheckFactory.LabelAcuerdos);
 
         var acuerdos = data.AcuerdosPago ?? [];
-        if (acuerdos.Count == 0)
-            return new ConsultationCheck("acuerdos_pago", "Acuerdos de pago SIMIT", Ok, Provider, null);
-
-        var total = acuerdos.Sum(a => a.Pendiente ?? 0);
-        return new ConsultationCheck(
-            "acuerdos_pago",
-            "Acuerdos de pago SIMIT",
-            Warn,
-            Provider,
-            $"{acuerdos.Count} acuerdo(s) activo(s) por ${total:N0} COP");
-    }
-
-    private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)
-    {
-        if (checks.Any(c => c.Status == Fail)) return Red;
-        if (checks.Any(c => c.Status == Warn)) return Yellow;
-        if (checks.Any(c => c.Status == Ok)) return Green;
-        return Yellow;
+        return FinesCheckFactory.Acuerdos(Provider, acuerdos.Count, acuerdos.Sum(a => a.Pendiente ?? 0));
     }
 }
