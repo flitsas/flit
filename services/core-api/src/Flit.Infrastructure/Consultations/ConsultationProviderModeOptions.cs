@@ -18,6 +18,9 @@ public sealed class ConsultationProviderModeOptions
     public string VerifikRuesMode { get; set; } = "mock";
     public string IntempoMode { get; set; } = "mock";
 
+    // Feature #10707 — avalúo Fasecolda. Default mock: real requiere credenciales explícitas.
+    public string FasecoldaMode { get; set; } = "mock";
+
     public static bool IsMock(string mode) =>
         !string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase);
 }

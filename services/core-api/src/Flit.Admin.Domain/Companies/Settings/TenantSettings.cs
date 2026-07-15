@@ -45,6 +45,12 @@ public sealed class TenantSettings
     public ConsultationProviderConfig ConsultationProviderConfig { get; init; } = ConsultationProviderConfig.Empty;
 
     /// <summary>
+    /// Proveedores de avalúo comercial habilitados por tenant
+    /// (<c>avaluo_provider_config</c>, jsonb, Feature #10707). Default = solo Fasecolda.
+    /// </summary>
+    public AvaluoProviderConfig AvaluoProviderConfig { get; init; } = AvaluoProviderConfig.Default;
+
+    /// <summary>
     /// Fuente de la consulta de comparendos (<c>fines_query_source</c>, FEATURE 02):
     /// <see cref="TenantSettingsCodes.FinesSourceInternal"/> o
     /// <see cref="TenantSettingsCodes.FinesSourceExternal"/>. Default <c>external</c> (SIMIT en línea).
@@ -68,6 +74,7 @@ public sealed class TenantSettings
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,
         ConsultationProviderConfig = ConsultationProviderConfig.Empty,
+        AvaluoProviderConfig = AvaluoProviderConfig.Default,
         FinesQuerySource = TenantSettingsCodes.FinesSourceExternal,
     };
 }

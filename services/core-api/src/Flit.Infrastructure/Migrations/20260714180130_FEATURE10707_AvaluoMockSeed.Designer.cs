@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260714180130_FEATURE10707_AvaluoMockSeed")]
+    partial class FEATURE10707_AvaluoMockSeed
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -765,13 +768,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("allow_misc_new_vehicles");
 
-                    b.Property<string>("AvaluoProviderConfig")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("avaluo_provider_config")
-                        .HasDefaultValueSql("'{}'");
-
                     b.Property<string>("ConsultationProviderConfig")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -786,13 +782,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<string>("FinesQuerySource")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("external")
-                        .HasColumnName("fines_query_source");
 
                     b.Property<string>("NotificationChannel")
                         .IsRequired()

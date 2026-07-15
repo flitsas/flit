@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<GetPrendaVigenteHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
+        services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
         services.AddScoped<GetWizardStateHandler>();

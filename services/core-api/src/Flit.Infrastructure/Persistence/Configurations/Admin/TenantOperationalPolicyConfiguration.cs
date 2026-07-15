@@ -40,6 +40,9 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.ConsultationProviderConfig)
             .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
 
+        builder.Property(x => x.AvaluoProviderConfig)
+            .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
+
         // FEATURE 02 — fuente de comparendos (internal | external).
         builder.Property(x => x.FinesQuerySource)
             .HasColumnType("text").HasDefaultValue("external").IsRequired();

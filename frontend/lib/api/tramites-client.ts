@@ -9,6 +9,7 @@ import type {
   BiometricValidationsResponse,
   ChecklistView,
   CommercialData,
+  SuggestedCommercialValue,
   CompletarBiometriaResult,
   ConsultationProvidersConfig,
   ConsultationResult,
@@ -674,6 +675,13 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(data),
       },
+    ),
+
+  // ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+  getSuggestedCommercialValue: (instanceId: string, tenantId?: string) =>
+    request<SuggestedCommercialValue>(
+      `/api/v1/tramites/instances/${instanceId}/commercial/suggested-value`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───

@@ -466,6 +466,30 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+  // Feature #10707 — trazabilidad del avalúo (opcional; el back las persiste).
+  valueOrigin?: 'suggestion' | 'manual' | null;
+  suggestedSource?: string | null;
+  suggestedValue?: number | null;
+}
+
+// ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+
+export type AvaluoSourceKey = 'fasecolda' | 'base_gravable' | 'mercado_libre';
+export type AvaluoStatus = 'ok' | 'no_data' | 'error';
+
+export interface AvaluoSource {
+  source: AvaluoSourceKey | string;
+  status: AvaluoStatus | string;
+  value: number | null;
+  currency: string;
+  message: string | null;
+  muestras: number | null;
+}
+
+export interface SuggestedCommercialValue {
+  sugerido: number | null;
+  fuentePrincipal: string | null;
+  sources: AvaluoSource[];
 }
 
 // ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
