@@ -81,6 +81,7 @@ export function OtDocumentosTab({
 
   useEffect(() => {
     const c = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API con AbortController
     void load(c.signal);
     return () => c.abort();
   }, [load]);
