@@ -56,6 +56,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        services.AddScoped<IOtConsultationRestrictionRepository, OtConsultationRestrictionRepository>();
+
         // Refactor adminOT — alta/listado de tenants Organismo de Tránsito (OT como
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();

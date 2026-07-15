@@ -13,12 +13,14 @@ using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
@@ -124,6 +126,11 @@ public static class DependencyInjection
         services.AddScoped<SetTransitOfficeTenantStatusHandler>();
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
+
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        // IOtConsultationRestrictionRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<GetOtConsultationRestrictionsHandler>();
+        services.AddScoped<SetOtConsultationRestrictionHandler>();
 
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
         // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.
