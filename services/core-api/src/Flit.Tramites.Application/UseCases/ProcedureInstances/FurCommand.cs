@@ -34,6 +34,7 @@ public sealed class GenerarFurHandler(
     IFurDocumentGenerator generator,
     IKyverumCertificateClient certClient,
     IRuesCertificateGenerator ruesGenerator,
+    IRnmcCertificateGenerator rnmcGenerator,
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger)
@@ -139,6 +140,30 @@ public sealed class GenerarFurHandler(
             // Sin actor NIT (o dejó de haberlo en una regeneración): retirar cualquier certificado RUES previo.
             foreach (var prev in instance.Attachments
                          .Where(a => string.Equals(a.Tipo, "certificado_rues", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
+
+        // HU #10762 — Certificado RNMC: si el preflight consultó el RNMC de alguna parte, emitir el
+        // certificado (PDF, Source=system) con el resultado por parte para que se descargue del trámite y
+        // se fusione en el consolidado. Best-effort: nunca bloquea el FUR.
+        var (certificadoRnmc, aplicaRnmc) = await TryGenerateRnmcCertificateAsync(instance, tenantId, ct);
+        if (certificadoRnmc is not null)
+        {
+            generated.Add(certificadoRnmc);
+        }
+        else if (!aplicaRnmc)
+        {
+            // Sin checks RNMC (o dejó de haberlos en una regeneración): retirar el certificado previo, para
+            // que el consolidado no arrastre un resultado RNMC obsoleto. Solo cuando el RNMC NO aplica: si
+            // aplicaba y la generación falló, se conserva el previo (borrarlo por un fallo transitorio
+            // perdería un certificado válido).
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "certificado_rnmc", StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -345,6 +370,89 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
+    /// HU #10762 — Genera el certificado RNMC desde el ÚLTIMO snapshot de preflight (los checks
+    /// <c>rnmc_{rol}_*</c>), o <c>null</c> si no se ha corrido el preflight o no consultó el RNMC (p. ej.
+    /// todas las partes son personas jurídicas: el RNMC solo aplica a naturales).
+    /// <para>La fuente del dato es el SNAPSHOT, no field_values: la señal <c>rnmc_medida_pendiente</c> es un
+    /// booleano sin el detalle por parte que exige el certificado.</para>
+    /// <para>Best-effort: cualquier fallo se registra como warning y omite el certificado; nunca aborta el FUR.</para>
+    /// </summary>
+    /// <returns>
+    /// <c>Aplica</c> distingue "el RNMC no aplica a este trámite" (⇒ el caller retira el certificado previo)
+    /// de "aplicaba pero la generación falló" (⇒ se conserva el previo, que sigue siendo válido).
+    /// </returns>
+    private async Task<(GeneratedDocument? Doc, bool Aplica)> TryGenerateRnmcCertificateAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            var snapshot = await repo.GetLatestPreflightAsync(instance.Id, tenantId, ct);
+            if (snapshot is null)
+                return (null, false);
+
+            var checks = GetPreflightHandler.DeserializeChecks(snapshot.Checks)
+                .Where(c => c.Key.StartsWith("rnmc_", StringComparison.Ordinal))
+                .ToList();
+            if (checks.Count == 0)
+                return (null, false);
+
+            var entradas = new List<RnmcCertificateEntry>(checks.Count);
+            foreach (var check in checks)
+            {
+                var rol = RolFromCheckKey(check.Key);
+                var actor = instance.Actors.FirstOrDefault(a =>
+                    string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+                entradas.Add(new RnmcCertificateEntry(
+                    rol,
+                    actor?.FullName ?? string.Empty,
+                    actor?.DocumentNumber ?? string.Empty,
+                    EstadoRnmc(check.Status),
+                    check.Message));
+            }
+
+            var data = new RnmcCertificateData(
+                instance.Id,
+                instance.ReferenceNumber,
+                snapshot.CreatedAt,
+                entradas);
+
+            return (rnmcGenerator.GenerateRnmcCertificate(data), true);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            GenerarFurLog.CertificadoRnmcFallo(logger, ex, instance.Id);
+            return (null, true);
+        }
+    }
+
+    /// <summary>
+    /// Rol del segmento intermedio de la key del check: <c>rnmc_{rol}_{keyDelMapper}</c> (p. ej.
+    /// <c>rnmc_comprador_medidas_correctivas</c>). Cubre también la key sin sufijo (<c>rnmc_{rol}</c>), que
+    /// el preflight emite cuando el provider RNMC no está disponible.
+    /// </summary>
+    private static string RolFromCheckKey(string key)
+    {
+        var parts = key.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? parts[1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Estado del check → texto del certificado. Deliberadamente NO expone el estado crudo del preflight
+    /// ni el proveedor: el certificado es un documento de cara al usuario / al OT.
+    /// </summary>
+    private static string EstadoRnmc(string? status) => status switch
+    {
+        "ok" => "SIN MEDIDAS CORRECTIVAS",
+        "warn" => "CON MEDIDAS CORRECTIVAS",
+        "unknown" => "SIN DATOS",
+        _ => "NO VERIFICABLE",
+    };
+
+    /// <summary>
     /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
     /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
     /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
@@ -469,4 +577,8 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo generar el certificado RNMC (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
+    public static partial void CertificadoRnmcFallo(ILogger logger, Exception ex, Guid instanceId);
 }
