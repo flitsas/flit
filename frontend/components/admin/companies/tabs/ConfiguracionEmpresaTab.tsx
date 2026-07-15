@@ -5,13 +5,19 @@ import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
 import {
+  FINES_QUERY_SOURCE_LABELS,
+  FINES_QUERY_SOURCES,
   METODOS_RECAUDO,
   NOTIFICATION_TARGET_LABELS,
   NOTIFICATION_TARGETS,
   SMTP_LABELS,
   type SettingsForm,
 } from "../settingsForm";
-import type { EnrutamientoSMTP, NotificationTarget } from "@/lib/api/types";
+import type {
+  EnrutamientoSMTP,
+  FinesQuerySource,
+  NotificationTarget,
+} from "@/lib/api/types";
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
 // enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + matriz
@@ -132,6 +138,43 @@ export function ConfiguracionEmpresaTab({
         {fieldErrors?.metodosRecaudo && (
           <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
             {fieldErrors.metodosRecaudo}
+          </p>
+        )}
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-xs font-semibold">Fuente de comparendos</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Dónde se consultan los comparendos de la compañía. «Interna» usa el módulo de
+          comparendos de FLIT con la fuente base cargada en la plataforma; «Externa» consulta en
+          línea al SIMIT (regla especial del SIMIT). Esta opción se aplicará al flujo de trámite en
+          una entrega posterior.
+        </p>
+        <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Fuente de comparendos">
+          {FINES_QUERY_SOURCES.map((value) => {
+            const checked = form.finesQuerySource === value;
+            return (
+              <label
+                key={value}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={checked ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="finesQuerySource"
+                  value={value}
+                  checked={checked}
+                  onChange={() => onChange({ finesQuerySource: value as FinesQuerySource })}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                {FINES_QUERY_SOURCE_LABELS[value]}
+              </label>
+            );
+          })}
+        </div>
+        {fieldErrors?.finesQuerySource && (
+          <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            {fieldErrors.finesQuerySource}
           </p>
         )}
       </fieldset>

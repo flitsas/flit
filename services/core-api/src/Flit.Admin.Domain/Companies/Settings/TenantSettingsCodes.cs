@@ -14,6 +14,21 @@ public static class TenantSettingsCodes
     public const string TargetRadicador = "RADICADOR";
     public const string TargetNinguno = "NINGUNO";
 
+    /// <summary>Fuente de comparendos interna (módulo de comparendos con fuente base). FEATURE 02.</summary>
+    public const string FinesSourceInternal = "internal";
+
+    /// <summary>Fuente de comparendos externa (consulta en línea al SIMIT). FEATURE 02.</summary>
+    public const string FinesSourceExternal = "external";
+
+    /// <summary>Normaliza y valida la fuente de comparendos; <c>null</c> si el valor no es reconocido.</summary>
+    public static string? ParseFinesSource(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            FinesSourceInternal => FinesSourceInternal,
+            FinesSourceExternal => FinesSourceExternal,
+            _ => null,
+        };
+
     /// <summary>Alias heredado del DDL (<c>notification_target DEFAULT 'submitter'</c>).</summary>
     private const string TargetLegacySubmitter = "submitter";
 

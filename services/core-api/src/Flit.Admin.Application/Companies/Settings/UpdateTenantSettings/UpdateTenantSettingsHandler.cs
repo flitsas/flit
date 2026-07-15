@@ -71,6 +71,19 @@ public sealed class UpdateTenantSettingsHandler
         // Feature #10707 — proveedores de avalúo (opcional): valida keys y el sugerido.
         var avaluoConfig = AvaluoConfigValidator.TryBuild(request.AvaluoProviderConfig, errors);
 
+        // FEATURE 02 — fuente de comparendos (opcional): si viene, debe ser internal | external.
+        string? finesQuerySource = null;
+        if (request.FinesQuerySource is not null)
+        {
+            finesQuerySource = TenantSettingsCodes.ParseFinesSource(request.FinesQuerySource);
+            if (finesQuerySource is null)
+            {
+                errors.Add(new SettingsValidationError(
+                    "finesQuerySource",
+                    $"Valor inválido. Valores permitidos: {TenantSettingsCodes.FinesSourceInternal}, {TenantSettingsCodes.FinesSourceExternal}."));
+            }
+        }
+
         // AC2: cualquier error de validación corta el flujo antes de persistir.
         if (errors.Count > 0)
         {
@@ -95,6 +108,7 @@ public sealed class UpdateTenantSettingsHandler
             RuntFailoverTimeoutMs = request.RuntFailoverTimeoutMs ?? previous.RuntFailoverTimeoutMs,
             ConsultationProviderConfig = consultationConfig ?? previous.ConsultationProviderConfig,
             AvaluoProviderConfig = avaluoConfig ?? previous.AvaluoProviderConfig,
+            FinesQuerySource = finesQuerySource ?? previous.FinesQuerySource,
         };
 
         var changes = SettingsDiff.Compute(previous, updated);

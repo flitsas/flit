@@ -19,7 +19,8 @@ internal static class SettingsMapper
         ToChoices(settings.ConsultationProviderConfig),
         new AvaluoProviderConfigDto(
             settings.AvaluoProviderConfig.Primary,
-            settings.AvaluoProviderConfig.Enabled));
+            settings.AvaluoProviderConfig.Enabled),
+        settings.FinesQuerySource);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

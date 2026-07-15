@@ -43,6 +43,13 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public string AvaluoProviderConfig { get; set; } = "{}";
 
+    /// <summary>
+    /// Fuente de la consulta de comparendos de la compañía (FEATURE 02): <c>internal</c>
+    /// (módulo de comparendos con fuente base cargada) o <c>external</c> (consulta en línea al
+    /// SIMIT). Se persiste y audita aquí; su USO en el flujo del trámite es FEATURE 05.
+    /// </summary>
+    public string FinesQuerySource { get; set; } = "external";
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -183,6 +183,9 @@ export interface ConsultationProvidersConfig {
   vehicleVin: string;
   vehiclePlate: string;
   conductor: string;
+  // FEATURE 02 — política "solo vehículos propios" del tenant. Cuando es true, el wizard autorrellena
+  // el documento del tenant (NIT) en la consulta de traspaso y bloquea la consulta si se edita a otro.
+  onlyOwnVehicles: boolean;
 }
 
 /**

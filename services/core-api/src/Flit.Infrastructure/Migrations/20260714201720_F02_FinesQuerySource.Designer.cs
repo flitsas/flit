@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260714201720_F02_FinesQuerySource")]
+    partial class F02_FinesQuerySource
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -764,13 +767,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("allow_misc_new_vehicles");
-
-                    b.Property<string>("AvaluoProviderConfig")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("avaluo_provider_config")
-                        .HasDefaultValueSql("'{}'");
 
                     b.Property<string>("ConsultationProviderConfig")
                         .IsRequired()
@@ -2480,40 +2476,6 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Flit.Tramites.Domain.Entities.AvaluoMockValue", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<string>("MatchKey")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("match_key");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("source");
-
-                    b.Property<decimal>("ValueCop")
-                        .HasColumnType("numeric(15,2)")
-                        .HasColumnName("value_cop");
-
-                    b.HasKey("Id")
-                        .HasName("pk_avaluo_mock_values");
-
-                    b.HasIndex("MatchKey", "Source")
-                        .IsUnique()
-                        .HasDatabaseName("uq_avaluo_mock");
-
-                    b.ToTable("avaluo_mock_values", "tramites");
-                });
-
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ConformationRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3666,15 +3628,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
 
-                    b.Property<string>("SuggestedSource")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("suggested_source");
-
-                    b.Property<decimal?>("SuggestedValue")
-                        .HasColumnType("numeric(15,2)")
-                        .HasColumnName("suggested_value");
-
                     b.Property<decimal?>("TasaImpuesto")
                         .HasColumnType("numeric(7,4)")
                         .HasColumnName("tasa_impuesto");
@@ -3690,11 +3643,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<decimal?>("ValorVenta")
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("valor_venta");
-
-                    b.Property<string>("ValueOrigin")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("value_origin");
 
                     b.HasKey("Id")
                         .HasName("pk_procedure_instance_commercial");

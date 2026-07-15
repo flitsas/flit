@@ -156,6 +156,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
         policy.AvaluoProviderConfig = SerializeAvaluoConfig(settings.AvaluoProviderConfig);
+        policy.FinesQuerySource = settings.FinesQuerySource;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -171,6 +172,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
         AvaluoProviderConfig = DeserializeAvaluoConfig(entity.AvaluoProviderConfig),
+        FinesQuerySource = TenantSettingsCodes.ParseFinesSource(entity.FinesQuerySource) ?? TenantSettingsCodes.FinesSourceExternal,
     };
 
     private static List<string> DeserializePaymentMethods(string json)
