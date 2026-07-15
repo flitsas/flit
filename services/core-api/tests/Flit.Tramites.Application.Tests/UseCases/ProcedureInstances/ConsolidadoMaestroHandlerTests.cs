@@ -239,6 +239,52 @@ public sealed class ConsolidadoMaestroHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ConsolidadoVigente_ReutilizaSinRegenerar()
+    {
+        // Feature #10701 (botón único): si la marca dice vigente y el adjunto existe, se REUTILIZA
+        // sin regenerar (no toca storage, no persiste, no borra el previo).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("factura", "factura.pdf"),
+            ("consolidado_maestro", "maestro_vigente.pdf"));
+        instance.ConsolidadoMaestroVigente = true;
+        var maestro = instance.Attachments.Single(a => a.Tipo == "consolidado_maestro");
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Regenerado.Should().BeFalse();
+        result.Document.AttachmentId.Should().Be(maestro.Id);
+        // No se regeneró: ni se guardó archivo, ni se persistió, ni se borró el previo.
+        _storage.Saved.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        _repo.DidNotReceive().RemoveAttachment(Arg.Any<ProcedureInstanceAttachment>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_AlGenerar_MarcaConsolidadoMaestroVigente()
+    {
+        // Feature #10701: una generación real deja la marca de vigencia en true y Regenerado en true.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("factura", "factura.pdf"),
+            ("fur", "fur.pdf"));
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        instance.ConsolidadoMaestroVigente.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task HandleAsync_ConMatrizPrecedencia_OrdenaSegunLaMatriz()
     {
         // HU #10706 AC1 — con una precedencia resuelta de matriz, el orden la sigue (tras los

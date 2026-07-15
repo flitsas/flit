@@ -16,10 +16,12 @@ export interface ClientProceduresTableProps {
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
-  /** Genera/regenera el expediente consolidado (omitir = accion oculta, p. ej. QX read-only). */
-  onGenerarConsolidado?: (row: OtClientProcedure) => void;
-  /** Descarga el PDF del consolidado mas reciente. */
-  onVerConsolidado?: (row: OtClientProcedure) => void;
+  /**
+   * Botón único "Ver consolidado" (Feature #10701): muestra el consolidado maestro vigente y, si no
+   * lo está (nunca generado o invalidado por un cambio de estado / LT), lo genera y lo muestra. El
+   * backend decide regenerar-o-reutilizar por la marca `consolidado_maestro_vigente`.
+   */
+  onConsolidado?: (row: OtClientProcedure) => void;
   /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
@@ -38,8 +40,7 @@ export function ClientProceduresTable({
   onApprove,
   onReject,
   showApprovalActions = true,
-  onGenerarConsolidado,
-  onVerConsolidado,
+  onConsolidado,
   onAdjuntarLt,
   consolidadoActingId = null,
   onVerDocumentos,
@@ -142,29 +143,16 @@ export function ClientProceduresTable({
                       Adjuntar LT
                     </button>
                   )}
-                  {(row.status === "entregado" || row.status === "aprobado") && (
-                    <>
-                      {onGenerarConsolidado && (
-                        <button
-                          type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
-                          disabled={consolidadoActingId === row.id}
-                          onClick={() => onGenerarConsolidado(row)}
-                        >
-                          Generar consolidado
-                        </button>
-                      )}
-                      {onVerConsolidado && (
-                        <button
-                          type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
-                          disabled={consolidadoActingId === row.id}
-                          onClick={() => onVerConsolidado(row)}
-                        >
-                          Ver consolidado
-                        </button>
-                      )}
-                    </>
+                  {(row.status === "entregado" || row.status === "aprobado") && onConsolidado && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
+                      disabled={consolidadoActingId === row.id}
+                      title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
+                      onClick={() => onConsolidado(row)}
+                    >
+                      {consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado"}
+                    </button>
                   )}
                 </div>
               </td>

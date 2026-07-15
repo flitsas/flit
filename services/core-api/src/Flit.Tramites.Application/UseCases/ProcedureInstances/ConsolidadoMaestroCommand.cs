@@ -45,6 +45,18 @@ public sealed class GenerarConsolidadoMaestroHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Botón único (Feature #10701): si la marca de la BD dice que el consolidado maestro está
+        // vigente y el adjunto sigue existiendo, se REUTILIZA sin regenerar (el PDF ya refleja el
+        // estado actual del expediente). La marca la baja a false cualquier cambio importante
+        // (transición de estado o adjuntar la LT), forzando la regeneración en la próxima petición.
+        var vigente = instance.Attachments
+            .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+        if (instance.ConsolidadoMaestroVigente && vigente is not null)
+        {
+            var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
+            return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
+        }
+
         // Fuente = tabla maestra de adjuntos de la instancia (AC2), excluyendo solo los consolidados
         // previos (wizard y maestro) para no fusionarlos consigo mismos. Los resolvers de orden
         // descartan además la evidencia biométrica (tipos "biometric_*", que no forma parte del
@@ -115,6 +127,10 @@ public sealed class GenerarConsolidadoMaestroHandler(
         };
         instance.Attachments.Add(newAttachment);
         repo.Add(newAttachment);
+
+        // Marca de vigencia (Feature #10701): el consolidado recién generado refleja el estado
+        // actual del expediente. La bajarán a false las transiciones de estado y el adjuntar LT.
+        instance.ConsolidadoMaestroVigente = true;
 
         var evento = new ProcedureInstanceEvent
         {

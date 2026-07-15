@@ -48,7 +48,6 @@ import {
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
-  fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
@@ -190,25 +189,12 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.queryByRole("button", { name: /^Rechazar$/i })).not.toBeInTheDocument();
   });
 
-  it("consolidado — generar usa el maestro y ver previsualiza inline (sin descarga)", async () => {
+  it("consolidado — botón único asegura el maestro y previsualiza inline (sin descarga)", async () => {
+    // Feature #10701: un solo botón "Ver consolidado". El backend es idempotente por la marca de
+    // vigencia; el front usa el attachmentId que devuelve la generación y previsualiza inline.
     vi.mocked(generarOtConsolidadoMaestro).mockResolvedValue({
       document: { attachmentId: "att-1", tipo: "consolidado_maestro", filename: "c.pdf", sha256: "x" },
-    });
-    vi.mocked(fetchOtDocuments).mockResolvedValue({
-      data: [
-        {
-          id: "att-cm",
-          tipo: "consolidado_maestro",
-          filename: "consolidado.pdf",
-          mimetype: "application/pdf",
-          sizeBytes: 1000,
-          sha256: "x",
-          source: "system",
-          uploadedAt: "2026-07-06T10:00:00Z",
-        },
-      ],
-      consolidado: false,
-      consolidado_maestro: true,
+      regenerado: true,
     });
     vi.mocked(fetchOtAttachmentPreviewUrl).mockResolvedValue({
       url: "https://s3.test/consolidado",
@@ -224,12 +210,13 @@ describe("ClientProceduresSection — HU #10220", () => {
 
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /Generar consolidado/i }));
+    // No hay botón "Generar consolidado" separado: el único botón es "Ver consolidado".
+    expect(screen.queryByRole("button", { name: /Generar consolidado/i })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
+    // Asegura el consolidado (idempotente) y luego lo previsualiza inline con el id devuelto.
     await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined));
-    await user.click(screen.getByRole("button", { name: /Ver consolidado/i }));
-    // "Ver consolidado" toma la ruta de previsualización inline (no descarga).
     await waitFor(() =>
-      expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-cm", undefined),
+      expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-1", undefined),
     );
     vi.unstubAllGlobals();
   });

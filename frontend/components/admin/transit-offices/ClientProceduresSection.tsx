@@ -184,19 +184,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
-  const handleGenerarConsolidado = async (row: OtClientProcedure) => {
-    setConsolidadoActingId(row.id);
-    try {
-      // Expediente completo (maestro): 100% de los documentos, ordenados por la matriz documental.
-      await generarOtConsolidadoMaestro(row.id, scope);
-      show("Consolidado generado.", "success");
-    } catch {
-      show("No se pudo generar el consolidado.", "error");
-    } finally {
-      setConsolidadoActingId(null);
-    }
-  };
-
   const closePreview = () => {
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
@@ -204,8 +191,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     });
   };
 
-  const handleVerConsolidado = async (row: OtClientProcedure) => {
-    // Previsualiza el consolidado INLINE (sin descargar). Prefiere el maestro; si no, el estándar.
+  const handleConsolidado = async (row: OtClientProcedure) => {
+    // Botón único (Feature #10701): abre el consolidado del expediente INLINE. Si el OT puede
+    // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
+    // o invalidado por un cambio de estado / LT) y reutiliza si ya está vigente. En modo QX
+    // read-only no se puede generar: solo se muestra el consolidado existente.
+    setConsolidadoActingId(row.id);
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
       return {
@@ -219,41 +210,54 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       };
     });
     try {
-      const docs = await fetchOtDocuments(row.id, scope);
-      const consol =
-        docs.data.find((a) => a.tipo === "consolidado_maestro") ??
-        docs.data.find((a) => a.tipo === "consolidado");
-      if (!consol) {
-        setPreview((p) => ({
-          ...p,
-          loading: false,
-          error: "El trámite aún no tiene consolidado generado. Genera el consolidado primero.",
-        }));
-        return;
+      let attId: string;
+      let filename: string;
+      let mimetype = "application/pdf";
+      if (!isReadOnly) {
+        const res = await generarOtConsolidadoMaestro(row.id, scope);
+        attId = res.document.attachmentId;
+        filename = res.document.filename;
+        if (res.regenerado) show("Consolidado generado.", "success");
+      } else {
+        const docs = await fetchOtDocuments(row.id, scope);
+        const consol =
+          docs.data.find((a) => a.tipo === "consolidado_maestro") ??
+          docs.data.find((a) => a.tipo === "consolidado");
+        if (!consol) {
+          setPreview((p) => ({
+            ...p,
+            loading: false,
+            error: "El trámite aún no tiene consolidado generado.",
+          }));
+          return;
+        }
+        attId = consol.id;
+        filename = consol.filename;
+        mimetype = consol.mimetype || "application/pdf";
       }
-      const { url } = await fetchOtAttachmentPreviewUrl(row.id, consol.id, scope);
+      const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
       // El file-manager sirve el objeto como binary/octet-stream: re-empaquetamos como Blob con el
       // mimetype real para forzar el render inline (S3 permite CORS GET).
       const blob = await fetch(url).then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.blob();
       });
-      const objectUrl = URL.createObjectURL(
-        new Blob([blob], { type: consol.mimetype || "application/pdf" }),
-      );
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: mimetype }));
       setPreview((p) => ({
         ...p,
         loading: false,
         url: objectUrl,
-        mimetype: consol.mimetype || "application/pdf",
-        download: { procId: row.id, attId: consol.id, filename: consol.filename },
+        mimetype,
+        download: { procId: row.id, attId, filename },
       }));
     } catch {
       setPreview((p) => ({
         ...p,
         loading: false,
-        error: "No se pudo cargar el consolidado. Intenta de nuevo.",
+        error: "No se pudo abrir el consolidado. Intenta de nuevo.",
       }));
+    } finally {
+      setConsolidadoActingId(null);
     }
   };
 
@@ -391,8 +395,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           }}
           onReject={setRejectTarget}
           showApprovalActions={!isReadOnly && !superAdmin}
-          onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
-          onVerConsolidado={handleVerConsolidado}
+          onConsolidado={handleConsolidado}
           onAdjuntarLt={
             !isReadOnly && !superAdmin
               ? (row) => {

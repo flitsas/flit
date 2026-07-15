@@ -97,6 +97,23 @@ public sealed class LicenciaTransitoHandlerTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
+    [Fact]
+    public async Task AdjuntarLt_InvalidaLaMarcaDeConsolidadoMaestro()
+    {
+        // Feature #10701 — adjuntar la LT cambia el expediente: baja la marca de vigencia a false
+        // para que el próximo "Ver consolidado" regenere el PDF incluyéndola.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.ConsolidadoMaestroVigente = true;
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(TramiteEstado.Borrador)]
     [InlineData(TramiteEstado.Preparado)]

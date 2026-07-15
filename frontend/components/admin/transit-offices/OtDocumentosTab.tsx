@@ -134,31 +134,44 @@ export function OtDocumentosTab({
     }
   };
 
-  const handleGenerarConsolidado = async () => {
+  const handleConsolidado = async () => {
+    // Botón único (Feature #10701): muestra el consolidado del expediente INLINE. Si el OT puede
+    // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
+    // o invalidado por un cambio de estado / LT) y reutiliza si ya está vigente. En modo QX
+    // read-only no se puede generar: solo se muestra el consolidado existente.
     setConsolidadoActing(true);
     try {
-      // El consolidado del OT es el expediente completo: incluye el 100% de los documentos
-      // cargados y generados del trámite (endpoint "maestro"), ordenados por la matriz documental.
-      await generarOtConsolidadoMaestro(procedureId, scope);
-      show("Consolidado generado.", "success");
-      void load();
+      if (!readOnly) {
+        // El consolidado maestro es el expediente completo: el 100% de los documentos cargados y
+        // generados del trámite, ordenados por la matriz documental.
+        const res = await generarOtConsolidadoMaestro(procedureId, scope);
+        if (res.regenerado) show("Consolidado generado.", "success");
+        void load();
+        await handlePreview({
+          id: res.document.attachmentId,
+          tipo: res.document.tipo,
+          filename: res.document.filename,
+          mimetype: "application/pdf",
+          sizeBytes: 0,
+          sha256: res.document.sha256,
+          source: "system",
+          uploadedAt: "",
+        });
+        return;
+      }
+      const consolidado =
+        attachments.find((a) => a.tipo === "consolidado_maestro") ??
+        attachments.find((a) => a.tipo === "consolidado");
+      if (!consolidado) {
+        show("El trámite aún no tiene consolidado generado.", "error");
+        return;
+      }
+      await handlePreview(consolidado);
     } catch {
-      show("No se pudo generar el consolidado.", "error");
+      show("No se pudo abrir el consolidado.", "error");
     } finally {
       setConsolidadoActing(false);
     }
-  };
-
-  const handleVerConsolidado = () => {
-    // Previsualiza el consolidado INLINE (sin forzar descarga), reusando el modal de preview.
-    const consolidado =
-      attachments.find((a) => a.tipo === "consolidado_maestro") ??
-      attachments.find((a) => a.tipo === "consolidado");
-    if (!consolidado) {
-      show("Primero genera el consolidado.", "error");
-      return;
-    }
-    void handlePreview(consolidado);
   };
 
   return (
@@ -176,30 +189,18 @@ export function OtDocumentosTab({
 
       <div className="space-y-4" data-testid="ot-documentos-tab">
         {/* Barra de acciones */}
-        {!readOnly && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-50"
-              disabled={consolidadoActing}
-              aria-label="Generar consolidado del expediente completo"
-              title="Genera el expediente consolidado con todos los documentos del trámite"
-              onClick={() => void handleGenerarConsolidado()}
-            >
-              {consolidadoActing ? "Generando…" : "Generar consolidado"}
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-50"
-              disabled={consolidadoActing}
-              aria-label="Ver consolidado"
-              title="Previsualiza el consolidado sin descargarlo"
-              onClick={() => handleVerConsolidado()}
-            >
-              Ver consolidado
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground disabled:opacity-50"
+            disabled={consolidadoActing}
+            aria-label="Ver consolidado del expediente"
+            title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
+            onClick={() => void handleConsolidado()}
+          >
+            {consolidadoActing ? "Abriendo…" : "Ver consolidado"}
+          </button>
+        </div>
 
         <UiStateBoundary
           status={status}

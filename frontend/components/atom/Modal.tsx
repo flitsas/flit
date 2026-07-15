@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId } from "react";
+import { createPortal } from "react-dom";
 import { X, type LucideIcon } from "lucide-react";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
@@ -75,13 +76,19 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, busy, onClose]);
 
-  if (!open) return null;
+  // Se renderiza vía portal a <body> (guardado para SSR): un modal anidado dentro de otro cuyo
+  // overlay usa `backdrop-blur` heredaría ese containing block y su `fixed inset-0` quedaría
+  // recortado al recuadro del modal padre (fondo oscuro confinado a una caja). Portalizar a body
+  // hace que el overlay cubra el viewport real, sin importar los ancestros. Se portaliza de forma
+  // síncrona (sin diferir el montaje) para no romper el auto-foco que los hijos hacen en su efecto
+  // de montaje.
+  if (!open || typeof document === "undefined") return null;
 
   const requestClose = () => {
     if (!busy) onClose();
   };
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 ${zClassName} flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-md`}
       role="dialog"
@@ -124,6 +131,7 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

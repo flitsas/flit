@@ -227,13 +227,18 @@ export function fetchOtAttachmentPreviewUrl(
 }
 
 /**
- * Genera el expediente consolidado maestro de un trámite OT (incluye todos los
- * documentos del expediente). Endpoint disponible solo si el backend lo expone.
+ * Genera (o reutiliza) el expediente consolidado maestro de un trámite OT — botón único
+ * (Feature #10701). El backend es idempotente por la marca `consolidado_maestro_vigente`: si el
+ * consolidado está vigente lo devuelve sin regenerar (`regenerado: false`); si no (nunca generado o
+ * invalidado por un cambio de estado / LT) lo reconstruye (`regenerado: true`).
  */
 export function generarOtConsolidadoMaestro(
   id: string,
   scope?: OtApiScope,
-): Promise<{ document: { attachmentId: string; tipo: string; filename: string; sha256: string } }> {
+): Promise<{
+  document: { attachmentId: string; tipo: string; filename: string; sha256: string };
+  regenerado: boolean;
+}> {
   return apiFetch(`${base}/client-procedures/${id}/consolidado-maestro`, {
     method: "POST",
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
