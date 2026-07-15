@@ -72,15 +72,15 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
       }
     >
       <div className="space-y-3">
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Código
           <input className={`mt-1 ${OT_INPUT_CLS}`} value={code} onChange={(e) => setCode(e.target.value)} />
         </label>
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Nombre
           <input className={`mt-1 ${OT_INPUT_CLS}`} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Color
           <div className="mt-1 flex items-center gap-2">
             <input

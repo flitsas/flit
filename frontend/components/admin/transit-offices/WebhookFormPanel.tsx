@@ -81,7 +81,7 @@ export function WebhookFormPanel({
     >
       <div className="space-y-3">
         {!isEdit && (
-          <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+          <label className="block text-xs font-semibold text-foreground">
             Tipo de evento
             <select
               className={`mt-1 ${OT_INPUT_CLS}`}
@@ -96,7 +96,7 @@ export function WebhookFormPanel({
             </select>
           </label>
         )}
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           URL destino (HTTPS)
           <input
             type="url"
@@ -106,7 +106,7 @@ export function WebhookFormPanel({
           />
         </label>
         {!isEdit && (
-          <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+          <label className="block text-xs font-semibold text-foreground">
             Secreto
             <input
               type="password"

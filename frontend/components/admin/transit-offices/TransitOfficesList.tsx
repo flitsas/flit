@@ -150,7 +150,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
               {filtered.map((office) => (
                 <tr
                   key={office.id}
-                  className="border-b last:border-b-0 hover:bg-slate-50/80"
+                  className="border-b last:border-b-0 hover:bg-slate-50/80 dark:hover:bg-white/5"
                 >
                   <td className="px-4 py-3 font-mono text-xs">{office.code}</td>
                   <td className="px-4 py-3 font-medium">{office.name}</td>

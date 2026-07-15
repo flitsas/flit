@@ -252,6 +252,20 @@ public sealed class TramiteLifecycleServiceTests
     }
 
     [Fact]
+    public async Task TransicionExitosa_InvalidaConsolidadoMaestro()
+    {
+        // Feature #10701 — un cambio de estado baja la marca de vigencia del consolidado maestro
+        // para que el próximo "Ver consolidado" lo regenere reflejando el nuevo estado del expediente.
+        var i = Wire(TramiteEstado.Preparado);
+        i.ConsolidadoMaestroVigente = true;
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RechazadoVuelveABorradorParaSubsanar()
     {
         var i = Wire(TramiteEstado.Rechazado);

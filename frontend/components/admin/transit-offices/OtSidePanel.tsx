@@ -37,7 +37,7 @@ export function OtSidePanel({
         disabled={disabled}
       />
       <aside
-        className="relative flex h-full w-full max-w-md flex-col border-l bg-white shadow-2xl dark:bg-[#0B0F14]"
+        className="relative flex h-full w-full max-w-md flex-col border-l bg-card shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
@@ -45,7 +45,7 @@ export function OtSidePanel({
         <div
           className="flex items-center justify-between border-b px-4 py-3"
         >
-          <h2 className="text-sm font-bold" style={{ color: "#162744" }}>
+          <h2 className="text-sm font-bold text-foreground">
             {title}
           </h2>
           <button type="button" aria-label="Cerrar" onClick={onClose} disabled={disabled}>

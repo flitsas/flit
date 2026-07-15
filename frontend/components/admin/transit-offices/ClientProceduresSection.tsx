@@ -8,17 +8,23 @@ import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametriza
 import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
-  descargarOtConsolidado,
+  fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
+  fetchOtDocuments,
   fetchOtProfile,
-  generarOtConsolidado,
+  generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
 import { getToken } from "@/lib/api/client";
+import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { Modal } from "@/components/atom/Modal";
+import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { FolderOpen } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
 const PAGE_SIZE = 20;
@@ -51,6 +57,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
+  // HU #10705 — panel de documentos del expediente
+  const [documentosProcedure, setDocumentosProcedure] = useState<OtClientProcedure | null>(null);
+  // Previsualización inline del consolidado (sin forzar descarga).
+  const [preview, setPreview] = useState<{
+    open: boolean;
+    title: string;
+    mimetype: string | null;
+    url: string | null;
+    loading: boolean;
+    error: string | null;
+    download: { procId: string; attId: string; filename: string } | null;
+  }>({ open: false, title: "Consolidado", mimetype: null, url: null, loading: false, error: null, download: null });
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
 
@@ -166,26 +184,96 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
-  const handleGenerarConsolidado = async (row: OtClientProcedure) => {
+  const closePreview = () => {
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return { ...p, open: false, url: null, error: null, download: null };
+    });
+  };
+
+  const handleConsolidado = async (row: OtClientProcedure) => {
+    // Botón único (Feature #10701): abre el consolidado del expediente INLINE. Si el OT puede
+    // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
+    // o invalidado por un cambio de estado / LT) y reutiliza si ya está vigente. En modo QX
+    // read-only no se puede generar: solo se muestra el consolidado existente.
     setConsolidadoActingId(row.id);
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return {
+        open: true,
+        title: `Consolidado — ${row.referenceNumber}`,
+        mimetype: "application/pdf",
+        url: null,
+        loading: true,
+        error: null,
+        download: null,
+      };
+    });
     try {
-      await generarOtConsolidado(row.id, scope);
-      show("Consolidado generado.", "success");
+      let attId: string;
+      let filename: string;
+      let mimetype = "application/pdf";
+      if (!isReadOnly) {
+        const res = await generarOtConsolidadoMaestro(row.id, scope);
+        attId = res.document.attachmentId;
+        filename = res.document.filename;
+        if (res.regenerado) show("Consolidado generado.", "success");
+      } else {
+        const docs = await fetchOtDocuments(row.id, scope);
+        const consol =
+          docs.data.find((a) => a.tipo === "consolidado_maestro") ??
+          docs.data.find((a) => a.tipo === "consolidado");
+        if (!consol) {
+          setPreview((p) => ({
+            ...p,
+            loading: false,
+            error: "El trámite aún no tiene consolidado generado.",
+          }));
+          return;
+        }
+        attId = consol.id;
+        filename = consol.filename;
+        mimetype = consol.mimetype || "application/pdf";
+      }
+      const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
+      // El file-manager sirve el objeto como binary/octet-stream: re-empaquetamos como Blob con el
+      // mimetype real para forzar el render inline (S3 permite CORS GET).
+      const blob = await fetch(url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: mimetype }));
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        url: objectUrl,
+        mimetype,
+        download: { procId: row.id, attId, filename },
+      }));
     } catch {
-      show("No se pudo generar el consolidado (verifica FUR y documentos del trámite).", "error");
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        error: "No se pudo abrir el consolidado. Intenta de nuevo.",
+      }));
     } finally {
       setConsolidadoActingId(null);
     }
   };
 
-  const handleVerConsolidado = async (row: OtClientProcedure) => {
-    setConsolidadoActingId(row.id);
+  const handlePreviewDownload = async () => {
+    const dl = preview.download;
+    if (!dl) return;
     try {
-      await descargarOtConsolidado(row.id, row.referenceNumber, scope);
+      await downloadFile(
+        `/api/v1/admin/ot/client-procedures/${dl.procId}/documents/${dl.attId}/download`,
+        {
+          query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+          fallbackFilename: dl.filename,
+        },
+      );
     } catch {
-      show("El trámite aún no tiene consolidado generado.", "error");
-    } finally {
-      setConsolidadoActingId(null);
+      show("No se pudo descargar el consolidado.", "error");
     }
   };
 
@@ -247,7 +335,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         }}
         aria-label="Filtros de trámites de clientes"
       >
-        <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="text-xs font-semibold text-foreground">
           Estado
           <select
             aria-label="Filtrar por estado"
@@ -261,7 +349,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <option value="">Todos</option>
           </select>
         </label>
-        <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="text-xs font-semibold text-foreground">
           Tipo de trámite
           <select
             aria-label="Filtrar por tipo de trámite"
@@ -307,8 +395,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           }}
           onReject={setRejectTarget}
           showApprovalActions={!isReadOnly && !superAdmin}
-          onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
-          onVerConsolidado={handleVerConsolidado}
+          onConsolidado={handleConsolidado}
           onAdjuntarLt={
             !isReadOnly && !superAdmin
               ? (row) => {
@@ -318,6 +405,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               : undefined
           }
           consolidadoActingId={consolidadoActingId}
+          onVerDocumentos={setDocumentosProcedure}
         />
       </UiStateBoundary>
 
@@ -328,15 +416,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Confirmar aprobación"
         >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-            style={{ border: "1px solid #DFE5ED" }}
-          >
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+            <h2 className="text-lg font-semibold text-foreground">
               ¿Aprobar este trámite?
             </h2>
             <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
-            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-4 block text-xs font-semibold text-foreground">
               Licencia de Tránsito (LT) — opcional
               <input
                 type="file"
@@ -379,11 +464,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Rechazar trámite"
         >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-            style={{ border: "1px solid #DFE5ED" }}
-          >
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+            <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
             <textarea
@@ -422,11 +504,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"
         >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-            style={{ border: "1px solid #DFE5ED" }}
-          >
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+            <h2 className="text-lg font-semibold text-foreground">
               Adjuntar Licencia de Tránsito (LT)
             </h2>
             <p className="mt-2 text-sm opacity-80">{ltTarget.referenceNumber}</p>
@@ -444,7 +523,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
                 onClick={() => {
                   setLtTarget(null);
                   setLtFile(null);
@@ -466,6 +544,37 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           </div>
         </div>
       )}
+
+      {/* HU #10705 — Modal de documentos del expediente */}
+      {documentosProcedure && (
+        <Modal
+          open
+          onClose={() => setDocumentosProcedure(null)}
+          title={`Documentos — ${documentosProcedure.referenceNumber}`}
+          icon={FolderOpen}
+          size="xl"
+          zClassName="z-[90]"
+        >
+          <OtDocumentosTab
+            procedureId={documentosProcedure.id}
+            referenceNumber={documentosProcedure.referenceNumber}
+            scope={transitOfficeId ? { transitOfficeId } : undefined}
+            readOnly={isReadOnly}
+          />
+        </Modal>
+      )}
+
+      {/* Previsualización inline del consolidado (botón "Ver consolidado" de la tabla) */}
+      <DocumentPreviewModal
+        open={preview.open}
+        onClose={closePreview}
+        title={preview.title}
+        mimetype={preview.mimetype}
+        url={preview.url}
+        loading={preview.loading}
+        error={preview.error}
+        onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
+      />
     </div>
   );
 }

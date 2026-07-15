@@ -245,6 +245,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
+                // Feature #10701 — la decisión del OT (aprobar/rechazar) invalida el consolidado
+                // maestro persistido: el próximo "Ver consolidado" lo regenerará antes de mostrarlo.
+                entity.ConsolidadoMaestroVigente = false;
+
                 // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
                 // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).
                 await _transitionPublisher.EnqueueAsync(

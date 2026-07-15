@@ -21,6 +21,15 @@ public sealed class FileManagerOptions
     public int TimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Minutos de validez que se REPORTAN para las presigned URLs de previsualización inline
+    /// (Feature #10701 / ADR-0029). El riesgo del feature exige URLs OT con expiración corta
+    /// (≤15 min); mantener este valor ≤15 y ALINEADO con el TTL real que firma el file-manager
+    /// en S3 (el file-manager no devuelve el TTL en su respuesta, así que aquí solo se calcula
+    /// el <c>expiresAt</c> informado al cliente).
+    /// </summary>
+    public int PreviewUrlTtlMinutes { get; set; } = 10;
+
+    /// <summary>
     /// Token Bearer opcional. Hoy el file-manager es público (sin auth); si se reactiva,
     /// se setea aquí (o por env FILE_MANAGER_AUTH_TOKEN) y se envía SOLO a la API del
     /// file-manager, nunca a las presigned URLs de S3.
