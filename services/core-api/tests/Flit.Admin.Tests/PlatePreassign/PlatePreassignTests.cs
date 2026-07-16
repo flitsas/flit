@@ -360,6 +360,93 @@ public sealed class PlatePreassignTests
         (await repo.ListEligibleCompaniesAsync(office, TestContext.Current.CancellationToken)).Should().BeEmpty();
     }
 
+    // ---------- HU #10800: asignación de placa fuera de rango (rango ad-hoc) ----------
+
+    [Fact] // AC2 — placa fuera de rango: crea un rango ad-hoc de 1 placa y la reserva al trámite.
+    public async Task ReserveOutOfRange_CreaRangoAdHocYReserva()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(company, office, "ABC123", instance, TestContext.Current.CancellationToken);
+        r.Success.Should().BeTrue();
+
+        await using var verify = NewContext(db);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC123", TestContext.Current.CancellationToken);
+        detail.State.Should().Be(PlateState.Preasignada);
+        detail.ProcedureInstanceId.Should().Be(instance);
+        // Registrada en el inventario como un rango de 1 placa (ABC, 123, 123).
+        var range = await verify.PlateRanges.SingleAsync(x => x.Id == detail.PlateRangeId, TestContext.Current.CancellationToken);
+        range.Prefix.Should().Be("ABC");
+        range.RangeFrom.Should().Be(123);
+        range.RangeTo.Should().Be(123);
+    }
+
+    [Theory] // AC6 — formato de placa inválido → falla.
+    [InlineData("AB12")]
+    [InlineData("ABCD12")]
+    [InlineData("123ABC")]
+    [InlineData("ABC12")]
+    public async Task ReserveOutOfRange_FormatoInvalido_Falla(string plate)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(Guid.NewGuid(), Guid.NewGuid(), plate, Guid.NewGuid(), TestContext.Current.CancellationToken);
+        r.Success.Should().BeFalse();
+    }
+
+    [Fact] // AC3 — la placa ya está registrada (no disponible) → falla con mensaje legible.
+    public async Task ReserveOutOfRange_Duplicada_Falla()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+
+        await using (var a = NewContext(db))
+        {
+            await new PlateRangeRepository(a).CreateRangeAsync(company, office, "ABC", 123, 123, null, TestContext.Current.CancellationToken);
+        }
+        await using (var use = NewContext(db))
+        {
+            var d = await use.PlateRangeDetails.FirstAsync(x => x.Plate == "ABC123", TestContext.Current.CancellationToken);
+            d.State = PlateState.Utilizada;
+            await use.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(company, office, "ABC123", Guid.NewGuid(), TestContext.Current.CancellationToken);
+        r.Success.Should().BeFalse();
+        r.Error.Should().Contain("ya está registrada");
+    }
+
+    [Fact] // Si la placa ya existe DISPONIBLE (fuera o dentro de rango), la reserva (no duplica).
+    public async Task ReserveOutOfRange_ExistenteDisponible_Reserva()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var a = NewContext(db))
+        {
+            await new PlateRangeRepository(a).CreateRangeAsync(company, office, "ABC", 123, 123, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(company, office, "ABC123", instance, TestContext.Current.CancellationToken);
+        r.Success.Should().BeTrue();
+
+        var detail = await ctx.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC123", TestContext.Current.CancellationToken);
+        detail.State.Should().Be(PlateState.Preasignada);
+        detail.ProcedureInstanceId.Should().Be(instance);
+    }
+
     // ---------- Reserva de placa (Flujo A) ----------
 
     [Fact]

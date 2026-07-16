@@ -126,4 +126,18 @@ public interface IPlateRangeRepository
         string plate,
         Guid procedureInstanceId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10800 — asigna una placa FUERA DE RANGO al trámite: si la placa no existe en el inventario del
+    /// (compañía, OT), la registra creando un rango ad-hoc de 1 placa (prefijo + número parseados de la
+    /// placa) y la reserva (preasignada) al trámite; si ya existe y está <c>disponible</c>, la reserva; si
+    /// ya está asignada/utilizada, falla con un mensaje legible (unicidad por <c>uq_...office_plate</c>).
+    /// Valida el formato de placa (3 letras + 3 dígitos).
+    /// </summary>
+    Task<PlateOpResult> ReserveOutOfRangePlateAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken = default);
 }

@@ -358,7 +358,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
-        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         await using var verify = NewContext(db);
@@ -389,7 +389,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
-        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }

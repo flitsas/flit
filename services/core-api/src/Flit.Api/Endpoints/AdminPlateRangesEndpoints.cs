@@ -75,13 +75,27 @@ public static class AdminPlateRangesEndpoints
             return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.Plate))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable", detail: "La placa es obligatoria.");
+        }
+
+        // HU #10800 — placa fuera de rango: validar el formato antes de intentar registrarla (AC6).
+        if (request.OutOfRange && !PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable",
+                detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+        }
+
         var result = await otRepo.AssignPlateAsync(
-            otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", ct)
+            otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", request.OutOfRange, ct)
             .ConfigureAwait(false);
 
         return result is null
             ? Results.Problem(statusCode: 422, title: "Unprocessable",
-                detail: "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.")
+                detail: request.OutOfRange
+                    ? "No se pudo asignar la placa fuera de rango: verifique que no esté ya registrada para el OT y que el trámite esté en preasignado."
+                    : "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.")
             : Results.Ok(result);
     }
 
@@ -226,8 +240,9 @@ public sealed record AssignPlateRangeRequest(
 /// <summary>Payload para editar un rango (dentro de la ventana de 60 min).</summary>
 public sealed record EditPlateRangeRequest(string Prefix, int RangeFrom, int RangeTo);
 
-/// <summary>Payload para asignar una placa a un trámite en preasignado (Flujo B).</summary>
-public sealed record AssignPlateToProcedureRequest(string Plate);
+/// <summary>Payload para asignar una placa a un trámite en preasignado (Flujo B). <c>OutOfRange</c> (HU #10800)
+/// registra una placa que no pertenece a ningún rango como rango ad-hoc de 1 placa.</summary>
+public sealed record AssignPlateToProcedureRequest(string Plate, bool OutOfRange = false);
 
 /// <summary>Payload para revocar la preasignación de un trámite.</summary>
 public sealed record RevokePlateRequest(string Reason);

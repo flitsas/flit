@@ -47,6 +47,22 @@ public static class PlateRangeRules
     public static string Format(string prefix, int number) =>
         prefix + number.ToString("D3", CultureInfo.InvariantCulture);
 
+    /// <summary>¿La placa tiene el formato de matrícula (3 letras A–Z + 3 dígitos, ej. ABC123)?</summary>
+    public static bool IsValidPlate(string? plate) =>
+        plate is { Length: 6 }
+        && plate[..3].All(c => c is >= 'A' and <= 'Z')
+        && plate[3..].All(char.IsDigit);
+
+    /// <summary>
+    /// Descompone una placa <c>ABC123</c> en su prefijo (<c>ABC</c>) y número (<c>123</c>). Permite
+    /// registrar una placa fuera de rango como un rango ad-hoc de 1 placa (HU #10800). Devuelve null si
+    /// el formato es inválido.
+    /// </summary>
+    public static (string Prefix, int Number)? ParsePlate(string? plate) =>
+        IsValidPlate(plate)
+            ? (plate![..3], int.Parse(plate[3..], CultureInfo.InvariantCulture))
+            : null;
+
     /// <summary>Explota el rango en las placas individuales (inclusive en ambos extremos).</summary>
     public static IEnumerable<string> Enumerate(string prefix, int from, int to)
     {

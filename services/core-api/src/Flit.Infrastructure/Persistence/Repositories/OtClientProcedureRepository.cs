@@ -374,6 +374,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string plate,
         Guid? changedBy,
         string source,
+        bool outOfRange = false,
         CancellationToken cancellationToken = default)
     {
         if (_plateRepo is null || string.IsNullOrWhiteSpace(plate))
@@ -410,9 +411,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
-                var reserved = await _plateRepo
-                    .TryReservePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
-                    .ConfigureAwait(false);
+                // HU #10800 — Flujo B: el OT elige una placa del rango (TryReserve, solo placas disponibles)
+                // o registra una placa FUERA DE RANGO (ReserveOutOfRange, la crea como rango ad-hoc de 1 placa).
+                var reserved = outOfRange
+                    ? (await _plateRepo
+                        .ReserveOutOfRangePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
+                        .ConfigureAwait(false)).Success
+                    : await _plateRepo
+                        .TryReservePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
+                        .ConfigureAwait(false);
                 if (!reserved)
                 {
                     return null;

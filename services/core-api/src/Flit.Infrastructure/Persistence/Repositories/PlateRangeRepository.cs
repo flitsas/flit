@@ -431,6 +431,94 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
             },
             cancellationToken);
 
+    // HU #10800 — asignación de placa FUERA DE RANGO: registra la placa como un rango ad-hoc de 1 placa
+    // (prefijo + número parseados) y la reserva al trámite. Respeta el modelo (plate_range_id NOT NULL) y
+    // la unicidad (uq_plate_range_details_office_plate) sin cambio de esquema.
+    public Task<PlateOpResult> ReserveOutOfRangePlateAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantScopeAsync(
+            companyTenantId,
+            async () =>
+            {
+                var normalized = plate?.Trim().ToUpperInvariant() ?? string.Empty;
+                var parsed = PlateRangeRules.ParsePlate(normalized);
+                if (parsed is null)
+                {
+                    return PlateOpResult.Fail("La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+                }
+
+                var now = DateTimeOffset.UtcNow;
+
+                // ¿Ya existe la placa en el inventario del (compañía, OT)?
+                var existing = await _context.PlateRangeDetails
+                    .FirstOrDefaultAsync(
+                        d => d.TenantId == companyTenantId
+                            && d.TransitOfficeId == transitOfficeId
+                            && d.Plate == normalized,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (existing is not null)
+                {
+                    // Idempotente: ya reservada para este mismo trámite.
+                    if (existing.State == PlateState.Preasignada && existing.ProcedureInstanceId == procedureInstanceId)
+                    {
+                        return PlateOpResult.Ok;
+                    }
+                    // Disponible → se reserva.
+                    if (existing.State == PlateState.Disponible)
+                    {
+                        existing.State = PlateState.Preasignada;
+                        existing.ProcedureInstanceId = procedureInstanceId;
+                        existing.ReservedAt = now;
+                        existing.UpdatedAt = now;
+                        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                        return PlateOpResult.Ok;
+                    }
+                    // Cualquier otro estado (preasignada por otro, utilizada, bloqueada, revocada) → duplicado.
+                    return PlateOpResult.Fail($"La placa {normalized} ya está registrada para este organismo de tránsito.");
+                }
+
+                var (prefix, number) = parsed.Value;
+
+                // Rango ad-hoc de 1 placa (contenedor para satisfacer la FK plate_range_id NOT NULL).
+                var range = new PlateRangeEntity
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = companyTenantId,
+                    TransitOfficeId = transitOfficeId,
+                    Prefix = prefix,
+                    RangeFrom = number,
+                    RangeTo = number,
+                    EditableUntil = now, // ad-hoc: sin ventana de edición útil
+                    CreatedAt = now,
+                };
+                _context.PlateRanges.Add(range);
+                // FK: el padre primero (mismo criterio que CreateRangeAsync, HU #10797).
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+                _context.PlateRangeDetails.Add(new PlateRangeDetailEntity
+                {
+                    Id = Guid.NewGuid(),
+                    PlateRangeId = range.Id,
+                    TenantId = companyTenantId,
+                    TransitOfficeId = transitOfficeId,
+                    Plate = normalized,
+                    State = PlateState.Preasignada,
+                    ProcedureInstanceId = procedureInstanceId,
+                    ReservedAt = now,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return PlateOpResult.Ok;
+            },
+            cancellationToken);
+
     private async Task<T> ExecuteInTenantScopeAsync<T>(
         Guid tenantId,
         Func<Task<T>> action,
