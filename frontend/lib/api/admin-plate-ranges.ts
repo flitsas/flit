@@ -118,8 +118,16 @@ export function revokePlate(plateId: string): Promise<void> {
   return apiFetch(`${base}/plates/${plateId}/revoke`, { method: "POST" });
 }
 
-export function assignPlateToProcedure(instanceId: string, plate: string): Promise<unknown> {
-  return apiFetch(`${base}/procedures/${instanceId}/assign-plate`, { method: "POST", body: { plate } });
+/** HU #10800 — asigna una placa al trámite: del rango (outOfRange=false) o fuera de rango (outOfRange=true). */
+export function assignPlateToProcedure(
+  instanceId: string,
+  plate: string,
+  outOfRange = false,
+): Promise<unknown> {
+  return apiFetch(`${base}/procedures/${instanceId}/assign-plate`, {
+    method: "POST",
+    body: { plate, outOfRange },
+  });
 }
 
 export function revokeProcedurePlate(instanceId: string, reason: string): Promise<unknown> {
