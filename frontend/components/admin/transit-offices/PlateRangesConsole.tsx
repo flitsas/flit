@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   assignPlateRange,
   editPlateRange,
+  listEligibleCompanies,
   listPlateRanges,
+  type EligibleCompany,
   type PlateRangeSummary,
 } from "@/lib/api/admin-plate-ranges";
 
@@ -17,6 +19,9 @@ const emptyForm = { prefix: "", rangeFrom: "", rangeTo: "" };
 
 export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps) {
   const [companyTenantId, setCompanyTenantId] = useState("");
+  // HU #10797 — compañías elegibles del OT (preasignación activa + grant): alimentan el selector.
+  const [companies, setCompanies] = useState<EligibleCompany[]>([]);
+  const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [ranges, setRanges] = useState<PlateRangeSummary[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -27,6 +32,18 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
   const [now, setNow] = useState(0);
 
   const scope = { transitOfficeId };
+
+  // Carga las compañías elegibles al montar (una sola vez por OT).
+  useEffect(() => {
+    const controller = new AbortController();
+    listEligibleCompanies({ transitOfficeId }, controller.signal)
+      .then((data) => {
+        setCompanies(data);
+        setCompaniesLoaded(true);
+      })
+      .catch(() => setCompaniesLoaded(true));
+    return () => controller.abort();
+  }, [transitOfficeId]);
 
   async function load() {
     if (!companyTenantId.trim()) return;
@@ -85,13 +102,27 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs font-semibold">
-          Compañía (tenant id)
-          <input
+          Compañía
+          <select
             value={companyTenantId}
             onChange={(e) => setCompanyTenantId(e.target.value)}
-            placeholder="UUID de la compañía"
-            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
-          />
+            disabled={companies.length === 0}
+            aria-label="Compañía con preasignación de placa activa"
+            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60"
+          >
+            <option value="">
+              {companies.length === 0
+                ? companiesLoaded
+                  ? "No hay compañías con preasignación activa"
+                  : "Cargando compañías…"
+                : "Selecciona una compañía"}
+            </option>
+            {companies.map((c) => (
+              <option key={c.tenantId} value={c.tenantId}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </label>
         <button
           type="button"

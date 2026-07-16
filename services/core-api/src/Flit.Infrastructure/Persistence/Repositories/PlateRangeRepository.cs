@@ -67,6 +67,14 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                 };
                 _context.PlateRanges.Add(range);
 
+                // HU #10797 — EF no conoce la relación plate_range_details → plate_ranges (PlateRangeId se
+                // declara solo como Property, sin navegación ni HasForeignKey), así que NO ordena el INSERT
+                // padre-antes-de-hijo y en PostgreSQL insertaba los detalles antes que el rango, violando
+                // plate_range_details_plate_range_id_fkey. Persistimos el rango PRIMERO y luego los detalles,
+                // en la MISMA transacción (ExecuteInTenantScopeAsync) para conservar la atomicidad.
+                // (El proveedor InMemory de los tests no valida FKs, por eso el bug no se detectaba.)
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
                 foreach (var plate in plates)
                 {
                     _context.PlateRangeDetails.Add(new PlateRangeDetailEntity
@@ -193,6 +201,56 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false) ?? false;
     }
+
+    // HU #10797 — compañías elegibles para recibir un rango de este OT (alimenta el selector de la consola,
+    // en vez de escribir el tenant id): OT con allow_plate_preassign + grant vigente + preasignación activa
+    // de la compañía. Lectura cross-tenant (el OT lee nombres de otras compañías → row_security off).
+    public Task<IReadOnlyList<EligibleCompany>> ListEligibleCompaniesAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(async () =>
+        {
+            var otAllows = await _context.OtRequirements
+                .AsNoTracking()
+                .Where(r => r.TransitOfficeId == transitOfficeId)
+                .Select(r => (bool?)r.AllowPlatePreassign)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false) ?? false;
+            if (!otAllows)
+            {
+                return (IReadOnlyList<EligibleCompany>)Array.Empty<EligibleCompany>();
+            }
+
+            var grantedTenantIds = await _context.TenantTransitOfficeGrants
+                .AsNoTracking()
+                .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
+                .Select(g => g.TenantId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (grantedTenantIds.Count == 0)
+            {
+                return Array.Empty<EligibleCompany>();
+            }
+
+            var eligibleIds = await _context.TenantOperationalPolicies
+                .AsNoTracking()
+                .Where(p => grantedTenantIds.Contains(p.TenantId) && p.PlatePreassignEnabled)
+                .Select(p => p.TenantId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (eligibleIds.Count == 0)
+            {
+                return Array.Empty<EligibleCompany>();
+            }
+
+            return (IReadOnlyList<EligibleCompany>)await _context.Tenants
+                .AsNoTracking()
+                .Where(t => eligibleIds.Contains(t.Id))
+                .OrderBy(t => t.LegalName)
+                .Select(t => new EligibleCompany(t.Id, t.LegalName))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }, cancellationToken);
 
     public Task<CreatePlateRangeResult> EditRangeAsync(
         Guid rangeId,
@@ -408,6 +466,41 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                     $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
                     cancellationToken).ConfigureAwait(false);
 
+                var result = await action().ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+        }).ConfigureAwait(false);
+    }
+
+    // HU #10797 — lectura cross-tenant (el OT lee compañías de otros tenants): desactiva RLS localmente
+    // dentro de una transacción. Mismo patrón que OtClientProcedureRepository. No-op fuera de relacional.
+    private async Task<T> ExecuteCrossTenantReadAsync<T>(
+        Func<Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            return await action().ConfigureAwait(false);
+        }
+
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
+            return await action().ConfigureAwait(false);
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            var transaction = await _context.Database
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (transaction.ConfigureAwait(false))
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
                 var result = await action().ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 return result;

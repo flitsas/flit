@@ -50,6 +50,23 @@ export interface PlateScope {
   transitOfficeId?: string;
 }
 
+/** HU #10797 — compañía elegible para recibir un rango (preasignación activa + grant con el OT). */
+export interface EligibleCompany {
+  tenantId: string;
+  name: string;
+}
+
+/** Compañías elegibles del OT para el selector de asignación de rango (en vez del tenant id). */
+export function listEligibleCompanies(
+  scope?: PlateScope,
+  signal?: AbortSignal,
+): Promise<EligibleCompany[]> {
+  return apiFetch<EligibleCompany[]>(`${base}/eligible-companies`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
 function scopeQuery(companyTenantId: string, scope?: PlateScope, extra?: Record<string, string>) {
   return {
     companyTenantId,

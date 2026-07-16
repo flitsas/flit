@@ -30,6 +30,12 @@ public sealed record CreatePlateRangeResult(bool Success, string? Error, Guid? R
     public static CreatePlateRangeResult Fail(string error) => new(false, error, null, 0);
 }
 
+/// <summary>
+/// Compañía elegible para recibir un rango de placas de un OT (HU #10797): tiene la preasignación
+/// activa (<c>plate_preassign_enabled</c>) y grant vigente con el OT. Alimenta el selector de la consola.
+/// </summary>
+public sealed record EligibleCompany(Guid TenantId, string Name);
+
 /// <summary>Resultado de una operación puntual sobre una placa o rango.</summary>
 public sealed record PlateOpResult(bool Success, string? Error)
 {
@@ -70,6 +76,15 @@ public interface IPlateRangeRepository
 
     /// <summary>Resuelve el <c>transit_office_id</c> del tenant OT (perfil OT), o null si no aplica.</summary>
     Task<Guid?> ResolveOfficeIdAsync(Guid otTenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lista las compañías ELEGIBLES para recibir un rango de este OT (HU #10797): con la preasignación
+    /// activa (<c>plate_preassign_enabled</c>) y grant vigente con el OT. Vacía si el OT no tiene
+    /// <c>allow_plate_preassign</c>. Alimenta el selector de compañías de la consola (en vez del tenant id).
+    /// </summary>
+    Task<IReadOnlyList<EligibleCompany>> ListEligibleCompaniesAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// ¿Se puede operar la preasignación entre esta compañía y este OT? Exige: flag de la compañía

@@ -23,6 +23,8 @@ public static class AdminPlateRangesEndpoints
 
         group.MapGet("/", ListRangesAsync).WithName("AdminPlateListRanges");
         group.MapGet("/plates", ListPlatesAsync).WithName("AdminPlateListPlates");
+        // HU #10797 — compañías elegibles del OT para el selector de asignación de rango.
+        group.MapGet("/eligible-companies", EligibleCompaniesAsync).WithName("AdminPlateEligibleCompanies");
         group.MapPost("/", AssignRangeAsync).WithName("AdminPlateAssignRange");
         group.MapPut("/{rangeId:guid}", EditRangeAsync).WithName("AdminPlateEditRange");
         group.MapPost("/plates/{plateId:guid}/block", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
@@ -112,6 +114,24 @@ public static class AdminPlateRangesEndpoints
         var officeId = await officeTask!.ConfigureAwait(false);
         var plates = await repo.ListDetailsAsync(companyTenantId, officeId, state, ct).ConfigureAwait(false);
         return Results.Ok(plates);
+    }
+
+    // HU #10797 — lista las compañías elegibles del OT (preasignación activa + grant vigente) para el
+    // selector de la consola, en vez de que el OT escriba el tenant id manualmente.
+    private static async Task<IResult> EligibleCompaniesAsync(
+        HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
+    {
+        var explicitOffice = http.Request.Query.TryGetValue("transitOfficeId", out var raw)
+            && Guid.TryParse(raw, out var oid) ? (Guid?)oid : null;
+
+        var officeId = await ResolveOfficeIdAsync(http, explicitOffice, repo, ct).ConfigureAwait(false);
+        if (officeId is null)
+        {
+            return Results.BadRequest(new { error = "No se pudo resolver el organismo de tránsito." });
+        }
+
+        var companies = await repo.ListEligibleCompaniesAsync(officeId.Value, ct).ConfigureAwait(false);
+        return Results.Ok(companies);
     }
 
     private static async Task<IResult> AssignRangeAsync(
