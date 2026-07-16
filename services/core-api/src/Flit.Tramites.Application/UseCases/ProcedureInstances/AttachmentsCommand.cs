@@ -71,12 +71,14 @@ public static class AttachmentRules
 
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: solo <c>borrador</c>
-    /// (inmutabilidad). Excepción de la ruta de placa: la evidencia de SOAT se puede cargar en
-    /// <c>asignado</c> para desbloquear la aprobación del OT.
+    /// (inmutabilidad). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT se puede cargar
+    /// con el trámite <c>entregado</c> y el sub-estado interno de placa en <c>asignado</c>, para
+    /// desbloquear la aprobación del OT.
     /// </summary>
-    public static bool AllowsUploadInState(string status, string? tipo) =>
+    public static bool AllowsUploadInState(string status, string? plateFlowStatus, string? tipo) =>
         string.Equals(status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
-        || (string.Equals(status, TramiteEstado.Asignado, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(status, TramiteEstado.Entregado, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(plateFlowStatus, PlateFlowStatus.Asignado, StringComparison.OrdinalIgnoreCase)
             && IsSoatEvidenceTipo(tipo));
 
     /// <summary>
@@ -143,7 +145,7 @@ public sealed class UploadAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -210,7 +212,7 @@ public sealed class PresignAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -251,7 +253,7 @@ public sealed class RegisterAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();

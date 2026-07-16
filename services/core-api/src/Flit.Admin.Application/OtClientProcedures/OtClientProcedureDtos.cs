@@ -16,6 +16,9 @@ public sealed class OtClientProcedureResponse
 
     public string Status { get; init; } = string.Empty;
 
+    /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
+    public string? PlateFlowStatus { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -43,6 +46,7 @@ internal static class OtClientProcedureMapper
             ClientTenantName = procedure.ClientTenantName,
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
+            PlateFlowStatus = procedure.PlateFlowStatus,
             TransitOfficeId = procedure.TransitOfficeId,
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,

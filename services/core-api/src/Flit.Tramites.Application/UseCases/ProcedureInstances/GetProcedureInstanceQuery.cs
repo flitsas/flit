@@ -38,7 +38,11 @@ public sealed record ProcedureInstanceDetailDto(
     // validación de identidad async). Null mientras el borrador no se ha finalizado. El
     // frontend lo usa para el modo "readOnly parcial" del wizard (datos bloqueados, identidad
     // operable). Opcional (default null) para compat con consumidores que no lo lean.
-    DateTimeOffset? DraftFinalizedAt = null);
+    DateTimeOffset? DraftFinalizedAt = null,
+    // Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al Status global
+    // (que permanece en 'entregado'): null (sin ruta de placa) | 'preasignado' | 'asignado'. El frontend
+    // lo usa para el badge secundario, el panel de SOAT y las acciones del OT. Opcional (default null).
+    string? PlateFlowStatus = null);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -78,5 +82,6 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.Actors
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName))
                 .ToList(),
-            e.DraftFinalizedAt);
+            e.DraftFinalizedAt,
+            e.PlateFlowStatus);
 }

@@ -66,6 +66,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(false);
 
+        // Feature #10587 / HU #10785 — sub-estado interno de placa, ortogonal al status global
+        // (que permanece en 'entregado'). Columna agregada por migración SQL cruda (la tabla está
+        // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Nullable: null = sin ruta de placa.
+        builder.Property(x => x.PlateFlowStatus)
+            .HasColumnName("plate_flow_status")
+            .HasMaxLength(20);
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");

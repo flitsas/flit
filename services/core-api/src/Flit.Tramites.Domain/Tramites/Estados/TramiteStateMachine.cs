@@ -12,16 +12,11 @@ public static class TramiteStateMachine
         new(StringComparer.Ordinal)
         {
             [TramiteEstado.Borrador] = [TramiteEstado.Anulado, TramiteEstado.Preparado],
-            // Preparado bifurca: ruta estándar (entregado) o ruta de preasignación de placa
-            // (Feature #10587): asignado si la compañía eligió placa de un rango; preasignado si
-            // no hay rango y el trámite se envía al OT para que la asigne (Flujo B).
-            [TramiteEstado.Preparado] = [TramiteEstado.Entregado, TramiteEstado.Asignado, TramiteEstado.Preasignado],
+            // Feature #10587 / HU #10785 — la ruta de placa NO bifurca la máquina de estados: el
+            // trámite entra a la decisión del OT siempre desde 'entregado'. El progreso de placa
+            // (preasignado/asignado) es un sub-estado interno ortogonal (ver PlateFlowStateMachine).
+            [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
-            // Preasignado: el OT asigna la placa (→ asignado) o se anula.
-            [TramiteEstado.Preasignado] = [TramiteEstado.Asignado, TramiteEstado.Anulado],
-            // Asignado: tras SOAT + recepción del OT, se aprueba o rechaza (o se anula). Revocar la
-            // preasignación devuelve el trámite a preasignado para reasignar placa (Feature #10587).
-            [TramiteEstado.Asignado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Anulado, TramiteEstado.Preasignado],
             [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],

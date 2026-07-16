@@ -6,11 +6,10 @@ namespace Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 /// <summary>Aprueba un trámite entregado de un cliente OT (HU #10217 AC2 · N 03: entregado→aprobado).</summary>
 public sealed class ApproveOtClientProcedureHandler
 {
-    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
+    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot). La ruta de
+    // placa (Feature #10587 / HU #10785) NO cambia el status: el trámite siempre está 'entregado' cuando
+    // el OT decide (el progreso de placa es un sub-estado interno).
     private const string EstadoEntregado = "entregado";
-    // Feature #10587 (ruta de placa): la decisión OT también aplica sobre 'asignado'; el trámite
-    // pasa por 'entregado' (pendiente OT) y luego a la decisión final en la misma acción.
-    private const string EstadoAsignado = "asignado";
 
     private readonly IOtClientProcedureRepository _repository;
     private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
@@ -47,8 +46,7 @@ public sealed class ApproveOtClientProcedureHandler
             return ApproveOtClientProcedureResult.NotFound();
         }
 
-        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal)
-            && !string.Equals(existing.Status, EstadoAsignado, StringComparison.Ordinal))
+        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal))
         {
             return ApproveOtClientProcedureResult.InvalidState();
         }

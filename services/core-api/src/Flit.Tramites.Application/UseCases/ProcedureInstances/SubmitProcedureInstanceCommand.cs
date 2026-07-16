@@ -43,25 +43,26 @@ public sealed class SubmitProcedureInstanceHandler(
                 return (null, preparado.ErrorCode);
         }
 
-        // Feature #10587 — ruta de preasignación de placa (solo matrícula inicial con la ruta activa):
-        // Flujo A (placa elegida y reservada) → asignado; Flujo B (sin rango/placa) → preasignado.
-        // En cualquier otro caso, la ruta estándar de entrega al OT.
+        // Feature #10587 / HU #10785 — ruta de preasignación de placa (solo matrícula inicial con la
+        // ruta activa). El status SIEMPRE queda en 'entregado' (máquina de estados == develop); lo que
+        // varía es el sub-estado INTERNO de placa: Flujo A (placa elegida y reservada) → asignado;
+        // Flujo B (sin rango/placa) → preasignado; ruta estándar → null.
         var decision = await _platePolicy.DecideAsync(tenantId, id, ct).ConfigureAwait(false);
-        var (targetStatus, reason) = decision switch
+        var (plateFlowStatus, reason) = decision switch
         {
             PlateRouteDecision.Asignado => (
-                TramiteEstado.Asignado,
-                "Radicación: placa preasignada seleccionada; trámite asignado."),
+                PlateFlowStatus.Asignado,
+                "Radicación: entregado al OT; placa seleccionada (sub-estado asignado)."),
             PlateRouteDecision.Preasignado => (
-                TramiteEstado.Preasignado,
-                "Radicación: sin rango de placa disponible; enviado al OT para preasignación."),
+                PlateFlowStatus.Preasignado,
+                "Radicación: entregado al OT sin rango de placa; pendiente de asignación (sub-estado preasignado)."),
             _ => (
-                TramiteEstado.Entregado,
+                (string?)null,
                 "Radicación: trámite entregado al organismo de tránsito."),
         };
 
         var final = await lifecycle.TransitionAsync(
-            new TramiteTransitionCommand(id, tenantId, targetStatus, reason, changedBy),
+            new TramiteTransitionCommand(id, tenantId, TramiteEstado.Entregado, reason, changedBy, plateFlowStatus),
             ct).ConfigureAwait(false);
         if (!final.Success)
             return (null, final.ErrorCode);

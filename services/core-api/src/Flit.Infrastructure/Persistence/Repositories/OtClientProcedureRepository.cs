@@ -84,6 +84,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ProcedureTypeId = p.ProcedureTypeId,
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
+                                PlateFlowStatus = p.PlateFlowStatus,
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
@@ -195,8 +196,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             source,
             cancellationToken);
 
-    // La transición OT obedece la máquina de estados única sobre el estado ACTUAL del trámite: aprobar/
-    // rechazar aplican desde entregado (ruta estándar) o desde asignado (ruta de placa, Feature #10587).
+    // La decisión del OT (aprobar/rechazar) aplica SIEMPRE desde 'entregado' (máquina == develop). La ruta
+    // de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno, HU #10785).
     private async Task<OtClientProcedure?> TransitionAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -239,16 +240,26 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 var fromStatus = entity.Status;
 
                 // N 03 (ADR-0022): la decisión OT obedece la máquina de estados única sobre el estado
-                // ACTUAL (entregado→aprobado|rechazado o asignado→aprobado|rechazado); si no es válida,
-                // no transiciona.
+                // ACTUAL (entregado→aprobado|rechazado); si no es válida, no transiciona.
                 if (!TramiteStateMachine.IsValidTransition(fromStatus, targetStatus))
                 {
                     return null;
                 }
 
-                // R06 (Feature #10587) — gate DURO de SOAT en la ruta de placa: no se puede aprobar un
-                // trámite ASIGNADO con el SOAT vencido (no subsanable). unknown (0 km) no bloquea.
-                if (targetStatus == TramiteEstado.Aprobado && fromStatus == TramiteEstado.Asignado)
+                // Feature #10587 / HU #10785 — gates de la ruta de placa en la aprobación del OT. El status
+                // global es 'entregado' (máquina == develop); el sub-flujo de placa vive en plate_flow_status:
+                //  · No se puede aprobar un trámite de la ruta de placa aún en 'preasignado' (sin placa): el
+                //    OT debe registrar la placa primero (AssignPlate → asignado).
+                //  · Gate DURO de SOAT (R06): con la placa 'asignado', el SOAT debe estar VIGENTE para aprobar
+                //    (no subsanable). 'vencido'/'unknown'/null/desconocido BLOQUEAN la aprobación.
+                if (targetStatus == TramiteEstado.Aprobado
+                    && entity.PlateFlowStatus == PlateFlowStatus.Preasignado)
+                {
+                    return null;
+                }
+
+                if (targetStatus == TramiteEstado.Aprobado
+                    && entity.PlateFlowStatus == PlateFlowStatus.Asignado)
                 {
                     var soatEstado = await _context.ProcedureInstanceFieldValues
                         .AsNoTracking()
@@ -271,31 +282,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
-                // Feature #10587 — la ruta de placa entra a la decisión del OT desde 'asignado'. La acción
-                // del OT hace pasar el trámite por 'entregado' (pendiente OT) y luego a la decisión final,
-                // en la MISMA transacción: se registra el hito intermedio en el historial (asignado→
-                // entregado) y la decisión final parte de 'entregado', reusando el flujo estándar de
-                // decisión del OT. El estado del trámite salta directo al final (atómico).
+                // Feature #10587 / HU #10785 — la decisión del OT parte SIEMPRE de 'entregado' (== develop):
+                // no hay hito sintético asignado→entregado (el trámite nunca salió de 'entregado'; el
+                // progreso de placa fue un sub-estado interno).
                 var effectiveFrom = fromStatus;
-                if (fromStatus == TramiteEstado.Asignado)
-                {
-                    _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        TenantId = accessible.ClientTenantId,
-                        ProcedureInstanceId = entity.Id,
-                        FromStatus = TramiteEstado.Asignado,
-                        ToStatus = TramiteEstado.Entregado,
-                        ChangedAt = now,
-                        ChangedBy = resolvedChangedBy,
-                        Reason = "Recepción del OT (ruta de placa).",
-                        Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, source }),
-                    });
-                    effectiveFrom = TramiteEstado.Entregado;
-                }
 
                 // Feature #10587 — al aprobar un trámite de la ruta de placa, la placa reservada pasa a
-                // utilizada (terminal); al rechazar, se libera y vuelve al inventario (disponible).
+                // utilizada (terminal); al rechazar, se libera y vuelve al inventario (disponible). En ambos
+                // casos el sub-flujo de placa termina: se limpia plate_flow_status.
                 if (targetStatus == TramiteEstado.Aprobado || targetStatus == TramiteEstado.Rechazado)
                 {
                     var plateDetail = await _context.PlateRangeDetails
@@ -319,6 +313,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
                         plateDetail.UpdatedAt = now;
                     }
+
+                    entity.PlateFlowStatus = null;
                 }
 
                 // Feature #10701 — la decisión del OT (aprobar/rechazar) invalida el consolidado
@@ -368,9 +364,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             cancellationToken).ConfigureAwait(false);
     }
 
-    // HU #10654 (Feature #10587) — el OT asigna una placa a un trámite en preasignado (Flujo B):
-    // reserva la placa, la escribe en field_values (el trigger lo permite en preasignado) y
-    // transiciona preasignado→asignado, devolviendo el trámite a la compañía.
+    // HU #10654 (Feature #10587 / HU #10785) — el OT asigna una placa a un trámite de la ruta de placa en
+    // sub-estado 'preasignado' (Flujo B): reserva la placa, la escribe en field_values (el trigger lo
+    // permite con plate_flow_status='preasignado') y avanza el SUB-ESTADO preasignado→asignado. El status
+    // global permanece en 'entregado' (no hay transición de la máquina de estados).
     public async Task<OtClientProcedure?> AssignPlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -406,7 +403,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         cancellationToken)
                     .ConfigureAwait(false);
 
-                if (entity is null || entity.Status != TramiteEstado.Preasignado)
+                if (entity is null
+                    || entity.Status != TramiteEstado.Entregado
+                    || entity.PlateFlowStatus != PlateFlowStatus.Preasignado)
                 {
                     return null;
                 }
@@ -447,29 +446,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken).ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
-                entity.Status = TramiteEstado.Asignado;
+                // Sub-estado interno: preasignado→asignado. El status global NO cambia (queda 'entregado'),
+                // así que no se emite transición de la máquina de estados ni fila de historial de status
+                // (evita registrar aristas que la máquina no contempla). La trazabilidad de la placa queda
+                // en plate_range_details (reserva) y en el field_value 'plate'.
+                entity.PlateFlowStatus = PlateFlowStatus.Asignado;
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
-
-                await _transitionPublisher.EnqueueAsync(
-                    new TramiteTransitionRecord(
-                        accessible.ClientTenantId, entity.Id,
-                        TramiteEstado.Preasignado, TramiteEstado.Asignado,
-                        $"Placa {normalizedPlate} asignada por el OT.", resolvedChangedBy, now),
-                    cancellationToken).ConfigureAwait(false);
-
-                _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = accessible.ClientTenantId,
-                    ProcedureInstanceId = entity.Id,
-                    FromStatus = TramiteEstado.Preasignado,
-                    ToStatus = TramiteEstado.Asignado,
-                    ChangedAt = now,
-                    ChangedBy = resolvedChangedBy,
-                    Reason = $"Placa {normalizedPlate} asignada por el OT.",
-                    Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, plate = normalizedPlate, source }),
-                });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 var mapped = Map(entity);
@@ -479,8 +462,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             cancellationToken).ConfigureAwait(false);
     }
 
-    // HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa (preasignada→revocada)
-    // y devuelve el trámite a preasignado para reasignar (si estaba asignado).
+    // HU #10655 (Feature #10587 / HU #10785) — el OT revoca la preasignación: libera la placa
+    // (preasignada→revocada) y, si el sub-estado era 'asignado', lo devuelve a 'preasignado' para
+    // reasignar. El status global permanece 'entregado' (no hay transición de la máquina de estados).
     public async Task<OtClientProcedure?> RevokePlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -512,7 +496,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .ConfigureAwait(false);
 
                 if (entity is null
-                    || entity.Status is not (TramiteEstado.Asignado or TramiteEstado.Preasignado))
+                    || entity.Status != TramiteEstado.Entregado
+                    || entity.PlateFlowStatus is not (PlateFlowStatus.Preasignado or PlateFlowStatus.Asignado))
                 {
                     return null;
                 }
@@ -534,32 +519,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     plateDetail.UpdatedAt = now;
                 }
 
-                // Si estaba asignado, vuelve a preasignado para reasignar placa.
-                if (entity.Status == TramiteEstado.Asignado)
+                // Sub-estado interno: si estaba 'asignado', revocar lo devuelve a 'preasignado' para
+                // reasignar placa. El status global permanece 'entregado' (sin transición de la máquina).
+                if (entity.PlateFlowStatus == PlateFlowStatus.Asignado)
                 {
-                    var fromStatus = entity.Status;
-                    entity.Status = TramiteEstado.Preasignado;
+                    entity.PlateFlowStatus = PlateFlowStatus.Preasignado;
                     entity.UpdatedAt = now;
                     entity.UpdatedBy = resolvedChangedBy;
-
-                    await _transitionPublisher.EnqueueAsync(
-                        new TramiteTransitionRecord(
-                            accessible.ClientTenantId, entity.Id, fromStatus, TramiteEstado.Preasignado,
-                            reason, resolvedChangedBy, now),
-                        cancellationToken).ConfigureAwait(false);
-
-                    _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        TenantId = accessible.ClientTenantId,
-                        ProcedureInstanceId = entity.Id,
-                        FromStatus = fromStatus,
-                        ToStatus = TramiteEstado.Preasignado,
-                        ChangedAt = now,
-                        ChangedBy = resolvedChangedBy,
-                        Reason = reason,
-                        Metadata = JsonSerializer.Serialize(new { ot_tenant_id = otTenantId, revoked = true, source }),
-                    });
                 }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -596,6 +562,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         ProcedureTypeId = p.ProcedureTypeId,
                         ReferenceNumber = p.ReferenceNumber,
                         Status = p.Status,
+                        PlateFlowStatus = p.PlateFlowStatus,
                         TransitOfficeId = p.TransitOfficeId,
                         CreatedAt = p.CreatedAt,
                         SubmittedAt = p.SubmittedAt,
@@ -786,6 +753,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ProcedureTypeId = entity.ProcedureTypeId,
         ReferenceNumber = entity.ReferenceNumber,
         Status = entity.Status,
+        PlateFlowStatus = entity.PlateFlowStatus,
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,
@@ -826,6 +794,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "—"),
                 ReferenceNumber = item.ReferenceNumber,
                 Status = item.Status,
+                PlateFlowStatus = item.PlateFlowStatus,
                 TransitOfficeId = item.TransitOfficeId,
                 CreatedAt = item.CreatedAt,
                 SubmittedAt = item.SubmittedAt,

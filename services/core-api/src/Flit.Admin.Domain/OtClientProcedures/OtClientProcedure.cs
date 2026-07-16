@@ -17,6 +17,13 @@ public sealed class OtClientProcedure
 
     public string Status { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al <see cref="Status"/>
+    /// (que permanece en 'entregado'): <c>null</c> (sin ruta de placa), <c>preasignado</c> (esperando placa)
+    /// o <c>asignado</c> (placa registrada). Gobierna las acciones del OT (Asignar/Revocar placa).
+    /// </summary>
+    public string? PlateFlowStatus { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
