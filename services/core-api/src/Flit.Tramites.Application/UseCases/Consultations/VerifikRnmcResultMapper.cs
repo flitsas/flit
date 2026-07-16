@@ -53,7 +53,7 @@ public static class VerifikRnmcResultMapper
                 "Medidas correctivas (Policía)",
                 Ok,
                 Provider,
-                null);
+                "Sin medidas correctivas registradas en el RNMC");
 
         var resumen = measures
             .Select(m => m.Measure)

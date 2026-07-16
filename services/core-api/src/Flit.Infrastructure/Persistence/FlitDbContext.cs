@@ -54,6 +54,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
         Set<TenantTransitOfficeConsultationRestriction>();
 
+    // FEATURE 05 — política de bloqueo de preflight (soat/rtm/estado/fines/rnmc) por OT de la compañía.
+    public DbSet<TenantTransitOfficeBlockingPolicy> TenantTransitOfficeBlockingPolicies =>
+        Set<TenantTransitOfficeBlockingPolicy>();
+
     // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
 

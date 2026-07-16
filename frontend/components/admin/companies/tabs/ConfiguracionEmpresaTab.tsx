@@ -28,6 +28,8 @@ export interface ConfiguracionEmpresaTabProps {
   otSlot?: ReactNode;
   /** HU #10761 — refina la matriz OT: qué consultas se hacen en cada organismo. */
   otRestrictionsSlot?: ReactNode;
+  /** FEATURE 05 — qué criterios del preflight bloquean vs. solo advierten por organismo. */
+  otBlockingSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
 }
 
@@ -36,6 +38,7 @@ export function ConfiguracionEmpresaTab({
   onChange,
   otSlot,
   otRestrictionsSlot,
+  otBlockingSlot,
   fieldErrors,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
@@ -196,6 +199,13 @@ export function ConfiguracionEmpresaTab({
       {otRestrictionsSlot && (
         <div className="rounded-2xl border p-4">
           {otRestrictionsSlot}
+        </div>
+      )}
+
+      {/* FEATURE 05 — criterios de bloqueo por OT: también sobre los organismos habilitados. */}
+      {otBlockingSlot && (
+        <div className="rounded-2xl border p-4">
+          {otBlockingSlot}
         </div>
       )}
     </div>

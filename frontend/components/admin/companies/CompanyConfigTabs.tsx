@@ -35,6 +35,8 @@ export interface CompanyConfigTabsProps {
   otSlot?: ReactNode;
   /** HU #10761 — restricciones de consulta por OT (endpoint propio, fuera del PUT atómico). */
   otRestrictionsSlot?: ReactNode;
+  /** FEATURE 05 — criterios de bloqueo del preflight por OT (endpoint propio). */
+  otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
 }
@@ -45,6 +47,7 @@ export function CompanyConfigTabs({
   whitelistSlot,
   otSlot,
   otRestrictionsSlot,
+  otBlockingSlot,
   auditSlot,
   documentosSlot,
 }: CompanyConfigTabsProps) {
@@ -140,6 +143,7 @@ export function CompanyConfigTabs({
             onChange={patch}
             otSlot={otSlot}
             otRestrictionsSlot={otRestrictionsSlot}
+            otBlockingSlot={otBlockingSlot}
             fieldErrors={fieldErrors}
           />
         )}

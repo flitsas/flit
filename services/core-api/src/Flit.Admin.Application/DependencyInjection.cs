@@ -13,6 +13,7 @@ using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
@@ -20,6 +21,7 @@ using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
 using Flit.Admin.Application.Companies.VehicleOwnership;
@@ -131,6 +133,11 @@ public static class DependencyInjection
         // IOtConsultationRestrictionRepository se registra en AddAdminInfrastructure.
         services.AddScoped<GetOtConsultationRestrictionsHandler>();
         services.AddScoped<SetOtConsultationRestrictionHandler>();
+
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT.
+        // IOtBlockingPolicyRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<GetOtBlockingPoliciesHandler>();
+        services.AddScoped<SetOtBlockingPolicyHandler>();
 
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
         // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.

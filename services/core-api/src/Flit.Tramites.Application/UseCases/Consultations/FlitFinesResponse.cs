@@ -37,12 +37,37 @@ public sealed class FlitFinesMulta
     [JsonPropertyName("estadoComparendo")]
     public string? EstadoComparendo { get; set; }
 
+    /// <summary>
+    /// Estado de CARTERA (cobro). En la respuesta viva el comparendo escalado a resolución llega con
+    /// <c>estadoComparendo=null</c> pero <c>estadoCartera="Pendiente de pago"</c>: indicador real de deuda.
+    /// </summary>
+    [JsonPropertyName("estadoCartera")]
+    public string? EstadoCartera { get; set; }
+
     /// <summary>Llega como texto ("742730"); AllowReadingFromString lo convierte.</summary>
     [JsonPropertyName("valorPagar")]
     public decimal? ValorPagar { get; set; }
 
     [JsonPropertyName("numeroComparendo")]
     public string? NumeroComparendo { get; set; }
+
+    [JsonPropertyName("fechaComparendo")]
+    public string? FechaComparendo { get; set; }
+
+    [JsonPropertyName("organismoTransito")]
+    public string? OrganismoTransito { get; set; }
+
+    [JsonPropertyName("infracciones")]
+    public List<FlitFinesInfraccion>? Infracciones { get; set; }
+}
+
+public sealed class FlitFinesInfraccion
+{
+    [JsonPropertyName("codigoInfraccion")]
+    public string? CodigoInfraccion { get; set; }
+
+    [JsonPropertyName("descripcionInfraccion")]
+    public string? DescripcionInfraccion { get; set; }
 }
 
 public sealed class FlitFinesAcuerdoPago

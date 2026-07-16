@@ -44,16 +44,26 @@ internal sealed class ConsultationRestrictionPolicy : IConsultationRestrictionPo
             return ConsultationRestrictions.None;
         }
 
-        var disabled = await _restrictions
-            .ListDisabledKindsAsync(tenantId, office, cancellationToken)
+        var rows = await _restrictions
+            .ListForOfficeAsync(tenantId, office, cancellationToken)
             .ConfigureAwait(false);
 
-        if (disabled.Count == 0)
+        if (rows.Count == 0)
         {
             return ConsultationRestrictions.None;
         }
 
-        return ConsultationRestrictions.From(disabled.Select(Translate).OfType<string>());
+        // Traduce cada fila (kind Admin → kind Trámites) conservando su estado enabled. Un kind que
+        // Trámites no sepa interpretar se descarta (no se cuela como ajuste silencioso).
+        var settings = new List<KeyValuePair<string, bool>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var kind = Translate(row.ConsultationKind);
+            if (kind is not null)
+                settings.Add(new KeyValuePair<string, bool>(kind, row.Enabled));
+        }
+
+        return ConsultationRestrictions.FromSettings(settings);
     }
 
     /// <summary>

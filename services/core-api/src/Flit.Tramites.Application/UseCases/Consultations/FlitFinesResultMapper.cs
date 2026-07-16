@@ -21,6 +21,12 @@ public static class FlitFinesResultMapper
     /// </summary>
     private const string EstadoPendiente = "Pendiente";
 
+    /// <summary>
+    /// Estado de CARTERA que cuenta como deuda. En la respuesta viva el comparendo escalado a
+    /// resolución trae <c>estadoComparendo=null</c> pero <c>estadoCartera="Pendiente de pago"</c>.
+    /// </summary>
+    private const string CarteraPendiente = "Pendiente de pago";
+
     public static ConsultationResult Map(FlitFinesResponse? response)
     {
         var checks = new List<ConsultationCheck>
@@ -40,10 +46,52 @@ public static class FlitFinesResultMapper
         // Conteo e importe SIEMPRE desde el detalle: los agregados de esta fuente mienten
         // (totalMultasPagar trae la cantidad, no el monto). Ver doc de FlitFinesResponse.
         var pendientes = data.Multas
-            .Where(m => string.Equals(m.EstadoComparendo, EstadoPendiente, StringComparison.OrdinalIgnoreCase))
+            .Where(EsPendiente)
             .ToList();
 
-        return FinesCheckFactory.Multas(Provider, pendientes.Count, pendientes.Sum(m => m.ValorPagar ?? 0));
+        var detalle = pendientes.Select(ToFineDetail).ToList();
+        return FinesCheckFactory.Multas(Provider, pendientes.Count, pendientes.Sum(m => m.ValorPagar ?? 0), detalle);
+    }
+
+    /// <summary>
+    /// Pendiente si <c>estadoComparendo=="Pendiente"</c> (forma documentada) O
+    /// <c>estadoCartera=="Pendiente de pago"</c> (forma viva, comparendo en cobro). "Pendiente Curso"
+    /// (curso pedagógico, sin deuda) sigue sin contar.
+    /// </summary>
+    private static bool EsPendiente(FlitFinesMulta m) =>
+        string.Equals(m.EstadoComparendo, EstadoPendiente, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(m.EstadoCartera, CarteraPendiente, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Comparendo → <see cref="FineDetail"/>. Solo datos del comparendo (número, fecha, valor,
+    /// organismo, estado e infracción); nunca los del infractor (PII / Habeas Data).
+    /// </summary>
+    private static FineDetail ToFineDetail(FlitFinesMulta m) => new(
+        m.NumeroComparendo,
+        LimpiarFecha(m.FechaComparendo),
+        m.ValorPagar,
+        m.OrganismoTransito,
+        string.IsNullOrWhiteSpace(m.EstadoComparendo) ? m.EstadoCartera : m.EstadoComparendo,
+        DescribeInfracciones(m.Infracciones));
+
+    /// <summary>La fecha llega como "26/01/2025 00:00:00"; se deja solo la fecha (antes del espacio).</summary>
+    private static string? LimpiarFecha(string? fecha)
+    {
+        if (string.IsNullOrWhiteSpace(fecha))
+            return null;
+        var idx = fecha.IndexOf(' ');
+        return idx > 0 ? fecha[..idx] : fecha;
+    }
+
+    /// <summary>Une las descripciones de las infracciones del comparendo en una sola línea legible.</summary>
+    private static string? DescribeInfracciones(List<FlitFinesInfraccion>? infracciones)
+    {
+        var descripciones = (infracciones ?? [])
+            .Select(i => string.IsNullOrWhiteSpace(i.DescripcionInfraccion) ? i.CodigoInfraccion : i.DescripcionInfraccion)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .ToList();
+
+        return descripciones.Count == 0 ? null : string.Join("; ", descripciones);
     }
 
     private static ConsultationCheck MapAcuerdosPago(FlitFinesResponse? data)

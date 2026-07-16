@@ -419,20 +419,44 @@ public sealed class FurHandlerTests
         };
 
     /// <summary>
-    /// Snapshot de preflight con los checks indicados, serializados como los persiste el preflight real.
+    /// Snapshot de preflight con los checks indicados. FEATURE 05 — el certificado RNMC ya no lee del
+    /// snapshot sino del field_value <c>rnmc_checks</c>: este helper además lo siembra con los mismos
+    /// checks (con <c>createdAt</c> como fecha de consulta), para que el certificado se genere igual.
     /// </summary>
     private static ProcedureInstancePreflightSnapshot Snapshot(
-        ProcedureInstance instance, DateTimeOffset createdAt, params PreflightCheckDto[] checks) =>
-        new()
+        ProcedureInstance instance, DateTimeOffset createdAt, params PreflightCheckDto[] checks)
+    {
+        var json = JsonSerializer.Serialize(checks);
+        var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == "rnmc_checks");
+        if (existing is not null)
+        {
+            existing.ValueJson = json;
+        }
+        else
+        {
+            instance.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = instance.TenantId,
+                ProcedureInstanceId = instance.Id,
+                FieldKey = "rnmc_checks",
+                ValueJson = json,
+                Source = "system",
+                CreatedAt = createdAt,
+            });
+        }
+
+        return new ProcedureInstancePreflightSnapshot
         {
             Id = Guid.NewGuid(),
             TenantId = instance.TenantId,
             ProcedureInstanceId = instance.Id,
             Overall = "green",
-            Checks = JsonSerializer.Serialize(checks),
+            Checks = json,
             Provider = "verifik_rnmc",
             CreatedAt = createdAt,
         };
+    }
 
     [Fact]
     public async Task Generar_SinSnapshotPreflight_NoGeneraCertificadoRnmc()

@@ -12,11 +12,22 @@ import { ApiValidationError } from "@/lib/api/types";
 // ausencia de fila se resuelve como PERMITIDA. Al alternar se hace PUT con UI optimista
 // y rollback ante error (AC4).
 
-/** Consultas restringibles, en orden de presentación. `vehicle` queda fuera (rompe el FUR). */
+/** Consultas por OT, en orden de presentación. `vehicle` queda fuera (rompe el FUR). */
 const KINDS: { kind: ConsultationRestrictionKind; label: string }[] = [
   { kind: "rnmc", label: "RNMC (medidas correctivas)" },
   { kind: "fines", label: "Comparendos (SIMIT)" },
 ];
+
+/**
+ * Default de cada consulta cuando no hay fila configurada (tabla dispersa). Semántica por tipo:
+ * comparendos es OPT-OUT (se consulta salvo que lo apagues); RNMC es OPT-IN (no corre hasta que lo
+ * enciendas para ese OT — recién ahí se consulta, se pide la fecha de expedición y se genera el
+ * certificado). Debe coincidir con el backend (ConsultationRestrictions.SettingOf).
+ */
+const KIND_DEFAULT: Record<ConsultationRestrictionKind, boolean> = {
+  rnmc: false,
+  fines: true,
+};
 
 export interface OTConsultationRestrictionsMatrixProps {
   /** Solo los OT habilitados para la compañía: son los únicos restringibles (AC2). */
@@ -63,7 +74,7 @@ export function OTConsultationRestrictionsMatrix({
     next: boolean,
   ) => {
     const cellKey = key(office.id, kind);
-    const previous = state.get(cellKey) ?? true;
+    const previous = state.get(cellKey) ?? KIND_DEFAULT[kind];
 
     // UI optimista.
     setState((current) => new Map(current).set(cellKey, next));
@@ -94,9 +105,10 @@ export function OTConsultationRestrictionsMatrix({
       <div>
         <h4 className="text-sm font-semibold">Consultas por Organismo de Tránsito</h4>
         <p className="mt-0.5 max-w-2xl text-[11px] opacity-60">
-          Define qué se consulta en cada organismo habilitado. Al inhabilitar una consulta, el
-          trámite hacia ese organismo la omitirá y lo indicará en el pre-vuelo; no impide crear el
-          trámite. Los cambios se guardan al instante; no requieren «Guardar todo».
+          Define qué se consulta en cada organismo habilitado. <strong>RNMC</strong> se consulta solo
+          si lo activas aquí (recién entonces se pide la fecha de expedición y se genera el
+          certificado); <strong>Comparendos</strong> se consulta por defecto salvo que lo desactives.
+          Nada de esto impide crear el trámite. Los cambios se guardan al instante.
         </p>
       </div>
 
@@ -146,7 +158,7 @@ export function OTConsultationRestrictionsMatrix({
                         key={kind}
                         id={`restriction-${office.id}-${kind}`}
                         label={label}
-                        checked={state.get(cellKey) ?? true}
+                        checked={state.get(cellKey) ?? KIND_DEFAULT[kind]}
                         disabled={pending.has(cellKey)}
                         onChange={(checked) => void handleToggle(office, kind, label, checked)}
                       />

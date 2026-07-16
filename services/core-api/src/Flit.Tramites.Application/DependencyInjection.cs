@@ -72,6 +72,10 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
+
+        // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
+        services.AddScoped<RunRnmcConsultHandler>();
+        services.AddScoped<GetRnmcHandler>();
         services.AddScoped<GetWizardStateHandler>();
         // HU #10478 — proveedor de consulta resuelto por tenant, para adaptar la UI del wizard.
         services.AddScoped<UseCases.Consultations.GetConsultationConfigHandler>();

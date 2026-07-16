@@ -152,6 +152,38 @@ public sealed class FlitFinesConsultationProviderTests
     }
 
     [Fact]
+    public async Task ConsultAsync_EstadoCarteraPendienteDePago_CuentaYAdjuntaDetalle()
+    {
+        // Forma viva: comparendo escalado a resolución (estadoComparendo=null, estadoCartera=
+        // "Pendiente de pago") con datos ricos. Debe contar como pendiente y adjuntar el detalle.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new CapturingHandler(
+            """
+            {"multas":[{
+              "estadoComparendo":null,
+              "estadoCartera":"Pendiente de pago",
+              "valorPagar":"657182",
+              "numeroComparendo":"05001000000044805008",
+              "fechaComparendo":"26/01/2025 00:00:00",
+              "organismoTransito":"Medellin",
+              "infracciones":[{"codigoInfraccion":"C29","descripcionInfraccion":"Exceso de velocidad"}]
+            }],"acuerdosPago":[]}
+            """);
+
+        var result = await BuildProvider("real", handler).ConsultAsync(Ctx(), ct);
+
+        var multas = Check(result, FinesCheckFactory.KeyMultas);
+        multas.Status.Should().Be("warn");
+        multas.Details.Should().ContainSingle();
+        multas.Details![0].Numero.Should().Be("05001000000044805008");
+        multas.Details[0].Valor.Should().Be(657_182m);
+        multas.Details[0].Organismo.Should().Be("Medellin");
+        multas.Details[0].Estado.Should().Be("Pendiente de pago");
+        multas.Details[0].Fecha.Should().Be("26/01/2025");
+        multas.Details[0].Infraccion.Should().Be("Exceso de velocidad");
+    }
+
+    [Fact]
     public async Task ConsultAsync_ConAcuerdoDePago_DevuelveWarnConClaveDistintaDeMultas()
     {
         var ct = TestContext.Current.CancellationToken;

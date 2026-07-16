@@ -23,9 +23,17 @@ public static class VerifikSimitResultMapper
     /// </summary>
     private const string EstadoPendiente = "Pendiente";
 
+    /// <summary>
+    /// Estado de CARTERA que cuenta como comparendo con deuda. En la respuesta viva de Verifik el
+    /// comparendo escalado a resolución trae <c>estadoComparendo=null</c> pero
+    /// <c>estadoCartera="Pendiente de pago"</c>: sin este criterio, una multa real no se detectaría.
+    /// </summary>
+    private const string CarteraPendiente = "Pendiente de pago";
+
     public static ConsultationResult Map(VerifikSimitResponse response)
     {
-        var data = response.Value?.Value?.Data;
+        // Acepta el envoltorio documentado (value.value.data) y el plano de la API viva (data al top).
+        var data = response.Value?.Value?.Data ?? response.Data;
 
         var checks = new List<ConsultationCheck>
         {
@@ -43,10 +51,55 @@ public static class VerifikSimitResultMapper
             return FinesCheckFactory.SinDatos(Provider, FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas);
 
         var pendientes = (data.Multas ?? [])
-            .Where(m => string.Equals(m.EstadoComparendo, EstadoPendiente, StringComparison.OrdinalIgnoreCase))
+            .Where(EsPendiente)
             .ToList();
 
-        return FinesCheckFactory.Multas(Provider, pendientes.Count, pendientes.Sum(m => m.ValorPagar ?? 0));
+        var detalle = pendientes.Select(ToFineDetail).ToList();
+        return FinesCheckFactory.Multas(Provider, pendientes.Count, pendientes.Sum(m => m.ValorPagar ?? 0), detalle);
+    }
+
+    /// <summary>
+    /// Un comparendo cuenta como pendiente si su <c>estadoComparendo</c> es "Pendiente" (forma
+    /// documentada) O su <c>estadoCartera</c> es "Pendiente de pago" (forma viva, comparendo en cobro).
+    /// "Pendiente Curso" (curso pedagógico, sin deuda) sigue sin contar.
+    /// </summary>
+    private static bool EsPendiente(VerifikSimitMulta m) =>
+        string.Equals(m.EstadoComparendo, EstadoPendiente, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(m.EstadoCartera, CarteraPendiente, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Comparendo SIMIT → <see cref="FineDetail"/>. Solo datos del comparendo (número, fecha, valor,
+    /// organismo, estado e infracción); nunca los del infractor (PII / Habeas Data).
+    /// </summary>
+    private static FineDetail ToFineDetail(VerifikSimitMulta m) => new(
+        m.NumeroComparendo,
+        LimpiarFecha(m.FechaComparendo),
+        m.ValorPagar ?? m.Valor,
+        m.OrganismoTransito,
+        // estadoComparendo puede venir null en la respuesta viva; se cae a estadoCartera para el display.
+        string.IsNullOrWhiteSpace(m.EstadoComparendo) ? m.EstadoCartera : m.EstadoComparendo,
+        DescribeInfracciones(m.Infracciones));
+
+    /// <summary>La fecha viva llega como "26/01/2025 00:00:00"; se deja solo la fecha (antes del espacio).</summary>
+    private static string? LimpiarFecha(string? fecha)
+    {
+        if (string.IsNullOrWhiteSpace(fecha))
+            return null;
+        var idx = fecha.IndexOf(' ');
+        return idx > 0 ? fecha[..idx] : fecha;
+    }
+
+    /// <summary>Une las descripciones de las infracciones del comparendo en una sola línea legible.</summary>
+    private static string? DescribeInfracciones(List<VerifikSimitInfraccion>? infracciones)
+    {
+        var descripciones = (infracciones ?? [])
+            .Select(i => string.IsNullOrWhiteSpace(i.DescripcionInfraccion)
+                ? i.CodigoInfraccion
+                : i.DescripcionInfraccion)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .ToList();
+
+        return descripciones.Count == 0 ? null : string.Join("; ", descripciones);
     }
 
     private static ConsultationCheck MapAcuerdosPago(VerifikSimitData? data)

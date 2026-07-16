@@ -4,21 +4,40 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// Consultas que la compañía inhabilitó para el OT destino del trámite (HU #10760). Conjunto
 /// case-insensitive de <see cref="ConsultationRestrictionKinds"/>; vacío = nada restringido.
 /// </summary>
-public sealed record ConsultationRestrictions(IReadOnlySet<string> DisabledKinds)
+public sealed record ConsultationRestrictions(IReadOnlyDictionary<string, bool> Settings)
 {
-    /// <summary>Sin restricciones: el default permisivo (tabla dispersa, ausencia de fila = permitido).</summary>
+    /// <summary>Sin filas configuradas: tabla dispersa, ausencia de fila = sin ajuste explícito.</summary>
     public static readonly ConsultationRestrictions None =
-        new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        new(new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Construye el conjunto normalizado a partir de los kinds crudos de la BD, garantizando la
-    /// comparación case-insensitive que <see cref="IsDisabled"/> asume (el ctor primario acepta
-    /// cualquier <see cref="IReadOnlySet{T}"/>, que podría venir con otro comparador).
+    /// Construye desde los ajustes explícitos por kind (kind → enabled) de la BD, normalizando a
+    /// comparación case-insensitive. Cada fila representa una decisión EXPLÍCITA de la compañía:
+    /// <c>enabled=true</c> = consultar, <c>enabled=false</c> = no consultar.
     /// </summary>
-    public static ConsultationRestrictions From(IEnumerable<string> disabledKinds) =>
-        new(new HashSet<string>(disabledKinds, StringComparer.OrdinalIgnoreCase));
+    public static ConsultationRestrictions FromSettings(IEnumerable<KeyValuePair<string, bool>> settings)
+    {
+        var map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (kind, enabled) in settings)
+            map[kind] = enabled;
+        return map.Count == 0 ? None : new ConsultationRestrictions(map);
+    }
 
-    public bool IsDisabled(string kind) => DisabledKinds.Contains(kind);
+    /// <summary>Compat: construye a partir solo de los kinds inhabilitados (<c>enabled=false</c>).</summary>
+    public static ConsultationRestrictions From(IEnumerable<string> disabledKinds) =>
+        FromSettings(disabledKinds.Select(k => new KeyValuePair<string, bool>(k, false)));
+
+    /// <summary>Kinds inhabilitados explícitamente (fila con <c>enabled=false</c>).</summary>
+    public IEnumerable<string> DisabledKinds => Settings.Where(kv => !kv.Value).Select(kv => kv.Key);
+
+    /// <summary>¿El kind está inhabilitado (opt-out) por una fila explícita <c>enabled=false</c>?</summary>
+    public bool IsDisabled(string kind) => Settings.TryGetValue(kind, out var enabled) && !enabled;
+
+    /// <summary>
+    /// Ajuste EXPLÍCITO de la compañía para el kind: <c>true</c> consultar, <c>false</c> no consultar,
+    /// <c>null</c> si no hay fila. Lo consume el RNMC como opt-in por compañía+OT (FEATURE 05).
+    /// </summary>
+    public bool? SettingOf(string kind) => Settings.TryGetValue(kind, out var enabled) ? enabled : null;
 }
 
 /// <summary>

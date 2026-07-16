@@ -159,6 +159,81 @@ public sealed class VerifikSimitResultMapperTests
     }
 
     [Fact]
+    public void MultaPendiente_AdjuntaDetalleDelComparendo()
+    {
+        // El check de multas lleva el detalle line-by-line del comparendo (número, valor, organismo,
+        // estado e infracción) para pintarlo bajo la advertencia. Sin datos del infractor (Habeas Data).
+        var multa = new VerifikSimitMulta
+        {
+            Placa = "RDL805",
+            ValorPagar = 344_730m,
+            EstadoComparendo = "Pendiente",
+            NumeroComparendo = "25612001000012662173",
+            FechaComparendo = "2024-05-01",
+            OrganismoTransito = "STRIA TTOyTTE MCPAL SABANETA",
+            Infracciones = [new VerifikSimitInfraccion { CodigoInfraccion = "C35", DescripcionInfraccion = "Semáforo en rojo" }],
+        };
+
+        var detalle = Check(VerifikSimitResultMapper.Map(Response(multas: [multa])), "multas").Details;
+
+        detalle.Should().ContainSingle();
+        detalle![0].Numero.Should().Be("25612001000012662173");
+        detalle[0].Valor.Should().Be(344_730m);
+        detalle[0].Organismo.Should().Be("STRIA TTOyTTE MCPAL SABANETA");
+        detalle[0].Estado.Should().Be("Pendiente");
+        detalle[0].Infraccion.Should().Be("Semáforo en rojo");
+    }
+
+    [Fact]
+    public void SinMultas_NoAdjuntaDetalle()
+    {
+        // Check ok (sin pendientes) → sin detalle: nada que listar.
+        Check(VerifikSimitResultMapper.Map(Response()), "multas").Details.Should().BeNull();
+    }
+
+    [Fact]
+    public void EnvoltorioPlano_DataAlTop_SeParsea()
+    {
+        // La API viva entrega { data, ... } plano (sin value.value). El mapper debe leerlo igual.
+        var response = new VerifikSimitResponse
+        {
+            Data = new VerifikSimitData { Multas = [MultaPendiente()], AcuerdosPago = [] },
+        };
+
+        var result = VerifikSimitResultMapper.Map(response);
+
+        Check(result, "multas").Status.Should().Be("warn");
+        result.Overall.Should().Be("yellow");
+    }
+
+    [Fact]
+    public void MultaConEstadoCarteraPendienteDePago_CuentaComoPendiente()
+    {
+        // Comparendo escalado a resolución: estadoComparendo=null pero estadoCartera="Pendiente de
+        // pago" (forma viva). Debe contar como pendiente y adjuntar su detalle.
+        var multa = new VerifikSimitMulta
+        {
+            EstadoComparendo = null,
+            EstadoCartera = "Pendiente de pago",
+            ValorPagar = 657_182m,
+            NumeroComparendo = "05001000000044805008",
+            FechaComparendo = "26/01/2025 00:00:00",
+            OrganismoTransito = "Medellin",
+            Infracciones = [new VerifikSimitInfraccion { CodigoInfraccion = "C29", DescripcionInfraccion = "Exceso de velocidad" }],
+        };
+
+        var check = Check(VerifikSimitResultMapper.Map(Response(multas: [multa])), "multas");
+
+        check.Status.Should().Be("warn");
+        check.Details.Should().ContainSingle();
+        check.Details![0].Numero.Should().Be("05001000000044805008");
+        check.Details[0].Valor.Should().Be(657_182m);
+        check.Details[0].Estado.Should().Be("Pendiente de pago");
+        check.Details[0].Fecha.Should().Be("26/01/2025"); // sin la hora
+        check.Details[0].Infraccion.Should().Be("Exceso de velocidad");
+    }
+
+    [Fact]
     public void DoubleNesting_ValueValueData_EsRequeridoParaAccederDatos()
     {
         // Verifica que el mapper consume exactamente value.value.data (doble envoltorio).

@@ -94,19 +94,19 @@ describe("OTConsultationRestrictionsPanel (HU #10761)", () => {
     expect(screen.queryByText(/Medellín/i)).not.toBeInTheDocument();
   });
 
-  // Semántica dispersa: sin fila ⇒ permitida.
-  it("trata la ausencia de fila como consulta habilitada", async () => {
-    arrange(["o1"], [{ transitOfficeId: "o1", consultationKind: "fines", enabled: false }]);
+  // Default por tipo: RNMC es opt-in (off), comparendos es opt-out (on).
+  it("aplica el default por tipo cuando no hay fila (RNMC off, comparendos on)", async () => {
+    arrange(["o1"], []);
     render(<OTConsultationRestrictionsPanel tenantId={TENANT} />);
 
     await screen.findByText(/Secretaría de Movilidad Bogotá/i);
-    // Sin fila para rnmc → habilitada; la fila explícita de fines → inhabilitada.
-    expect(toggleOf("o1", /RNMC/i)).toBeChecked();
-    expect(toggleOf("o1", /Comparendos/i)).not.toBeChecked();
+    // Sin fila: RNMC no corre hasta activarlo (opt-in); comparendos se consulta por defecto.
+    expect(toggleOf("o1", /RNMC/i)).not.toBeChecked();
+    expect(toggleOf("o1", /Comparendos/i)).toBeChecked();
   });
 
-  // AC1 — cambiar una restricción se guarda.
-  it("persiste el cambio al inhabilitar una consulta", async () => {
+  // AC1 — activar RNMC (opt-in) se guarda con enabled=true.
+  it("persiste al activar RNMC (opt-in) con enabled=true", async () => {
     const user = userEvent.setup();
     arrange(["o1"]);
     vi.mocked(setOtConsultationRestriction).mockResolvedValue(undefined);
@@ -116,9 +116,9 @@ describe("OTConsultationRestrictionsPanel (HU #10761)", () => {
     await user.click(toggleOf("o1", /RNMC/i));
 
     await waitFor(() =>
-      expect(setOtConsultationRestriction).toHaveBeenCalledWith(TENANT, "o1", "rnmc", false),
+      expect(setOtConsultationRestriction).toHaveBeenCalledWith(TENANT, "o1", "rnmc", true),
     );
-    expect(toggleOf("o1", /RNMC/i)).not.toBeChecked();
+    expect(toggleOf("o1", /RNMC/i)).toBeChecked();
   });
 
   // AC4 — error al guardar: el control vuelve a su estado anterior + aviso.

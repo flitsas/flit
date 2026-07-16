@@ -24,6 +24,16 @@ public interface IOtConsultationRestrictionRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lista TODAS las filas de restricción del tenant para un OT puntual (con su <c>enabled</c>),
+    /// no solo las inhabilitadas. La necesita el RNMC, cuyo ajuste por compañía+OT es un opt-in
+    /// (una fila con <c>enabled=true</c> es una decisión EXPLÍCITA de consultar, no el default).
+    /// </summary>
+    Task<IReadOnlyList<OtConsultationRestrictionItem>> ListForOfficeAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Fija el estado deseado (<paramref name="enabled"/>) de <paramref name="consultationKind"/>
     /// para el par (tenant, OT). Idempotente: si la fila ya tiene ese mismo estado, no hace
     /// nada y no audita; si el estado cambia (o la fila no existía), persiste el upsert y

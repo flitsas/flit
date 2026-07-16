@@ -40,13 +40,19 @@ public static class FinesCheckFactory
 
     /// <summary>
     /// Check de multas. Sin pendientes → <c>ok</c>. Con pendientes → <c>warn</c> (AC5: advierte,
-    /// no bloquea la creación).
+    /// no bloquea la creación). <paramref name="detalle"/> (opcional) lleva la lista de comparendos
+    /// pendientes para pintarla bajo la advertencia; solo se adjunta cuando hay pendientes.
     /// </summary>
-    public static ConsultationCheck Multas(string provider, int pendientes, decimal totalPagar) =>
+    public static ConsultationCheck Multas(
+        string provider,
+        int pendientes,
+        decimal totalPagar,
+        IReadOnlyList<FineDetail>? detalle = null) =>
         pendientes <= 0
             ? new ConsultationCheck(KeyMultas, LabelMultas, Ok, provider, null)
             : new ConsultationCheck(KeyMultas, LabelMultas, Warn, provider,
-                $"{pendientes} multa(s) pendiente(s) por ${totalPagar:N0} COP");
+                $"{pendientes} multa(s) pendiente(s) por ${totalPagar:N0} COP",
+                detalle is { Count: > 0 } ? detalle : null);
 
     /// <summary>Check de acuerdos de pago. Sin acuerdos activos → <c>ok</c>; con acuerdos → <c>warn</c>.</summary>
     public static ConsultationCheck Acuerdos(string provider, int activos, decimal pendiente) =>

@@ -6,6 +6,7 @@
 
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
+  FineDetail,
   PreflightCheckStatus,
   PreflightSnapshot,
 } from '@/lib/api/types/procedure-runtime';
@@ -77,6 +78,54 @@ export function checkRoleSuffix(key: string): string {
   if (key.startsWith('rnmc_comprador')) return ' (comprador)';
   if (key.startsWith('rnmc_vendedor')) return ' (vendedor)';
   return '';
+}
+
+/** Formatea un valor en pesos colombianos (sin decimales). Null/NaN → cadena vacía. */
+function formatCOP(valor: number | null | undefined): string {
+  if (valor == null || Number.isNaN(valor)) return '';
+  return `$${Math.round(valor).toLocaleString('es-CO')} COP`;
+}
+
+/**
+ * Detalle de los comparendos/multas de un check, listado bajo su advertencia. Cada fila muestra lo
+ * que la fuente expone (número, fecha, organismo, infracción, estado y valor); los campos ausentes
+ * se omiten. Nunca incluye datos del infractor (Habeas Data).
+ */
+export function FineDetailList({ details }: { details: FineDetail[] }) {
+  if (details.length === 0) return null;
+  return (
+    <ul className="mt-1.5 space-y-1.5" aria-label="Detalle de comparendos">
+      {details.map((d, i) => {
+        const valor = formatCOP(d.valor);
+        return (
+          <li
+            key={d.numero ?? `comparendo-${i}`}
+            className="rounded-lg px-2.5 py-1.5"
+            style={{ background: 'rgba(249,172,0,0.10)', border: '1px solid rgba(249,172,0,0.25)' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span className="text-[11px] font-semibold">
+                {d.numero ? `Comparendo ${d.numero}` : 'Comparendo'}
+              </span>
+              {valor && (
+                <span className="text-[11px] font-bold" style={{ color: '#B47800' }}>
+                  {valor}
+                </span>
+              )}
+            </div>
+            {d.infraccion && (
+              <p className="mt-0.5 text-[10px] opacity-80">{d.infraccion}</p>
+            )}
+            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] opacity-60">
+              {d.fecha && <span>Fecha: {d.fecha}</span>}
+              {d.organismo && <span>· {d.organismo}</span>}
+              {d.estado && <span>· {d.estado}</span>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function PreflightPanel({
@@ -253,7 +302,7 @@ export function PreflightPanel({
           <p className="text-xs font-bold" style={{ color: '#F9AC00' }}>
             Advertencias del pre-vuelo
           </p>
-          <ul className="mt-1.5 space-y-1">
+          <ul className="mt-1.5 space-y-2">
             {warnChecks.map((c) => (
               <li key={c.key} className="text-[11px]">
                 <span className="font-semibold">
@@ -261,6 +310,9 @@ export function PreflightPanel({
                   {checkRoleSuffix(c.key)}
                 </span>
                 {c.message && <span className="opacity-70"> — {c.message}</span>}
+                {c.details && c.details.length > 0 && (
+                  <FineDetailList details={c.details} />
+                )}
               </li>
             ))}
           </ul>

@@ -145,6 +145,11 @@ public static class AdminInfrastructureExtensions
         // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
         services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
 
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
+        // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
+        services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
+
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();

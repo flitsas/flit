@@ -59,6 +59,19 @@ internal sealed class OtConsultationRestrictionRepository : IOtConsultationRestr
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<OtConsultationRestrictionItem>> ListForOfficeAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.TenantTransitOfficeConsultationRestrictions
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.TransitOfficeId == transitOfficeId)
+            .Select(r => new OtConsultationRestrictionItem(r.TransitOfficeId, r.ConsultationKind, r.Enabled))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public Task SetAsync(
         Guid tenantId,
         Guid transitOfficeId,

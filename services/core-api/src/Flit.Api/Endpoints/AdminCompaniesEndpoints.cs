@@ -8,10 +8,12 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
@@ -189,6 +191,34 @@ public static class AdminCompaniesEndpoints
                 + "puntual de la compañía. Idempotente: reenviar el mismo estado no duplica auditoría. 422 si "
                 + "el OT no existe, no está habilitado para la compañía, o el tipo de consulta no es "
                 + "restringible. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // GET /api/v1/admin/companies/{tenantId}/ot-blocking-policies — políticas de bloqueo de
+        // preflight (soat/rtm/estado_vehiculo/fines/rnmc) por OT de la compañía (FEATURE 05).
+        group.MapGet("/{tenantId:guid}/ot-blocking-policies", GetOtBlockingPoliciesAsync)
+            .WithName("AdminCompanyGetOtBlockingPolicies")
+            .WithSummary("Lista las políticas de bloqueo de preflight por OT del tenant")
+            .WithDescription("Retorna las filas de política configuradas explícitamente (tabla dispersa: "
+                + "ausencia de fila = default del criterio). Requiere SuperAdmin.")
+            .Produces<IReadOnlyList<OtBlockingPolicyResponse>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // PUT /api/v1/admin/companies/{tenantId}/ot-blocking-policies/{transitOfficeId}/{criterion}
+        // — fija si un criterio del preflight bloquea (rojo) o solo advierte (amarillo) para un OT
+        // puntual de la compañía (FEATURE 05). PUT idempotente: transporta el estado deseado.
+        group.MapPut(
+                "/{tenantId:guid}/ot-blocking-policies/{transitOfficeId:guid}/{criterion}",
+                SetOtBlockingPolicyAsync)
+            .WithName("AdminCompanySetOtBlockingPolicy")
+            .WithSummary("Fija el carácter bloqueante de un criterio del preflight por OT")
+            .WithDescription("Marca un criterio (soat|rtm|estado_vehiculo|fines|rnmc) como bloqueante o "
+                + "informativo para un Organismo de Tránsito puntual de la compañía. Idempotente: reenviar "
+                + "el mismo estado no duplica auditoría. 422 si el OT no existe, no está habilitado para la "
+                + "compañía, o el criterio no es configurable. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -492,6 +522,45 @@ public static class AdminCompaniesEndpoints
                 statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
+    private static async Task<IResult> GetOtBlockingPoliciesAsync(
+        Guid tenantId,
+        [FromServices] GetOtBlockingPoliciesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetOtBlockingPoliciesQuery { TenantId = tenantId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SetOtBlockingPolicyAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        string criterion,
+        SetOtBlockingPolicyRequest request,
+        HttpContext httpContext,
+        [FromServices] SetOtBlockingPolicyHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetOtBlockingPolicyCommand
+        {
+            TenantId = tenantId,
+            TransitOfficeId = transitOfficeId,
+            Criterion = criterion,
+            Blocks = request.Blocks,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.NoContent()
+            : Results.Json(
+                new OtBlockingPolicyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {
         var raw = user.FindFirst("sub")?.Value
@@ -521,4 +590,8 @@ public static class AdminCompaniesEndpoints
     /// <summary>Cuerpo de error 422 de restricción de consulta: <c>{ errors: [{ field, message, value }] }</c>.</summary>
     private sealed record OtConsultationRestrictionValidationErrorResponse(
         IReadOnlyList<OtConsultationRestrictionValidationError> Errors);
+
+    /// <summary>Cuerpo de error 422 de política de bloqueo: <c>{ errors: [{ field, message, value }] }</c>.</summary>
+    private sealed record OtBlockingPolicyValidationErrorResponse(
+        IReadOnlyList<OtBlockingPolicyValidationError> Errors);
 }

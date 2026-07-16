@@ -201,4 +201,48 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     render(<PreflightPanel snapshot={snap([])} {...baseProps} />);
     expect(screen.queryByText('Advertencias del pre-vuelo')).not.toBeInTheDocument();
   });
+
+  it('lista el detalle de cada comparendo bajo la advertencia de multas', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'yellow',
+          createdAt: '2026-07-07T00:00:00Z',
+          checks: [
+            {
+              key: 'simit_comprador_multas',
+              label: 'Multas SIMIT',
+              status: 'warn',
+              source: 'verifik_simit',
+              message: '2 multa(s) pendiente(s) por $544.730 COP',
+              details: [
+                {
+                  numero: '25612001000012662173',
+                  fecha: '2024-05-01',
+                  valor: 344730,
+                  organismo: 'STRIA TTOyTTE MCPAL SABANETA',
+                  estado: 'Pendiente',
+                  infraccion: 'Semáforo en rojo',
+                },
+                {
+                  numero: '25612001000099999999',
+                  valor: 200000,
+                  estado: 'Pendiente',
+                },
+              ],
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+    const detalle = screen.getByRole('list', { name: 'Detalle de comparendos' });
+    expect(detalle).toHaveTextContent('Comparendo 25612001000012662173');
+    expect(detalle).toHaveTextContent('Semáforo en rojo');
+    expect(detalle).toHaveTextContent('STRIA TTOyTTE MCPAL SABANETA');
+    expect(detalle).toHaveTextContent('2024-05-01');
+    // Formateo COP de ambos valores.
+    expect(detalle).toHaveTextContent('$344.730 COP');
+    expect(detalle).toHaveTextContent('$200.000 COP');
+  });
 });

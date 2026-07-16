@@ -151,7 +151,7 @@ public sealed class GenerarFurHandler(
         // HU #10762 — Certificado RNMC: si el preflight consultó el RNMC de alguna parte, emitir el
         // certificado (PDF, Source=system) con el resultado por parte para que se descargue del trámite y
         // se fusione en el consolidado. Best-effort: nunca bloquea el FUR.
-        var (certificadoRnmc, aplicaRnmc) = await TryGenerateRnmcCertificateAsync(instance, tenantId, ct);
+        var (certificadoRnmc, aplicaRnmc) = TryGenerateRnmcCertificate(instance);
         if (certificadoRnmc is not null)
         {
             generated.Add(certificadoRnmc);
@@ -381,17 +381,17 @@ public sealed class GenerarFurHandler(
     /// <c>Aplica</c> distingue "el RNMC no aplica a este trámite" (⇒ el caller retira el certificado previo)
     /// de "aplicaba pero la generación falló" (⇒ se conserva el previo, que sigue siendo válido).
     /// </returns>
-    private async Task<(GeneratedDocument? Doc, bool Aplica)> TryGenerateRnmcCertificateAsync(
-        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    private (GeneratedDocument? Doc, bool Aplica) TryGenerateRnmcCertificate(ProcedureInstance instance)
     {
         try
         {
-            var snapshot = await repo.GetLatestPreflightAsync(instance.Id, tenantId, ct);
-            if (snapshot is null)
-                return (null, false);
+            // FEATURE 05 — el resultado RNMC ya no vive en el snapshot del pre-vuelo, sino en el
+            // field_value `rnmc_checks` que escribe la consulta RNMC dedicada del paso final.
+            var fvRnmc = instance.FieldValues
+                .FirstOrDefault(f => string.Equals(f.FieldKey, RunRnmcConsultHandler.FieldRnmcChecks, StringComparison.Ordinal));
 
-            var checks = GetPreflightHandler.DeserializeChecks(snapshot.Checks)
-                .Where(c => c.Key.StartsWith("rnmc_", StringComparison.Ordinal))
+            var checks = GetPreflightHandler.DeserializeChecks(fvRnmc?.ValueJson)
+                .Where(c => c.Key.EndsWith("medidas_correctivas", StringComparison.Ordinal))
                 .ToList();
             if (checks.Count == 0)
                 return (null, false);
@@ -410,17 +410,14 @@ public sealed class GenerarFurHandler(
                     check.Message));
             }
 
+            var consultadoAt = fvRnmc?.UpdatedAt ?? fvRnmc?.CreatedAt ?? DateTimeOffset.UtcNow;
             var data = new RnmcCertificateData(
                 instance.Id,
                 instance.ReferenceNumber,
-                snapshot.CreatedAt,
+                consultadoAt,
                 entradas);
 
             return (rnmcGenerator.GenerateRnmcCertificate(data), true);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
         }
         catch (Exception ex)
         {

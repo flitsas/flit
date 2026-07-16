@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -108,6 +109,70 @@ public sealed class WizardStateHandlerTests
     private void Setup(ProcedureInstance instance) =>
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(),
             Arg.Any<CancellationToken>()).Returns(instance);
+
+    /// <summary>Stub de exigibilidad RNMC por OT (para probar el flag que muestra la fecha de expedición).</summary>
+    private sealed class StubRnmcPolicy(bool required) : IRnmcRequirementPolicy
+    {
+        public Task<bool> IsRnmcRequiredAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(required);
+    }
+
+    /// <summary>Stub de restricciones con ajustes explícitos por kind (para el opt-in RNMC de la compañía).</summary>
+    private sealed class StubRestrictionPolicy(params (string kind, bool enabled)[] settings) : IConsultationRestrictionPolicy
+    {
+        public Task<ConsultationRestrictions> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConsultationRestrictions.FromSettings(
+                settings.Select(s => new KeyValuePair<string, bool>(s.kind, s.enabled))));
+    }
+
+    // ── FEATURE 05 — RnmcEnabled controla la visibilidad de la fecha de expedición ──
+
+    [Fact] // El OT exige RNMC → RnmcEnabled=true (el frontend muestra la fecha de expedición).
+    public async Task Get_RnmcExigidoPorOt_RnmcEnabledTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(_repo, rnmcPolicy: new StubRnmcPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeTrue();
+    }
+
+    [Fact] // Default (OT no exige RNMC) → RnmcEnabled=false (la fecha de expedición se oculta).
+    public async Task Get_RnmcNoExigido_RnmcEnabledFalse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(_repo, rnmcPolicy: new StubRnmcPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeFalse();
+    }
+
+    [Fact] // FEATURE 05 — la compañía activa RNMC (opt-in) → RnmcEnabled=true aunque el OT no lo exija.
+    public async Task Get_RnmcActivadoPorCompania_RnmcEnabledTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            rnmcPolicy: new StubRnmcPolicy(required: false),
+            restrictionPolicy: new StubRestrictionPolicy((ConsultationRestrictionKinds.Rnmc, true)));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeTrue();
+    }
 
     // ── 404 ──────────────────────────────────────────────────────────────────
 
