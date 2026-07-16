@@ -196,8 +196,7 @@ export function MandatarioFormPanel({
                       {reason && (
                         <span
                           id={`ms-company-${company.companyTenantId}-reason`}
-                          className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                          style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
+                          className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-[#FF4E00]/10 text-[#FF4E00]"
                         >
                           {reason}
                         </span>

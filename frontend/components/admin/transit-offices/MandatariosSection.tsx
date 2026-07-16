@@ -140,33 +140,32 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
       >
         <table className="w-full border-separate border-spacing-y-2 text-xs">
           <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-              <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+              <th className="rounded-l-xl px-4 py-2.5 bg-muted">
                 Mandatario
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Documento
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Compañías
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <th className="px-4 py-2.5 bg-muted">
                 Huella
               </th>
-              <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+              <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
                 Acciones
               </th>
             </tr>
           </thead>
           <tbody>
             {signers.map((signer) => (
-              <tr key={signer.id} className="bg-white dark:bg-[#0B0F14]">
+              <tr key={signer.id} className="bg-card">
                 <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
                   <span className="font-semibold">{signer.fullName}</span>
                   {!signer.isActive && (
                     <span
-                      className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                      style={{ color: "#6b7280", borderColor: "#d1d5db", background: "#f3f4f6" }}
+                      className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-muted text-muted-foreground"
                     >
                       Inactivo
                     </span>

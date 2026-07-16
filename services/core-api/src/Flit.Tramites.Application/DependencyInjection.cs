@@ -126,6 +126,9 @@ public static class DependencyInjection
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
+        // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
+        services.AddScoped<GetAttachmentPreviewUrlHandler>();
+        services.AddScoped<GenerarConsolidadoMaestroHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();

@@ -68,6 +68,10 @@ public sealed class GenerarRuesAttachmentHandlerTests
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
     private ProcedureInstance InstanceConNit(bool conActorNit = true, string status = TramiteEstado.Borrador)
