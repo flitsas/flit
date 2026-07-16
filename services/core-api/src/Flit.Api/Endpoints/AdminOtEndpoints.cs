@@ -197,6 +197,39 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
+            .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
+            .WithName("AdminOtListClientProcedureDocuments")
+            .WithSummary("Lista los adjuntos del trámite de un cliente OT (sin binarios, con flags de consolidado)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/preview-url", GetClientProcedureDocumentPreviewUrlAsync)
+            .WithName("AdminOtGetClientProcedureDocumentPreviewUrl")
+            .WithSummary("Obtiene la URL de previsualización inline de un adjunto del trámite de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/download", DownloadClientProcedureDocumentAsync)
+            .WithName("AdminOtDownloadClientProcedureDocument")
+            .WithSummary("Descarga el binario de un adjunto del trámite de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("/client-procedures/{id:guid}/attachments", UploadClientProcedureLicenciaTransitoAsync)
             .WithName("AdminOtUploadClientProcedureLicenciaTransito")
             .WithSummary("Adjunta la Licencia de Tránsito (LT) al trámite de un cliente OT")
@@ -1064,6 +1097,165 @@ public static class AdminOtEndpoints
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
             _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+        };
+    }
+
+    // ── Consolidado Maestro OT (Feature #10701 / HU #10706) ─────────────────────────────────────
+
+    private static async Task<IResult> GenerateClientProcedureConsolidadoMaestroAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var guardResult = await quipuxReadOnlyGuard
+            .ValidateActionAsync(tenantId, "generar_consolidado_maestro", cancellationToken)
+            .ConfigureAwait(false);
+        if (!guardResult.IsAllowed)
+            return Results.Json(new { error = "QUIPUX_READONLY" }, statusCode: StatusCodes.Status403Forbidden);
+
+        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            async () =>
+            {
+                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
+                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
+                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
+                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
+                IReadOnlyList<string> precedencia;
+                try
+                {
+                    var matriz = await matrixResolver
+                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    precedencia = matriz.Select(m => m.Codigo).ToList();
+                }
+                catch
+                {
+                    precedencia = [];
+                }
+
+                return await handler
+                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
+            "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
+            "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
+            _ => Results.Ok(result),
+        };
+    }
+
+    // ── Documentos y preview inline del trámite de cliente OT (Feature #10701 / HU #10704) ────────
+
+    private static async Task<IResult> ListClientProcedureDocumentsAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (error is "not_found")
+            return Results.NotFound(new { error = "Trámite no encontrado" });
+
+        var docs = attachments!.Attachments;
+        var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+
+        return Results.Ok(new
+        {
+            data = docs,
+            consolidado = hasConsolidado,
+            consolidado_maestro = hasConsolidadoMaestro,
+        });
+    }
+
+    private static async Task<IResult> GetClientProcedureDocumentPreviewUrlAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GetAttachmentPreviewUrlHandler previewHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (previewResult, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => previewHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = previewResult!.Url, expiresAt = previewResult.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> DownloadClientProcedureDocumentAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.DownloadAttachmentHandler downloadHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (download, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => downloadHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "file_missing" => Results.NotFound(new { error = "file_missing" }),
+            _ => Results.File(download!.Content, download.Mimetype, download.Filename),
         };
     }
 

@@ -198,7 +198,7 @@ export function CreateTransitOfficeTenantDialog({
                 value={transitOfficeId}
                 onChange={(e) => setTransitOfficeId(e.target.value)}
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-                style={{ borderColor: errors.transitOfficeId ? "#FF4E00" : "#DFE5ED" }}
+                style={{ borderColor: errors.transitOfficeId ? "#FF4E00" : undefined }}
               >
                 <option value="">Selecciona una oficina…</option>
                 {availableOffices.map((office) => (
@@ -218,7 +218,7 @@ export function CreateTransitOfficeTenantDialog({
               onChange={(e) => setLegalName(sanitizeName(e.target.value))}
               maxLength={255}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-              style={{ borderColor: errors.legalName ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.legalName ? "#FF4E00" : undefined }}
             />
           </Field>
 
@@ -231,7 +231,7 @@ export function CreateTransitOfficeTenantDialog({
               maxLength={20}
               placeholder="900123456-1"
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-              style={{ borderColor: errors.taxId ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.taxId ? "#FF4E00" : undefined }}
             />
           </Field>
 
@@ -248,7 +248,7 @@ export function CreateTransitOfficeTenantDialog({
               onChange={(e) => setCode(sanitizeTenantCode(e.target.value))}
               maxLength={32}
               className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-              style={{ borderColor: errors.code ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.code ? "#FF4E00" : undefined }}
             />
           </Field>
 

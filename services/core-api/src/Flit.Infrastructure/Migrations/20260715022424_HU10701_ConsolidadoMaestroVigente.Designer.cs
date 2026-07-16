@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260715022424_HU10701_ConsolidadoMaestroVigente")]
+    partial class HU10701_ConsolidadoMaestroVigente
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -671,146 +674,6 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("ot_webhook_subscriptions", "admin");
                 });
 
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.PlateRangeDetailEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Plate")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("plate");
-
-                    b.Property<Guid>("PlateRangeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("plate_range_id");
-
-                    b.Property<Guid?>("ProcedureInstanceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("procedure_instance_id");
-
-                    b.Property<DateTimeOffset?>("ReservedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reserved_at");
-
-                    b.Property<long>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(0L)
-                        .HasColumnName("row_version");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("disponible")
-                        .HasColumnName("state");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<Guid>("TransitOfficeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("transit_office_id");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("used_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_plate_range_details");
-
-                    b.HasIndex("TenantId", "State")
-                        .HasDatabaseName("ix_plate_range_details_tenant_state");
-
-                    b.HasIndex("TransitOfficeId", "Plate")
-                        .IsUnique()
-                        .HasDatabaseName("uq_plate_range_details_office_plate");
-
-                    b.ToTable("plate_range_details", "admin");
-                });
-
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.PlateRangeEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTimeOffset>("EditableUntil")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("editable_until");
-
-                    b.Property<string>("Prefix")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("prefix");
-
-                    b.Property<int>("RangeFrom")
-                        .HasColumnType("integer")
-                        .HasColumnName("range_from");
-
-                    b.Property<int>("RangeTo")
-                        .HasColumnType("integer")
-                        .HasColumnName("range_to");
-
-                    b.Property<long>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(0L)
-                        .HasColumnName("row_version");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<Guid>("TransitOfficeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("transit_office_id");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id")
-                        .HasName("pk_plate_ranges");
-
-                    b.HasIndex("TenantId", "TransitOfficeId")
-                        .HasDatabaseName("ix_plate_ranges_tenant_office");
-
-                    b.ToTable("plate_ranges", "admin");
-                });
-
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantConfigAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -905,13 +768,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("allow_misc_new_vehicles");
 
-                    b.Property<string>("AvaluoProviderConfig")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("avaluo_provider_config")
-                        .HasDefaultValueSql("'{}'");
-
                     b.Property<string>("ConsultationProviderConfig")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -926,13 +782,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<string>("FinesQuerySource")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("external")
-                        .HasColumnName("fines_query_source");
 
                     b.Property<string>("NotificationChannel")
                         .IsRequired()
@@ -962,12 +811,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payment_methods")
                         .HasDefaultValueSql("'[]'");
-
-                    b.Property<bool>("PlatePreassignEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("plate_preassign_enabled");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -2626,40 +2469,6 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Flit.Tramites.Domain.Entities.AvaluoMockValue", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<string>("MatchKey")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("match_key");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("source");
-
-                    b.Property<decimal>("ValueCop")
-                        .HasColumnType("numeric(15,2)")
-                        .HasColumnName("value_cop");
-
-                    b.HasKey("Id")
-                        .HasName("pk_avaluo_mock_values");
-
-                    b.HasIndex("MatchKey", "Source")
-                        .IsUnique()
-                        .HasDatabaseName("uq_avaluo_mock");
-
-                    b.ToTable("avaluo_mock_values", "tramites");
-                });
-
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ConformationRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3818,15 +3627,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
 
-                    b.Property<string>("SuggestedSource")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("suggested_source");
-
-                    b.Property<decimal?>("SuggestedValue")
-                        .HasColumnType("numeric(15,2)")
-                        .HasColumnName("suggested_value");
-
                     b.Property<decimal?>("TasaImpuesto")
                         .HasColumnType("numeric(7,4)")
                         .HasColumnName("tasa_impuesto");
@@ -3842,11 +3642,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<decimal?>("ValorVenta")
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("valor_venta");
-
-                    b.Property<string>("ValueOrigin")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("value_origin");
 
                     b.HasKey("Id")
                         .HasName("pk_procedure_instance_commercial");

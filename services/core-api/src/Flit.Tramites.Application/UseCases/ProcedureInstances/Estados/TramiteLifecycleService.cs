@@ -130,6 +130,10 @@ public sealed class TramiteLifecycleService(
         if (command.ToStatus == TramiteEstado.Entregado)
             instance.SubmittedAt = now;
 
+        // Feature #10701 — un cambio de estado invalida el consolidado maestro persistido: el
+        // expediente cambió, así que el próximo "Ver consolidado" debe regenerarlo antes de mostrarlo.
+        instance.ConsolidadoMaestroVigente = false;
+
         var record = new TramiteTransitionRecord(
             command.TenantId,
             instance.Id,

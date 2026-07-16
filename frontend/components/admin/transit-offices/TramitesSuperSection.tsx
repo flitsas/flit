@@ -279,7 +279,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
 
       {operationalFlags.length > 0 && (
         <div
-          className="rounded-2xl border bg-white p-4"
+          className="rounded-2xl border bg-card p-4"
           aria-labelledby={`${tabsId}-flags-heading`}
         >
           <h3 id={`${tabsId}-flags-heading`} className="mb-3 text-xs font-bold">
@@ -310,11 +310,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-selected={activePanel === "dashboard"}
           aria-controls={`${tabsId}-panel-dashboard`}
           tabIndex={activePanel === "dashboard" ? 0 : -1}
-          className="rounded-xl px-4 py-2 text-xs font-semibold"
-          style={{
-            background: activePanel === "dashboard" ? "#557EFF" : "#F4F7FC",
-            color: activePanel === "dashboard" ? "#FFFFFF" : "#162744",
-          }}
+          className={`rounded-xl px-4 py-2 text-xs font-semibold ${
+            activePanel === "dashboard" ? "bg-[#557EFF] text-white" : "bg-muted text-foreground"
+          }`}
           onClick={() => setActivePanel("dashboard")}
           onKeyDown={(e) => handleTabKeyDown(e, "dashboard")}
         >
@@ -327,11 +325,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-selected={activePanel === "quipux"}
           aria-controls={`${tabsId}-panel-quipux`}
           tabIndex={activePanel === "quipux" ? 0 : -1}
-          className="rounded-xl px-4 py-2 text-xs font-semibold"
-          style={{
-            background: activePanel === "quipux" ? "#557EFF" : "#F4F7FC",
-            color: activePanel === "quipux" ? "#FFFFFF" : "#162744",
-          }}
+          className={`rounded-xl px-4 py-2 text-xs font-semibold ${
+            activePanel === "quipux" ? "bg-[#557EFF] text-white" : "bg-muted text-foreground"
+          }`}
           onClick={() => setActivePanel("quipux")}
           onKeyDown={(e) => handleTabKeyDown(e, "quipux")}
         >
@@ -344,7 +340,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         id={`${tabsId}-panel-dashboard`}
         aria-labelledby={`${tabsId}-tab-dashboard`}
         hidden={activePanel !== "dashboard"}
-        className="rounded-2xl border bg-white p-4"
+        className="rounded-2xl border bg-card p-4"
       >
         <UiStateBoundary
           status={listStatus}
@@ -370,7 +366,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         id={`${tabsId}-panel-quipux`}
         aria-labelledby={`${tabsId}-tab-quipux`}
         hidden={activePanel !== "quipux"}
-        className="rounded-2xl border bg-white p-4"
+        className="rounded-2xl border bg-card p-4"
       >
         <UiStateBoundary
           status={listStatus}
@@ -399,10 +395,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-label="Confirmar aprobación"
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-            style={{ border: "1px solid #DFE5ED" }}
+            className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl"
           >
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+            <h2 className="text-lg font-semibold text-foreground">
               ¿Aprobar este trámite?
             </h2>
             <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
@@ -410,7 +405,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
                 onClick={() => setApproveTarget(null)}
                 disabled={acting}
               >
@@ -438,10 +432,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-label="Rechazar trámite"
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
-            style={{ border: "1px solid #DFE5ED" }}
+            className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl"
           >
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>
+            <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
             <textarea
@@ -454,7 +447,6 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                style={{ borderColor: "#DFE5ED" }}
                 onClick={() => setRejectTarget(null)}
                 disabled={acting}
               >

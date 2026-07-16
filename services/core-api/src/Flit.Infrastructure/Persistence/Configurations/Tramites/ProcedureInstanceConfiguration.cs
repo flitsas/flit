@@ -58,6 +58,14 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(x => new { x.TenantId, x.Prioritario, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_prioritario");
 
+        // Feature #10701 — vigencia del consolidado maestro. Columna agregada por migración SQL
+        // cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea para el modelo EF. La baja
+        // a false cualquier transición de estado o el adjuntar la LT; la sube a true la generación.
+        builder.Property(x => x.ConsolidadoMaestroVigente)
+            .HasColumnName("consolidado_maestro_vigente")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");
