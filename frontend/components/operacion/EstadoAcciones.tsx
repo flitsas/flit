@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import {
+  estadoChipStyle,
+  estadoLabel,
+  plateFlowChipStyle,
+  plateFlowLabel,
+} from '@/lib/tramites/estados';
+import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
 
 /**
  * N 03 — acciones de transición de estado del trámite en el detalle. El backend manda:
@@ -35,6 +41,9 @@ export function EstadoAcciones({
   onChanged?: () => void;
 }) {
   const [status, setStatus] = useState<string | null>(null);
+  // Feature #10587 / HU #10785 — sub-estado interno de placa (ortogonal al status; el trámite sigue
+  // en 'entregado'). Gobierna el badge secundario y el panel de SOAT.
+  const [plateFlowStatus, setPlateFlowStatus] = useState<PlateFlowStatus | null>(null);
   const [allowed, setAllowed] = useState<string[]>([]);
   const [pending, setPending] = useState<AccionConfig | null>(null);
   const [motivo, setMotivo] = useState('');
@@ -62,6 +71,7 @@ export function EstadoAcciones({
       .then((d) => {
         if (!active) return;
         setSoatEstado(d?.fieldValues?.find((f) => f.fieldKey === 'soat_estado')?.valueText ?? null);
+        setPlateFlowStatus(d?.plateFlowStatus ?? null);
       })
       .catch(() => {});
     return () => {
@@ -158,6 +168,22 @@ export function EstadoAcciones({
         >
           {estadoLabel(status)}
         </span>
+        {plateFlowChipStyle(plateFlowStatus) ? (
+          <span
+            title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
+            style={{
+              background: plateFlowChipStyle(plateFlowStatus)!.bg,
+              color: plateFlowChipStyle(plateFlowStatus)!.color,
+              border: `1px solid ${plateFlowChipStyle(plateFlowStatus)!.border}`,
+              borderRadius: 999,
+              padding: '2px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {plateFlowLabel(plateFlowStatus)}
+          </span>
+        ) : null}
         {acciones.map((a) => (
           <button
             key={a.toStatus}
@@ -184,7 +210,7 @@ export function EstadoAcciones({
         ))}
       </div>
 
-      {status === 'asignado' ? (
+      {plateFlowStatus === 'asignado' ? (
         <div className="flex flex-col gap-3 rounded-xl border p-4">
           <div>
             <p className="m-0 text-sm font-semibold text-slate-700">

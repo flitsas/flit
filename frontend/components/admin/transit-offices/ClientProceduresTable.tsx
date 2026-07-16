@@ -6,6 +6,7 @@ import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -99,10 +100,25 @@ export function ClientProceduresTable({
                 {row.clientTenantName ?? row.clientTenantId}
               </td>
               <td className="border-y px-4 py-3">
-                <OtStatusBadge
-                  label={formatOtProcedureStatus(row.status)}
-                  tone={procedureStatusTone(row.status)}
-                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <OtStatusBadge
+                    label={formatOtProcedureStatus(row.status)}
+                    tone={procedureStatusTone(row.status)}
+                  />
+                  {plateFlowChipStyle(row.plateFlowStatus) && (
+                    <span
+                      title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
+                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
+                        color: plateFlowChipStyle(row.plateFlowStatus)!.color,
+                        border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
+                      }}
+                    >
+                      {plateFlowLabel(row.plateFlowStatus)}
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
@@ -121,7 +137,9 @@ export function ClientProceduresTable({
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
-                  {(row.status === "entregado" || row.status === "asignado") && showApprovalActions && (
+                  {row.status === "entregado" &&
+                    row.plateFlowStatus !== "preasignado" &&
+                    showApprovalActions && (
                     <RowActions
                       actions={[
                         {
@@ -139,8 +157,9 @@ export function ClientProceduresTable({
                       ]}
                     />
                   )}
-                  {/* Feature #10587 — ruta de placa: asignar (preasignado) y revocar (preasignado/asignado). */}
-                  {row.status === "preasignado" && showApprovalActions && onAssignPlate && (
+                  {/* Feature #10587 / HU #10785 — la ruta de placa vive en plate_flow_status (el status
+                      permanece 'entregado'): asignar (preasignado) y revocar (preasignado/asignado). */}
+                  {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
                     <button
                       type="button"
                       className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
@@ -150,7 +169,7 @@ export function ClientProceduresTable({
                       Asignar placa
                     </button>
                   )}
-                  {(row.status === "preasignado" || row.status === "asignado") &&
+                  {(row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
                     showApprovalActions &&
                     onRevoke && (
                       <button

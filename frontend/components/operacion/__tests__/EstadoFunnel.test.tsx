@@ -7,8 +7,6 @@ const counts = {
   borrador: 5,
   preparado: 2,
   entregado: 3,
-  preasignado: 4,
-  asignado: 6,
   aprobado: 7,
   rechazado: 1,
   anulado: 0,
@@ -21,13 +19,14 @@ describe('EstadoFunnel', () => {
     expect(borrador).toBeInTheDocument();
     expect(borrador.textContent).toContain('5');
     expect(screen.getByRole('button', { name: 'Aprobado' }).textContent).toContain('7');
-    // Los 8 estados de negocio están presentes (incluye la ruta de preasignación de placa).
-    for (const label of ['Borrador', 'Preparado', 'Entregado', 'Preasignado', 'Asignado', 'Aprobado', 'Rechazado', 'Anulado']) {
+    // HU #10785: los 6 estados de negocio (== develop); la ruta de placa NO añade tarjetas (su
+    // progreso es un sub-estado interno que vive bajo 'entregado').
+    for (const label of ['Borrador', 'Preparado', 'Entregado', 'Aprobado', 'Rechazado', 'Anulado']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
-    // Feature #10587: los estados de placa muestran su conteo.
-    expect(screen.getByRole('button', { name: 'Preasignado' }).textContent).toContain('4');
-    expect(screen.getByRole('button', { name: 'Asignado' }).textContent).toContain('6');
+    // preasignado/asignado ya no son tarjetas del funnel.
+    expect(screen.queryByRole('button', { name: 'Preasignado' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Asignado' })).toBeNull();
   });
 
   it('al hacer clic en un estado inactivo lo selecciona como filtro', () => {

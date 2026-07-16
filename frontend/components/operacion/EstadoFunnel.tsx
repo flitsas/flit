@@ -17,13 +17,12 @@ import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 
 // Orden de embudo (ciclo de vida): borrador → preparado → entregado → aprobado,
 // con los desenlaces (rechazado/anulado) al final.
+// La ruta de placa (Feature #10587 / HU #10785) NO añade tarjetas: su progreso es un sub-estado
+// interno que vive bajo 'entregado' (se muestra como badge secundario en la fila, no en el funnel).
 const FUNNEL_ORDER: EstadoTramite[] = [
   'borrador',
   'preparado',
   'entregado',
-  // Ruta de preasignación de placa (Feature #10587).
-  'preasignado',
-  'asignado',
   'aprobado',
   'rechazado',
   'anulado',

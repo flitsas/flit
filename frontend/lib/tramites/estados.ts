@@ -10,18 +10,13 @@ export type EstadoTramite =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado'
-  // Ruta de preasignación de placa (Feature #10587, matrícula inicial).
-  | 'preasignado'
-  | 'asignado';
+  | 'rechazado';
 
 export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'borrador',
   'anulado',
   'preparado',
   'entregado',
-  'preasignado',
-  'asignado',
   'aprobado',
   'rechazado',
 ] as const;
@@ -34,8 +29,6 @@ export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   anulado: 'Anulado',
   preparado: 'Preparado',
   entregado: 'Entregado',
-  preasignado: 'Preasignado',
-  asignado: 'Asignado',
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
 };
@@ -62,17 +55,6 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     bg: 'rgba(85,126,255,0.12)',
     color: '#557eff',
     border: 'rgba(85,126,255,0.3)',
-  },
-  // Preasignación de placa (Feature #10587): preasignado = en cola del OT (cian); asignado = con placa (índigo).
-  preasignado: {
-    bg: 'rgba(6,182,212,0.12)',
-    color: '#0e7490',
-    border: 'rgba(6,182,212,0.3)',
-  },
-  asignado: {
-    bg: 'rgba(99,102,241,0.12)',
-    color: '#4f46e5',
-    border: 'rgba(99,102,241,0.3)',
   },
   aprobado: {
     bg: 'rgba(34,197,94,0.12)',
@@ -114,4 +96,47 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
     color: '#475569',
     border: 'rgba(100,116,139,0.3)',
   };
+}
+
+/**
+ * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL al estado del
+ * trámite: mientras avanza, el trámite permanece en `entregado`. Se muestra como un badge secundario
+ * junto al chip de estado. `null` = trámite sin ruta de placa.
+ */
+export type PlateFlowStatus = 'preasignado' | 'asignado';
+
+export const PLATE_FLOW_STATUSES: readonly PlateFlowStatus[] = ['preasignado', 'asignado'] as const;
+
+/** Etiqueta del badge secundario (describe el progreso de la placa, no el estado del trámite). */
+export const PLATE_FLOW_LABELS: Record<PlateFlowStatus, string> = {
+  preasignado: 'En cola del OT',
+  asignado: 'Con placa',
+};
+
+/** Colores del badge de sub-estado: preasignado = cian (en cola del OT); asignado = índigo (con placa). */
+export const PLATE_FLOW_CHIP_STYLES: Record<PlateFlowStatus, EstadoChipStyle> = {
+  preasignado: {
+    bg: 'rgba(6,182,212,0.12)',
+    color: '#0e7490',
+    border: 'rgba(6,182,212,0.3)',
+  },
+  asignado: {
+    bg: 'rgba(99,102,241,0.12)',
+    color: '#4f46e5',
+    border: 'rgba(99,102,241,0.3)',
+  },
+};
+
+export function esPlateFlowStatus(value: string | null | undefined): value is PlateFlowStatus {
+  return !!value && (PLATE_FLOW_STATUSES as readonly string[]).includes(value);
+}
+
+/** Label del badge de sub-estado de placa; `null` si el trámite no está en la ruta de placa. */
+export function plateFlowLabel(value: string | null | undefined): string | null {
+  return esPlateFlowStatus(value) ? PLATE_FLOW_LABELS[value] : null;
+}
+
+/** Estilo del badge de sub-estado de placa; `null` si el trámite no está en la ruta de placa. */
+export function plateFlowChipStyle(value: string | null | undefined): EstadoChipStyle | null {
+  return esPlateFlowStatus(value) ? PLATE_FLOW_CHIP_STYLES[value] : null;
 }

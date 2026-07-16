@@ -47,6 +47,12 @@ export interface OtClientProcedure {
   clientTenantName?: string;
   referenceNumber: string;
   status: string;
+  /**
+   * Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa (null | preasignado |
+   * asignado), ortogonal al status (que permanece en 'entregado'). Gobierna las acciones del OT
+   * (Asignar / Revocar placa) y el badge secundario de la bandeja.
+   */
+  plateFlowStatus?: string | null;
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;

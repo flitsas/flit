@@ -191,8 +191,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setActing(true);
     try {
       await assignPlateToProcedure(assignTarget.id, plateInput.trim().toUpperCase());
+      // HU #10785 — el status global permanece 'entregado'; avanza el sub-estado interno de placa.
       setRows((prev) =>
-        prev.map((r) => (r.id === assignTarget.id ? { ...r, status: "asignado" } : r)),
+        prev.map((r) => (r.id === assignTarget.id ? { ...r, plateFlowStatus: "asignado" } : r)),
       );
       setAssignTarget(null);
       setPlateInput("");
@@ -209,8 +210,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setActing(true);
     try {
       await revokeProcedurePlate(revokeTarget.id, revokePlateReason.trim());
+      // HU #10785 — el status global permanece 'entregado'; el sub-estado vuelve a 'preasignado'.
       setRows((prev) =>
-        prev.map((r) => (r.id === revokeTarget.id ? { ...r, status: "preasignado" } : r)),
+        prev.map((r) => (r.id === revokeTarget.id ? { ...r, plateFlowStatus: "preasignado" } : r)),
       );
       setRevokeTarget(null);
       setRevokePlateReason("");
