@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -293,6 +294,70 @@ public sealed class PlatePreassignTests
         (await repo.IsAssignmentAllowedAsync(company, office, TestContext.Current.CancellationToken)).Should().BeTrue();
         // Sin flag de otra compañía → false.
         (await repo.IsAssignmentAllowedAsync(Guid.NewGuid(), office, TestContext.Current.CancellationToken)).Should().BeFalse();
+    }
+
+    // ---------- HU #10797: selector de compañías elegibles ----------
+
+    [Fact] // Solo compañías con preasignación activa + grant vigente con el OT; devuelve el nombre.
+    public async Task ListEligibleCompanies_FiltraPorPreasignacionYGrant()
+    {
+        var db = NewDbName();
+        var office = Guid.NewGuid();
+        var otTenant = Guid.NewGuid();
+        var elegible = Guid.NewGuid();
+        var sinFlag = Guid.NewGuid();
+        var sinGrant = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            seed.OtRequirements.Add(new OtRequirementsEntity
+            {
+                Id = Guid.NewGuid(), TenantId = otTenant, TransitOfficeId = office, AllowPlatePreassign = true, CreatedAt = now,
+            });
+            // Elegible: flag activo + grant vigente.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = elegible, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant { Id = Guid.NewGuid(), TenantId = elegible, TransitOfficeId = office, IsEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = elegible, LegalName = "Flota Andina S.A.S.", Code = "FA", TaxId = "900000001-1", TenantType = "company", CreatedAt = now });
+            // Sin flag: grant pero preasignación desactivada → excluida.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = sinFlag, PlatePreassignEnabled = false, CreatedAt = now });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant { Id = Guid.NewGuid(), TenantId = sinFlag, TransitOfficeId = office, IsEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = sinFlag, LegalName = "Sin Flag S.A.", Code = "SF", TaxId = "2", TenantType = "company", CreatedAt = now });
+            // Sin grant: flag activo pero sin grant con este OT → excluida.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = sinGrant, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = sinGrant, LegalName = "Sin Grant S.A.", Code = "SG", TaxId = "3", TenantType = "company", CreatedAt = now });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var companies = await repo.ListEligibleCompaniesAsync(office, TestContext.Current.CancellationToken);
+
+        companies.Should().ContainSingle();
+        companies[0].TenantId.Should().Be(elegible);
+        companies[0].Name.Should().Be("Flota Andina S.A.S.");
+    }
+
+    [Fact] // OT sin allow_plate_preassign → ninguna compañía elegible.
+    public async Task ListEligibleCompanies_OtSinAllow_Vacio()
+    {
+        var db = NewDbName();
+        var office = Guid.NewGuid();
+        var company = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            seed.OtRequirements.Add(new OtRequirementsEntity { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), TransitOfficeId = office, AllowPlatePreassign = false, CreatedAt = now });
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = company, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant { Id = Guid.NewGuid(), TenantId = company, TransitOfficeId = office, IsEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = company, LegalName = "X S.A.", Code = "X", TaxId = "1", TenantType = "company", CreatedAt = now });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        (await repo.ListEligibleCompaniesAsync(office, TestContext.Current.CancellationToken)).Should().BeEmpty();
     }
 
     // ---------- Reserva de placa (Flujo A) ----------
