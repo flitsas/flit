@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -245,6 +245,22 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
 
+      {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
+          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}
+      {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
+        <PlacaPreasignadaSection
+          instanceId={instanceId}
+          organismoId={organismo.id}
+          plateValue={fv('plate')}
+          plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+          readOnly={readOnly}
+          onRefresh={() => {
+            void loadDetail();
+            onRefresh?.();
+          }}
+        />
+      )}
+
       <MatriculaResumen
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
@@ -310,6 +326,173 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         />
       )}
     </div>
+  );
+}
+
+// ── Placa preasignada (Flujo A, HU #10799) ────────────────────────────
+
+/**
+ * Sección explícita del paso FUR para elegir la placa preasignada del rango del OT (Flujo A). Reemplaza
+ * la antigua fase modal. No aplica si el VIN ya tiene placa del RUNT (source 'consultation', AC2). Si no
+ * hay placas disponibles, informa que el OT la asignará (Flujo B, AC3). Con buscador para rangos grandes.
+ */
+export function PlacaPreasignadaSection({
+  instanceId,
+  organismoId,
+  plateValue,
+  plateSource,
+  readOnly,
+  onRefresh,
+}: {
+  instanceId: string;
+  organismoId: string;
+  plateValue: string;
+  plateSource: string;
+  readOnly: boolean;
+  onRefresh?: () => void;
+}) {
+  const [plates, setPlates] = useState<PlateDetail[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+
+  const placa = plateValue.trim();
+  // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
+  const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
+  const placaElegida = placa !== '' && plateSource === 'user';
+  const mostrarSelector = !readOnly && !vinTienePlacaRunt && (!placaElegida || changing);
+
+  useEffect(() => {
+    if (!mostrarSelector) return;
+    let active = true;
+    listAvailablePlatesForCompany(organismoId)
+      .then((data) => {
+        if (active) {
+          setPlates(data);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [organismoId, mostrarSelector]);
+
+  const pick = async (plate: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: plate },
+      ]);
+      setChanging(false);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = query.trim()
+    ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
+    : plates;
+
+  const shell = (children: ReactNode) => (
+    <section className="rounded-2xl border border-[#DFE5ED] p-5 dark:border-white/10">
+      <h3 className="text-sm font-bold">Placa preasignada</h3>
+      {children}
+    </section>
+  );
+
+  if (vinTienePlacaRunt) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80">
+        El vehículo ya tiene placa asignada según el RUNT (<span className="font-mono font-semibold">{placa}</span>).
+        No aplica la preasignación de placa.
+      </p>,
+    );
+  }
+
+  if (placaElegida && !changing) {
+    return shell(
+      <div className="mt-2 flex items-center gap-3">
+        <p className="text-xs opacity-80">
+          Placa seleccionada: <span className="font-mono font-semibold">{placa}</span>
+        </p>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setChanging(true)}
+            className="rounded-lg border px-3 py-1 text-[11px] font-semibold"
+          >
+            Cambiar
+          </button>
+        )}
+      </div>,
+    );
+  }
+
+  if (!mostrarSelector) {
+    return null;
+  }
+
+  return shell(
+    <div className="mt-2 flex flex-col gap-3">
+      <p className="text-[11px] opacity-70">
+        Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
+        trámite se enviará al OT para que asigne la placa.
+      </p>
+      {error && (
+        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+          {error}
+        </p>
+      )}
+      {loaded && plates.length === 0 ? (
+        <p className="text-xs opacity-80">
+          No hay placas disponibles en el rango; el trámite se enviará al OT para que asigne la placa.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2">
+            <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar placa…"
+              aria-label="Buscar placa disponible"
+              className="w-full bg-transparent text-xs outline-none"
+            />
+          </div>
+          <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+            {filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={saving}
+                onClick={() => void pick(p.plate)}
+                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
+              >
+                {p.plate}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {changing && (
+        <button
+          type="button"
+          onClick={() => setChanging(false)}
+          className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold"
+        >
+          Cancelar
+        </button>
+      )}
+    </div>,
   );
 }
 
@@ -446,8 +629,6 @@ function OrganismoModal({
   // solo puede elegir de esta lista; ya no es un catálogo estático del frontend.
   const [offices, setOffices] = useState<TransitOfficeOption[]>([]);
   const [loading, setLoading] = useState(true);
-  // Feature #10587 (P-10) — fase de selección de placa preasignada tras elegir el OT.
-  const [platePhase, setPlatePhase] = useState<{ plates: PlateDetail[] } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -498,19 +679,8 @@ function OrganismoModal({
         { formFieldId: null, fieldKey: 'transit_office_name', valueText: org.name },
         { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.cityCode },
       ]);
-      // Feature #10587 — si la compañía tiene placas disponibles en este OT, se ofrece elegir una
-      // (Flujo A). Sin rango disponible, se radica sin placa y el trámite va al OT (Flujo B).
-      let available: PlateDetail[] = [];
-      try {
-        available = await listAvailablePlatesForCompany(org.id);
-      } catch {
-        available = [];
-      }
-      if (available.length > 0) {
-        setPlatePhase({ plates: available });
-        setSaving(false);
-        return;
-      }
+      // HU #10799 — la selección de placa (Flujo A) ya no vive aquí: es una SECCIÓN explícita del paso FUR
+      // (PlacaPreasignadaSection). El modal solo confirma el OT.
       onConfirmed();
     } catch {
       setError('No se pudo guardar el organismo. Inténtalo de nuevo.');
@@ -518,72 +688,6 @@ function OrganismoModal({
       setSaving(false);
     }
   };
-
-  const pickPlate = async (plate: string) => {
-    setSaving(true);
-    setError(null);
-    try {
-      await tramitesClient.patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey: 'plate', valueText: plate },
-      ]);
-      onConfirmed();
-    } catch {
-      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (platePhase) {
-    return (
-      <div
-        className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Seleccionar placa preasignada"
-      >
-        <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold">Placa preasignada</h3>
-              <p className="text-[11px] opacity-70">
-                Selecciona una placa del rango asignado por el organismo de tránsito.
-              </p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Cerrar">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          {error && (
-            <p className="text-[11px] font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
-              {error}
-            </p>
-          )}
-          <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-2">
-            {platePhase.plates.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={saving}
-                onClick={() => void pickPlate(p.plate)}
-                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
-              >
-                {p.plate}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onConfirmed}
-            className="mt-3 rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-          >
-            Radicar sin placa (la asignará el OT)
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
