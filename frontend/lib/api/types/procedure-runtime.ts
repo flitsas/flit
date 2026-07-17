@@ -263,6 +263,9 @@ export interface RuntPersonLookupResult {
   nroPazYSalvo?: string | null;     // Número del paz y salvo
   hasActiveLicense?: boolean;       // true si tiene al menos 1 licencia ACTIVA
   licenseCategories?: string | null; // "B1" o "B1,C1"
+  // Detalle de comparendos del SIMIT (best-effort), presente cuando hasPendingFines=true y el SIMIT
+  // respondió. El RUNT conductor solo trae el flag; el detalle viene del SIMIT del mismo documento.
+  fines?: FineDetail[] | null;
 }
 
 // HU #10611 (Feature #10587) — validación en línea del SOAT (re-consulta RUNT) en estado 'asignado'.
@@ -309,6 +312,20 @@ export interface PreflightAction {
   href?: string;
 }
 
+/**
+ * Detalle de un comparendo/multa pendiente, para listarlo bajo la advertencia de multas del
+ * pre-vuelo. Todos los campos son opcionales (cada fuente expone lo que trae). Nunca lleva datos del
+ * infractor (Habeas Data): solo información del comparendo.
+ */
+export interface FineDetail {
+  numero?: string | null;
+  fecha?: string | null;
+  valor?: number | null;
+  organismo?: string | null;
+  estado?: string | null;
+  infraccion?: string | null;
+}
+
 export interface PreflightCheck {
   key: string;
   label: string;
@@ -316,6 +333,8 @@ export interface PreflightCheck {
   source: string;
   message: string;
   action?: PreflightAction | null;
+  /** Detalle line-by-line del hallazgo (hoy: los comparendos de un check de multas). */
+  details?: FineDetail[] | null;
 }
 
 export interface PreflightSnapshot {
@@ -471,6 +490,12 @@ export interface WizardState {
    * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
    */
   identityValidationEnabled?: boolean;
+  /**
+   * FEATURE 05 — `true` si el RNMC aplica a este trámite (el OT destino lo exige y la compañía no lo
+   * inhabilitó para ese OT). Solo entonces el formulario de actores muestra la fecha de expedición del
+   * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
+   */
+  rnmcEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

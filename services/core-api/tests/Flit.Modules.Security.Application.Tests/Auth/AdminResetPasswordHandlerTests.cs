@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -12,11 +13,13 @@ public sealed class AdminResetPasswordHandlerTests
     private readonly ITemporaryPasswordGenerator _tempGen = Substitute.For<ITemporaryPasswordGenerator>();
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
     private readonly IEmailSender _email = Substitute.For<IEmailSender>();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly AdminResetPasswordHandler _handler;
 
     public AdminResetPasswordHandlerTests()
     {
-        _handler = new AdminResetPasswordHandler(_repo, _tempGen, _hasher, _email);
+        _handler = new AdminResetPasswordHandler(_repo, _tempGen, _hasher, _email, _auditWriter, _auditContext);
         _tempGen.Generate().Returns("Temp23xy!Kp9Qr");
         _hasher.Hash(Arg.Any<string>()).Returns("hashed-temp");
     }

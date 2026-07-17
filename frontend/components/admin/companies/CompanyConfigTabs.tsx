@@ -35,6 +35,10 @@ export interface CompanyConfigTabsProps {
   onSaveSettings: (update: TenantSettingsUpdate) => Promise<void>;
   whitelistSlot?: ReactNode;
   otSlot?: ReactNode;
+  /** HU #10761 — restricciones de consulta por OT (endpoint propio, fuera del PUT atómico). */
+  otRestrictionsSlot?: ReactNode;
+  /** FEATURE 05 — criterios de bloqueo del preflight por OT (endpoint propio). */
+  otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
   platesSlot?: ReactNode;
@@ -45,6 +49,8 @@ export function CompanyConfigTabs({
   onSaveSettings,
   whitelistSlot,
   otSlot,
+  otRestrictionsSlot,
+  otBlockingSlot,
   auditSlot,
   documentosSlot,
   platesSlot,
@@ -141,7 +147,14 @@ export function CompanyConfigTabs({
           <TraspasosTab form={form} onChange={patch} whitelistSlot={whitelistSlot} />
         )}
         {tab === "config" && (
-          <ConfiguracionEmpresaTab form={form} onChange={patch} otSlot={otSlot} fieldErrors={fieldErrors} />
+          <ConfiguracionEmpresaTab
+            form={form}
+            onChange={patch}
+            otSlot={otSlot}
+            otRestrictionsSlot={otRestrictionsSlot}
+            otBlockingSlot={otBlockingSlot}
+            fieldErrors={fieldErrors}
+          />
         )}
         {tab === "documentos" && documentosSlot}
         {tab === "placas" && platesSlot}

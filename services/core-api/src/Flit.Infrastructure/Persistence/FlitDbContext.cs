@@ -1,8 +1,11 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
+using Flit.Modules.Quipux.Domain.Envios;
+using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +52,14 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+    public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
+        Set<TenantTransitOfficeConsultationRestriction>();
+
+    // FEATURE 05 — política de bloqueo de preflight (soat/rtm/estado/fines/rnmc) por OT de la compañía.
+    public DbSet<TenantTransitOfficeBlockingPolicy> TenantTransitOfficeBlockingPolicies =>
+        Set<TenantTransitOfficeBlockingPolicy>();
 
     // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
@@ -142,6 +153,20 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
+
+    // Quipux — radicación de trámites en secretarías de tránsito. El activador es el modo QX del
+    // perfil OT (admin.transit_office_profiles.operation_mode = 'quipux').
+    public DbSet<QuipuxSubmission> QuipuxSubmissions => Set<QuipuxSubmission>();
+
+    // Quipux — bitácora por radicación (trazabilidad de la ejecución a la finalización).
+    public DbSet<QuipuxSubmissionEvent> QuipuxSubmissionEvents => Set<QuipuxSubmissionEvent>();
+
+    // Quipux — bitácora por ejecución del worker (¿corrió el cron? ¿cuántos falló?).
+    public DbSet<QuipuxJobRun> QuipuxJobRuns => Set<QuipuxJobRun>();
+
+    // Quipux — configuración operativa (fila única, secretos cifrados). Entidad de persistencia:
+    // el dominio los ve en claro, la BD solo cifrados.
+    internal DbSet<QuipuxSettingsRow> QuipuxSettings => Set<QuipuxSettingsRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

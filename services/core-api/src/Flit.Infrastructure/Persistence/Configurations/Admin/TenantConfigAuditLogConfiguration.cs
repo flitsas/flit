@@ -15,7 +15,9 @@ internal sealed class TenantConfigAuditLogConfiguration
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.TenantId).IsRequired();
+        // HU #10678: tenant_id pasa a NULLABLE — el rastro unificado también audita eventos
+        // de autenticación/seguridad sin tenant resoluble (p. ej. login fallido).
+        builder.Property(x => x.TenantId);
         builder.Property(x => x.EntityName).HasMaxLength(80).IsRequired();
         builder.Property(x => x.FieldName).HasMaxLength(80).IsRequired();
 
@@ -31,6 +33,13 @@ internal sealed class TenantConfigAuditLogConfiguration
         builder.Property(x => x.Operation).HasColumnType("text");
         builder.Property(x => x.ErrorCode).HasColumnType("text");
 
+        // HU #10678 — auditoría administrativa/seguridad transversal (rastro unificado).
+        builder.Property(x => x.TenantType).HasMaxLength(20);
+        builder.Property(x => x.Module).HasMaxLength(20);
+        builder.Property(x => x.TargetEntityType).HasMaxLength(40);
+        builder.Property(x => x.TargetEntityId);
+        builder.Property(x => x.UserAgent).HasColumnType("text");
+
         builder.HasIndex(x => new { x.TenantId, x.ChangedAt })
             .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_changed_at")
             .IsDescending(false, true);
@@ -39,5 +48,19 @@ internal sealed class TenantConfigAuditLogConfiguration
         builder.HasIndex(x => new { x.TenantId, x.Result, x.ChangedAt })
             .HasDatabaseName("ix_tenant_config_audit_logs_tenant_id_result_changed_at")
             .IsDescending(false, false, true);
+
+        // HU #10678 — índices para las consultas globales del SuperAdmin (rastro unificado).
+        builder.HasIndex(x => x.ChangedAt)
+            .HasDatabaseName("ix_audit_logs_changed_at")
+            .IsDescending(true);
+        builder.HasIndex(x => new { x.Module, x.ChangedAt })
+            .HasDatabaseName("ix_audit_logs_module_changed_at")
+            .IsDescending(false, true);
+        builder.HasIndex(x => new { x.TargetEntityId, x.ChangedAt })
+            .HasDatabaseName("ix_audit_logs_target_changed_at")
+            .IsDescending(false, true);
+        builder.HasIndex(x => new { x.ChangedBy, x.ChangedAt })
+            .HasDatabaseName("ix_audit_logs_changed_by_changed_at")
+            .IsDescending(false, true);
     }
 }

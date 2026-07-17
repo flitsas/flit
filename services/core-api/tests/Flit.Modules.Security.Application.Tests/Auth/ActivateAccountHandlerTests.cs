@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -13,6 +14,8 @@ public sealed class ActivateAccountHandlerTests
     private readonly ISecureTokenGenerator _tokenGen = Substitute.For<ISecureTokenGenerator>();
     private readonly IUserActivationRepository _activationRepo = Substitute.For<IUserActivationRepository>();
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ActivateAccountHandler _handler;
 
     private static readonly Guid InvitationId = Guid.NewGuid();
@@ -32,7 +35,8 @@ public sealed class ActivateAccountHandlerTests
 
     public ActivateAccountHandlerTests()
     {
-        _handler = new ActivateAccountHandler(_invitationRepo, _tokenGen, _activationRepo, _hasher);
+        _handler = new ActivateAccountHandler(
+            _invitationRepo, _tokenGen, _activationRepo, _hasher, _auditWriter, _auditContext);
         _tokenGen.HashToken(RawToken).Returns(TokenHash);
         _hasher.Hash(ValidPassword).Returns("hashed-password");
     }

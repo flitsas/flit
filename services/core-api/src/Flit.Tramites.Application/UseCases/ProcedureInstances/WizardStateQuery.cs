@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -39,6 +40,14 @@ public sealed record WizardStateDto(
     /// y el frontend oculta el paso de identidad (AC3 / HU #10549). Default <c>true</c> (se exige).
     /// </summary>
     public bool IdentityValidationEnabled { get; init; } = true;
+
+    /// <summary>
+    /// FEATURE 05 — <c>true</c> si el RNMC aplica a este trámite (el OT destino lo exige y la compañía
+    /// no lo inhabilitó para ese OT): el frontend muestra la fecha de expedición del documento en los
+    /// actores, la consulta y genera el certificado. Default <c>false</c>: si el RNMC no aplica, la
+    /// fecha de expedición se oculta (no se pide un dato que no se va a usar).
+    /// </summary>
+    public bool RnmcEnabled { get; init; }
 }
 
 /// <summary>
@@ -58,7 +67,10 @@ public sealed record WizardStateDto(
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
     IIdentityValidationPolicy? identityPolicy = null,
-    ChecklistMatrixCompleteness? matrixCompleteness = null)
+    ChecklistMatrixCompleteness? matrixCompleteness = null,
+    IConsultationBlockingPolicy? blockingPolicy = null,
+    IRnmcRequirementPolicy? rnmcPolicy = null,
+    IConsultationRestrictionPolicy? restrictionPolicy = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -67,6 +79,19 @@ public sealed class GetWizardStateHandler(
     // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
         identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
+    // FEATURE 05 — política de bloqueo por criterio y OT (default permisivo en tests): decide si los
+    // comparendos bloquean el gate del paso 4 de traspaso.
+    private readonly IConsultationBlockingPolicy _blockingPolicy =
+        blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // FEATURE 05 — exigibilidad del RNMC por OT (default: no exige) y consultas que la compañía
+    // inhabilitó para el OT (default: nada restringido). Juntas deciden si el RNMC aplica y, por tanto,
+    // si el frontend muestra la fecha de expedición del documento.
+    private readonly IRnmcRequirementPolicy _rnmcPolicy =
+        rnmcPolicy ?? NullRnmcRequirementPolicy.Instance;
+    private readonly IConsultationRestrictionPolicy _restrictionPolicy =
+        restrictionPolicy ?? NullConsultationRestrictionPolicy.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -95,9 +120,25 @@ public sealed class GetWizardStateHandler(
             ? null
             : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
 
-        var state = ComputeState(instance, partesEfectivas, docsCompletos) with
+        var otId = TransitOfficeIdFromFieldValues(instance);
+
+        // FEATURE 05 — ¿los comparendos bloquean el paso 4 (comprador con multas) para el OT destino?
+        // El gate simit_multas bloqueaba SIEMPRE antes de esta feature: sin override explícito se
+        // preserva ese comportamiento (?? true); solo un override de la compañía lo cambia.
+        var blockingRules = await _blockingPolicy.GetAsync(instance.TenantId, otId, ct);
+        var comparendosBloquean = blockingRules.Override(ConsultationBlockingCriteria.Fines) ?? true;
+
+        // FEATURE 05 — el RNMC aplica según el opt-in de la compañía para el OT destino ("Consultar
+        // RNMC"); si no hay decisión explícita, cae al requisito del OT. Misma condición que dispara la
+        // consulta en el preflight. Solo entonces el frontend muestra la fecha de expedición.
+        var rnmcRequired = await _rnmcPolicy.IsRnmcRequiredAsync(instance.TenantId, otId, ct);
+        var rnmcRestrictions = await _restrictionPolicy.GetAsync(instance.TenantId, otId, ct);
+        var rnmcEnabled = rnmcRestrictions.SettingOf(ConsultationRestrictionKinds.Rnmc) ?? rnmcRequired;
+
+        var state = ComputeState(instance, partesEfectivas, docsCompletos, comparendosBloquean) with
         {
             IdentityValidationEnabled = identityRequired,
+            RnmcEnabled = rnmcEnabled,
         };
         return (state, null);
     }
@@ -125,10 +166,16 @@ public sealed class GetWizardStateHandler(
     /// ⇒ se usa el cómputo actual del catálogo (flag OFF, sin matriz, o llamadores que no lo aportan,
     /// p. ej. el listado de trámites), sin regresión.
     /// </param>
+    /// <param name="comparendosBloquean">
+    /// FEATURE 05: si los comparendos bloquean el paso 4 de traspaso (criterio <c>fines</c> por
+    /// compañía + OT). Default <c>true</c> ⇒ comportamiento previo; los llamadores que no resuelven la
+    /// política (p. ej. el listado de trámites) lo dejan en el default sin regresión.
+    /// </param>
     public static WizardStateDto ComputeState(
         ProcedureInstance instance,
         IReadOnlySet<string> identidadAprobadaPartes,
-        bool? documentosCompletosOverride = null)
+        bool? documentosCompletosOverride = null,
+        bool comparendosBloquean = true)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -137,7 +184,7 @@ public sealed class GetWizardStateHandler(
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride)
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean)
             : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
     }
 
@@ -264,7 +311,8 @@ public sealed class GetWizardStateHandler(
     // ---- Traspaso estándar (6 pasos) ----------------------------------------
 
     private static WizardStateDto BuildTraspaso(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
+        bool? docsCompletosOverride = null, bool comparendosBloquean = true)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -299,6 +347,7 @@ public sealed class GetWizardStateHandler(
             DocumentosObligatoriosCompletos = docsCompletos,
             ForzarContinuar = false,
             RiesgoPreflightAceptado = riesgoAceptado,
+            ComparendosBloquean = comparendosBloquean,
         };
 
         var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
@@ -521,9 +570,20 @@ public sealed class GetWizardStateHandler(
     /// (<c>simit_comprador*</c>) del último preflight, NO del <c>Overall</c> del vehículo (Bug #10728):
     /// el overall se pone rojo por SOAT/RTM/estado del vehículo, ajenos a las multas de la persona, así
     /// que inferir comparendos del overall producía un falso <c>simit_multas</c>. Sin preflight aún →
-    /// null (el gate exige consulta SIMIT). Solo <c>fail</c> del check del comprador cuenta como
-    /// comparendo; <c>unknown</c> (sin documento al correr el preflight) o <c>error</c> (proveedor caído,
-    /// bloqueo duro aparte vía ProviderError) NO se infieren como multas.
+    /// null (el gate exige consulta SIMIT).
+    ///
+    /// FEATURE 05 — el gate se deriva de la CLAVE del check, no de su severidad. Los comparendos ya
+    /// no pintan rojo (pasaron de <c>fail</c> a <c>warn</c> en <see cref="Consultations.FinesCheckFactory"/>:
+    /// no bloquean CREAR el trámite), pero sí siguen bloqueando la RADICACIÓN al OT. Se aceptan ambas
+    /// severidades: <c>warn</c> (actual) y <c>fail</c> (snapshots persistidos antes del cambio, que son
+    /// JSON inmutable y hay que seguir leyendo bien).
+    ///
+    /// El sufijo <c>_multas</c> es OBLIGATORIO en la coincidencia:
+    /// <c>simit_comprador_acuerdos_pago</c> TAMBIÉN es <c>warn</c> y NO es un comparendo — sin este
+    /// guard, todo comprador con un acuerdo de pago activo dispararía un <c>simit_multas</c> falso.
+    /// Y <c>unknown</c> (sin documento al correr el preflight) o <c>error</c> (proveedor caído, cuya
+    /// clave es el prefijo pelado <c>simit_comprador</c>, bloqueo duro aparte vía ProviderError) NO se
+    /// infieren como multas.
     /// </summary>
     private static SimitSnapshot? SimitOf(ProcedureInstance instance, ParteDatos? comprador, PreflightSnapshot? preflight)
     {
@@ -533,7 +593,9 @@ public sealed class GetWizardStateHandler(
         var checks = LatestPreflightChecks(instance);
         var hasComparendos = checks.Any(c =>
             c.Key.StartsWith("simit_comprador", StringComparison.Ordinal) &&
-            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
+            c.Key.EndsWith($"_{Consultations.FinesCheckFactory.KeyMultas}", StringComparison.Ordinal) &&
+            (string.Equals(c.Status, "warn", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase)));
 
         return new SimitSnapshot(
             Consultado: true,

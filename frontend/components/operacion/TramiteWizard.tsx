@@ -37,6 +37,7 @@ import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -664,6 +665,7 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                rnmcEnabled={wizard?.rnmcEnabled ?? false}
               />
             </div>
           )}
@@ -1229,6 +1231,24 @@ function ConsultaStep({
     }
   };
 
+  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
+  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
+  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
+  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
+    if (!instanceId || items.length === 0) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(
+        instanceId,
+        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
+      );
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
   // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
@@ -1365,6 +1385,13 @@ function ConsultaStep({
 
       <VehicleDataCard fieldValues={fieldValues} />
 
+      <VehicleTransformationsCard
+        fieldValues={fieldValues}
+        readOnly={readOnly}
+        saving={atributosSaving}
+        onPatch={saveTransformacion}
+      />
+
       <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
         <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
         <p className="text-[11px] opacity-55 -mt-1.5">
@@ -1455,6 +1482,7 @@ function StepBody({
   stepFormRef,
   identityOperable = false,
   identityApproved = false,
+  rnmcEnabled = false,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1464,6 +1492,8 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
+  rnmcEnabled?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -1527,6 +1557,7 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1545,6 +1576,7 @@ function StepBody({
           // siembra su documento desde owner_document_* y consulta RUNT al llegar.
           seedDocumentoFromOwner
           autoConsultRunt
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1638,6 +1670,7 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            rnmcEnabled={rnmcEnabled}
           />
         </div>
       );

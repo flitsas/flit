@@ -69,6 +69,22 @@ describe('ActorsForm — layout split (un comprador)', () => {
   });
 });
 
+describe('ActorsForm — fecha de expedición (RNMC, FEATURE 05)', () => {
+  it('oculta la fecha de expedición cuando el RNMC no aplica (rnmcEnabled ausente/false)', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    // Espera a que monte el formulario.
+    await screen.findByLabelText('Número de documento');
+    expect(screen.queryByLabelText(/Fecha de expedición del documento/i)).toBeNull();
+  });
+
+  it('muestra la fecha de expedición cuando el RNMC aplica (rnmcEnabled=true)', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" rnmcEnabled />);
+    expect(
+      await screen.findByLabelText(/Fecha de expedición del documento/i),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('ActorsForm — render por modalidad', () => {
   it('traspaso muestra vendedor y comprador', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
@@ -339,6 +355,46 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+  });
+
+  it('lista el detalle de los comparendos bajo la alerta cuando el SIMIT lo trae', async () => {
+    const user = userEvent.setup();
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'DANIEL AMADO GARCIA',
+      firstName: 'DANIEL',
+      lastName: 'AMADO GARCIA',
+      documentType: 'CC',
+      documentNumber: '1193552679',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'real',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: true,
+      hasActiveLicense: true,
+      licenseCategories: 'A2,C1,B1',
+      fines: [
+        {
+          numero: '25612001000012662173',
+          fecha: '2024-05-01',
+          valor: 344730,
+          organismo: 'STRIA TTOyTTE MCPAL SABANETA',
+          estado: 'Pendiente',
+          infraccion: 'Semáforo en rojo',
+        },
+      ],
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.type(await screen.findByLabelText('Número de documento'), '1193552679');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+    const detalle = screen.getByRole('list', { name: 'Detalle de comparendos' });
+    expect(detalle).toHaveTextContent('Comparendo 25612001000012662173');
+    expect(detalle).toHaveTextContent('Semáforo en rojo');
+    expect(detalle).toHaveTextContent('$344.730 COP');
+    expect(detalle).toHaveTextContent('STRIA TTOyTTE MCPAL SABANETA');
   });
 });
 

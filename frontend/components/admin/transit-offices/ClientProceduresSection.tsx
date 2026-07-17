@@ -395,7 +395,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             Solo lectura
           </span>
           <span className="text-[11px] opacity-60">
-            Modo QX activo — no se pueden aprobar ni rechazar trámites.
+            Este OT opera en Quipux — no se pueden aprobar ni rechazar trámites desde FLIT.
           </span>
         </div>
       )}

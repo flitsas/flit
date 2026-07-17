@@ -629,6 +629,261 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/transit-offices/operational-status:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesOperationalStatus
+      summary: Estado operativo y parametrización Quipux de los organismos de tránsito (RF01)
+      description: >
+        Una fila por oficina activa del catálogo (`catalogs.transit_offices` LEFT JOIN
+        `admin.transit_office_profiles` + `identity.tenants`), ordenada por nombre. Incluye
+        tanto el estado del tenant OT —si la oficina es cliente de FLIT— como la
+        parametrización Quipux del catálogo (`divipoCode` + banderas, HU #10710), que existe
+        para las 317 oficinas sean o no clientes. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado operativo por oficina del catálogo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransitOfficeOperationalStatus"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin (ot_admin incluido).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{id}/quipux-settings:
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesUpdateQuipuxSettings
+      summary: Parametriza la radicación Quipux de una secretaría (HU #10710)
+      description: >
+        Reemplaza (PUT completo) el código DIVIPO y las tres banderas por familia de trámite
+        de `catalogs.transit_offices`. Describe a la secretaría **DESTINO** a la que FLIT
+        radica trámites vía Quipux, que normalmente **no** es cliente de FLIT.
+
+
+        No confundir con `admin.transit_office_profiles.operation_mode = 'quipux'`
+        (HU #10215): aquello describe al OT-**cliente** cuya consola queda en solo lectura
+        porque aprueba dentro de Quipux. Son conceptos distintos que comparten el nombre.
+
+
+        Reglas: `divipoCode` nulo o vacío significa «aún no se conoce» — **no es un error**,
+        es el estado normal de las secretarías todavía no integradas (hoy 311 de 317) — y se
+        normaliza a `null`, dejando la secretaría NO elegible para radicar. Activar banderas
+        sin DIVIPO se permite (el alta es gradual y manual), pero la respuesta devuelve
+        `elegible: false`: sin DIVIPO no se radica. Requiere SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de la oficina en `catalogs.transit_offices`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitOfficeQuipuxSettingsRequest"
+      responses:
+        "200":
+          description: Parametrización persistida (estado ya normalizado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitOfficeQuipuxSettings"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin (ot_admin incluido).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La oficina no existe o está descatalogada (`TRANSIT_OFFICE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+        "422":
+          description: >
+            `DIVIPO_CODE_INVALID` (el DIVIPO no es numérico o excede 20 dígitos) o
+            `QUIPUX_FLAGS_REQUIRED` (falta alguna bandera en el PUT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+
+  /api/v1/admin/transit-offices/{id}/quipux-submissions:
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesListQuipuxCola
+      summary: Cola de radicaciones Quipux de una secretaría (HU #10774)
+      description: >
+        Lista `tramites.quipux_submissions` de los trámites cuyo `transit_office_id` es esta
+        secretaría **destino**, enriquecidas con el número de referencia, el tipo de trámite y
+        la razón social del cliente. Incluye todos los estados (activa + histórico:
+        `pendiente`, `registrado`, `aprobado`, `rechazado`, `fallido`), ordenados del más nuevo
+        al más viejo. Requiere SuperAdmin u ot_admin (OtModulePolicy); el ot_admin solo puede
+        consultar su propia secretaría: el `{id}` de la ruta debe coincidir con el
+        `transit_office_id` que su perfil OT resuelve desde su `tenant_id` (recuerda que
+        `tenant_id` ≠ `transit_office_id`), de lo contrario 403 `TRANSIT_OFFICE_FORBIDDEN`.
+        El SuperAdmin es cross-tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de la secretaría destino en `catalogs.transit_offices`.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de la cola.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuipuxColaPage"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: >
+            Sin rol SuperAdmin u ot_admin, o un ot_admin consultando una secretaría
+            que no es la de su perfil OT (`TRANSIT_OFFICE_FORBIDDEN`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{id}/quipux-submissions/{submissionId}/retry:
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesRetryQuipuxSubmission
+      summary: Re-encola una radicación Quipux fallida (HU #10774)
+      description: >
+        Lleva una submission `fallido` de vuelta a `pendiente` con presupuesto de intentos
+        fresco, de modo que el registrador la vuelva a reclamar. Requiere SuperAdmin u ot_admin;
+        el ot_admin solo opera la secretaría de su perfil OT (403 `TRANSIT_OFFICE_FORBIDDEN` si el
+        `{id}` no coincide con su `transit_office_id`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de la secretaría destino (scope de la submission).
+        - name: submissionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: "Re-encolada (código OK)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: >
+            Sin rol SuperAdmin u ot_admin, o un ot_admin operando una secretaría ajena
+            (`TRANSIT_OFFICE_FORBIDDEN`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            No hay submission con ese id en esta secretaría
+            (`QUIPUX_SUBMISSION_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+        "409":
+          description: >
+            `QUIPUX_SUBMISSION_INVALID_STATE` (no está en `fallido`) o
+            `QUIPUX_SUBMISSION_CONFLICT` (el trámite ya tiene otra radicación viva).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+
+  /api/v1/admin/transit-offices/{id}/quipux-submissions/{submissionId}/cancel:
+    post:
+      tags: [Admin · Compañías]
+      operationId: adminTransitOfficesCancelQuipuxSubmission
+      summary: Cancela una radicación Quipux pendiente (HU #10774)
+      description: >
+        Lleva una submission `pendiente` a `fallido` terminal antes de que se radique.
+        La transición está guardada por estado: si un worker la registró entre la carga de la
+        pantalla y el clic, responde 409. Requiere SuperAdmin u ot_admin; el ot_admin solo opera
+        la secretaría de su perfil OT (403 `TRANSIT_OFFICE_FORBIDDEN` si el `{id}` no coincide con
+        su `transit_office_id`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de la secretaría destino (scope de la submission).
+        - name: submissionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: "Cancelada (código OK)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: >
+            Sin rol SuperAdmin u ot_admin, o un ot_admin operando una secretaría ajena
+            (`TRANSIT_OFFICE_FORBIDDEN`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No hay submission con ese id en esta secretaría (`QUIPUX_SUBMISSION_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+        "409":
+          description: >
+            `QUIPUX_SUBMISSION_INVALID_STATE`: ya no está en `pendiente`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeErrorResponse"
+
   /api/v1/admin/ot/profile:
     get:
       tags: [Admin · OT]
@@ -1301,6 +1556,87 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/superadmin/audit:
+    get:
+      tags: [Super Admin]
+      operationId: getAdminAuditLog
+      summary: Consulta global del rastro de auditoría administrativa/seguridad (HU #10679)
+      description: >
+        Retorna el rastro unificado de auditoría (`admin.tenant_config_audit_logs`,
+        HU #10678) — config + operaciones administrativas/seguridad sobre usuarios,
+        roles, permisos y autenticación — ordenado por `changedAt` descendente,
+        paginado. Alcance GLOBAL (cross-tenant): la RLS de la tabla admite bypass
+        SuperAdmin. `userId` matchea el actor (`changedBy`) O el afectado
+        (`targetEntityId`). Requiere JWT con rol SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Usuario actor o afectado.
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Compañía gestora u organismo de tránsito.
+        - name: tenantType
+          in: query
+          required: false
+          schema: { type: string, enum: [COMPANY, TRANSIT_OFFICE] }
+        - name: module
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [users, roles, permissions, authentication, security, config]
+        - name: operation
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            Verbo de la operación auditada (p. ej. `create`, `update`, `delete`,
+            `assign_role`, `revoke_role`, `suspend`, `unsuspend`, `invite`,
+            `login`, `login_failed`, `logout`, `reset_password`, …).
+        - name: result
+          in: query
+          required: false
+          schema: { type: string, enum: [success, failure] }
+        - name: dateFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite inferior (inclusive) del rango de `changedAt`.
+        - name: dateTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Límite superior (inclusive) del rango de `changedAt`.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del rastro unificado de auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuditLogPageResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/ot/invitations/{invitationId}/resend:
     parameters:
       - name: invitationId
@@ -1625,6 +1961,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetOtConsultationRestrictions
+      summary: Restricciones de consulta por OT del tenant (HU #10759, AC1/AC5)
+      description: >
+        Retorna las filas de restricción de consulta (RNMC, comparendos) configuradas
+        explícitamente para el tenant. Tabla dispersa: solo existen filas para los
+        pares (organismo, tipo de consulta) que el admin tocó; la ausencia de fila
+        equivale a consulta permitida. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de restricciones configuradas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtConsultationRestrictionListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions/{transitOfficeId}/{consultationKind}:
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanySetOtConsultationRestriction
+      summary: Fija el estado de una restricción de consulta por OT (HU #10759, AC1–AC4)
+      description: >
+        Habilita o inhabilita una consulta (`rnmc` | `fines`) para un Organismo de
+        Tránsito puntual de la compañía. El cuerpo transporta el ESTADO DESEADO (no
+        un verbo): idempotente en ambos sentidos, sin 404. Valida en orden: (1) el
+        organismo debe existir en el catálogo, (2) el organismo debe estar habilitado
+        (grant activo) para la compañía — restringir un OT sin grant no significa
+        nada, se exige habilitarlo primero, (3) el tipo de consulta debe ser uno de
+        los restringibles. `vehicle` queda deliberadamente fuera: restringirlo
+        rompería la hidratación de field_values y la generación del FUR. Requiere
+        JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+        - name: consultationKind
+          in: path
+          required: true
+          schema: { type: string, enum: [rnmc, fines] }
+          description: Tipo de consulta a restringir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetOtConsultationRestrictionRequest"
+      responses:
+        "204":
+          description: Estado fijado (alta nueva o no-op idempotente).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El organismo no existe en el catálogo, no está habilitado para la
+            compañía, o el tipo de consulta no es restringible. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtConsultationRestrictionValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-blocking-policies:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetOtBlockingPolicies
+      summary: Políticas de bloqueo de preflight por OT del tenant (FEATURE 05)
+      description: >
+        Retorna las filas de política de bloqueo configuradas explícitamente para el
+        tenant. Por cada criterio (`soat` | `rtm` | `estado_vehiculo` | `fines` |
+        `rnmc`) y organismo, indica si un hallazgo negativo BLOQUEA (rojo, subsanable)
+        o solo ADVIERTE (amarillo). Tabla dispersa: la ausencia de fila equivale al
+        default del criterio. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de políticas configuradas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtBlockingPolicyListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-blocking-policies/{transitOfficeId}/{criterion}:
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanySetOtBlockingPolicy
+      summary: Fija el carácter bloqueante de un criterio del preflight por OT (FEATURE 05)
+      description: >
+        Marca un criterio (`soat` | `rtm` | `estado_vehiculo` | `fines` | `rnmc`) como
+        bloqueante o informativo para un Organismo de Tránsito puntual de la compañía.
+        El cuerpo transporta el ESTADO DESEADO (no un verbo): idempotente en ambos
+        sentidos, sin 404. Valida en orden: (1) el organismo debe existir en el
+        catálogo, (2) el organismo debe estar habilitado (grant activo) para la
+        compañía, (3) el criterio debe ser configurable. Requiere JWT con rol
+        SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+        - name: criterion
+          in: path
+          required: true
+          schema: { type: string, enum: [soat, rtm, estado_vehiculo, fines, rnmc] }
+          description: Criterio del preflight a configurar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetOtBlockingPolicyRequest"
+      responses:
+        "204":
+          description: Estado fijado (alta nueva o no-op idempotente).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El organismo no existe en el catálogo, no está habilitado para la
+            compañía, o el criterio no es configurable. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtBlockingPolicyValidationErrorResponse"
 
   /api/v1/admin/document-types:
     post:
@@ -5095,6 +5616,171 @@ components:
         cityCode: { type: string }
       required: [id, code, name, departmentCode, cityCode]
 
+    TransitOfficeQuipuxFlags:
+      type: object
+      description: >
+        Banderas de radicación Quipux por familia de trámite (HU #10710). Replican
+        `id_parinttrasec_registration` / `_transfer` / `_otherservice` de FLIT 1.0: el alta es
+        gradual y una secretaría puede estar integrada para traspasos y no para matrículas.
+      properties:
+        quipuxRegistration:
+          type: boolean
+          description: ¿Se radican las MATRÍCULAS de esta secretaría por Quipux?
+        quipuxTransfer:
+          type: boolean
+          description: ¿Se radican los TRASPASOS de esta secretaría por Quipux?
+        quipuxOther:
+          type: boolean
+          description: ¿Se radican los OTROS trámites de esta secretaría por Quipux?
+      required: [quipuxRegistration, quipuxTransfer, quipuxOther]
+
+    TransitOfficeQuipuxSettingsRequest:
+      allOf:
+        - $ref: "#/components/schemas/TransitOfficeQuipuxFlags"
+        - type: object
+          description: >
+            Estado destino de la parametrización Quipux de una secretaría. Las tres banderas
+            son obligatorias (un PUT sin ellas devuelve 422 en vez de apagarlas por omisión).
+          properties:
+            divipoCode:
+              type: string
+              nullable: true
+              pattern: '^\d{1,20}$'
+              example: "05001"
+              description: >
+                Código DIVIPO que espera Quipux. Numérico y **se trata como texto** para
+                conservar los ceros a la izquierda (Medellín = `05001`). `null` o vacío =
+                aún no se conoce: no es un error, y deja la secretaría no elegible.
+
+    TransitOfficeQuipuxSettings:
+      allOf:
+        - $ref: "#/components/schemas/TransitOfficeQuipuxFlags"
+        - type: object
+          description: Parametrización Quipux persistida de una secretaría (HU #10710).
+          properties:
+            transitOfficeId: { type: string, format: uuid }
+            divipoCode:
+              type: string
+              nullable: true
+              example: "05001"
+              description: Código DIVIPO ya normalizado, o `null` si aún no se conoce.
+            elegible:
+              type: boolean
+              description: >
+                Derivado: `true` solo si hay `divipoCode` **y** al menos una bandera activa.
+                Con DIVIPO nulo es siempre `false` — sin DIVIPO no se radica, aunque las
+                banderas estén activas. Es el fallo seguro frente a mandar un trámite a la
+                secretaría equivocada.
+          required: [transitOfficeId, elegible]
+
+    TransitOfficeOperationalStatus:
+      allOf:
+        - $ref: "#/components/schemas/TransitOfficeQuipuxFlags"
+        - type: object
+          description: >
+            Estado operativo de una oficina del catálogo (RF01) más su parametrización Quipux
+            (HU #10710). Una fila por oficina activa.
+          properties:
+            id: { type: string, format: uuid, description: Id en `catalogs.transit_offices`. }
+            code: { type: string }
+            name: { type: string }
+            departmentCode: { type: string }
+            hasTenant:
+              type: boolean
+              description: ¿La oficina ya tiene tenant OT dado de alta (es cliente de FLIT)?
+            tenantId:
+              type: string
+              format: uuid
+              nullable: true
+              description: Tenant OT asociado, o `null` si la oficina no tiene alta.
+            estadoActivo:
+              type: boolean
+              nullable: true
+              description: Estado del tenant OT, o `null` si la oficina no tiene alta.
+            operationMode:
+              type: string
+              nullable: true
+              enum: [dashboard, quipux, null]
+              description: >
+                Modo del perfil del OT-**cliente** (`admin.transit_office_profiles`): con
+                `quipux` su consola queda en solo lectura porque aprueba dentro de Quipux.
+                `null` si la oficina no tiene alta. **No decide** si FLIT radica a esta
+                secretaría — eso son `divipoCode` y las banderas.
+            divipoCode:
+              type: string
+              nullable: true
+              example: "05001"
+              description: >
+                Código DIVIPO de la secretaría, o `null` si aún no se conoce (el caso
+                mayoritario). Sin él la secretaría no es elegible para radicar.
+          required: [id, code, name, departmentCode, hasTenant]
+
+    CodeErrorResponse:
+      type: object
+      description: Error con código estable en SCREAMING_SNAKE para consumo programático.
+      properties:
+        code: { type: string, example: DIVIPO_CODE_INVALID }
+      required: [code]
+
+    CodeResponse:
+      type: object
+      description: OK con código estable (respuesta de una acción sin cuerpo relevante).
+      properties:
+        code: { type: string, example: OK }
+      required: [code]
+
+    QuipuxColaItem:
+      type: object
+      description: >
+        Una radicación de la cola Quipux vista desde la consola (HU #10774): la submission
+        (`tramites.quipux_submissions`) enriquecida con datos del trámite.
+      properties:
+        id: { type: string, format: uuid, description: Id de la submission. }
+        procedureInstanceId: { type: string, format: uuid }
+        referenceNumber: { type: string, description: Número de referencia del trámite. }
+        procedureTypeName: { type: string }
+        clientTenantName: { type: string, description: Razón social del cliente dueño del trámite. }
+        documentName:
+          type: string
+          description: El "documento" enviado a Quipux; llave de correlación estable entre reintentos.
+        status:
+          type: string
+          enum: [pendiente, registrado, aprobado, rechazado, fallido]
+        attempts: { type: integer }
+        pollCount: { type: integer }
+        qxRegisterCode:
+          type: integer
+          nullable: true
+          description: Último `codigo` del registro (81 = radicado).
+        qxProcedureCode:
+          type: integer
+          nullable: true
+          description: Último `estadoTramite.codigo` de la consulta (2 aprobado, 3 rechazado).
+        rejectionReason:
+          type: string
+          nullable: true
+          description: Motivo del rechazo de Quipux, si lo hubo.
+        createdAt: { type: string, format: date-time }
+        registeredAt: { type: string, format: date-time, nullable: true }
+        lastPolledAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+      required:
+        [id, procedureInstanceId, referenceNumber, procedureTypeName, clientTenantName,
+         documentName, status, attempts, pollCount, createdAt]
+
+    QuipuxColaPage:
+      type: object
+      description: Página de la cola Quipux de una secretaría.
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/QuipuxColaItem" }
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
     TransitGrantRequest:
       type: object
       description: Habilitación de un organismo de tránsito a un tenant (AC2).
@@ -5139,6 +5825,113 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TransitGrantValidationError"
+      required: [errors]
+
+    OtConsultationRestrictionItem:
+      type: object
+      description: >
+        Fila de restricción de consulta de un tenant para un OT puntual (HU #10759,
+        AC1/AC5). Tabla dispersa: ausencia de fila para un consultationKind dado
+        equivale a enabled=true (permisivo).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        consultationKind:
+          type: string
+          enum: [rnmc, fines]
+          description: >
+            Vocabulario propio de restricciones comerciales — no confundir con el
+            tipo de dato consultado del motor de trámites (vehicle_vin|vehicle_plate|conductor).
+        enabled:
+          type: boolean
+          description: Estado deseado — true permitida (default), false inhabilitada.
+      required: [transitOfficeId, consultationKind, enabled]
+
+    OtConsultationRestrictionListResponse:
+      type: array
+      description: Restricciones de consulta por OT configuradas explícitamente para el tenant (AC1/AC5).
+      items:
+        $ref: "#/components/schemas/OtConsultationRestrictionItem"
+
+    SetOtConsultationRestrictionRequest:
+      type: object
+      description: >
+        Cuerpo del PUT que fija el estado deseado de una restricción (HU #10759).
+        Transporta el ESTADO DESEADO, no un verbo de alta/baja.
+      properties:
+        enabled:
+          type: boolean
+          description: true permite la consulta (default), false la inhabilita.
+      required: [enabled]
+
+    OtConsultationRestrictionValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    OtConsultationRestrictionValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtConsultationRestrictionValidationError"
+      required: [errors]
+
+    OtBlockingPolicyItem:
+      type: object
+      description: >
+        Fila de política de bloqueo de un tenant para un OT puntual (FEATURE 05). Tabla
+        dispersa: la ausencia de fila para un criterio dado equivale al default del
+        criterio (soat/rtm/estado_vehiculo bloquean; fines/rnmc advierten en el pre-vuelo).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        criterion:
+          type: string
+          enum: [soat, rtm, estado_vehiculo, fines, rnmc]
+          description: >
+            Criterio del preflight configurable — no confundir con RestrictedConsultationKinds
+            (rnmc|fines, que decide SI se consulta) ni con el tipo de dato consultado
+            (vehicle_vin|vehicle_plate|conductor).
+        blocks:
+          type: boolean
+          description: true bloquea (fail→rojo, subsanable); false solo advierte (warn→amarillo).
+      required: [transitOfficeId, criterion, blocks]
+
+    OtBlockingPolicyListResponse:
+      type: array
+      description: Políticas de bloqueo por OT configuradas explícitamente para el tenant (FEATURE 05).
+      items:
+        $ref: "#/components/schemas/OtBlockingPolicyItem"
+
+    SetOtBlockingPolicyRequest:
+      type: object
+      description: >
+        Cuerpo del PUT que fija el carácter bloqueante de un criterio (FEATURE 05).
+        Transporta el ESTADO DESEADO, no un verbo.
+      properties:
+        blocks:
+          type: boolean
+          description: true el criterio bloquea (rojo, subsanable); false solo advierte (amarillo).
+      required: [blocks]
+
+    OtBlockingPolicyValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    OtBlockingPolicyValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtBlockingPolicyValidationError"
       required: [errors]
 
     TransitOfficeTenantItem:
@@ -5456,6 +6249,58 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AuditLogEntry"
+        totalCount: { type: integer, format: int64 }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    AdminAuditLogEntry:
+      type: object
+      description: >
+        Entrada del rastro unificado de auditoría administrativa/seguridad
+        (HU #10679): config (RNF01/ADR-0024) + operaciones sobre usuarios, roles,
+        permisos y autenticación (HU #10678).
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid, nullable: true }
+        tenantType:
+          type: string
+          nullable: true
+          enum: [COMPANY, TRANSIT_OFFICE]
+        module:
+          type: string
+          nullable: true
+          enum: [users, roles, permissions, authentication, security, config]
+        entityName: { type: string }
+        operation: { type: string, nullable: true }
+        result:
+          type: string
+          nullable: true
+          enum: [success, failure]
+        errorCode: { type: string, nullable: true }
+        changedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario actor que ejecutó la operación.
+        targetEntityType: { type: string, nullable: true }
+        targetEntityId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario/rol/permiso afectado por la operación.
+        clientIp: { type: string, nullable: true }
+        changedAt: { type: string, format: date-time }
+      required: [id, entityName, changedAt]
+
+    AdminAuditLogPageResponse:
+      type: object
+      description: Página del rastro unificado de auditoría administrativa/seguridad (HU #10679).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditLogEntry"
         totalCount: { type: integer, format: int64 }
         page: { type: integer }
         pageSize: { type: integer }

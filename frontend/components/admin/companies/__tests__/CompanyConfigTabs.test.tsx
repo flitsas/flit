@@ -41,6 +41,9 @@ describe("CompanyConfigTabs (AC2)", () => {
     await user.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 
     expect(onSaveSettings).toHaveBeenCalledTimes(1);
+    // Este objeto afirma el contrato COMPLETO que emite `formToUpdate` (settingsForm.ts): es una
+    // aserción exacta, no un `objectContaining`. Al añadir un campo nuevo al PUT de configuración
+    // hay que reflejarlo aquí, o este test queda obsoleto y falla con el campo ausente.
     expect(onSaveSettings).toHaveBeenCalledWith({
       switchesMatricula: {
         allowInitialRegistration: true,
@@ -64,6 +67,8 @@ describe("CompanyConfigTabs (AC2)", () => {
         primary: "fasecolda",
         enabled: ["fasecolda"],
       },
+      // FEATURE 02 (HU #10723/#10724) — default sin config: 'external' (SIMIT en línea).
+      finesQuerySource: "external",
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.

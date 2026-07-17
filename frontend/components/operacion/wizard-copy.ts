@@ -16,7 +16,8 @@ const REASON_COPY: Record<string, string> = {
   preflight_pendiente: 'Falta correr el pre-vuelo',
   preflight_red: 'Hay bloqueos críticos',
   preflight_provider_error: 'No se pudo verificar la consulta; vuelve a intentarla',
-  preflight_yellow: 'Hay advertencias por revisar',
+  // Sin `preflight_yellow`: el amarillo NO bloquea y este canal es el de "Antes de enviar,
+  // resuelve:". Las advertencias se informan en PreflightPanel, no como razón de incompletitud.
   validacion_pendiente: 'Falta validar el resultado legal',
   // documentos
   documentos_incompletos: 'Faltan documentos obligatorios',

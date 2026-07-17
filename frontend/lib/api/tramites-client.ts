@@ -36,6 +36,7 @@ import type {
   ParticipantsResponse,
   PortalFirmaUrl,
   PortalView,
+  FineDetail,
   PreflightSnapshot,
   PresignAttachmentResponse,
   ProcedureActor,
@@ -73,21 +74,27 @@ interface PreflightSnapshotDto {
     status: PreflightSnapshot['checks'][number]['status'];
     source: string;
     message?: string;
+    details?: FineDetail[] | null;
   }>;
   provider?: string;
   createdAt: string;
 }
 
+function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
+  return dtos.map((c) => ({
+    key: c.key,
+    label: c.label,
+    status: c.status,
+    source: c.source,
+    message: c.message ?? '',
+    details: c.details ?? null,
+  }));
+}
+
 function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
   return {
     overall: dto.overall,
-    checks: dto.checks.map((c) => ({
-      key: c.key,
-      label: c.label,
-      status: c.status,
-      source: c.source,
-      message: c.message ?? '',
-    })),
+    checks: mapChecks(dto.checks),
     createdAt: dto.createdAt,
   };
 }
@@ -675,6 +682,25 @@ export const tramitesClient = {
       throw err;
     }
     return dto ? mapPreflight(dto) : null;
+  },
+
+  // ── RNMC (FEATURE 05) — consulta desacoplada del pre-vuelo ──────
+  // POST corre la consulta RNMC por cada actor natural (con su fecha de expedición) y persiste;
+  // GET trae el último resultado. Ambos devuelven la lista de checks (rnmc_{rol}_medidas_correctivas).
+  runRnmc: async (instanceId: string, tenantId?: string): Promise<PreflightSnapshot['checks']> => {
+    const dtos = await request<PreflightSnapshotDto['checks']>(
+      `/api/v1/tramites/instances/${instanceId}/rnmc`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    );
+    return mapChecks(dtos ?? []);
+  },
+
+  getRnmc: async (instanceId: string, tenantId?: string): Promise<PreflightSnapshot['checks']> => {
+    const dtos = await request<PreflightSnapshotDto['checks']>(
+      `/api/v1/tramites/instances/${instanceId}/rnmc`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return mapChecks(dtos ?? []);
   },
 
   // ── Datos comerciales (traspaso) — GET/PUT /commercial ──────────

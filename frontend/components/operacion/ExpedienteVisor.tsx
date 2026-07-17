@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Car, Check, Download, FileText, ShieldCheck, User } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
   BiometricValidation,
@@ -381,8 +382,8 @@ function DocRow({
     <li className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: BORDER }}>
       <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold capitalize">
-          {d.tipo} · {d.filename}
+        <p className="text-xs font-semibold">
+          {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
         </p>
         <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
           SHA-256: {d.sha256}
