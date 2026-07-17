@@ -51,6 +51,34 @@ internal sealed class OtProfileRepository : IOtProfileRepository
         return Map(profile, flags);
     }
 
+    public async Task<OtProfile?> GetByTransitOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        // Lectura cross-tenant por oficina (SuperAdmin navegando el hub). El rol de core-api es
+        // OWNER de la tabla y no hay FORCE ROW LEVEL SECURITY, así que la consulta directa ve
+        // todas las filas sin fijar app.current_tenant_id — igual patrón que OtRuleGateService y
+        // la cola Quipux. NO escribe: evita el conflicto de uq_transit_office_profiles_...
+        var profile = await _context.TransitOfficeProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (profile is null)
+        {
+            return null;
+        }
+
+        var flags = await _context.OtFeatureFlags
+            .AsNoTracking()
+            .Where(f => f.TenantId == profile.TenantId)
+            .OrderBy(f => f.FlagKey)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Map(profile, flags);
+    }
+
     public Task<OtProfile> SaveAsync(
         Guid tenantId,
         string operationMode,
