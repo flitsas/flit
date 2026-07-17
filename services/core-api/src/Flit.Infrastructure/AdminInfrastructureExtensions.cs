@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
@@ -47,6 +48,10 @@ public static class AdminInfrastructureExtensions
         // HU #10678 — rastro de auditoría administrativa/seguridad transversal (usuarios,
         // roles, permisos, autenticación) sobre el mismo scope independiente que AuditFailureWriter.
         services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
+
+        // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
+        // auditoría administrativa/seguridad.
+        services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
