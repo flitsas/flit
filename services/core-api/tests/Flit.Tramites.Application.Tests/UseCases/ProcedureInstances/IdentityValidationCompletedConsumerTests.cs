@@ -32,7 +32,8 @@ public sealed class IdentityValidationCompletedConsumerTests
         _firma = new SolicitarFirmaHandler(_repo, new MockSignatureProvider());
         _fur = new GenerarFurHandler(
             _repo, new MockFurDocumentGenerator(), Substitute.For<IKyverumCertificateClient>(),
-            Substitute.For<IRuesCertificateGenerator>(), Substitute.For<IProcedureInstancePrendaRepository>(),
+            Substitute.For<IRuesCertificateGenerator>(), Substitute.For<IRnmcCertificateGenerator>(),
+            Substitute.For<IProcedureInstancePrendaRepository>(),
             new FakeStorage(), NullLogger<GenerarFurHandler>.Instance);
         _sut = new IdentityValidationCompletedConsumer(_repo, _firma, _fur);
     }
@@ -53,6 +54,10 @@ public sealed class IdentityValidationCompletedConsumerTests
             throw new NotSupportedException();
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
     private ProcedureInstanceBiometricValidation AprobadaValidation(Guid validationId, Guid tenant, string parte = "comprador")

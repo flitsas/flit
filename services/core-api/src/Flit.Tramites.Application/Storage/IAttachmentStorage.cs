@@ -60,4 +60,14 @@ public interface IAttachmentStorage
     /// Devuelve <c>null</c> si el archivo no existe (el adjunto está en BD pero el binario se perdió).
     /// </summary>
     Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve una presigned GET URL con <c>Content-Disposition: inline</c> para visualización
+    /// en el navegador (Feature #10701 / ADR-0029). TTL ≈ 10 minutos.
+    /// Devuelve <c>null</c> si el archivo no existe o el backend no soporta presigned view.
+    /// <para>No loguear la URL completa (contiene firma HMAC).</para>
+    /// </summary>
+    Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+        string storagePath,
+        CancellationToken ct = default);
 }

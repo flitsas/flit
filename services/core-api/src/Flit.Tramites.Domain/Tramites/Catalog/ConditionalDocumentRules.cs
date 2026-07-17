@@ -34,11 +34,14 @@ public static class ConditionalDocumentRules
         yield return new ConditionalRule("servicio_especial_anexos", c => c.ServicioEspecial, ConditionalEffect.Add,
             Item("anexos_servicio_especial", "Anexos de servicio especial", false, "anexos_generales"));
 
-        // RF35 — identidad del actor: NIT ⇒ RUES + documento; persona natural ⇒ sin cédula manual.
-        yield return new ConditionalRule("nit_rues", c => c.EsNit, ConditionalEffect.Require,
-            Item("rues", "Certificado RUES", true, "rues"));
-        yield return new ConditionalRule("nit_identificacion", c => c.EsNit, ConditionalEffect.Require,
-            Item("cedulas", "Documento de identificación (NIT)", true, "cedulas"));
+        // RF35 — identidad del actor (matrícula y traspaso). El actor NIT ya NO carga Certificado RUES
+        // ni documento de identificación: el sistema autogenera el certificado RUES (tipo
+        // `certificado_rues`, vía FUR) y lo pega al consolidado, y ese certificado cubre la
+        // identificación del NIT. Persona natural: identidad digital (biométrica), sin cédula manual.
+        // En ambos casos se oculta la cédula del checklist de carga (para NIT esto retira además el
+        // documento de identidad que el traspaso trae en el checklist base).
+        yield return new ConditionalRule("nit_sin_cedula", c => c.EsNit, ConditionalEffect.Hide,
+            Item("cedulas", "Documento de identidad", false, "cedulas"));
         yield return new ConditionalRule("pn_sin_cedula", c => c.EsPersonaNatural, ConditionalEffect.Hide,
             Item("cedulas", "Documento de identidad", false, "cedulas"));
     }

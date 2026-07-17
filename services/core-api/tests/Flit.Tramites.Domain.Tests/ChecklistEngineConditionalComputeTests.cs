@@ -42,11 +42,13 @@ public sealed class ChecklistEngineConditionalComputeTests
     }
 
     [Fact]
-    public void Nit_ExigeRuesYCedula_RF35()
+    public void Nit_NoCargaRuesNiCedula_RF35()
     {
+        // Ajuste RUES: el actor NIT no carga Certificado RUES ni el documento de identidad (lo cubre el
+        // certificado_rues autogenerado). En traspaso la cédula viene del checklist base ⇒ se oculta.
         var nit = Compute(new TramiteDocumentContext(EsNit: true));
-        nit.Items.Should().Contain(i => i.Item.Id == "rues" && i.Item.Obligatorio);
-        nit.Items.Should().Contain(i => i.Item.Id == "cedulas" && i.Item.Obligatorio);
+        nit.Items.Should().NotContain(i => i.Item.Id == "rues");
+        nit.Items.Should().NotContain(i => i.Item.Id == "cedulas");
     }
 
     [Fact]

@@ -20,6 +20,12 @@ internal sealed class ProcedureInstanceCommercialConfiguration : IEntityTypeConf
         builder.Property(x => x.TasaImpuesto).HasColumnName("tasa_impuesto").HasColumnType("numeric(7,4)");
         builder.Property(x => x.Derechos).HasColumnName("derechos").HasColumnType("numeric(18,2)");
         builder.Property(x => x.MetodoPago).HasColumnName("metodo_pago").HasMaxLength(40);
+
+        // Feature #10707 — trazabilidad del avalúo sugerido.
+        builder.Property(x => x.SuggestedValue).HasColumnName("suggested_value").HasColumnType("numeric(15,2)");
+        builder.Property(x => x.SuggestedSource).HasColumnName("suggested_source").HasMaxLength(30);
+        builder.Property(x => x.ValueOrigin).HasColumnName("value_origin").HasMaxLength(20);
+
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 

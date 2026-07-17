@@ -36,12 +36,11 @@ export function TramitesProcedureList({
         return (
           <li
             key={procedure.id}
-            className="group flex flex-col gap-4 rounded-2xl border bg-white p-4 transition-shadow hover:shadow-[0_2px_12px_rgba(22,39,68,0.08)] sm:flex-row sm:items-center dark:bg-[#0B0F14]"
-            style={{ borderColor: "#DFE5ED" }}
+            className="group flex flex-col gap-4 rounded-2xl border bg-card p-4 transition-shadow hover:shadow-[0_2px_12px_rgba(22,39,68,0.08)] sm:flex-row sm:items-center"
           >
             <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-              style={{ background: "#EEF5FF", color: "#557EFF" }}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#557EFF]/10"
+              style={{ color: "#557EFF" }}
               aria-hidden="true"
             >
               <FileText className="h-5 w-5" />
@@ -49,7 +48,7 @@ export function TramitesProcedureList({
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="truncate text-sm font-semibold" style={{ color: "#162744" }}>
+                <p className="truncate text-sm font-semibold text-foreground">
                   {procedure.procedureTypeName ?? procedure.procedureTypeId}
                 </p>
                 <OtStatusBadge
@@ -57,12 +56,12 @@ export function TramitesProcedureList({
                   tone={procedureStatusTone(procedure.status)}
                 />
               </div>
-              <dl className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]" style={{ color: "#162744" }}>
+              <dl className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-foreground">
                 <div className="inline-flex items-center gap-1">
                   <dt className="sr-only">Radicado</dt>
                   <dd
-                    className="rounded-md px-1.5 py-0.5 font-mono font-medium tracking-tight"
-                    style={{ background: "#F4F7FC", color: "#557EFF" }}
+                    className="rounded-md px-1.5 py-0.5 font-mono font-medium tracking-tight bg-muted"
+                    style={{ color: "#557EFF" }}
                   >
                     {procedure.referenceNumber}
                   </dd>
@@ -83,7 +82,6 @@ export function TramitesProcedureList({
             {(canAct || hasConsolidadoActions) && (
               <div
                 className="flex flex-wrap shrink-0 gap-2 border-t pt-3 sm:border-t-0 sm:pt-0"
-                style={{ borderColor: "#DFE5ED" }}
               >
                 {canAct && (
                   <>
@@ -110,8 +108,7 @@ export function TramitesProcedureList({
                 {onGenerarConsolidado && (
                   <button
                     type="button"
-                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                    style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50"
                     disabled={consolidadoActingId === procedure.id}
                     onClick={() => onGenerarConsolidado(procedure)}
                   >
@@ -121,8 +118,7 @@ export function TramitesProcedureList({
                 {onVerConsolidado && (
                   <button
                     type="button"
-                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                    style={{ borderColor: "#DFE5ED", color: "#162744" }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50"
                     disabled={consolidadoActingId === procedure.id}
                     onClick={() => onVerConsolidado(procedure)}
                   >

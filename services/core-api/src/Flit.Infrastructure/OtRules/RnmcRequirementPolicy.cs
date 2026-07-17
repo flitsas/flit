@@ -28,7 +28,8 @@ internal sealed class RnmcRequirementPolicy : IRnmcRequirementPolicy
         Guid? transitOfficeId,
         CancellationToken cancellationToken = default)
     {
-        var officeId = await ResolveOfficeAsync(tenantId, transitOfficeId, cancellationToken)
+        var officeId = await TransitOfficeDestinationResolver
+            .ResolveAsync(_grants, tenantId, transitOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         if (officeId is not { } office)
@@ -46,23 +47,5 @@ internal sealed class RnmcRequirementPolicy : IRnmcRequirementPolicy
 
         // Sin fila configurada → default: no se exige RNMC.
         return requires ?? false;
-    }
-
-    private async Task<Guid?> ResolveOfficeAsync(
-        Guid tenantId,
-        Guid? transitOfficeId,
-        CancellationToken cancellationToken)
-    {
-        if (transitOfficeId is { } explicitOffice && explicitOffice != Guid.Empty)
-        {
-            return explicitOffice;
-        }
-
-        // Aún sin OT en el FUR: si la empresa tiene exactamente un grant vigente, ese es el destino.
-        var enabledOffices = await _grants
-            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
-            .ConfigureAwait(false);
-
-        return enabledOffices.Count == 1 ? enabledOffices[0] : null;
     }
 }

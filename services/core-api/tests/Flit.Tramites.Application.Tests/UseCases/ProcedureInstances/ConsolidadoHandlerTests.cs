@@ -61,6 +61,13 @@ public sealed class ConsolidadoHandlerTests
                 return Task.FromResult<Stream?>(null);
             return Task.FromResult<Stream?>(new MemoryStream(bytes));
         }
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(
+                string.IsNullOrWhiteSpace(storagePath)
+                    ? null
+                    : ($"https://s3.test/view/{Uri.EscapeDataString(storagePath)}", DateTimeOffset.UtcNow.AddMinutes(10)));
     }
 
     private static ProcedureInstance MatriculaInstance(Guid id, Guid tenantId)

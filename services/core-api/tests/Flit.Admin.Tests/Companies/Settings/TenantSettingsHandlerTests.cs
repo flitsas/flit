@@ -426,6 +426,125 @@ public sealed class TenantSettingsHandlerTests
         result.ConsultationProviderConfig["conductor"].Fallback.Should().BeEquivalentTo("kyverum_runt_conductor");
     }
 
+    // ---------- FEATURE 02: fuente de comparendos (fines_query_source) ----------
+
+    [Fact]
+    public async Task F02_PersistsFinesQuerySource_AndAuditsOnlyThatField()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            // Sembrado con el default 'external' (entity default).
+            SeedPolicy(seed, tenantId,
+                allowInit: true, allowMisc: true, onlyOwn: false, vault: false,
+                channel: "flit_smtp", target: "RADICADOR", payments: "[]");
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            // Resto idéntico a lo sembrado: solo cambia la fuente de comparendos.
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ChangedBy,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: [],
+                    FinesQuerySource: "internal"),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.FinesQuerySource.Should().Be("internal");
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.FinesQuerySource.Should().Be("internal");
+
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        audits.Should().ContainSingle()
+            .Which.Should().Match<TenantConfigAuditLog>(a =>
+                a.FieldName == "fines_query_source" && a.OldValue == "\"external\"" && a.NewValue == "\"internal\"");
+    }
+
+    [Fact]
+    public async Task F02_InvalidFinesQuerySource_Returns422_AndPersistsNothing()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedPolicy(seed, tenantId,
+                allowInit: true, allowMisc: true, onlyOwn: false, vault: false,
+                channel: "flit_smtp", target: "RADICADOR", payments: "[]");
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: [],
+                    FinesQuerySource: "simit"),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainSingle(e => e.Field == "finesQuerySource");
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.FinesQuerySource.Should().Be("external");
+        (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task F02_Get_ReturnsFinesQuerySource()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                AllowInitialRegistration = true,
+                AllowMiscNewVehicles = true,
+                OnlyOwnVehicles = false,
+                SignatureVaultEnabled = false,
+                NotificationChannel = "flit_smtp",
+                NotificationTarget = "RADICADOR",
+                PaymentMethods = "[]",
+                FinesQuerySource = "internal",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+
+        var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
+
+        result.Should().NotBeNull();
+        result!.FinesQuerySource.Should().Be("internal");
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-settings-{Guid.NewGuid()}";

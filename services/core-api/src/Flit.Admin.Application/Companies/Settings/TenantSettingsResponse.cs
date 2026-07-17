@@ -14,4 +14,7 @@ public sealed record TenantSettingsResponse(
     string NotificationTarget,
     IReadOnlyList<string> MetodosRecaudo,
     int RuntFailoverTimeoutMs,
-    IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig);
+    IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig,
+    AvaluoProviderConfigDto AvaluoProviderConfig,
+    // FEATURE 02 — fuente de comparendos (internal | external).
+    string FinesQuerySource);

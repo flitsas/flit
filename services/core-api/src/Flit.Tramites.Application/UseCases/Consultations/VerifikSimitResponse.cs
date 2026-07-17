@@ -12,6 +12,12 @@ public sealed class VerifikSimitResponse
 {
     [JsonPropertyName("value")]
     public VerifikSimitValueOuter? Value { get; set; }
+
+    // La API viva de Verifik entrega el envoltorio PLANO { data, signature, id } (verificado contra
+    // HTTP 200 real por documento), no el doble anidado value.value.data que documentaba §3.5. El
+    // mapper acepta ambos (data del top como fallback) para no romper ni con el doc ni con la realidad.
+    [JsonPropertyName("data")]
+    public VerifikSimitData? Data { get; set; }
 }
 
 public sealed class VerifikSimitValueOuter
@@ -84,6 +90,11 @@ public sealed class VerifikSimitMulta
 
     [JsonPropertyName("estadoComparendo")]
     public string? EstadoComparendo { get; set; }
+
+    // Estado de CARTERA (cobro). En la respuesta viva el comparendo escalado a resolución llega con
+    // estadoComparendo=null pero estadoCartera="Pendiente de pago": es el indicador real de deuda.
+    [JsonPropertyName("estadoCartera")]
+    public string? EstadoCartera { get; set; }
 }
 
 public sealed class VerifikSimitInfractor

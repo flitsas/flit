@@ -252,6 +252,20 @@ public sealed class TramiteLifecycleServiceTests
     }
 
     [Fact]
+    public async Task TransicionExitosa_InvalidaConsolidadoMaestro()
+    {
+        // Feature #10701 — un cambio de estado baja la marca de vigencia del consolidado maestro
+        // para que el próximo "Ver consolidado" lo regenere reflejando el nuevo estado del expediente.
+        var i = Wire(TramiteEstado.Preparado);
+        i.ConsolidadoMaestroVigente = true;
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RechazadoVuelveABorradorParaSubsanar()
     {
         var i = Wire(TramiteEstado.Rechazado);
@@ -298,31 +312,17 @@ public sealed class TramiteLifecycleServiceTests
         await _operabilityGate.Received(1).IsOperableAsync(officeId, Arg.Any<CancellationToken>());
     }
 
-    // HU #10604 (R19) — "Imponer Medida": registra pero bloquea el envío hasta el paz y salvo RNMC.
+    // HU #10604 (R19) — RNMC no es bloqueante: una medida correctiva pendiente NO veta el envío al OT.
     [Fact]
-    public async Task Entrega_RnmcMedidaPendienteSinPazSalvo_BloqueaEnvio()
+    public async Task Entrega_RnmcMedidaPendiente_NoBloqueaEnvio()
     {
         var i = Wire(TramiteEstado.Preparado);
-        ConSenalRnmcMedida(i); // el preflight detectó una medida correctiva
-
-        var outcome = await Transition(i, TramiteEstado.Entregado);
-
-        outcome.Success.Should().BeFalse();
-        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.RnmcMedidaBloqueaEnvio);
-        i.Status.Should().Be(TramiteEstado.Preparado); // registrado, no enviado
-    }
-
-    [Fact]
-    public async Task Entrega_RnmcMedidaConPazSalvo_Permite()
-    {
-        var i = Wire(TramiteEstado.Preparado);
-        ConSenalRnmcMedida(i);
-        ConPazSalvoRnmc(i); // el paz y salvo desbloquea el envío
+        ConSenalRnmcMedida(i); // el preflight detectó una medida correctiva (informativa)
 
         var outcome = await Transition(i, TramiteEstado.Entregado);
 
         outcome.Success.Should().BeTrue();
-        i.Status.Should().Be(TramiteEstado.Entregado);
+        i.Status.Should().Be(TramiteEstado.Entregado); // se envía pese a la medida
     }
 
     private static void SeleccionarOt(ProcedureInstance instance, Guid officeId) =>
@@ -347,14 +347,4 @@ public sealed class TramiteLifecycleServiceTests
             Source = "system",
         });
 
-    private static void ConPazSalvoRnmc(ProcedureInstance instance) =>
-        instance.Attachments.Add(new ProcedureInstanceAttachment
-        {
-            Id = Guid.NewGuid(),
-            TenantId = instance.TenantId,
-            ProcedureInstanceId = instance.Id,
-            Tipo = "paz_salvo_rnmc",
-            StoragePath = "p/paz_salvo_rnmc",
-            UploadedAt = DateTimeOffset.UtcNow,
-        });
 }
