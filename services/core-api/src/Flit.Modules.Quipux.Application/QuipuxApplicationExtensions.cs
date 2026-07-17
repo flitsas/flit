@@ -1,6 +1,7 @@
 using Flit.Modules.Quipux.Application.UseCases.Cola;
 using Flit.Modules.Quipux.Application.UseCases.Configuracion;
 using Flit.Modules.Quipux.Application.UseCases.ConsultarEstado;
+using Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
 using Flit.Modules.Quipux.Application.UseCases.EncolarEnvio;
 using Flit.Modules.Quipux.Application.UseCases.RegistrarDocumento;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,6 +54,10 @@ public static class QuipuxApplicationExtensions
         services.AddScoped<ListarColaQuipuxHandler>();
         services.AddScoped<ReintentarSubmissionHandler>();
         services.AddScoped<CancelarSubmissionHandler>();
+
+        // LOG QX (HU #10793): consulta de trazabilidad (búsqueda + timeline) para soporte/admin.
+        // Solo lectura; lo consume AdminLogQxEndpoints.
+        services.AddScoped<ConsultarLogQuipuxHandler>();
 
         return services;
     }
