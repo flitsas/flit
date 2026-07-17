@@ -59,6 +59,12 @@ export interface OtClientProcedure {
    * `puedeDecidirOt`). El gate duro de aprobación ya lo impone el backend.
    */
   soatEstado?: string | null;
+  /**
+   * HU #10805 (Feature #10587) — dígito de preferencia de placa (0-9) que el gestor indicó al radicar
+   * sin placa. Es solo una GUÍA para el OT al asignar: puede elegir una placa que termine en este
+   * dígito o cualquier otra. `null` si no hubo preferencia.
+   */
+  platePreferredLastDigit?: string | null;
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;

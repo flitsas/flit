@@ -253,6 +253,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
           organismoId={organismo.id}
           plateValue={fv('plate')}
           plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+          preferredDigitValue={fv('plate_preferred_last_digit')}
           readOnly={readOnly}
           onRefresh={() => {
             void loadDetail();
@@ -341,6 +342,7 @@ export function PlacaPreasignadaSection({
   organismoId,
   plateValue,
   plateSource,
+  preferredDigitValue = '',
   readOnly,
   onRefresh,
 }: {
@@ -348,6 +350,8 @@ export function PlacaPreasignadaSection({
   organismoId: string;
   plateValue: string;
   plateSource: string;
+  /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
+  preferredDigitValue?: string;
   readOnly: boolean;
   onRefresh?: () => void;
 }) {
@@ -357,6 +361,9 @@ export function PlacaPreasignadaSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  // HU #10805 — dígito de preferencia (0-9) para radicar sin placa: guía para el OT al asignar.
+  const [preferredDigit, setPreferredDigit] = useState(() => preferredDigitValue ?? '');
+  const [savingDigit, setSavingDigit] = useState(false);
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -395,6 +402,24 @@ export function PlacaPreasignadaSection({
       setError('No se pudo asignar la placa. Inténtalo de nuevo.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // HU #10805 — persiste el dígito de preferencia (o lo limpia con ''). Solo es una guía para el OT;
+  // no cambia el enrutamiento: sin placa el trámite sigue cayendo por preasignación.
+  const saveDigit = async (value: string) => {
+    setPreferredDigit(value);
+    setSavingDigit(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value },
+      ]);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo guardar el dígito de preferencia. Inténtalo de nuevo.');
+    } finally {
+      setSavingDigit(false);
     }
   };
 
@@ -483,6 +508,29 @@ export function PlacaPreasignadaSection({
           </div>
         </>
       )}
+      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
+      <label className="mt-1 flex flex-col gap-1 text-[11px] font-semibold">
+        Dígito de preferencia (opcional)
+        <span className="text-[10px] font-normal opacity-70">
+          Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
+          guía: puede asignar una placa que termine en ese dígito u otra.
+        </span>
+        <select
+          value={preferredDigit}
+          disabled={savingDigit}
+          onChange={(e) => void saveDigit(e.target.value)}
+          aria-label="Dígito de preferencia de placa"
+          className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
+        >
+          <option value="">Sin preferencia</option>
+          {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <option key={d} value={d}>
+              Termina en {d}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {changing && (
         <button
           type="button"

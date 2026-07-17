@@ -32,6 +32,14 @@ public sealed class OtClientProcedure
     /// </summary>
     public string? SoatEstado { get; init; }
 
+    /// <summary>
+    /// HU #10805 (Feature #10587) — dígito de preferencia de placa (field_value
+    /// <c>plate_preferred_last_digit</c>, un carácter 0-9) indicado por el gestor al radicar sin placa.
+    /// Es SOLO una guía para el OT al asignar: puede elegir una placa que termine en este dígito o
+    /// cualquier otra. <c>null</c> si el gestor no indicó preferencia.
+    /// </summary>
+    public string? PlatePreferredLastDigit { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

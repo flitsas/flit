@@ -515,6 +515,50 @@ public sealed class OtClientProcedureHandlerTests
         result.Data.Single(p => p.Id == estandar).SoatEstado.Should().BeNull();
     }
 
+    // ---------- HU #10805 (Feature #10587): la bandeja del OT proyecta el dígito de preferencia ----------
+
+    /// <summary>
+    /// Uso de ejemplo: la bandeja del OT expone <c>PlatePreferredLastDigit</c> como guía para asignar
+    /// placa; es informativo (no obliga) y null cuando el gestor no indicó preferencia.
+    /// </summary>
+    [Fact] // HU #10805 — happy path + contrato: plate_preferred_last_digit se proyecta y es null sin field.
+    public async Task List_ProyectaDigitoDePreferencia()
+    {
+        var db = NewDbName();
+        var conDigito = Guid.NewGuid();
+        var sinDigito = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, conDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-DIG", PlateFlowStatus.Preasignado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = conDigito,
+                TenantId = ClientTenant,
+                FieldKey = "plate_preferred_last_digit",
+                ValueText = "5",
+            });
+            SeedProcedure(seed, sinDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-NODIG", PlateFlowStatus.Preasignado);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+        var result = await handler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = TramiteEstado.Entregado,
+        }, TestContext.Current.CancellationToken);
+
+        // AC2 — el OT recibe el dígito como guía.
+        result.Data.Single(p => p.Id == conDigito).PlatePreferredLastDigit.Should().Be("5");
+        // AC4 — sin preferencia: null (no gatea ni obliga nada).
+        result.Data.Single(p => p.Id == sinDigito).PlatePreferredLastDigit.Should().BeNull();
+    }
+
     // ---------- HU #10610 (R06): SOAT gate duro en la aprobación de la ruta de placa ----------
 
     [Theory]

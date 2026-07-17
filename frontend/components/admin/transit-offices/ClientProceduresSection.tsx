@@ -374,6 +374,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
+  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía). Las placas del rango que
+  // terminan en ese dígito se ordenan primero y se marcan; el OT puede elegir esa u otra cualquiera.
+  const preferredDigit = assignTarget?.platePreferredLastDigit?.trim() ?? "";
+  const orderedPlates = preferredDigit
+    ? [...availablePlates].sort(
+        (a, b) =>
+          Number(b.plate.endsWith(preferredDigit)) - Number(a.plate.endsWith(preferredDigit)),
+      )
+    : availablePlates;
+
   return (
     <div className="space-y-4">
       {isReadOnly && (
@@ -548,6 +558,17 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
+            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede asignar una placa
+                que termine en ese dígito o cualquier otra. */}
+            {preferredDigit && (
+              <div
+                className="mt-3 rounded-lg px-3 py-2 text-xs"
+                style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
+              >
+                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía. Las placas ★ del
+                rango terminan en ese dígito; puedes asignar esa u otra cualquiera.
+              </div>
+            )}
             {/* HU #10800 — elegir del rango (select) o registrar una placa fuera de rango (input). */}
             <div className="mt-4 flex gap-2 text-xs font-semibold">
               <button
@@ -580,8 +601,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   <option value="">
                     {availablePlates.length === 0 ? "No hay placas disponibles" : "Selecciona una placa"}
                   </option>
-                  {availablePlates.map((p) => (
-                    <option key={p.id} value={p.plate}>{p.plate}</option>
+                  {orderedPlates.map((p) => (
+                    <option key={p.id} value={p.plate}>
+                      {p.plate}
+                      {preferredDigit && p.plate.endsWith(preferredDigit) ? " ★" : ""}
+                    </option>
                   ))}
                 </select>
               </label>

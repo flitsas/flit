@@ -23,6 +23,10 @@ public sealed class OtClientProcedureResponse
     /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
     public string? SoatEstado { get; init; }
 
+    /// <summary>HU #10805 (Feature #10587) — dígito de preferencia de placa (0-9). Guía para el OT
+    /// al asignar; no obliga (puede asignar una placa que termine en otro dígito).</summary>
+    public string? PlatePreferredLastDigit { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -52,6 +56,7 @@ internal static class OtClientProcedureMapper
             Status = procedure.Status,
             PlateFlowStatus = procedure.PlateFlowStatus,
             SoatEstado = procedure.SoatEstado,
+            PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,
             TransitOfficeId = procedure.TransitOfficeId,
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,

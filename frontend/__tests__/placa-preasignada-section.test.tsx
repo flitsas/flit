@@ -1,6 +1,6 @@
 // HU #10799 — sección explícita de selección de placa preasignada (Flujo A) en el paso FUR.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
@@ -92,5 +92,50 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
     expect(screen.getByText('ABC100')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cambiar/i })).toBeInTheDocument();
     expect(mocks.listAvailablePlatesForCompany).not.toHaveBeenCalled();
+  });
+});
+
+// HU #10805 — dígito de preferencia (guía para el OT); se captura al radicar sin placa.
+// Uso de ejemplo: <PlacaPreasignadaSection preferredDigitValue="5" ... /> → select en "Termina en 5"
+describe('PlacaPreasignadaSection — dígito de preferencia (HU #10805)', () => {
+  // AC1/AC5 — el control ofrece exactamente "Sin preferencia" + 0..9 (entrada acotada, no texto libre).
+  it('AC1/AC5 — ofrece el dígito de preferencia con opciones Sin preferencia + 0-9', async () => {
+    render(
+      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
+    );
+    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
+    expect(within(select).getAllByRole('option')).toHaveLength(11); // Sin preferencia + 0..9
+  });
+
+  // AC1 — seleccionar un dígito lo persiste en el field plate_preferred_last_digit y refresca.
+  it('AC1 — seleccionar un dígito lo persiste y refresca', async () => {
+    const onRefresh = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PlacaPreasignadaSection
+        instanceId="inst-9" organismoId="o" plateValue="" plateSource="" readOnly={false} onRefresh={onRefresh}
+      />,
+    );
+    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
+    await user.selectOptions(select, '5');
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-9', [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: '5' },
+      ]),
+    );
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  // AC4 (edge) — si ya hay dígito persistido, el control lo prellena.
+  it('AC4 — prellena el dígito de preferencia persistido', async () => {
+    render(
+      <PlacaPreasignadaSection
+        instanceId="i" organismoId="o" plateValue="" plateSource="" preferredDigitValue="7" readOnly={false}
+      />,
+    );
+    const select = (await screen.findByLabelText(
+      /Dígito de preferencia de placa/i,
+    )) as HTMLSelectElement;
+    expect(select.value).toBe('7');
   });
 });

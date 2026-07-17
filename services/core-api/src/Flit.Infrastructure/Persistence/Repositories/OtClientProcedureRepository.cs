@@ -16,6 +16,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 {
+    // HU #10805 — field_value donde el gestor guarda el dígito de preferencia de placa (0-9).
+    private const string PlatePreferredLastDigitFieldKey = "plate_preferred_last_digit";
+
     private readonly FlitDbContext _context;
     private readonly ITramiteTransitionPublisher _transitionPublisher;
     private readonly IPlateRangeRepository? _plateRepo;
@@ -91,6 +94,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 SoatEstado = _context.ProcedureInstanceFieldValues
                                     .Where(f => f.ProcedureInstanceId == p.Id
                                         && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
+                                    .Select(f => f.ValueText)
+                                    .FirstOrDefault(),
+                                // HU #10805 — dígito de preferencia (guía para el OT al asignar placa).
+                                PlatePreferredLastDigit = _context.ProcedureInstanceFieldValues
+                                    .Where(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == PlatePreferredLastDigitFieldKey)
                                     .Select(f => f.ValueText)
                                     .FirstOrDefault(),
                                 TransitOfficeId = p.TransitOfficeId,
@@ -584,6 +593,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
                             .Select(f => f.ValueText)
                             .FirstOrDefault(),
+                        // HU #10805 — dígito de preferencia también en el detalle.
+                        PlatePreferredLastDigit = _context.ProcedureInstanceFieldValues
+                            .Where(f => f.ProcedureInstanceId == p.Id
+                                && f.FieldKey == PlatePreferredLastDigitFieldKey)
+                            .Select(f => f.ValueText)
+                            .FirstOrDefault(),
                         TransitOfficeId = p.TransitOfficeId,
                         CreatedAt = p.CreatedAt,
                         SubmittedAt = p.SubmittedAt,
@@ -817,6 +832,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 Status = item.Status,
                 PlateFlowStatus = item.PlateFlowStatus,
                 SoatEstado = item.SoatEstado,
+                PlatePreferredLastDigit = item.PlatePreferredLastDigit,
                 TransitOfficeId = item.TransitOfficeId,
                 CreatedAt = item.CreatedAt,
                 SubmittedAt = item.SubmittedAt,
