@@ -27,6 +27,7 @@ import {
   Briefcase,
   Landmark,
   Fingerprint,
+  Send,
   ScrollText,
 } from "lucide-react";
 
@@ -191,6 +192,13 @@ export function Shell({
         icon: Fingerprint,
         active: pathname.startsWith("/admin/improntas"),
         onClick: () => window.location.assign("/admin/improntas"),
+      },
+      {
+        key: "admin-quipux",
+        label: "Quipux",
+        icon: Send,
+        active: pathname.startsWith("/admin/quipux"),
+        onClick: () => window.location.assign("/admin/quipux"),
       },
       {
         key: "rbac",
