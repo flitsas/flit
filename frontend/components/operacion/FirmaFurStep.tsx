@@ -15,7 +15,9 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
+import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
   BiometricValidation,
@@ -24,6 +26,7 @@ import type {
   InstanceStatus,
   Participant,
   ParticipantRol,
+  PreflightCheck,
   ProcedureAttachment,
   Signature,
   SignatureParte,
@@ -37,12 +40,78 @@ interface Props {
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras una acción (server-driven). */
   onRefresh?: () => void;
+  /** FEATURE 05 — el RNMC aplica al trámite: se consulta por actor y se muestra en el resumen. */
+  rnmcEnabled?: boolean;
 }
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
 };
+
+// FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
+const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
+  ok: { dot: '#8CC63F', text: '#8CC63F' },
+  warn: { dot: '#F9AC00', text: '#F9AC00' },
+  fail: { dot: '#FF4E00', text: '#FF4E00' },
+  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  error: { dot: '#FF4E00', text: '#FF4E00' },
+};
+
+/**
+ * FEATURE 05 — resultado de la consulta RNMC (medidas correctivas de la Policía) por actor. Se
+ * consulta al entrar al paso final (ya con la fecha de expedición de cada actor), no en el pre-vuelo.
+ * Reutiliza `sourceLabel` (verifik_rnmc→RNMC) y `checkRoleSuffix` (comprador/vendedor) del pre-vuelo.
+ */
+function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
+  return (
+    <div className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]">
+      <div className="mb-3 flex items-center gap-2">
+        <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+        <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
+        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
+      </div>
+      {loading && checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Consultando el RNMC de los actores…</p>
+      ) : checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+      ) : (
+        <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
+          {checks.map((c) => {
+            const s = RNMC_STATUS_STYLE[c.status] ?? RNMC_STATUS_STYLE.unknown;
+            return (
+              <li key={c.key} className="flex items-start gap-2.5 rounded-xl border p-2.5">
+                <span
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: s.dot }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold">
+                      {c.label}
+                      {checkRoleSuffix(c.key)}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold" style={{ color: s.text }}>
+                      {c.status}
+                    </span>
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+                    >
+                      {sourceLabel(c.source)}
+                    </span>
+                  </div>
+                  {c.message && <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
   { value: 'comprador', label: 'Comprador' },
@@ -122,7 +191,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * wizard tras cada acción y delega la verificación autoritativa al backend
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
-export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
+export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = false }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
   const readOnly = useWizardReadOnly();
@@ -137,6 +206,10 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
+  // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
+  const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
+  const [rnmcLoading, setRnmcLoading] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
@@ -170,12 +243,29 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
     }
   }, [instanceId]);
 
+  // FEATURE 05 — al entrar a este paso (ya con la fecha de expedición de cada actor) se dispara la
+  // consulta RNMC: POST corre la consulta por actor natural y persiste, y devuelve los checks. Si el
+  // RNMC no aplica al trámite (rnmcEnabled=false) no se llama nada.
+  const loadRnmc = useCallback(async () => {
+    if (!instanceId || !rnmcEnabled) return;
+    setRnmcLoading(true);
+    try {
+      const checks = await tramitesClient.runRnmc(instanceId);
+      setRnmcChecks(checks);
+    } catch {
+      // El RNMC es informativo en este paso; su fallo no bloquea la firma/FUR.
+    } finally {
+      setRnmcLoading(false);
+    }
+  }, [instanceId, rnmcEnabled]);
+
   useEffect(() => {
     // Carga al montar: el setState ocurre tras el await (no es setState síncrono).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDetail();
     void loadExpediente();
-  }, [loadDetail, loadExpediente]);
+    void loadRnmc();
+  }, [loadDetail, loadExpediente, loadRnmc]);
 
   const fv = useCallback(
     (key: string): string =>
@@ -274,6 +364,8 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         identidadAprobada={identidadAprobada}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
       />
+
+      {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
       <ExpedienteVisor
         instanceId={instanceId}
@@ -1261,7 +1353,7 @@ function ImprontaSection({
 // ── FUR / compraventa ─────────────────────────────────────────────────
 
 /** Tipos de documento generados por el FUR. */
-const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor']);
+const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
 
 function FurSection({
   instanceId,
@@ -1397,8 +1489,8 @@ function FurSection({
             >
               <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold capitalize">
-                  {d.tipo} · {d.filename}
+                <p className="text-xs font-semibold">
+                  {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
                 </p>
                 <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
                   SHA-256: {d.sha256}

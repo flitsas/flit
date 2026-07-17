@@ -9,6 +9,8 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
+import { OTConsultationRestrictionsPanel } from "@/components/admin/companies/panels/OTConsultationRestrictionsPanel";
+import { OTBlockingPoliciesPanel } from "@/components/admin/companies/panels/OTBlockingPoliciesPanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
@@ -110,6 +112,8 @@ function CompanyDetail() {
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
                 otSlot={<OTMatrixPanel tenantId={tenantId} />}
+                otRestrictionsSlot={<OTConsultationRestrictionsPanel tenantId={tenantId} />}
+                otBlockingSlot={<OTBlockingPoliciesPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
               />

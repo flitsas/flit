@@ -305,18 +305,23 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || string.IsNullOrWhiteSpace(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            if (actor is null)
+                continue;
+
+            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+            var subject = IdentitySubjectResolver.For(actor);
+            if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
             var yaLocal = instance.BiometricValidations.Any(v =>
                 string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
                 && BiometricRules.EsAprobadaVigente(v, now)
-                && BiometricRules.DocumentoCoincide(v, actor.DocumentType, actor.DocumentNumber));
+                && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento));
             if (yaLocal)
                 continue;
 
             var source = await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
             if (source is not null)
                 dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
         }
@@ -502,6 +507,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         if (actor is null)
             return (null, "actor_requerido");
 
+        // Sujeto de identidad (HU #10688): natural → actor; jurídica → representante legal. La validación se
+        // ancla al documento/correo del sujeto para que la PJ quede firmada por el RL, no por el NIT.
+        var subject = IdentitySubjectResolver.For(actor);
+
         var detalle = JsonSerializer.Serialize(new
         {
             score = MockScore,
@@ -519,10 +528,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
             validation = existing;
             validation.Score = MockScore;
             validation.Detail = detalle;
-            validation.Name = actor.FullName;
-            validation.DocumentType = actor.DocumentType;
-            validation.DocumentNumber = actor.DocumentNumber;
-            validation.Email = actor.Email ?? string.Empty;
+            validation.Name = subject.Nombre ?? actor.FullName;
+            validation.DocumentType = subject.TipoDocumento ?? actor.DocumentType;
+            validation.DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber;
+            validation.Email = subject.Email ?? string.Empty;
             validation.Approve(now); // estado + validated_at + estampa valid_until + updated_at
         }
         else
@@ -533,10 +542,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
                 TenantId = tenantId,
                 ProcedureInstanceId = id,
                 PartyRole = normalized,
-                Name = actor.FullName,
-                DocumentType = actor.DocumentType,
-                DocumentNumber = actor.DocumentNumber,
-                Email = actor.Email ?? string.Empty,
+                Name = subject.Nombre ?? actor.FullName,
+                DocumentType = subject.TipoDocumento ?? actor.DocumentType,
+                DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber,
+                Email = subject.Email ?? string.Empty,
                 Status = BiometricEstados.Aprobado,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),

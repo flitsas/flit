@@ -47,7 +47,7 @@ export function UiStateBoundary({
         {Array.from({ length: skeletonRows }).map((_, i) => (
           <div
             key={i}
-            className="h-12 rounded-xl border animate-pulse bg-[#F4F7FC]"
+            className="h-12 rounded-xl border animate-pulse bg-[#F4F7FC] dark:bg-white/5"
           />
         ))}
       </div>

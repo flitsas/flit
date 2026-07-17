@@ -34,6 +34,7 @@ public sealed class GenerarFurHandler(
     IFurDocumentGenerator generator,
     IKyverumCertificateClient certClient,
     IRuesCertificateGenerator ruesGenerator,
+    IRnmcCertificateGenerator rnmcGenerator,
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger)
@@ -147,6 +148,30 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // HU #10762 — Certificado RNMC: si el preflight consultó el RNMC de alguna parte, emitir el
+        // certificado (PDF, Source=system) con el resultado por parte para que se descargue del trámite y
+        // se fusione en el consolidado. Best-effort: nunca bloquea el FUR.
+        var (certificadoRnmc, aplicaRnmc) = TryGenerateRnmcCertificate(instance);
+        if (certificadoRnmc is not null)
+        {
+            generated.Add(certificadoRnmc);
+        }
+        else if (!aplicaRnmc)
+        {
+            // Sin checks RNMC (o dejó de haberlos en una regeneración): retirar el certificado previo, para
+            // que el consolidado no arrastre un resultado RNMC obsoleto. Solo cuando el RNMC NO aplica: si
+            // aplicaba y la generación falló, se conserva el previo (borrarlo por un fallo transitorio
+            // perdería un certificado válido).
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "certificado_rnmc", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
+
         foreach (var doc in generated)
         {
             // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo.
@@ -230,9 +255,12 @@ public sealed class GenerarFurHandler(
             Marca: Get(fv, "vehicle_brand"),
             Linea: Get(fv, "vehicle_line"),
             Modelo: Get(fv, "vehicle_year"),
-            Color: Get(fv, "vehicle_color"),
+            // A4/B4 (HU #10673, ADR-0029) — los CAMPOS del vehículo del FUR (color/combustible) llevan el
+            // dato ORIGINAL del RUNT (snapshot *_runt); la transformación declarada viaja solo en las
+            // observaciones. Fallback al efectivo si no hay snapshot (trámites previos a la feature).
+            Color: RuntOrEffective(fv, "vehicle_color_runt", "vehicle_color"),
             Clase: Get(fv, "vehicle_class"),
-            Combustible: Get(fv, "vehicle_fuel"),
+            Combustible: RuntOrEffective(fv, "vehicle_fuel_runt", "vehicle_fuel"),
             Cilindraje: Get(fv, "vehicle_engine_displacement"),
             Vin: Get(fv, "vin"),
             Placa: Get(fv, "plate"),
@@ -263,7 +291,12 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            Observaciones: Get(fv, "fur_observations"),
+            // A4/B4 (HU #10673, ADR-0029) — anexa a las observaciones manuales el texto automático de las
+            // transformaciones de color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            Observaciones: FurTransformationObservations.Compose(
+                Get(fv, "fur_observations"),
+                Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
@@ -283,22 +316,24 @@ public sealed class GenerarFurHandler(
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
-        // Fila propia aprobada+vigente del rol Y del documento del actor actual. El filtro por documento es
+        // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
         // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
         // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
             && BiometricRules.EsAprobadaVigente(v, now)
-            && BiometricRules.DocumentoCoincide(v, actor?.DocumentType, actor?.DocumentNumber));
+            && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
 
-        // Identidad vigente REFERENCIADA por documento del actor (HU #10350, sin clonar).
-        if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+        // Identidad vigente REFERENCIADA por documento del sujeto (HU #10350, sin clonar).
+        if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             return await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
 
         return null;
     }
@@ -343,6 +378,86 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
+    /// HU #10762 — Genera el certificado RNMC desde el ÚLTIMO snapshot de preflight (los checks
+    /// <c>rnmc_{rol}_*</c>), o <c>null</c> si no se ha corrido el preflight o no consultó el RNMC (p. ej.
+    /// todas las partes son personas jurídicas: el RNMC solo aplica a naturales).
+    /// <para>La fuente del dato es el SNAPSHOT, no field_values: la señal <c>rnmc_medida_pendiente</c> es un
+    /// booleano sin el detalle por parte que exige el certificado.</para>
+    /// <para>Best-effort: cualquier fallo se registra como warning y omite el certificado; nunca aborta el FUR.</para>
+    /// </summary>
+    /// <returns>
+    /// <c>Aplica</c> distingue "el RNMC no aplica a este trámite" (⇒ el caller retira el certificado previo)
+    /// de "aplicaba pero la generación falló" (⇒ se conserva el previo, que sigue siendo válido).
+    /// </returns>
+    private (GeneratedDocument? Doc, bool Aplica) TryGenerateRnmcCertificate(ProcedureInstance instance)
+    {
+        try
+        {
+            // FEATURE 05 — el resultado RNMC ya no vive en el snapshot del pre-vuelo, sino en el
+            // field_value `rnmc_checks` que escribe la consulta RNMC dedicada del paso final.
+            var fvRnmc = instance.FieldValues
+                .FirstOrDefault(f => string.Equals(f.FieldKey, RunRnmcConsultHandler.FieldRnmcChecks, StringComparison.Ordinal));
+
+            var checks = GetPreflightHandler.DeserializeChecks(fvRnmc?.ValueJson)
+                .Where(c => c.Key.EndsWith("medidas_correctivas", StringComparison.Ordinal))
+                .ToList();
+            if (checks.Count == 0)
+                return (null, false);
+
+            var entradas = new List<RnmcCertificateEntry>(checks.Count);
+            foreach (var check in checks)
+            {
+                var rol = RolFromCheckKey(check.Key);
+                var actor = instance.Actors.FirstOrDefault(a =>
+                    string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+                entradas.Add(new RnmcCertificateEntry(
+                    rol,
+                    actor?.FullName ?? string.Empty,
+                    actor?.DocumentNumber ?? string.Empty,
+                    EstadoRnmc(check.Status),
+                    check.Message));
+            }
+
+            var consultadoAt = fvRnmc?.UpdatedAt ?? fvRnmc?.CreatedAt ?? DateTimeOffset.UtcNow;
+            var data = new RnmcCertificateData(
+                instance.Id,
+                instance.ReferenceNumber,
+                consultadoAt,
+                entradas);
+
+            return (rnmcGenerator.GenerateRnmcCertificate(data), true);
+        }
+        catch (Exception ex)
+        {
+            GenerarFurLog.CertificadoRnmcFallo(logger, ex, instance.Id);
+            return (null, true);
+        }
+    }
+
+    /// <summary>
+    /// Rol del segmento intermedio de la key del check: <c>rnmc_{rol}_{keyDelMapper}</c> (p. ej.
+    /// <c>rnmc_comprador_medidas_correctivas</c>). Cubre también la key sin sufijo (<c>rnmc_{rol}</c>), que
+    /// el preflight emite cuando el provider RNMC no está disponible.
+    /// </summary>
+    private static string RolFromCheckKey(string key)
+    {
+        var parts = key.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? parts[1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Estado del check → texto del certificado. Deliberadamente NO expone el estado crudo del preflight
+    /// ni el proveedor: el certificado es un documento de cara al usuario / al OT.
+    /// </summary>
+    private static string EstadoRnmc(string? status) => status switch
+    {
+        "ok" => "SIN MEDIDAS CORRECTIVAS",
+        "warn" => "CON MEDIDAS CORRECTIVAS",
+        "unknown" => "SIN DATOS",
+        _ => "NO VERIFICABLE",
+    };
+
+    /// <summary>
     /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
     /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
     /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
@@ -367,10 +482,12 @@ public sealed class GenerarFurHandler(
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is not null && !string.IsNullOrWhiteSpace(actor.DocumentType) && !string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+            var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+            if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             {
                 var source = await repo.FindVigenteApprovedByDocumentAsync(
-                    instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), DateTimeOffset.UtcNow, ct);
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
                 if (source is not null && EsKyverumConId(source))
                     bio = source;
             }
@@ -408,6 +525,9 @@ public sealed class GenerarFurHandler(
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
         var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
+        var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
+            || string.Equals(a?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
         partes.Add(new DocumentParte(
             rol,
             a?.FullName,
@@ -416,7 +536,8 @@ public sealed class GenerarFurHandler(
             string.IsNullOrWhiteSpace(a?.DocumentType) ? null : a.DocumentType.Trim(),
             string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
             direccion,
-            ciudad));
+            ciudad,
+            esJuridica));
     }
 
     private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);
@@ -449,6 +570,14 @@ public sealed class GenerarFurHandler(
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
+
+    // Devuelve el snapshot RUNT si existe (no vacío); si no, cae al valor efectivo. Se usa para imprimir
+    // el dato original del vehículo en el FUR aunque exista una transformación declarada en el efectivo.
+    private static string? RuntOrEffective(Dictionary<string, string?> fv, string runtKey, string effectiveKey)
+    {
+        var runt = Get(fv, runtKey);
+        return string.IsNullOrWhiteSpace(runt) ? Get(fv, effectiveKey) : runt;
+    }
 }
 
 /// <summary>Logging source-generated (CA1848) de la generación del FUR. No incluye PII ni secretos.</summary>
@@ -461,4 +590,8 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo generar el certificado RNMC (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
+    public static partial void CertificadoRnmcFallo(ILogger logger, Exception ex, Guid instanceId);
 }

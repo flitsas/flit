@@ -6,6 +6,7 @@
 
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
+  FineDetail,
   PreflightCheckStatus,
   PreflightSnapshot,
 } from '@/lib/api/types/procedure-runtime';
@@ -53,6 +54,14 @@ const SOURCE_LABEL: Record<string, string> = {
   verifik_simit: 'SIMIT',
   verifik_rnmc: 'RNMC',
   intempo: 'RUNT',
+  kyverum_runt: 'RUNT',
+  // El origen último del dato es el SIMIT; Kyverum es solo la pasarela.
+  kyverum_fines: 'SIMIT',
+  // Cartera propia de FLIT: aquí la fuente sí es interna.
+  flit_fines: 'Comparendos FLIT',
+  // Checks derivados por la plataforma, no por un proveedor externo
+  // (p. ej. `vin_matricula`, o una consulta omitida por configuración del OT).
+  system: 'FLIT',
 };
 
 export function sourceLabel(source: string | null | undefined): string {
@@ -69,6 +78,54 @@ export function checkRoleSuffix(key: string): string {
   if (key.startsWith('rnmc_comprador')) return ' (comprador)';
   if (key.startsWith('rnmc_vendedor')) return ' (vendedor)';
   return '';
+}
+
+/** Formatea un valor en pesos colombianos (sin decimales). Null/NaN → cadena vacía. */
+function formatCOP(valor: number | null | undefined): string {
+  if (valor == null || Number.isNaN(valor)) return '';
+  return `$${Math.round(valor).toLocaleString('es-CO')} COP`;
+}
+
+/**
+ * Detalle de los comparendos/multas de un check, listado bajo su advertencia. Cada fila muestra lo
+ * que la fuente expone (número, fecha, organismo, infracción, estado y valor); los campos ausentes
+ * se omiten. Nunca incluye datos del infractor (Habeas Data).
+ */
+export function FineDetailList({ details }: { details: FineDetail[] }) {
+  if (details.length === 0) return null;
+  return (
+    <ul className="mt-1.5 space-y-1.5" aria-label="Detalle de comparendos">
+      {details.map((d, i) => {
+        const valor = formatCOP(d.valor);
+        return (
+          <li
+            key={d.numero ?? `comparendo-${i}`}
+            className="rounded-lg px-2.5 py-1.5"
+            style={{ background: 'rgba(249,172,0,0.10)', border: '1px solid rgba(249,172,0,0.25)' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span className="text-[11px] font-semibold">
+                {d.numero ? `Comparendo ${d.numero}` : 'Comparendo'}
+              </span>
+              {valor && (
+                <span className="text-[11px] font-bold" style={{ color: '#B47800' }}>
+                  {valor}
+                </span>
+              )}
+            </div>
+            {d.infraccion && (
+              <p className="mt-0.5 text-[10px] opacity-80">{d.infraccion}</p>
+            )}
+            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] opacity-60">
+              {d.fecha && <span>Fecha: {d.fecha}</span>}
+              {d.organismo && <span>· {d.organismo}</span>}
+              {d.estado && <span>· {d.estado}</span>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function PreflightPanel({
@@ -98,6 +155,10 @@ export function PreflightPanel({
   // Se saca de la lista genérica de checks: su mensaje se muestra —de forma accionable— en la
   // tarjeta CTA de abajo, para no duplicarlo. El resto del semáforo se pinta normal.
   const visibleChecks = checks.filter((c) => c.key !== 'vin_matricula');
+  // Hallazgos no bloqueantes (multas, SOAT/RTM, consultas omitidas por el OT): se resumen para que
+  // el gestor los vea de un vistazo. Se toman de `visibleChecks` para no repetir `vin_matricula`,
+  // que ya tiene su propia tarjeta accionable arriba.
+  const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
 
   return (
     <div
@@ -107,7 +168,7 @@ export function PreflightPanel({
         <div>
           <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
           <p className="text-[11px] opacity-60">
-            RUNT · SIMIT — consulta antes de radicar el trámite
+            RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -226,6 +287,39 @@ export function PreflightPanel({
             ejecutar la consulta antes de continuar; no es posible avanzar sin
             estos datos.
           </span>
+        </div>
+      )}
+
+      {/* Amarillo = hay observaciones, no bloqueos: se informan y se sigue. Por eso `status` y no
+          `alert`, y por eso NO se ofrece aceptar riesgo (no hay nada que levantar). */}
+      {overall === 'yellow' && warnChecks.length > 0 && (
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: 'rgba(249,172,0,0.08)', border: '1px solid rgba(249,172,0,0.30)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-xs font-bold" style={{ color: '#F9AC00' }}>
+            Advertencias del pre-vuelo
+          </p>
+          <ul className="mt-1.5 space-y-2">
+            {warnChecks.map((c) => (
+              <li key={c.key} className="text-[11px]">
+                <span className="font-semibold">
+                  {c.label}
+                  {checkRoleSuffix(c.key)}
+                </span>
+                {c.message && <span className="opacity-70"> — {c.message}</span>}
+                {c.details && c.details.length > 0 && (
+                  <FineDetailList details={c.details} />
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] opacity-70">
+            Puedes continuar con el trámite; el organismo de tránsito verá estas
+            observaciones.
+          </p>
         </div>
       )}
 

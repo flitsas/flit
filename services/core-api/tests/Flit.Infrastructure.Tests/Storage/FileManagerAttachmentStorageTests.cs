@@ -127,6 +127,37 @@ public sealed class FileManagerAttachmentStorageTests
     }
 
     [Fact]
+    public async Task GetPresignedViewUrlAsync_DevuelveUrlYExpiresAt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) =>
+        {
+            if (req.Method == HttpMethod.Get &&
+                req.RequestUri!.AbsolutePath == "/pdn/api/v1/files/file_abc/presigned-url" &&
+                req.RequestUri.Query.Contains("disposition=inline"))
+                return Json(HttpStatusCode.OK, """{"presignedUrl":{"url":"https://s3.test/view/inline"}}""");
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        var result = await Storage(handler).GetPresignedViewUrlAsync("file_abc", ct);
+
+        result.Should().NotBeNull();
+        result!.Value.Url.Should().Be("https://s3.test/view/inline");
+        result.Value.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(10), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task GetPresignedViewUrlAsync_NotFound_DevuelveNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var result = await Storage(handler).GetPresignedViewUrlAsync("missing", ct);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public void Delete_EsNoOp_NoLanzaNiLlamaAlServicio()
     {
         var handler = new MockHttpMessageHandler((_, _) => new HttpResponseMessage(HttpStatusCode.InternalServerError));

@@ -35,7 +35,11 @@ public sealed class ListTransitOfficesOperationalStatusHandler
                 o.HasTenant,
                 o.TenantId,
                 o.EstadoActivo,
-                o.OperationMode)),
+                o.OperationMode,
+                o.DivipoCode,
+                o.QuipuxRegistration,
+                o.QuipuxTransfer,
+                o.QuipuxOther)),
         ];
     }
 }
