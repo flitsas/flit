@@ -255,9 +255,12 @@ public sealed class GenerarFurHandler(
             Marca: Get(fv, "vehicle_brand"),
             Linea: Get(fv, "vehicle_line"),
             Modelo: Get(fv, "vehicle_year"),
-            Color: Get(fv, "vehicle_color"),
+            // A4/B4 (HU #10673, ADR-0029) — los CAMPOS del vehículo del FUR (color/combustible) llevan el
+            // dato ORIGINAL del RUNT (snapshot *_runt); la transformación declarada viaja solo en las
+            // observaciones. Fallback al efectivo si no hay snapshot (trámites previos a la feature).
+            Color: RuntOrEffective(fv, "vehicle_color_runt", "vehicle_color"),
             Clase: Get(fv, "vehicle_class"),
-            Combustible: Get(fv, "vehicle_fuel"),
+            Combustible: RuntOrEffective(fv, "vehicle_fuel_runt", "vehicle_fuel"),
             Cilindraje: Get(fv, "vehicle_engine_displacement"),
             Vin: Get(fv, "vin"),
             Placa: Get(fv, "plate"),
@@ -288,7 +291,12 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            Observaciones: Get(fv, "fur_observations"),
+            // A4/B4 (HU #10673, ADR-0029) — anexa a las observaciones manuales el texto automático de las
+            // transformaciones de color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            Observaciones: FurTransformationObservations.Compose(
+                Get(fv, "fur_observations"),
+                Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
@@ -562,6 +570,14 @@ public sealed class GenerarFurHandler(
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
+
+    // Devuelve el snapshot RUNT si existe (no vacío); si no, cae al valor efectivo. Se usa para imprimir
+    // el dato original del vehículo en el FUR aunque exista una transformación declarada en el efectivo.
+    private static string? RuntOrEffective(Dictionary<string, string?> fv, string runtKey, string effectiveKey)
+    {
+        var runt = Get(fv, runtKey);
+        return string.IsNullOrWhiteSpace(runt) ? Get(fv, effectiveKey) : runt;
+    }
 }
 
 /// <summary>Logging source-generated (CA1848) de la generación del FUR. No incluye PII ni secretos.</summary>

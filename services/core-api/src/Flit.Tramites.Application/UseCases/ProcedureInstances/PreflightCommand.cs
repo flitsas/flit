@@ -76,6 +76,17 @@ public sealed class RunPreflightHandler(
     private const string CheckVinMatricula = "vin_matricula";
     private const string CheckSimitOmitida = "simit_omitida";
 
+    // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
+    // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
+    // declarado; el snapshot RUNT vive en "{key}_runt". Ver UpsertTransformationAwareField.
+    private const string RuntSnapshotSuffix = "_runt";
+    private static readonly Dictionary<string, string> TransformationFlagByEffectiveKey =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vehicle_color"] = "cambio_color",
+            ["vehicle_fuel"] = "cambio_combustible",
+        };
+
     public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -564,34 +575,111 @@ public sealed class RunPreflightHandler(
 
         foreach (var field in hydratedFields)
         {
-            var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == field.FieldKey);
-            if (existing is not null)
+            // A4/B4 (HU #10673) — color/combustible admiten transformación declarada: el snapshot RUNT
+            // siempre se refresca, pero el valor efectivo NO se pisa si hay un cambio activo (ver ADR-0029).
+            if (TransformationFlagByEffectiveKey.TryGetValue(field.FieldKey, out var flagKey))
             {
-                existing.ValueText = field.ValueText;
-                existing.ValueJson = field.ValueJson;
-                existing.Source = ConsultationSource;
-                existing.UpdatedAt = now;
+                UpsertTransformationAwareField(instance, tenantId, field, flagKey, now);
+                continue;
             }
-            else
-            {
-                var fieldValue = new ProcedureInstanceFieldValue
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantId,
-                    ProcedureInstanceId = instance.Id,
-                    FormFieldId = null,
-                    FieldKey = field.FieldKey,
-                    ValueText = field.ValueText,
-                    ValueJson = field.ValueJson,
-                    Source = ConsultationSource,
-                    CreatedAt = now,
-                };
-                instance.FieldValues.Add(fieldValue);
-                // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
-                // INSERT (sin esto EF infiere Modified por la PK no-default → UPDATE de 0 filas).
-                repo.Add(fieldValue);
-            }
+
+            UpsertSingleField(instance, tenantId, field.FieldKey, field.ValueText, field.ValueJson, now);
         }
+    }
+
+    /// <summary>
+    /// Upsert idempotente por field_key de un único valor "loose" (FormFieldId null, Source="consultation").
+    /// Mismo idiom de INSERT explícito (PK store-generated) que el resto del handler.
+    /// </summary>
+    private void UpsertSingleField(
+        ProcedureInstance instance,
+        Guid tenantId,
+        string fieldKey,
+        string? valueText,
+        string? valueJson,
+        DateTimeOffset now)
+    {
+        var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == fieldKey);
+        if (existing is not null)
+        {
+            existing.ValueText = valueText;
+            existing.ValueJson = valueJson;
+            existing.Source = ConsultationSource;
+            existing.UpdatedAt = now;
+        }
+        else
+        {
+            var fieldValue = new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = instance.Id,
+                FormFieldId = null,
+                FieldKey = fieldKey,
+                ValueText = valueText,
+                ValueJson = valueJson,
+                Source = ConsultationSource,
+                CreatedAt = now,
+            };
+            instance.FieldValues.Add(fieldValue);
+            // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
+            // INSERT (sin esto EF infiere Modified por la PK no-default → UPDATE de 0 filas).
+            repo.Add(fieldValue);
+        }
+    }
+
+    /// <summary>
+    /// A4/B4 (HU #10673, ADR-0029) — upsert del atributo transformable (color/combustible). El snapshot RUNT
+    /// (<c>{key}_runt</c>) SIEMPRE se refresca con el valor recién consultado. El valor EFECTIVO (el que va al
+    /// FUR) solo se sobrescribe si NO hay una transformación activa: sin esto, cada re-consulta RUNT (botón
+    /// "Actualizar") pisaría el cambio de color/combustible declarado por el operador — el problema técnico
+    /// central del ADR. "Activa" = flag <c>cambio_*</c> = "true" o el efectivo ya difiere del snapshot previo.
+    /// </summary>
+    private void UpsertTransformationAwareField(
+        ProcedureInstance instance,
+        Guid tenantId,
+        HydratedField field,
+        string flagKey,
+        DateTimeOffset now)
+    {
+        var snapshotKey = field.FieldKey + RuntSnapshotSuffix;
+        var previousSnapshot = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, snapshotKey, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+
+        // El snapshot RUNT siempre refleja la última consulta.
+        UpsertSingleField(instance, tenantId, snapshotKey, field.ValueText, field.ValueJson, now);
+
+        // Nunca pisar un cambio declarado: si hay transformación activa, el efectivo se conserva.
+        if (HasActiveTransformation(instance, field.FieldKey, flagKey, previousSnapshot))
+            return;
+
+        UpsertSingleField(instance, tenantId, field.FieldKey, field.ValueText, field.ValueJson, now);
+    }
+
+    /// <summary>
+    /// Determina si hay una transformación de color/combustible ACTIVA que el preflight no debe pisar:
+    /// (a) flag explícito <c>cambio_*</c> = "true" (puesto por el operador vía PATCH field-values), o
+    /// (b) cambio implícito: el efectivo ya difiere del snapshot RUNT previo (declaración sin flag).
+    /// </summary>
+    private static bool HasActiveTransformation(
+        ProcedureInstance instance,
+        string effectiveKey,
+        string flagKey,
+        string? previousSnapshot)
+    {
+        var flag = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, flagKey, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.Equals(flag?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var effective = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, effectiveKey, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        return !string.IsNullOrWhiteSpace(effective)
+            && !string.IsNullOrWhiteSpace(previousSnapshot)
+            && !string.Equals(effective.Trim(), previousSnapshot.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
