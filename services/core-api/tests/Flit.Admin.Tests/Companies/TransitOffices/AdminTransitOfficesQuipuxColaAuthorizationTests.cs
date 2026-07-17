@@ -2,8 +2,13 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flit.Admin.Tests.Companies;
+using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Catalogs;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Flit.Admin.Tests.Companies.TransitOffices;
@@ -24,11 +29,6 @@ public sealed class AdminTransitOfficesQuipuxColaAuthorizationTests
         $"/api/v1/admin/transit-offices/{OtId}/quipux-submissions";
     private static readonly string RetryUrl =
         $"/api/v1/admin/transit-offices/{OtId}/quipux-submissions/{Guid.NewGuid()}/retry";
-
-    // Par sembrado por la migración HU10133_OtAdminDevSeed: el ot_admin cuyo tenant es
-    // SeededTenantId tiene su perfil apuntando a SeededOfficeId (tenant_id ≠ transit_office_id).
-    private static readonly Guid SeededTenantId = Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
-    private static readonly Guid SeededOfficeId = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
 
     private readonly WebApplicationFactory<Program> _factory;
 
@@ -78,18 +78,31 @@ public sealed class AdminTransitOfficesQuipuxColaAuthorizationTests
     public async Task List_WithOtAdminOwnOffice_PassesScope()
     {
         // ot_admin de SU secretaría: su perfil (por tenant_id) apunta al transit_office_id de la
-        // ruta, así que el guard lo deja pasar. El desenlace exacto depende de la BD, pero NUNCA
-        // debe ser 401/403.
-        var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", TestTokenFactory.CreateOtAdminToken(SeededTenantId));
+        // ruta, así que el guard lo deja pasar. Se siembra el par tenant→office con Guids frescos
+        // para NO depender de datos externos (el seed de dev no existe en la BD limpia del CI;
+        // tenant_id ≠ transit_office_id). El desenlace exacto depende de la BD, pero NUNCA debe
+        // ser 401/403.
+        var ownTenantId = Guid.NewGuid();
+        var ownOfficeId = Guid.NewGuid();
+        await SeedProfileAsync(ownTenantId, ownOfficeId);
 
-        var response = await client.GetAsync(
-            $"/api/v1/admin/transit-offices/{SeededOfficeId}/quipux-submissions",
-            TestContext.Current.CancellationToken);
+        try
+        {
+            var client = _factory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", TestTokenFactory.CreateOtAdminToken(ownTenantId));
 
-        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
-        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            var response = await client.GetAsync(
+                $"/api/v1/admin/transit-offices/{ownOfficeId}/quipux-submissions",
+                TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        }
+        finally
+        {
+            await RemoveProfileAsync(ownTenantId);
+        }
     }
 
     [Fact]
@@ -116,6 +129,68 @@ public sealed class AdminTransitOfficesQuipuxColaAuthorizationTests
 
         var response = await client.PostAsync(RetryUrl, content: null, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // Siembra un perfil OT (tenant_id → transit_office_id) directo en la BD real que usa la app.
+    // El rol de core-api es OWNER de la tabla (sin FORCE RLS), así que el insert directo no requiere
+    // fijar app.current_tenant_id. El perfil tiene FK a identity.tenants y a catalogs.transit_offices,
+    // así que ambos padres se crean primero.
+    private async Task SeedProfileAsync(Guid tenantId, Guid transitOfficeId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+
+        db.Tenants.Add(new Tenant
+        {
+            Id = tenantId,
+            Code = $"OT-QX-{Guid.NewGuid():N}"[..20],
+            LegalName = "OT Cola QX auth tests",
+            TaxId = "900999999-9",
+            TenantType = "RENTING",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        db.TransitOffices.Add(new TransitOffice
+        {
+            Id = transitOfficeId,
+            Code = $"Q{Guid.NewGuid():N}"[..10],
+            Name = "OT Cola QX auth tests",
+            DepartmentCode = "99",
+            CityCode = "99999",
+            IsActive = true,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            TransitOfficeId = transitOfficeId,
+            OperationMode = "dashboard",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task RemoveProfileAsync(Guid tenantId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+
+        // Orden inverso a las FK: primero el perfil (hijo), luego tenant y oficina (padres).
+        var officeIds = db.TransitOfficeProfiles
+            .Where(p => p.TenantId == tenantId)
+            .Select(p => p.TransitOfficeId)
+            .ToList();
+
+        db.TransitOfficeProfiles.RemoveRange(
+            db.TransitOfficeProfiles.Where(p => p.TenantId == tenantId));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        db.Tenants.RemoveRange(db.Tenants.Where(t => t.Id == tenantId));
+        db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => officeIds.Contains(o.Id)));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private sealed record CodeBody(string Code);
