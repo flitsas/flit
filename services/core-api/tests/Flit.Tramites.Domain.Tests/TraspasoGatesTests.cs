@@ -222,6 +222,17 @@ public sealed class TraspasoGatesTests
         TraspasoGates.PasoCompleto(4, ctx).Code.Should().Be("simit_multas");
     }
 
+    [Fact] // FEATURE 05 — comparendos informativos (ComparendosBloquean=false) NO bloquean el paso 4.
+    public void Paso4_SimitConComparendos_NoBloquea_SiComparendosSonInformativos()
+    {
+        var ctx = BaseCtx() with
+        {
+            SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 3),
+            ComparendosBloquean = false,
+        };
+        TraspasoGates.PasoCompleto(4, ctx).Ok.Should().BeTrue();
+    }
+
     [Fact]
     public void ValidarComercial_Valor0_Bloquea()
     {

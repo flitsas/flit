@@ -1626,6 +1626,191 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetOtConsultationRestrictions
+      summary: Restricciones de consulta por OT del tenant (HU #10759, AC1/AC5)
+      description: >
+        Retorna las filas de restricción de consulta (RNMC, comparendos) configuradas
+        explícitamente para el tenant. Tabla dispersa: solo existen filas para los
+        pares (organismo, tipo de consulta) que el admin tocó; la ausencia de fila
+        equivale a consulta permitida. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de restricciones configuradas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtConsultationRestrictionListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions/{transitOfficeId}/{consultationKind}:
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanySetOtConsultationRestriction
+      summary: Fija el estado de una restricción de consulta por OT (HU #10759, AC1–AC4)
+      description: >
+        Habilita o inhabilita una consulta (`rnmc` | `fines`) para un Organismo de
+        Tránsito puntual de la compañía. El cuerpo transporta el ESTADO DESEADO (no
+        un verbo): idempotente en ambos sentidos, sin 404. Valida en orden: (1) el
+        organismo debe existir en el catálogo, (2) el organismo debe estar habilitado
+        (grant activo) para la compañía — restringir un OT sin grant no significa
+        nada, se exige habilitarlo primero, (3) el tipo de consulta debe ser uno de
+        los restringibles. `vehicle` queda deliberadamente fuera: restringirlo
+        rompería la hidratación de field_values y la generación del FUR. Requiere
+        JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+        - name: consultationKind
+          in: path
+          required: true
+          schema: { type: string, enum: [rnmc, fines] }
+          description: Tipo de consulta a restringir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetOtConsultationRestrictionRequest"
+      responses:
+        "204":
+          description: Estado fijado (alta nueva o no-op idempotente).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El organismo no existe en el catálogo, no está habilitado para la
+            compañía, o el tipo de consulta no es restringible. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtConsultationRestrictionValidationErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-blocking-policies:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía).
+    get:
+      tags: [Admin · Compañías]
+      operationId: adminCompanyGetOtBlockingPolicies
+      summary: Políticas de bloqueo de preflight por OT del tenant (FEATURE 05)
+      description: >
+        Retorna las filas de política de bloqueo configuradas explícitamente para el
+        tenant. Por cada criterio (`soat` | `rtm` | `estado_vehiculo` | `fines` |
+        `rnmc`) y organismo, indica si un hallazgo negativo BLOQUEA (rojo, subsanable)
+        o solo ADVIERTE (amarillo). Tabla dispersa: la ausencia de fila equivale al
+        default del criterio. Requiere JWT con rol SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de políticas configuradas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtBlockingPolicyListResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/ot-blocking-policies/{transitOfficeId}/{criterion}:
+    put:
+      tags: [Admin · Compañías]
+      operationId: adminCompanySetOtBlockingPolicy
+      summary: Fija el carácter bloqueante de un criterio del preflight por OT (FEATURE 05)
+      description: >
+        Marca un criterio (`soat` | `rtm` | `estado_vehiculo` | `fines` | `rnmc`) como
+        bloqueante o informativo para un Organismo de Tránsito puntual de la compañía.
+        El cuerpo transporta el ESTADO DESEADO (no un verbo): idempotente en ambos
+        sentidos, sin 404. Valida en orden: (1) el organismo debe existir en el
+        catálogo, (2) el organismo debe estar habilitado (grant activo) para la
+        compañía, (3) el criterio debe ser configurable. Requiere JWT con rol
+        SuperAdmin (RF01).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del tenant (compañía).
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador del organismo de tránsito.
+        - name: criterion
+          in: path
+          required: true
+          schema: { type: string, enum: [soat, rtm, estado_vehiculo, fines, rnmc] }
+          description: Criterio del preflight a configurar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetOtBlockingPolicyRequest"
+      responses:
+        "204":
+          description: Estado fijado (alta nueva o no-op idempotente).
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El organismo no existe en el catálogo, no está habilitado para la
+            compañía, o el criterio no es configurable. No se persiste nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtBlockingPolicyValidationErrorResponse"
+
   /api/v1/admin/document-types:
     post:
       tags: [Admin · Documentos]
@@ -5139,6 +5324,113 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TransitGrantValidationError"
+      required: [errors]
+
+    OtConsultationRestrictionItem:
+      type: object
+      description: >
+        Fila de restricción de consulta de un tenant para un OT puntual (HU #10759,
+        AC1/AC5). Tabla dispersa: ausencia de fila para un consultationKind dado
+        equivale a enabled=true (permisivo).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        consultationKind:
+          type: string
+          enum: [rnmc, fines]
+          description: >
+            Vocabulario propio de restricciones comerciales — no confundir con el
+            tipo de dato consultado del motor de trámites (vehicle_vin|vehicle_plate|conductor).
+        enabled:
+          type: boolean
+          description: Estado deseado — true permitida (default), false inhabilitada.
+      required: [transitOfficeId, consultationKind, enabled]
+
+    OtConsultationRestrictionListResponse:
+      type: array
+      description: Restricciones de consulta por OT configuradas explícitamente para el tenant (AC1/AC5).
+      items:
+        $ref: "#/components/schemas/OtConsultationRestrictionItem"
+
+    SetOtConsultationRestrictionRequest:
+      type: object
+      description: >
+        Cuerpo del PUT que fija el estado deseado de una restricción (HU #10759).
+        Transporta el ESTADO DESEADO, no un verbo de alta/baja.
+      properties:
+        enabled:
+          type: boolean
+          description: true permite la consulta (default), false la inhabilita.
+      required: [enabled]
+
+    OtConsultationRestrictionValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    OtConsultationRestrictionValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtConsultationRestrictionValidationError"
+      required: [errors]
+
+    OtBlockingPolicyItem:
+      type: object
+      description: >
+        Fila de política de bloqueo de un tenant para un OT puntual (FEATURE 05). Tabla
+        dispersa: la ausencia de fila para un criterio dado equivale al default del
+        criterio (soat/rtm/estado_vehiculo bloquean; fines/rnmc advierten en el pre-vuelo).
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        criterion:
+          type: string
+          enum: [soat, rtm, estado_vehiculo, fines, rnmc]
+          description: >
+            Criterio del preflight configurable — no confundir con RestrictedConsultationKinds
+            (rnmc|fines, que decide SI se consulta) ni con el tipo de dato consultado
+            (vehicle_vin|vehicle_plate|conductor).
+        blocks:
+          type: boolean
+          description: true bloquea (fail→rojo, subsanable); false solo advierte (warn→amarillo).
+      required: [transitOfficeId, criterion, blocks]
+
+    OtBlockingPolicyListResponse:
+      type: array
+      description: Políticas de bloqueo por OT configuradas explícitamente para el tenant (FEATURE 05).
+      items:
+        $ref: "#/components/schemas/OtBlockingPolicyItem"
+
+    SetOtBlockingPolicyRequest:
+      type: object
+      description: >
+        Cuerpo del PUT que fija el carácter bloqueante de un criterio (FEATURE 05).
+        Transporta el ESTADO DESEADO, no un verbo.
+      properties:
+        blocks:
+          type: boolean
+          description: true el criterio bloquea (rojo, subsanable); false solo advierte (amarillo).
+      required: [blocks]
+
+    OtBlockingPolicyValidationError:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+        value: { type: string, nullable: true }
+      required: [field, message]
+
+    OtBlockingPolicyValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OtBlockingPolicyValidationError"
       required: [errors]
 
     TransitOfficeTenantItem:

@@ -664,6 +664,7 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                rnmcEnabled={wizard?.rnmcEnabled ?? false}
               />
             </div>
           )}
@@ -1455,6 +1456,7 @@ function StepBody({
   stepFormRef,
   identityOperable = false,
   identityApproved = false,
+  rnmcEnabled = false,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1464,6 +1466,8 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
+  rnmcEnabled?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -1527,6 +1531,7 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1545,6 +1550,7 @@ function StepBody({
           // siembra su documento desde owner_document_* y consulta RUNT al llegar.
           seedDocumentoFromOwner
           autoConsultRunt
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1638,6 +1644,7 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            rnmcEnabled={rnmcEnabled}
           />
         </div>
       );

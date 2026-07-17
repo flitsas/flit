@@ -872,6 +872,134 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("tenant_operational_policies", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficeBlockingPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<bool>("Blocks")
+                        .HasColumnType("boolean")
+                        .HasColumnName("blocks");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Criterion")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("criterion");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_transit_office_blocking_policies");
+
+                    b.HasIndex("TenantId", "TransitOfficeId")
+                        .HasDatabaseName("ix_tenant_transit_office_blocking_policies_tenant_office");
+
+                    b.HasIndex("TenantId", "TransitOfficeId", "Criterion")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_transit_office_blocking_policies");
+
+                    b.ToTable("tenant_transit_office_blocking_policies", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficeConsultationRestriction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("ConsultationKind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("consultation_kind");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("enabled");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_transit_office_consultation_restrictions");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_tenant_transit_office_consultation_restrictions_tenant_id");
+
+                    b.HasIndex("TenantId", "TransitOfficeId")
+                        .HasDatabaseName("ix_tenant_transit_office_consultation_restrictions_disabled")
+                        .HasFilter("enabled = false");
+
+                    b.HasIndex("TenantId", "TransitOfficeId", "ConsultationKind")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_transit_office_consultation_restrictions");
+
+                    b.ToTable("tenant_transit_office_consultation_restrictions", "admin");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficeGrant", b =>
                 {
                     b.Property<Guid>("Id")
