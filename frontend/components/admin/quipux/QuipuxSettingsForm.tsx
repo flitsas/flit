@@ -383,19 +383,30 @@ export function QuipuxSettingsForm() {
         </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field id="qx-officer-type" label="Tipo de documento">
+            {/* Fondo/texto sólidos por tema: con `bg-transparent` (OT_INPUT_CLS) el popup nativo de
+                opciones queda ilegible en modo oscuro. Se estiliza también cada <option>. */}
             <select
               id="qx-officer-type"
               value={form.officerDocumentType}
               disabled={saving}
               onChange={(e) => set("officerDocumentType", toInt(e.target.value, DEFAULTS.officerDocumentType))}
-              className={`mt-1 ${OT_INPUT_CLS}`}
+              className="mt-1 w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#0B0F14] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:border-[#2A3441] dark:bg-[#0B0F14] dark:text-white"
             >
               {/* Si el valor guardado no está en el catálogo (dato viejo), se muestra igual. */}
               {!DOCUMENT_TYPES.some((t) => t.value === form.officerDocumentType) && (
-                <option value={form.officerDocumentType}>Código {form.officerDocumentType}</option>
+                <option
+                  value={form.officerDocumentType}
+                  className="bg-white text-[#0B0F14] dark:bg-[#0B0F14] dark:text-white"
+                >
+                  Código {form.officerDocumentType}
+                </option>
               )}
               {DOCUMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
+                <option
+                  key={t.value}
+                  value={t.value}
+                  className="bg-white text-[#0B0F14] dark:bg-[#0B0F14] dark:text-white"
+                >
                   {t.value} — {t.label}
                 </option>
               ))}
