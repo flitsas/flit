@@ -9,8 +9,10 @@ import { useToast } from "@/components/admin/Toast";
 import {
   fetchTransitOfficesOperationalStatus,
   hasQuipuxFlagsWithoutDivipo,
+  isQuipuxElegible,
   type TransitOfficeOperationalStatus,
 } from "@/lib/api/admin-transit-office-tenants";
+import { departmentName } from "@/lib/co-departments";
 import { matchesOtOfficeSearch, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { TransitOfficeStatusDialog } from "@/components/admin/transit-offices/TransitOfficeStatusDialog";
 import { TransitOfficeQuipuxDialog } from "@/components/admin/transit-offices/TransitOfficeQuipuxDialog";
@@ -33,13 +35,54 @@ export interface TransitOfficesListProps {
   onCreateTenant?: (office: TransitOfficeOperationalStatus) => void;
 }
 
+/** Eje «estado del tenant» del filtro. `todos` = sin filtrar. */
+type EstadoFilter = "todos" | "sin-alta" | "activo" | "inactivo";
+/** Eje «radicación Quipux» del filtro. */
+type QuipuxFilter = "todos" | "elegible" | "sin-divipo";
+
+/** ¿Coincide la oficina con el eje de estado seleccionado? */
+function matchesEstado(office: TransitOfficeOperationalStatus, filter: EstadoFilter): boolean {
+  switch (filter) {
+    case "sin-alta":
+      return !office.hasTenant;
+    case "activo":
+      return office.hasTenant && office.estadoActivo === true;
+    case "inactivo":
+      return office.hasTenant && office.estadoActivo === false;
+    default:
+      return true;
+  }
+}
+
+/** ¿Coincide la oficina con el eje de radicación Quipux seleccionado? */
+function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFilter): boolean {
+  switch (filter) {
+    case "elegible":
+      return isQuipuxElegible(office);
+    // «Sin DIVIPO»: toda secretaría sin código cargado (el caso mayoritario, el trabajo
+    // pendiente). Absorbe el antiguo botón «Sin DIVIPO».
+    case "sin-divipo":
+      return !office.divipoCode;
+    default:
+      return true;
+  }
+}
+
+// Selects de filtro con colores sólidos por tema: en modo oscuro las <option> nativas heredan
+// el fondo del sistema y quedan ilegibles sobre bg-transparent, así que se fijan explícitos.
+const FILTER_SELECT_CLS =
+  "rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#0B0F14] outline-none focus:border-[#557EFF] dark:border-[#2A3441] dark:bg-[#0B0F14] dark:text-white";
+const FILTER_OPTION_CLS = "bg-white text-[#0B0F14] dark:bg-[#0B0F14] dark:text-white";
+
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOfficeOperationalStatus[]>([]);
   const [search, setSearch] = useState("");
-  const [soloSinDivipo, setSoloSinDivipo] = useState(false);
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("todos");
+  const [quipuxFilter, setQuipuxFilter] = useState<QuipuxFilter>("todos");
+  const [departamento, setDepartamento] = useState("todos");
   const [statusTarget, setStatusTarget] = useState<TransitOfficeOperationalStatus | null>(null);
   const [quipuxTarget, setQuipuxTarget] = useState<TransitOfficeOperationalStatus | null>(null);
 
@@ -69,10 +112,30 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
   const filtered = useMemo(
     () =>
       offices.filter(
-        (o) => matchesOtOfficeSearch(o, search) && (!soloSinDivipo || !o.divipoCode),
+        (o) =>
+          matchesOtOfficeSearch(o, search) &&
+          matchesEstado(o, estadoFilter) &&
+          matchesQuipux(o, quipuxFilter) &&
+          (departamento === "todos" || o.departmentCode === departamento),
       ),
-    [offices, search, soloSinDivipo],
+    [offices, search, estadoFilter, quipuxFilter, departamento],
   );
+
+  // Departamentos presentes en el catálogo, ordenados por nombre, para poblar el filtro. Solo
+  // se listan los que existen en los datos: no tiene sentido ofrecer un departamento vacío.
+  const departamentos = useMemo(() => {
+    const codes = Array.from(new Set(offices.map((o) => o.departmentCode))).filter(Boolean);
+    return codes
+      .map((code) => ({ code, name: departmentName(code) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [offices]);
+
+  // ¿Hay algún filtro activo? Determina el mensaje de «sin resultados».
+  const hayFiltros =
+    search.trim() !== "" ||
+    estadoFilter !== "todos" ||
+    quipuxFilter !== "todos" ||
+    departamento !== "todos";
 
   // Cuántas secretarías faltan por parametrizar. Es el dato de cabecera del trabajo pendiente:
   // la carga del DIVIPO es manual, secretaría por secretaría.
@@ -82,9 +145,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
   );
 
   const listStatus: UiStatus =
-    status === "ready" && filtered.length === 0 && (search.trim() !== "" || soloSinDivipo)
-      ? "empty"
-      : status;
+    status === "ready" && filtered.length === 0 && hayFiltros ? "empty" : status;
 
   const rowActions = useCallback(
     (office: TransitOfficeOperationalStatus): RowAction[] => {
@@ -131,7 +192,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3">
         <label className="relative block w-full max-w-md">
           <span className="sr-only">Buscar organismo de tránsito</span>
           <Search
@@ -147,33 +208,72 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
           />
         </label>
 
-        {/* Atajo al trabajo pendiente: la carga del DIVIPO es manual y hoy falta en la
-            mayoría del catálogo. `aria-pressed` comunica el estado del filtro sin depender
-            solo del color. */}
-        {status === "ready" && sinDivipoCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setSoloSinDivipo((v) => !v)}
-            aria-pressed={soloSinDivipo}
-            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition"
-            style={
-              soloSinDivipo
-                ? { background: "#557EFF", color: "#FFFFFF", borderColor: "#557EFF" }
-                : undefined
-            }
-          >
-            Sin DIVIPO
-            <span
-              className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-              style={
-                soloSinDivipo
-                  ? { background: "rgba(255,255,255,0.25)", color: "#FFFFFF" }
-                  : { background: "#E2E8F0", color: "#475569" }
-              }
-            >
-              {sinDivipoCount}
-            </span>
-          </button>
+        {/* Filtros por eje. Se muestran solo con datos cargados (necesitan el catálogo para
+            poblar los departamentos y saber cuántas secretarías faltan por DIVIPO). */}
+        {status === "ready" && (
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold opacity-70">
+              Departamento
+              <select
+                value={departamento}
+                onChange={(e) => setDepartamento(e.target.value)}
+                aria-label="Filtrar por departamento"
+                className={FILTER_SELECT_CLS}
+              >
+                <option value="todos" className={FILTER_OPTION_CLS}>
+                  Todos los departamentos
+                </option>
+                {departamentos.map((d) => (
+                  <option key={d.code} value={d.code} className={FILTER_OPTION_CLS}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] font-semibold opacity-70">
+              Estado
+              <select
+                value={estadoFilter}
+                onChange={(e) => setEstadoFilter(e.target.value as EstadoFilter)}
+                aria-label="Filtrar por estado"
+                className={FILTER_SELECT_CLS}
+              >
+                <option value="todos" className={FILTER_OPTION_CLS}>
+                  Todos
+                </option>
+                <option value="sin-alta" className={FILTER_OPTION_CLS}>
+                  Sin alta
+                </option>
+                <option value="activo" className={FILTER_OPTION_CLS}>
+                  Activo
+                </option>
+                <option value="inactivo" className={FILTER_OPTION_CLS}>
+                  Inactivo
+                </option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-[11px] font-semibold opacity-70">
+              Radicación Quipux
+              <select
+                value={quipuxFilter}
+                onChange={(e) => setQuipuxFilter(e.target.value as QuipuxFilter)}
+                aria-label="Filtrar por radicación Quipux"
+                className={FILTER_SELECT_CLS}
+              >
+                <option value="todos" className={FILTER_OPTION_CLS}>
+                  Todas
+                </option>
+                <option value="elegible" className={FILTER_OPTION_CLS}>
+                  Radica (elegible)
+                </option>
+                <option value="sin-divipo" className={FILTER_OPTION_CLS}>
+                  Sin DIVIPO
+                </option>
+              </select>
+            </label>
+          </div>
         )}
       </div>
 
@@ -189,11 +289,9 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
         status={listStatus}
         onRetry={() => void load()}
         emptyMessage={
-          soloSinDivipo
-            ? "No hay secretarías sin código DIVIPO que coincidan con la búsqueda."
-            : search.trim()
-              ? "No hay organismos de tránsito que coincidan con la búsqueda."
-              : "No hay organismos de tránsito en el catálogo."
+          hayFiltros
+            ? "No hay organismos de tránsito que coincidan con los filtros."
+            : "No hay organismos de tránsito en el catálogo."
         }
         errorMessage="No se pudo cargar el catálogo de organismos de tránsito."
       >
@@ -229,7 +327,9 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
                 >
                   <td className="px-4 py-3 font-mono text-xs">{office.code}</td>
                   <td className="px-4 py-3 font-medium">{office.name}</td>
-                  <td className="px-4 py-3 text-xs opacity-80">{office.departmentCode}</td>
+                  <td className="px-4 py-3 text-xs opacity-80">
+                    {departmentName(office.departmentCode)}
+                  </td>
                   <td className="px-4 py-3">
                     <EstadoBadge office={office} />
                   </td>

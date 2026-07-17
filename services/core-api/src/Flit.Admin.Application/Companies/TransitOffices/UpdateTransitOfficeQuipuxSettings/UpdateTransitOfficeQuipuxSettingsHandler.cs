@@ -11,12 +11,13 @@ namespace Flit.Admin.Application.Companies.TransitOffices.UpdateTransitOfficeQui
 ///
 /// Reglas de negocio:
 /// <list type="bullet">
-/// <item>Un DIVIPO vacío NO es un error: es el estado normal de una secretaría aún no
-/// integrada (hoy 311 de 317). Se normaliza a <c>null</c> y la secretaría queda no elegible.</item>
-/// <item>Activar banderas sin DIVIPO SÍ se permite: el alta es gradual y el operador puede
-/// declarar el alcance antes de conseguir el código. La elegibilidad calculada lo refleja
-/// (<c>Elegible = false</c>) y la consola lo advierte; bloquearlo obligaría a cargar los dos
-/// datos en el mismo instante, cosa que el proceso manual no garantiza.</item>
+/// <item>Un DIVIPO vacío NO es un error MIENTRAS no haya banderas activas: es el estado normal
+/// de una secretaría aún no integrada (hoy 311 de 317). Se normaliza a <c>null</c> y la
+/// secretaría queda no elegible.</item>
+/// <item>Activar una bandera sin DIVIPO SÍ es un error (<c>DivipoRequiredForFlags</c> → 422):
+/// dejaría a la secretaría declarando que radica sin ser elegible, un estado inconsistente que
+/// engaña al administrador. El DIVIPO es obligatorio en cuanto se enciende una familia, así el
+/// estado «banderas sin DIVIPO» es imposible de persistir.</item>
 /// </list>
 /// </summary>
 /// <remarks>
@@ -70,6 +71,15 @@ public sealed partial class UpdateTransitOfficeQuipuxSettingsHandler
         var matricula = request.QuipuxRegistration.Value;
         var traspaso = request.QuipuxTransfer.Value;
         var otros = request.QuipuxOther.Value;
+
+        // El DIVIPO es obligatorio en cuanto se enciende una familia: sin él la secretaría no es
+        // elegible y persistir la bandera crearía el estado inconsistente «declara pero no
+        // radica». Sin banderas, un DIVIPO vacío sigue siendo válido (secretaría no integrada).
+        if (divipoCode is null && (matricula || traspaso || otros))
+        {
+            return UpdateTransitOfficeQuipuxSettingsResult.Failure(
+                UpdateTransitOfficeQuipuxSettingsStatus.DivipoRequiredForFlags);
+        }
 
         var updated = await _writer.UpdateQuipuxSettingsAsync(
             command.TransitOfficeId,

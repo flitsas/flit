@@ -191,6 +191,54 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     });
   });
 
+  it("traduce el código DANE del departamento a su nombre", async () => {
+    renderList();
+    await screen.findByText("Medellín — Secretaría de Movilidad");
+    // departmentCode "05" → Antioquia, en la celda de la fila (no la opción del filtro).
+    const row = within(rowFor("Medellín — Secretaría de Movilidad"));
+    expect(row.getByText("Antioquia")).toBeInTheDocument();
+  });
+
+  it("filtra por estado (solo activos)", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Medellín — Secretaría de Movilidad");
+
+    await user.selectOptions(screen.getByLabelText("Filtrar por estado"), "activo");
+    await waitFor(() => {
+      expect(screen.getByText("Medellín — Secretaría de Movilidad")).toBeInTheDocument();
+      expect(screen.queryByText("Secretaría de Movilidad Bogotá")).not.toBeInTheDocument();
+      expect(screen.queryByText("Cali — Secretaría de Movilidad")).not.toBeInTheDocument();
+    });
+  });
+
+  it("filtra por departamento", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Medellín — Secretaría de Movilidad");
+
+    // "76" → Valle del Cauca (Cali).
+    await user.selectOptions(screen.getByLabelText("Filtrar por departamento"), "76");
+    await waitFor(() => {
+      expect(screen.getByText("Cali — Secretaría de Movilidad")).toBeInTheDocument();
+      expect(screen.queryByText("Medellín — Secretaría de Movilidad")).not.toBeInTheDocument();
+    });
+  });
+
+  it("filtra por radicación Quipux (solo elegibles)", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Secretaría de Movilidad Bogotá");
+
+    // Solo Bogotá tiene DIVIPO + bandera activa → elegible.
+    await user.selectOptions(screen.getByLabelText("Filtrar por radicación Quipux"), "elegible");
+    await waitFor(() => {
+      expect(screen.getByText("Secretaría de Movilidad Bogotá")).toBeInTheDocument();
+      expect(screen.queryByText("Medellín — Secretaría de Movilidad")).not.toBeInTheDocument();
+      expect(screen.queryByText("Cali — Secretaría de Movilidad")).not.toBeInTheDocument();
+    });
+  });
+
   it("muestra estado de error cuando la carga falla", async () => {
     vi.mocked(fetchTransitOfficesOperationalStatus).mockRejectedValue(new Error("boom"));
     renderList();
@@ -255,14 +303,15 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     );
   });
 
-  it("filtra solo las secretarías sin DIVIPO", async () => {
+  it("filtra solo las secretarías sin DIVIPO desde el eje de radicación", async () => {
     const user = userEvent.setup();
     renderList();
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
-    const filtro = screen.getByRole("button", { name: /Sin DIVIPO/i });
-    expect(filtro).toHaveAttribute("aria-pressed", "false");
-    await user.click(filtro);
+    await user.selectOptions(
+      screen.getByLabelText("Filtrar por radicación Quipux"),
+      "sin-divipo",
+    );
 
     await waitFor(() => {
       // Bogotá sí tiene DIVIPO → sale del listado.
@@ -270,7 +319,6 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     });
     expect(screen.getByText("Medellín — Secretaría de Movilidad")).toBeInTheDocument();
     expect(screen.getByText("Cali — Secretaría de Movilidad")).toBeInTheDocument();
-    expect(filtro).toHaveAttribute("aria-pressed", "true");
   });
 
   it("la parametrización está disponible también para secretarías sin alta en FLIT", async () => {
@@ -341,7 +389,7 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     });
   });
 
-  it("advierte al activar una bandera sin DIVIPO, pero deja guardar", async () => {
+  it("bloquea el guardado al activar una bandera sin DIVIPO", async () => {
     const user = userEvent.setup();
     renderList();
     await screen.findByText("Medellín — Secretaría de Movilidad");
@@ -352,9 +400,10 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("switch", { name: /Traspasos/i }));
 
-    expect(await within(dialog).findByText(/Sin código DIVIPO no se radica/i)).toBeInTheDocument();
-    // Es un aviso, no un bloqueo: el alta es gradual.
-    expect(within(dialog).getByRole("button", { name: /^Guardar$/ })).toBeEnabled();
+    expect(await within(dialog).findByText(/Falta el código DIVIPO/i)).toBeInTheDocument();
+    // Estado inconsistente: sin DIVIPO no se puede radicar → Guardar deshabilitado.
+    expect(within(dialog).getByRole("button", { name: /^Guardar$/ })).toBeDisabled();
+    expect(updateTransitOfficeQuipuxSettings).not.toHaveBeenCalled();
   });
 
   it("rechaza un DIVIPO no numérico sin llamar a la API", async () => {
