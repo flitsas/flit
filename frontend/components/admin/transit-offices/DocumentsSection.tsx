@@ -139,7 +139,7 @@ export function DocumentsSection() {
 
       {tab === "precedence" && (
         <div role="tabpanel" className="space-y-3 pt-2">
-          <label className="block max-w-md text-xs font-semibold" style={{ color: "#162744" }}>
+          <label className="block max-w-md text-xs font-semibold text-foreground">
             Tipo de trámite
             <select
               className={`mt-1 ${OT_INPUT_CLS}`}
@@ -245,9 +245,9 @@ export function DocumentsSection() {
             role="alertdialog"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
-            className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-xl"
+            className="relative w-full max-w-md rounded-2xl border bg-card p-6 shadow-xl"
           >
-            <h3 id="delete-tag-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+            <h3 id="delete-tag-title" className="text-sm font-bold text-foreground">
               Eliminar etiqueta
             </h3>
             <p id="delete-tag-desc" className="mt-2 text-xs opacity-80">

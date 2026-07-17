@@ -388,6 +388,16 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             c.UserId == _companyUserId || c.UserId == _otUserId || c.UserId == _noNitUserId || c.UserId == _multiRoleUserId));
         db.SaveChanges();
 
+        // El login audita cada intento con changed_by = usuario (HU #10678); esas filas
+        // deben eliminarse antes que los usuarios o el FK tenant_config_audit_logs_changed_by_fkey
+        // bloquea el borrado.
+        db.TenantConfigAuditLogs.RemoveRange(db.TenantConfigAuditLogs.Where(l =>
+            (l.ChangedBy == _companyUserId || l.ChangedBy == _otUserId
+                || l.ChangedBy == _noNitUserId || l.ChangedBy == _multiRoleUserId)
+            || (l.TargetEntityId == _companyUserId || l.TargetEntityId == _otUserId
+                || l.TargetEntityId == _noNitUserId || l.TargetEntityId == _multiRoleUserId)));
+        db.SaveChanges();
+
         db.Users.RemoveRange(db.Users.Where(u =>
             u.Id == _companyUserId || u.Id == _otUserId || u.Id == _noNitUserId || u.Id == _multiRoleUserId));
         db.Roles.RemoveRange(db.Roles.Where(r =>

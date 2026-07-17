@@ -91,13 +91,15 @@ public sealed class IniciarKyverumVerifyHandler(
         }
 
         // Datos del sujeto: el body los puede sobreescribir (API/Postman directo); si vienen vacíos, se
-        // resuelven desde el actor de la parte registrado en el trámite (el camino del wizard).
+        // resuelven desde el SUJETO DE IDENTIDAD de la parte (HU #10688): el actor si es natural, el
+        // representante legal si es jurídico. Así una PJ valida con el documento/correo del RL, no con el NIT.
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        var nombre = FirstNonEmpty(input.Nombre, actor?.FullName);
-        var tipoDoc = FirstNonEmpty(input.TipoDoc, actor?.DocumentType);
-        var documento = FirstNonEmpty(input.Documento, actor?.DocumentNumber);
-        var email = FirstNonEmpty(input.Email, actor?.Email);
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+        var nombre = FirstNonEmpty(input.Nombre, subject?.Nombre);
+        var tipoDoc = FirstNonEmpty(input.TipoDoc, subject?.TipoDocumento);
+        var documento = FirstNonEmpty(input.Documento, subject?.NumeroDocumento);
+        var email = FirstNonEmpty(input.Email, subject?.Email);
         if (nombre is null || tipoDoc is null || documento is null || email is null)
             // Sin datos: si ni siquiera hay actor registrado → actor_requerido; si el actor existe pero le
             // falta algún dato (p.ej. email) → datos_incompletos.

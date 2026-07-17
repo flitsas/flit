@@ -73,6 +73,11 @@ internal sealed class DbTransitOfficeOperationalStatusReader : ITransitOfficeOpe
                             TenantId = hasTenant ? tenant!.Id : null,
                             EstadoActivo = hasTenant ? tenant!.IsActive : null,
                             OperationMode = hasTenant ? profile!.OperationMode : null,
+                            // Del catálogo: existen tenga o no tenant OT (HU #10710).
+                            DivipoCode = office.DivipoCode,
+                            QuipuxRegistration = office.QuipuxRegistration,
+                            QuipuxTransfer = office.QuipuxTransfer,
+                            QuipuxOther = office.QuipuxOther,
                         };
                     }),
                 ];
@@ -101,7 +106,17 @@ internal sealed class DbTransitOfficeOperationalStatusReader : ITransitOfficeOpe
         var office = await _context.TransitOffices
             .AsNoTracking()
             .Where(o => o.Id == transitOfficeId && o.IsActive)
-            .Select(o => new { o.Id, o.Code, o.Name, o.DepartmentCode })
+            .Select(o => new
+            {
+                o.Id,
+                o.Code,
+                o.Name,
+                o.DepartmentCode,
+                o.DivipoCode,
+                o.QuipuxRegistration,
+                o.QuipuxTransfer,
+                o.QuipuxOther,
+            })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -138,6 +153,10 @@ internal sealed class DbTransitOfficeOperationalStatusReader : ITransitOfficeOpe
             TenantId = hasTenant ? tenant!.Id : null,
             EstadoActivo = hasTenant ? tenant!.IsActive : null,
             OperationMode = hasTenant ? profile!.OperationMode : null,
+            DivipoCode = office.DivipoCode,
+            QuipuxRegistration = office.QuipuxRegistration,
+            QuipuxTransfer = office.QuipuxTransfer,
+            QuipuxOther = office.QuipuxOther,
         };
     }
 

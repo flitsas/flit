@@ -1,6 +1,10 @@
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
+/// <param name="EsJuridica">
+/// HU #10688 — persona jurídica: el <see cref="Nombre"/> es la razón social y NO debe trocearse en
+/// apellidos/nombres; el mapper la escribe completa en la casilla de nombre.
+/// </param>
 public sealed record DocumentParte(
     string Rol,
     string? Nombre,
@@ -9,7 +13,8 @@ public sealed record DocumentParte(
     string? DocumentType = null,
     string? Phone = null,
     string? Address = null,
-    string? City = null);
+    string? City = null,
+    bool EsJuridica = false);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
@@ -139,4 +144,44 @@ public interface IRuesCertificateGenerator
 {
     /// <summary>Genera el certificado RUES de una persona jurídica (tipo 'certificado_rues').</summary>
     GeneratedDocument GenerateRuesCertificate(RuesCertificateData data);
+}
+
+/// <summary>
+/// Una entrada del Certificado RNMC: el resultado de la consulta de medidas correctivas de UNA parte
+/// (comprador/vendedor) del trámite.
+/// </summary>
+/// <param name="Estado">
+/// Texto ya resuelto para el usuario ("SIN MEDIDAS CORRECTIVAS" / "CON MEDIDAS CORRECTIVAS" /
+/// "SIN DATOS" / "NO VERIFICABLE"): el certificado NO traduce estados del preflight, solo los pinta.
+/// </param>
+public sealed record RnmcCertificateEntry(
+    string Rol,
+    string Nombre,
+    string Documento,
+    string Estado,
+    string? Detalle);
+
+/// <summary>
+/// Datos para el Certificado RNMC (HU #10762): resultado por parte de la consulta al Registro Nacional
+/// de Medidas Correctivas, tomado del snapshot de preflight.
+/// <para><b>Restricción dura:</b> este record NUNCA transporta el identificador del proveedor
+/// (p. ej. "verifik_rnmc"). La fuente que ve el usuario es la entidad oficial (Policía Nacional), no el
+/// integrador; el generador la escribe como literal.</para>
+/// </summary>
+/// <param name="ConsultadoEn">Fecha de la corrida de preflight que produjo estos resultados.</param>
+public sealed record RnmcCertificateData(
+    Guid ProcedureInstanceId,
+    string ReferenceNumber,
+    DateTimeOffset ConsultadoEn,
+    IReadOnlyList<RnmcCertificateEntry> Entradas);
+
+/// <summary>
+/// Contrato del generador del Certificado RNMC. La implementación productiva es
+/// <c>RnmcCertificatePdfGenerator</c> (Infrastructure): PDF real vía QuestPDF (tipo 'certificado_rnmc')
+/// que pasa IsMergeableMime y se fusiona en el Expediente Consolidado (mismo patrón que el RUES).
+/// </summary>
+public interface IRnmcCertificateGenerator
+{
+    /// <summary>Genera el certificado RNMC del trámite (tipo 'certificado_rnmc').</summary>
+    GeneratedDocument GenerateRnmcCertificate(RnmcCertificateData data);
 }

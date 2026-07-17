@@ -31,6 +31,13 @@
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
+    <!-- Quipux: el PDF consolidado se publica en el bucket S3 DE QUIPUX (qxinterconnect), que lee
+         el documento de ahí — por eso el payload de radicación lleva la key y no el binario. Es el
+         único punto de FLIT 2.0 con credenciales AWS directas: el File Manager corporativo no
+         aplica porque el bucket es de un tercero. -->
+    <PackageReference Include="AWSSDK.S3" />
   </ItemGroup>
 
   <ItemGroup>

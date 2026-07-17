@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly, groupThousands } from '@/lib/format/currency';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { AvaluoComercialCard } from './AvaluoComercialCard';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type {
   CommercialCausal,
@@ -168,6 +169,22 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </div>
       )}
 
+      {!readOnly && (
+        <AvaluoComercialCard
+          instanceId={instanceId}
+          disabled={readOnly}
+          onAccept={(value, source, sugerido) =>
+            setData((d) => ({
+              ...d,
+              valorVenta: value,
+              valueOrigin: 'suggestion',
+              suggestedSource: source,
+              suggestedValue: sugerido,
+            }))
+          }
+        />
+      )}
+
      <fieldset disabled={readOnly} className="contents">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -194,6 +211,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
                 setData((d) => ({
                   ...d,
                   valorVenta: digits === '' ? null : Number(digits),
+                  // Edición manual: el valor deja de ser el sugerido (trazabilidad).
+                  valueOrigin: 'manual',
                 }));
               }}
               placeholder="0"
