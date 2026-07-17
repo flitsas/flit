@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -1653,7 +1653,190 @@ function FurSection({
           )}
         </div>
       )}
+
+      {/* HU #10611 (Feature #10587) — asignación de SOAT de la ruta de placa, ubicada bajo el
+          Expediente consolidado (movida desde EstadoAcciones). Se auto-oculta salvo sub-estado
+          de placa 'asignado' (el OT ya asignó la placa). */}
+      <SoatSection instanceId={instanceId} onRefresh={onRefresh} />
     </section>
+  );
+}
+
+/**
+ * SOAT de la ruta de placa (HU #10611, Feature #10587). Se muestra en el paso FUR, debajo del
+ * Expediente consolidado, y SOLO cuando el sub-estado de placa es 'asignado' (el OT ya asignó la
+ * placa): el gestor/radicador registra el SOAT validando por RUNT o cargando el PDF. Sin un SOAT
+ * vigente el OT no puede aprobar la matrícula (gate no subsanable, R06). Autocontenido: lee su
+ * propio estado (plate_flow_status + soat_estado) por instanceId, como hacía EstadoAcciones.
+ */
+function SoatSection({
+  instanceId,
+  onRefresh,
+}: {
+  instanceId: string | null;
+  onRefresh?: () => void;
+}) {
+  const [plateFlowStatus, setPlateFlowStatus] = useState<string | null>(null);
+  const [soatEstado, setSoatEstado] = useState<string | null>(null);
+  const [soatWorking, setSoatWorking] = useState(false);
+  const [soatMsg, setSoatMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    // Lee el sub-estado de placa y el soat_estado persistido para reflejar el registro previo.
+    tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (!active) return;
+        setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        setSoatEstado(d?.fieldValues?.find((f) => f.fieldKey === 'soat_estado')?.valueText ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  // Opción 1 — re-consulta el RUNT del vehículo; si el SOAT viene vigente, el backend marca
+  // soat_estado=vigente y desbloquea la aprobación del OT (sin cambiar de estado el trámite).
+  const validarSoatRunt = async () => {
+    if (!instanceId) return;
+    setSoatWorking(true);
+    setError(null);
+    setSoatMsg(null);
+    try {
+      const r = await tramitesClient.validateSoatViaRunt(instanceId);
+      setSoatEstado(r.soatEstado);
+      setSoatMsg(r.message);
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo validar el SOAT por RUNT.');
+    } finally {
+      setSoatWorking(false);
+    }
+  };
+
+  // Opción 2 — carga el PDF del SOAT (permitido en 'asignado') y lo registra como evidencia vigente.
+  const subirSoatPdf = async (file: File) => {
+    if (!instanceId) return;
+    setSoatWorking(true);
+    setError(null);
+    setSoatMsg(null);
+    try {
+      await tramitesClient.uploadAttachment(instanceId, 'soat', file);
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'soat_estado', valueText: 'vigente' },
+      ]);
+      setSoatEstado('vigente');
+      setSoatMsg('SOAT cargado (PDF). El trámite queda listo para la recepción y aprobación del OT.');
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el PDF del SOAT.');
+    } finally {
+      setSoatWorking(false);
+    }
+  };
+
+  // Solo aplica a la ruta de placa una vez el OT asignó la placa (sub-estado 'asignado').
+  if (plateFlowStatus !== 'asignado') return null;
+
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <div>
+        <h5 className="text-xs font-bold">SOAT del vehículo</h5>
+        <p className="text-[11px] opacity-70">
+          Requerido para que el OT reciba y apruebe. Valida el SOAT por consulta RUNT o carga el
+          PDF; sin un SOAT vigente el OT no puede aprobar la matrícula (gate no subsanable).
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-semibold uppercase tracking-wide opacity-60">SOAT:</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            soatEstado === 'vigente'
+              ? 'bg-green-100 text-green-700'
+              : soatEstado === 'vencido'
+                ? 'bg-orange-100 text-orange-700'
+                : 'bg-slate-100 text-slate-600'
+          }`}
+        >
+          {soatEstado === 'vigente'
+            ? 'Vigente'
+            : soatEstado === 'vencido'
+              ? 'Vencido'
+              : soatEstado === 'unknown'
+                ? 'No reportado'
+                : 'Sin registrar'}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={soatWorking}
+          onClick={() => void validarSoatRunt()}
+          className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+        >
+          {soatWorking ? 'Validando…' : 'Validar por RUNT'}
+        </button>
+        <button
+          type="button"
+          disabled={soatWorking}
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-lg border border-slate-300 px-3.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-60"
+        >
+          Cargar PDF del SOAT
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (f) void subirSoatPdf(f);
+          }}
+        />
+      </div>
+
+      {soatMsg ? (
+        <p
+          className={`m-0 text-xs ${
+            soatEstado === 'vigente'
+              ? 'text-green-700'
+              : soatEstado === 'vencido'
+                ? 'text-orange-700'
+                : 'text-slate-500'
+          }`}
+          role={soatEstado === 'vigente' ? undefined : 'alert'}
+        >
+          {soatMsg}
+        </p>
+      ) : soatEstado === 'vigente' ? (
+        <p className="m-0 text-xs text-green-700">
+          SOAT registrado como vigente. El OT ya puede recibir y aprobar la matrícula.
+        </p>
+      ) : soatEstado === 'vencido' ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          SOAT vencido: el OT no podrá aprobar hasta que esté vigente (gate no subsanable).
+        </p>
+      ) : (
+        <p className="m-0 text-xs text-slate-500">
+          SOAT sin registrar. Valida por RUNT o carga el PDF; sin SOAT el OT no puede aprobar.
+        </p>
+      )}
+
+      {error ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
