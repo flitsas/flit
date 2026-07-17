@@ -247,7 +247,7 @@ public sealed class FurHandlerTests
 
         var capturing = new CapturingFurGenerator();
         var handler = new GenerarFurHandler(
-            _repo, capturing, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
 
         var (_, error) = await handler.HandleAsync(id, tenant, ct);
 
@@ -273,7 +273,7 @@ public sealed class FurHandlerTests
 
         var capturing = new CapturingFurGenerator();
         var handler = new GenerarFurHandler(
-            _repo, capturing, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
 
         var (_, error) = await handler.HandleAsync(id, tenant, ct);
 
