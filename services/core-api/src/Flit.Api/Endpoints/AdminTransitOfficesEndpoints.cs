@@ -62,8 +62,9 @@ public static class AdminTransitOfficesEndpoints
                 + "(matrícula/traspaso/otros) de catalogs.transit_offices. divipoCode nulo o vacío "
                 + "significa «aún no se conoce» — no es un error: es el estado normal de las "
                 + "secretarías todavía no integradas, y deja a la secretaría NO elegible para "
-                + "radicar. Activar banderas sin DIVIPO se permite (el alta es gradual) pero la "
-                + "respuesta devuelve elegible=false. No confundir con "
+                + "radicar. Activar una bandera sin DIVIPO se rechaza (422 DIVIPO_REQUIRED_FOR_FLAGS): "
+                + "el DIVIPO es obligatorio en cuanto se enciende una familia, para que no exista el "
+                + "estado inconsistente «declara pero no radica». No confundir con "
                 + "admin.transit_office_profiles.operation_mode, que describe al OT-CLIENTE. "
                 + "Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
@@ -168,6 +169,9 @@ public static class AdminTransitOfficesEndpoints
                 statusCode: StatusCodes.Status422UnprocessableEntity),
             UpdateTransitOfficeQuipuxSettingsStatus.MissingFlags => Results.Json(
                 new { code = "QUIPUX_FLAGS_REQUIRED" },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            UpdateTransitOfficeQuipuxSettingsStatus.DivipoRequiredForFlags => Results.Json(
+                new { code = "DIVIPO_REQUIRED_FOR_FLAGS" },
                 statusCode: StatusCodes.Status422UnprocessableEntity),
             _ => Results.Ok(result.Settings),
         };

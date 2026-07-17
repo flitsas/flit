@@ -14,6 +14,13 @@ public enum UpdateTransitOfficeQuipuxSettingsStatus
 
     /// <summary>Falta alguna de las tres banderas en el PUT → 422.</summary>
     MissingFlags,
+
+    /// <summary>
+    /// Se activó al menos una bandera sin cargar el DIVIPO → 422. Estado inconsistente: la
+    /// secretaría declararía que radica sin ser elegible. El DIVIPO es obligatorio en cuanto
+    /// se enciende una familia; sin banderas, un DIVIPO vacío sigue siendo válido.
+    /// </summary>
+    DivipoRequiredForFlags,
 }
 
 /// <summary>

@@ -91,24 +91,37 @@ public sealed class UpdateTransitOfficeQuipuxSettingsHandlerTests
     }
 
     /// <summary>
-    /// Se permite declarar banderas antes de conocer el DIVIPO (el alta es gradual), pero la
-    /// secretaría NO queda elegible: sin DIVIPO no se radica. Es el fallo seguro.
+    /// Activar una bandera sin DIVIPO se rechaza (422): dejaría el estado inconsistente
+    /// «declara pero no radica». El DIVIPO es obligatorio en cuanto se enciende una familia, y
+    /// nada se persiste. Basta con una sola bandera para disparar la regla.
     /// </summary>
-    [Fact]
-    public async Task Update_FlagsWithoutDivipoCode_IsAllowed_ButNotElegible()
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public async Task Update_FlagsWithoutDivipoCode_Returns422_AndDoesNotPersist(
+        bool matricula, bool traspaso, bool otros)
     {
         var db = NewDbName();
         var officeId = await SeedOfficeAsync(db);
 
         await using var ctx = NewContext(db);
         var result = await NewHandler(ctx).HandleAsync(
-            NewCommand(officeId, null, matricula: true, traspaso: true, otros: true),
+            NewCommand(officeId, null, matricula, traspaso, otros),
             TestContext.Current.CancellationToken);
 
-        result.Status.Should().Be(UpdateTransitOfficeQuipuxSettingsStatus.Success);
-        result.Settings!.QuipuxRegistration.Should().BeTrue();
-        result.Settings.DivipoCode.Should().BeNull();
-        result.Settings.Elegible.Should().BeFalse();
+        result.Status.Should().Be(UpdateTransitOfficeQuipuxSettingsStatus.DivipoRequiredForFlags);
+        result.Settings.Should().BeNull();
+
+        // La secretaría queda intacta: la bandera inconsistente nunca toca la base.
+        await using var verify = NewContext(db);
+        var saved = await verify.TransitOffices.SingleAsync(
+            o => o.Id == officeId, TestContext.Current.CancellationToken);
+        saved.DivipoCode.Should().BeNull();
+        saved.QuipuxRegistration.Should().BeFalse();
+        saved.QuipuxTransfer.Should().BeFalse();
+        saved.QuipuxOther.Should().BeFalse();
     }
 
     /// <summary>Con DIVIPO pero sin ninguna bandera tampoco hay nada que radicar.</summary>
@@ -213,7 +226,11 @@ public sealed class UpdateTransitOfficeQuipuxSettingsHandlerTests
         result.Status.Should().Be(UpdateTransitOfficeQuipuxSettingsStatus.NotFound);
     }
 
-    /// <summary>Reparametrizar reemplaza el estado completo (PUT), incluido volver a "desconocido".</summary>
+    /// <summary>
+    /// Reparametrizar reemplaza el estado completo (PUT), incluido volver a "desconocido".
+    /// Limpiar el DIVIPO obliga a apagar todas las banderas en el mismo PUT (si no, sería el
+    /// estado inconsistente que ahora se rechaza): la desintegración es un acto deliberado.
+    /// </summary>
     [Fact]
     public async Task Update_IsAFullReplace_AndCanClearDivipoCode()
     {
@@ -229,17 +246,18 @@ public sealed class UpdateTransitOfficeQuipuxSettingsHandlerTests
         await using (var second = NewContext(db))
         {
             var result = await NewHandler(second).HandleAsync(
-                NewCommand(officeId, null, false, true, false), ct);
+                NewCommand(officeId, null, false, false, false), ct);
+            result.Status.Should().Be(UpdateTransitOfficeQuipuxSettingsStatus.Success);
             result.Settings!.DivipoCode.Should().BeNull();
             result.Settings.QuipuxRegistration.Should().BeFalse();
-            result.Settings.QuipuxTransfer.Should().BeTrue();
+            result.Settings.QuipuxTransfer.Should().BeFalse();
             result.Settings.QuipuxOther.Should().BeFalse();
         }
 
         await using var verify = NewContext(db);
         var saved = await verify.TransitOffices.SingleAsync(o => o.Id == officeId, ct);
         saved.DivipoCode.Should().BeNull();
-        saved.QuipuxTransfer.Should().BeTrue();
+        saved.QuipuxTransfer.Should().BeFalse();
         saved.QuipuxRegistration.Should().BeFalse();
     }
 

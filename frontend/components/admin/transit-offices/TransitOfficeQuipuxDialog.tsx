@@ -43,14 +43,17 @@ export function TransitOfficeQuipuxDialog({
 
   const trimmed = divipoCode.trim();
   const algunaBandera = matricula || traspaso || otros;
-  // Vacío NO es un error: es «aún no se conoce», el estado normal de las secretarías todavía
-  // no integradas. Solo se valida el formato cuando el administrador sí escribió algo.
+  // Vacío NO es un error MIENTRAS no haya banderas activas: es «aún no se conoce», el estado
+  // normal de las secretarías todavía no integradas. Solo se valida el formato cuando el
+  // administrador sí escribió algo.
   const formatoInvalido = trimmed !== "" && !DIVIPO_PATTERN.test(trimmed);
+  // Activar una familia sin DIVIPO es un estado inconsistente («declara pero no radica»): se
+  // bloquea el guardado, igual que el backend (422 DIVIPO_REQUIRED_FOR_FLAGS).
   const sinDivipoConBanderas = trimmed === "" && algunaBandera;
   const elegible = trimmed !== "" && algunaBandera;
 
   async function save() {
-    if (formatoInvalido) {
+    if (formatoInvalido || sinDivipoConBanderas) {
       return;
     }
     setError(null);
@@ -110,8 +113,9 @@ export function TransitOfficeQuipuxDialog({
             className={`mt-1 font-mono ${OT_INPUT_CLS}`}
           />
           <p id="ot-quipux-divipo-hint" className="mt-1 text-[11px] opacity-60">
-            El código que espera Quipux para esta secretaría. Déjalo vacío si aún no se
-            conoce: es el estado normal de las secretarías todavía no integradas.
+            El código que espera Quipux para esta secretaría. Es obligatorio para activar
+            cualquier familia; déjalo vacío solo si la secretaría aún no se integra (sin
+            banderas): es el estado normal de las secretarías todavía no integradas.
           </p>
           {formatoInvalido && (
             <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
@@ -150,16 +154,17 @@ export function TransitOfficeQuipuxDialog({
           />
         </fieldset>
 
-        {/* Aviso, no bloqueo: se permite declarar el alcance antes de conseguir el código. */}
+        {/* Bloqueo: activar una familia sin DIVIPO dejaría el estado inconsistente «declara
+            pero no radica». El código es obligatorio en cuanto se enciende una bandera. */}
         {sinDivipoConBanderas && (
           <p
             role="alert"
             className="rounded-xl px-3 py-2 text-[11px]"
             style={{ background: "#FFF4EC", color: "#7A2E00", border: "1px solid #FFD9C2" }}
           >
-            <span className="font-semibold">Sin código DIVIPO no se radica.</span> Puedes
-            guardar las banderas activas, pero esta secretaría no recibirá trámites por Quipux
-            hasta que cargues el código.
+            <span className="font-semibold">Falta el código DIVIPO.</span> Para activar una
+            familia primero debes cargar el código: sin él la secretaría no radica, así que no
+            se puede guardar en este estado.
           </p>
         )}
 
@@ -187,7 +192,7 @@ export function TransitOfficeQuipuxDialog({
           <button
             type="button"
             onClick={save}
-            disabled={busy || formatoInvalido}
+            disabled={busy || formatoInvalido || sinDivipoConBanderas}
             className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
           >

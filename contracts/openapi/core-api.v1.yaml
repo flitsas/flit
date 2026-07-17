@@ -676,11 +676,12 @@ paths:
         porque aprueba dentro de Quipux. Son conceptos distintos que comparten el nombre.
 
 
-        Reglas: `divipoCode` nulo o vacío significa «aún no se conoce» — **no es un error**,
-        es el estado normal de las secretarías todavía no integradas (hoy 311 de 317) — y se
-        normaliza a `null`, dejando la secretaría NO elegible para radicar. Activar banderas
-        sin DIVIPO se permite (el alta es gradual y manual), pero la respuesta devuelve
-        `elegible: false`: sin DIVIPO no se radica. Requiere SuperAdmin.
+        Reglas: `divipoCode` nulo o vacío significa «aún no se conoce» — **no es un error**
+        mientras no haya banderas activas —, es el estado normal de las secretarías todavía no
+        integradas (hoy 311 de 317), y se normaliza a `null` dejando la secretaría NO elegible.
+        En cambio, activar una bandera sin DIVIPO se **rechaza** (`422 DIVIPO_REQUIRED_FOR_FLAGS`):
+        el DIVIPO es obligatorio en cuanto se enciende una familia, para que no exista el estado
+        inconsistente «declara pero no radica». Requiere SuperAdmin.
       security:
         - bearerAuth: []
       parameters:
@@ -718,8 +719,9 @@ paths:
                 $ref: "#/components/schemas/CodeErrorResponse"
         "422":
           description: >
-            `DIVIPO_CODE_INVALID` (el DIVIPO no es numérico o excede 20 dígitos) o
-            `QUIPUX_FLAGS_REQUIRED` (falta alguna bandera en el PUT).
+            `DIVIPO_CODE_INVALID` (el DIVIPO no es numérico o excede 20 dígitos),
+            `QUIPUX_FLAGS_REQUIRED` (falta alguna bandera en el PUT) o
+            `DIVIPO_REQUIRED_FOR_FLAGS` (se activó una bandera sin cargar el DIVIPO).
           content:
             application/json:
               schema:
