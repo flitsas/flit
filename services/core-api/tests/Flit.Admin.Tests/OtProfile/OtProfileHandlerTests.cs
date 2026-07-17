@@ -219,6 +219,71 @@ public sealed class OtProfileHandlerTests
             .OperationMode.Should().Be(OtOperationModes.Dashboard);
     }
 
+    // HU #10774 (fix incidental): el SuperAdmin que navega el hub de una OT pasa el
+    // transitOfficeId; el GET debe LEER el perfil de esa oficina, sin crear ni reasignar (un GET
+    // no muta, y crear un perfil para el tenant del SuperAdmin sobre una oficina ajena rompía la
+    // unicidad uq_transit_office_profiles_transit_office_id → 500).
+    [Fact]
+    public async Task SuperAdmin_GetProfileByOffice_ReadsThatOfficeWithoutCreatingOwnRow()
+    {
+        var db = NewDbName();
+        var officeId = Guid.Parse("cccccccc-0001-4000-8000-000000000001");
+        var superAdminTenant = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+        await using (var seed = NewContext(db))
+        {
+            // La oficina pertenece a TenantB, en modo quipux read-only.
+            seed.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantB,
+                TransitOfficeId = officeId,
+                OperationMode = OtOperationModes.Quipux,
+                QuipuxReadOnly = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new GetOtProfileHandler(new OtProfileRepository(ctx));
+        var response = await handler.HandleAsync(
+            new GetOtProfileQuery { TenantId = superAdminTenant, TransitOfficeId = officeId },
+            TestContext.Current.CancellationToken);
+
+        // Lee el perfil de la oficina (el de TenantB), no el del SuperAdmin.
+        response.OperationMode.Should().Be(OtOperationModes.Quipux);
+        response.QuipuxReadOnly.Should().BeTrue();
+        response.TransitOfficeId.Should().Be(officeId);
+
+        // No se creó ninguna fila para el tenant del SuperAdmin: sigue habiendo un único perfil.
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+        (await verify.TransitOfficeProfiles.CountAsync(
+            p => p.TenantId == superAdminTenant, TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SuperAdmin_GetProfileByOfficeWithoutProfile_ReturnsDefaultAndPersistsNothing()
+    {
+        var db = NewDbName();
+        var officeId = Guid.Parse("cccccccc-0002-4000-8000-000000000002");
+        var superAdminTenant = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+        await using var ctx = NewContext(db);
+        var handler = new GetOtProfileHandler(new OtProfileRepository(ctx));
+        var response = await handler.HandleAsync(
+            new GetOtProfileQuery { TenantId = superAdminTenant, TransitOfficeId = officeId },
+            TestContext.Current.CancellationToken);
+
+        // Oficina sin perfil: por defecto dashboard, y NADA persistido.
+        response.OperationMode.Should().Be(OtOperationModes.Dashboard);
+        response.TransitOfficeId.Should().Be(officeId);
+
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
     private static string NewDbName() => Guid.NewGuid().ToString();
 
     private static FlitDbContext NewContext(string dbName) =>

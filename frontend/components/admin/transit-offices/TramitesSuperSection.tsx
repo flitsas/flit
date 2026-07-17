@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure, OtFeatureFlag, OtProfile } from "@/lib/api/types-ot";
 import { TramitesProcedureList } from "./TramitesProcedureList";
+import { QuipuxQueueList } from "./QuipuxQueueList";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 
 export type TramitesPanel = "dashboard" | "quipux";
@@ -116,7 +117,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       setProfile(updated);
       setActivePanel(nextMode === "quipux" ? "quipux" : "dashboard");
       show(
-        nextMode === "quipux" ? "Modo QX activado." : "Modo Dashboard activado.",
+        nextMode === "quipux"
+          ? "Consola en solo lectura: este OT opera en Quipux."
+          : "Consola operativa en FLIT.",
         "success",
       );
     } catch {
@@ -267,10 +270,15 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           )}
         </div>
         <div className="w-full max-w-xs">
+          {/* El nombre anterior («Modo QX — Integración con cola Quipux») hacía creer que aquí
+              se decidía si a la secretaría se le radica por Quipux. No es eso: este toggle solo
+              pone la consola de ESTE OT-cliente en solo lectura, porque aprueba dentro de
+              Quipux. La radicación a la secretaría DESTINO se parametriza en el catálogo
+              (código DIVIPO + banderas, HU #10710). */}
           <ToggleSwitch
             id={`${tabsId}-mode-qx`}
-            label="Modo QX"
-            description="Integración con cola Quipux"
+            label="Consola en solo lectura (opera en Quipux)"
+            description="Este OT aprueba y rechaza dentro de Quipux, no en FLIT. No afecta a la radicación."
             checked={isQuipuxMode}
             onChange={(checked) => void handleModeToggle(checked)}
           />
@@ -368,23 +376,10 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
         hidden={activePanel !== "quipux"}
         className="rounded-2xl border bg-card p-4"
       >
-        <UiStateBoundary
-          status={listStatus}
-          emptyMessage="La cola Quipux no tiene trámites pendientes en este momento."
-          errorMessage="Error al consultar la cola QX."
-          onRetry={() => void loadProcedures()}
-          skeletonRows={3}
-        >
-          <TramitesProcedureList
-            procedures={procedures}
-            showApprovalActions={false}
-            onVerConsolidado={handleVerConsolidado}
-            consolidadoActingId={consolidadoActingId}
-          />
-          <p className="mt-3 text-[11px] opacity-60">
-            Vista de cola Quipux en modo {isReadOnly ? "solo lectura" : "operativo"}.
-          </p>
-        </UiStateBoundary>
+        {/* Cola Quipux REAL de la secretaría destino (tramites.quipux_submissions, HU #10774):
+            las radicaciones con su estado en el ciclo de Quipux y las acciones de operación del
+            SuperAdmin. Ya no es la fachada que repintaba la bandeja del dashboard. */}
+        <QuipuxQueueList transitOfficeId={transitOfficeId} />
       </div>
 
       {approveTarget && (

@@ -174,6 +174,7 @@ app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminQuipuxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
 app.MapAdminDocumentTypesEndpoints();

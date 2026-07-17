@@ -27,6 +27,14 @@ using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
+using Flit.Infrastructure.Quipux;
+using Flit.Modules.Quipux.Application;
+using Flit.Modules.Quipux.Application.UseCases.EncolarEnvio;
+using Flit.Modules.Quipux.Domain.Configuracion;
+using Flit.Modules.Quipux.Domain.Consola;
+using Flit.Modules.Quipux.Domain.Envios;
+using Flit.Modules.Quipux.Domain.Puertos;
+using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.Avaluos;
@@ -125,6 +133,7 @@ public static class InfrastructureExtensions
         AddImprontas(services, configuration);
         AddRues(services, configuration);
         AddOcr(services, configuration);
+        AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -581,6 +590,65 @@ public static class InfrastructureExtensions
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
+    }
+
+    /// <summary>
+    /// Integración Quipux: radicación de trámites en las secretarías de tránsito.
+    /// </summary>
+    /// <remarks>
+    /// <para>A diferencia del resto de integraciones, <b>no recibe <see cref="IConfiguration"/> ni
+    /// tiene gate de registro</b>. La configuración de Quipux (credenciales, URLs, cadencia) vive
+    /// en <c>admin.quipux_settings</c>, no en appsettings/env vars, por requisito explícito:
+    /// rotar una credencial o cambiar el intervalo debe ser un UPDATE, sin desplegar. Por eso todo
+    /// se registra siempre y el gate real es <c>settings.Enabled</c>, releído por los workers en
+    /// cada ciclo. Sin fila o con <c>enabled = false</c> la integración es inerte.</para>
+    /// <para>El corolario es que el patrón de "no registrar el cliente y dejar la dependencia en
+    /// null" (el de RUES) aquí no aplica: no se puede decidir en el arranque algo que la BD puede
+    /// cambiar en caliente.</para>
+    /// <para>Tampoco se usa <c>IsDevelopment()</c> como gate de mock/real: el compose de PDN corre
+    /// con <c>ASPNETCORE_ENVIRONMENT=Development</c>.</para>
+    /// </remarks>
+    private static void AddQuipux(IServiceCollection services)
+    {
+        // Los handlers del módulo. Se registran aquí —y no en Program.cs— igual que
+        // AddSecurityApplication(): quien consume estos handlers son los workers de este mismo
+        // ensamblado, así que registrarlos juntos evita que un módulo quede a medio cablear.
+        // Sin esta línea todo COMPILA pero los workers revientan en el primer ciclo al resolverlos.
+        services.AddQuipuxApplication();
+
+        // Configuración y secretos. El protector cifra password_enc / aws_secret_access_key_enc con
+        // Data Protection (keyring ya persistido en Postgres): el claro nunca toca la BD.
+        services.AddSingleton<IQuipuxSecretProtector, DataProtectionQuipuxSecretProtector>();
+        services.AddScoped<IQuipuxSettingsRepository, QuipuxSettingsRepository>();
+
+        // Estado de la radicación y trazabilidad.
+        services.AddScoped<IQuipuxSubmissionRepository, QuipuxSubmissionRepository>();
+
+        // Consola de cola QX (HU #10774): lectura por secretaría destino + acciones manuales. Puerto
+        // aparte del de los workers — sin claim/lease, con filtro explícito por transit_office_id.
+        services.AddScoped<IQuipuxSubmissionConsoleRepository, DbQuipuxSubmissionConsoleRepository>();
+        services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
+        services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
+
+        // Adaptadores de los puertos que declara Quipux.Application, para que el módulo no dependa
+        // de Tramites.Application ni del DbContext.
+        services.AddScoped<IQuipuxConsolidadoMaestroPort, QuipuxConsolidadoMaestroAdapter>();
+        services.AddScoped<IQuipuxOrganismoPort, QuipuxOrganismoAdapter>();
+        services.AddScoped<IQuipuxTenantPort, QuipuxTenantAdapter>();
+
+        // Publicación del PDF en el bucket S3 DE QUIPUX. Scoped: resuelve el adjunto vía DbContext.
+        services.AddScoped<IQuipuxDocumentUploader, QuipuxS3DocumentUploader>();
+
+        // Cliente HTTP. Sin BaseAddress: las URLs son absolutas y salen de la BD en cada llamada,
+        // porque un BaseAddress fijado aquí se congelaría en el arranque y no podría cambiar en
+        // caliente. El Timeout sí queda fijado (limitación de HttpClient) con un valor holgado.
+        services.AddHttpClient<IQuipuxClient, QuipuxApiClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(120));
+
+        // Los dos workers (el "cron"). ADR-0024 rechaza cron/broker externo: van dentro de core-api
+        // con claim FOR UPDATE SKIP LOCKED. Registrados siempre; el gate es la BD.
+        services.AddHostedService<QuipuxRegisterProcessor>();
+        services.AddHostedService<QuipuxStatusPollProcessor>();
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
