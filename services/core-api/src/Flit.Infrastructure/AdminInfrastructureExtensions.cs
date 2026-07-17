@@ -44,6 +44,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
         services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
 
+        // HU #10678 — rastro de auditoría administrativa/seguridad transversal (usuarios,
+        // roles, permisos, autenticación) sobre el mismo scope independiente que AuditFailureWriter.
+        services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
+
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();

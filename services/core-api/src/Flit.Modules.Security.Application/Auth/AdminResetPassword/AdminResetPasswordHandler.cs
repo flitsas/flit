@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
@@ -14,7 +15,9 @@ public sealed class AdminResetPasswordHandler(
     IUserAccountRepository userAccountRepository,
     ITemporaryPasswordGenerator temporaryPasswordGenerator,
     IPasswordHasher passwordHasher,
-    IEmailSender emailSender)
+    IEmailSender emailSender,
+    IAdminAuditWriter auditWriter,
+    IAuditContextAccessor auditContext)
 {
     /// <summary>Permiso requerido para resetear contraseñas dentro del propio tenant.</summary>
     public const string ResetPermission = "security.users.reset_password";
@@ -27,13 +30,30 @@ public sealed class AdminResetPasswordHandler(
     {
         var email = command.TargetEmail?.Trim() ?? string.Empty;
         if (email.Length == 0)
+        {
+            await AuditAsync(command, null, AuditVocabulary.Results.Failure, "user_not_found", cancellationToken)
+                .ConfigureAwait(false);
             throw new TargetUserNotFoundException();
+        }
 
         var target = await userAccountRepository.FindActiveTargetByEmailAsync(email, cancellationToken);
         if (target is null)
+        {
+            await AuditAsync(command, null, AuditVocabulary.Results.Failure, "user_not_found", cancellationToken)
+                .ConfigureAwait(false);
             throw new TargetUserNotFoundException();
+        }
 
-        EnsureScope(command, target);
+        try
+        {
+            EnsureScope(command, target);
+        }
+        catch (AdminScopeException)
+        {
+            await AuditAsync(command, target.UserId, AuditVocabulary.Results.Failure, "forbidden_scope", cancellationToken)
+                .ConfigureAwait(false);
+            throw;
+        }
 
         var temporaryPassword = temporaryPasswordGenerator.Generate();
         var hash = passwordHasher.Hash(temporaryPassword);
@@ -48,7 +68,33 @@ public sealed class AdminResetPasswordHandler(
             BuildBody(target.DisplayName, temporaryPassword));
 
         await emailSender.SendAsync(message, cancellationToken);
+
+        await AuditAsync(command, target.UserId, AuditVocabulary.Results.Success, null, cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    // HU #10678 — sin contraseñas en el rastro: actor = admin que ejecuta, afectado = usuario objetivo.
+    private async Task AuditAsync(
+        AdminResetPasswordCommand command,
+        Guid? targetUserId,
+        string result,
+        string? errorCode,
+        CancellationToken cancellationToken) =>
+        await auditWriter.WriteAsync(
+            new AdminAuditEntry(
+                command.CallerTenantId,
+                TenantType: null,
+                AuditVocabulary.Modules.Authentication,
+                EntityName: "user",
+                AuditVocabulary.Operations.AdminResetPassword,
+                result,
+                errorCode,
+                ActorUserId: null,
+                TargetEntityType: targetUserId is null ? null : "USER",
+                TargetEntityId: targetUserId,
+                auditContext.ClientIp,
+                UserAgent: null),
+            cancellationToken).ConfigureAwait(false);
 
     private static void EnsureScope(AdminResetPasswordCommand command, AdminTargetUser target)
     {
