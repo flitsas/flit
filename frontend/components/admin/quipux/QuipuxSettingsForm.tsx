@@ -44,6 +44,25 @@ const DEFAULTS = {
 
 type FormState = typeof DEFAULTS;
 
+// Catálogo de tipos de documento de Quipux (el mismo código que espera su API en
+// `tipoDocumentoFuncionario`). El valor es el identificador que viaja al cable; la etiqueta es
+// solo para la UI. Para la entidad que radica (FLIT) lo normal es 3 (NIT).
+const DOCUMENT_TYPES: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 1, label: "NN - No identificado" },
+  { value: 2, label: "Cédula de Ciudadanía" },
+  { value: 3, label: "NIT" },
+  { value: 4, label: "Cédula de Extranjería" },
+  { value: 5, label: "Tarjeta de Identidad" },
+  { value: 6, label: "Pasaporte" },
+  { value: 7, label: "Número Único de Identificación" },
+  { value: 8, label: "Carnet Diplomático" },
+  { value: 9, label: "RUT" },
+  { value: 20, label: "Sin Documento" },
+  { value: 21, label: "Registro Civil" },
+  { value: 22, label: "Cédula Venezolana" },
+  { value: 25, label: "Cédula Ecuatoriana" },
+];
+
 function toForm(s: QuipuxSettings): FormState {
   return {
     enabled: s.enabled,
@@ -354,28 +373,42 @@ export function QuipuxSettingsForm() {
         />
       </section>
 
-      {/* Funcionario que radica */}
+      {/* Entidad que radica (FLIT) */}
       <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-        <h2 className="text-sm font-semibold">Funcionario que radica</h2>
+        <h2 className="text-sm font-semibold">Entidad que radica (FLIT)</h2>
+        <p className="text-[11px] opacity-60">
+          Identifica a <span className="font-semibold">FLIT</span> como la entidad que presenta el
+          documento ante Quipux. No es el ciudadano ni el dueño del vehículo (ese viaja por trámite);
+          es el «remitente» de la radicación. Normalmente es el NIT de FLIT.
+        </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field id="qx-officer-type" label="Tipo de documento" hint="3 = NIT.">
-            <input
+          <Field id="qx-officer-type" label="Tipo de documento">
+            <select
               id="qx-officer-type"
-              type="number"
-              min={1}
               value={form.officerDocumentType}
               disabled={saving}
               onChange={(e) => set("officerDocumentType", toInt(e.target.value, DEFAULTS.officerDocumentType))}
               className={`mt-1 ${OT_INPUT_CLS}`}
-            />
+            >
+              {/* Si el valor guardado no está en el catálogo (dato viejo), se muestra igual. */}
+              {!DOCUMENT_TYPES.some((t) => t.value === form.officerDocumentType) && (
+                <option value={form.officerDocumentType}>Código {form.officerDocumentType}</option>
+              )}
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.value} — {t.label}
+                </option>
+              ))}
+            </select>
           </Field>
-          <Field id="qx-officer-number" label="Número de documento" hint="NIT de FLIT como entidad que radica.">
+          <Field id="qx-officer-number" label="Número de documento" hint="El NIT de FLIT como entidad que radica.">
             <input
               id="qx-officer-number"
               type="text"
               value={form.officerDocumentNumber}
               disabled={saving}
               onChange={(e) => set("officerDocumentNumber", e.target.value)}
+              placeholder="NIT de FLIT"
               className={`mt-1 font-mono ${OT_INPUT_CLS}`}
             />
           </Field>

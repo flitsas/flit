@@ -74,6 +74,16 @@ describe("QuipuxSettingsForm — HU #10710", () => {
     expect(pwd).toHaveAttribute("placeholder", expect.stringContaining("guardado"));
   });
 
+  it("el tipo de documento es un desplegable con etiquetas (3 = NIT)", async () => {
+    vi.mocked(fetchQuipuxSettings).mockResolvedValue(settings({ officerDocumentType: 3 }));
+    renderForm();
+
+    const select = await screen.findByLabelText("Tipo de documento");
+    expect(select).toHaveValue("3");
+    const nit = screen.getByRole("option", { name: /NIT/ }) as HTMLOptionElement;
+    expect(nit.selected).toBe(true);
+  });
+
   it("estado inicial sin fila: usa los valores por defecto", async () => {
     vi.mocked(fetchQuipuxSettings).mockResolvedValue(null);
     renderForm();
