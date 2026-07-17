@@ -20,6 +20,8 @@ internal static class SuperAdminEndpointExtensions
         SecurityPermissionsEndpoints.Map(group);
         SecurityRolesEndpoints.Map(group);
         SecurityUsersEndpoints.Map(group);
+        // HU #10679 — consulta global del rastro de auditoría administrativa/seguridad.
+        SecurityAuditEndpoints.Map(group);
 
         return app;
     }
