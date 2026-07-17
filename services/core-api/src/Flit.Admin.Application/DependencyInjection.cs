@@ -20,6 +20,7 @@ using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperatio
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
 using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
+using Flit.Admin.Application.Companies.TransitOffices.UpdateTransitOfficeQuipuxSettings;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -113,6 +114,10 @@ public static class DependencyInjection
         // RF01 — estado operativo del catálogo OT (join catálogo + perfil + tenant).
         // ITransitOfficeOperationalStatusReader se registra en AddAdminInfrastructure.
         services.AddScoped<ListTransitOfficesOperationalStatusHandler>();
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas
+        // por familia de trámite). ITransitOfficeQuipuxSettingsWriter se registra en
+        // AddAdminInfrastructure.
+        services.AddScoped<UpdateTransitOfficeQuipuxSettingsHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
 

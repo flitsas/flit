@@ -64,6 +64,10 @@ public static class AdminInfrastructureExtensions
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
 
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas).
+        // Escritura sobre el catálogo global catalogs.transit_offices (sin RLS), solo SuperAdmin.
+        services.AddScoped<ITransitOfficeQuipuxSettingsWriter, DbTransitOfficeQuipuxSettingsWriter>();
+
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();

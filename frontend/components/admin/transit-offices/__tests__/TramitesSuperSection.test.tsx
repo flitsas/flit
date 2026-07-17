@@ -15,6 +15,16 @@ vi.mock("@/lib/api/admin-ot", () => ({
   rejectOtClientProcedure: vi.fn(),
 }));
 
+// El panel «Cola QX» monta <QuipuxQueueList/>, que llama fetchQuipuxCola al montar (aunque el
+// panel esté oculto). Se mockea aquí para no disparar una llamada real; los helpers puros
+// (canRetry/canCancel) se reexportan tal cual.
+vi.mock("@/lib/api/admin-transit-office-tenants", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/admin-transit-office-tenants")>()),
+  fetchQuipuxCola: vi.fn(),
+  retryQuipuxSubmission: vi.fn(),
+  cancelQuipuxSubmission: vi.fn(),
+}));
+
 import {
   approveOtClientProcedure,
   fetchOtClientProcedures,
@@ -22,6 +32,7 @@ import {
   rejectOtClientProcedure,
   updateOtProfile,
 } from "@/lib/api/admin-ot";
+import { fetchQuipuxCola } from "@/lib/api/admin-transit-office-tenants";
 
 const OT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const PROC_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
@@ -76,6 +87,12 @@ describe("TramitesSuperSection — HU #10218", () => {
       ...sampleProcedure,
       status: "rechazado",
     });
+    vi.mocked(fetchQuipuxCola).mockResolvedValue({
+      data: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 20,
+    });
   });
 
   it("AC1 muestra dos paneles con roles ARIA de pestañas", async () => {
@@ -86,12 +103,12 @@ describe("TramitesSuperSection — HU #10218", () => {
     expect(screen.getByRole("tablist", { name: /Paneles de trámites/i })).toBeInTheDocument();
   });
 
-  it("AC2 al activar Modo QX llama PATCH profile con operation_mode quipux", async () => {
+  it("AC2 al activar «Consola en solo lectura» llama PATCH profile con operation_mode quipux", async () => {
     const user = userEvent.setup();
     renderSection();
 
-    await screen.findByRole("switch", { name: /Modo QX/i });
-    await user.click(screen.getByRole("switch", { name: /Modo QX/i }));
+    await screen.findByRole("switch", { name: /Consola en solo lectura/i });
+    await user.click(screen.getByRole("switch", { name: /Consola en solo lectura/i }));
 
     await waitFor(() => {
       expect(updateOtProfile).toHaveBeenCalledWith({ operationMode: "quipux" });
@@ -102,7 +119,7 @@ describe("TramitesSuperSection — HU #10218", () => {
     );
   });
 
-  it("AC3 en modo QX solo lectura no renderiza botones Aprobar/Rechazar", async () => {
+  it("AC3 con la consola en solo lectura no renderiza botones Aprobar/Rechazar", async () => {
     vi.mocked(fetchOtProfile).mockResolvedValue(quipuxReadOnlyProfile);
     renderSection();
 
@@ -112,6 +129,18 @@ describe("TramitesSuperSection — HU #10218", () => {
     expect(screen.queryByRole("button", { name: /Aprobar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Rechazar/i })).not.toBeInTheDocument();
     expect(screen.getByText(/^Solo lectura$/i)).toBeInTheDocument();
+  });
+
+  // HU #10710 — el toggle se llamaba «Modo QX / Integración con cola Quipux», lo que hacía
+  // creer que decidía si a la secretaría se le radica por Quipux. Solo pone la consola de
+  // este OT-cliente en solo lectura; la radicación se parametriza en el catálogo (DIVIPO).
+  it("el toggle nombra su efecto real y no se confunde con la radicación Quipux", async () => {
+    renderSection();
+
+    const toggle = await screen.findByRole("switch", { name: /Consola en solo lectura/i });
+    expect(toggle).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: /Modo QX/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Integración con cola Quipux/i)).not.toBeInTheDocument();
   });
 
   it("AC4 muestra skeleton mientras carga el perfil", () => {
@@ -124,7 +153,7 @@ describe("TramitesSuperSection — HU #10218", () => {
     vi.mocked(fetchOtProfile).mockResolvedValue(quipuxReadOnlyProfile);
     renderSection();
 
-    const toggle = await screen.findByRole("switch", { name: /Modo QX/i });
+    const toggle = await screen.findByRole("switch", { name: /Consola en solo lectura/i });
     expect(toggle).toBeChecked();
     expect(fetchOtProfile).toHaveBeenCalled();
     expect(localStorage.getItem("ot_operation_mode")).toBeNull();
