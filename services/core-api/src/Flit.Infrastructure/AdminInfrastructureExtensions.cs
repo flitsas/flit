@@ -17,6 +17,7 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
@@ -154,6 +155,9 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
+        // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
+        services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
+
         // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
         // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
         services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
@@ -173,6 +177,9 @@ public static class AdminInfrastructureExtensions
 
         // HU #10466 — historial de improntas generadas (ADR-0022).
         services.AddScoped<IImprontaRepository, ImprontaRepository>();
+
+        // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
+        services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
         return services;
     }

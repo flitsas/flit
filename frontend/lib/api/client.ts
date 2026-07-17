@@ -105,7 +105,15 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
 async function safeJson(response: Response): Promise<unknown> {
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    // HU #10797 (AC5) — una respuesta no-JSON (p. ej. la página HTML de error de desarrollo:
+    // "Microsoft.EntityFrameworkCore...") no debe romper el cliente con "Unexpected token". Se
+    // ignora el cuerpo no parseable; el caller recibe un ApiError con el status (mensaje legible).
+    return null;
+  }
 }
 
 function readCookie(name: string): string | null {

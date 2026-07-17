@@ -16,6 +16,16 @@ public sealed class ProcedureInstance
     public Guid? TransitOfficeId { get; set; }
 
     /// <summary>
+    /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
+    /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
+    /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al
+    /// OT, esperando placa) y <c>asignado</c> (placa registrada; pendiente de SOAT + recepción del OT).
+    /// Ver <see cref="Tramites.Estados.PlateFlowStatus"/>. Columna agregada por migración SQL cruda
+    /// (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public string? PlateFlowStatus { get; set; }
+
+    /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
     /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
     /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el

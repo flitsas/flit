@@ -21,6 +21,13 @@ public sealed class TenantSettings
     /// <summary>Baúl de firmas activo (<c>signature_vault_enabled</c>).</summary>
     public required bool SignatureVaultEnabled { get; init; }
 
+    /// <summary>
+    /// Preasignación de placa activa (<c>plate_preassign_enabled</c>, Feature #10587). Nace apagada;
+    /// habilita la ruta de placa (matrícula inicial) cuando además el OT tiene <c>allow_plate_preassign</c>
+    /// y existe grant vigente. No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool PlatePreassignEnabled { get; init; }
+
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
@@ -69,6 +76,7 @@ public sealed class TenantSettings
         AllowMiscNewVehicles = true,
         OnlyOwnVehicles = false,
         SignatureVaultEnabled = false,
+        PlatePreassignEnabled = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],

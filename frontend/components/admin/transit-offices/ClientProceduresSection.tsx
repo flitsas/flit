@@ -24,6 +24,12 @@ import { Modal } from "@/components/atom/Modal";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { FolderOpen } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import {
+  assignPlateToProcedure,
+  listPlateDetails,
+  revokeProcedurePlate,
+  type PlateDetail,
+} from "@/lib/api/admin-plate-ranges";
 import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
@@ -50,6 +56,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
+  // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
+  const [assignTarget, setAssignTarget] = useState<OtClientProcedure | null>(null);
+  const [plateInput, setPlateInput] = useState("");
+  // HU #10800 — placas disponibles del rango de la compañía (para el select) y modo de asignación.
+  const [availablePlates, setAvailablePlates] = useState<PlateDetail[]>([]);
+  const [assignMode, setAssignMode] = useState<"range" | "out">("range");
+  const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
+  const [revokePlateReason, setRevokePlateReason] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
@@ -147,23 +161,88 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!approveTarget) return;
     setActing(true);
     try {
-      // Si el OT seleccionó la Licencia de Tránsito, se adjunta ANTES de aprobar
-      // (el backend la acepta en entregado/aprobado y el consolidado la incluirá).
+      // Se aprueba PRIMERO y luego se adjunta la LT: el gate de la LT exige el trámite en
+      // entregado/aprobado. En la ruta de placa (Feature #10587) el trámite llega a la aprobación
+      // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
+      // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
+      const updated = await approveOtClientProcedure(approveTarget.id);
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
       if (ltFile) {
         try {
           await adjuntarOtLicenciaTransito(approveTarget.id, ltFile, scope);
         } catch {
-          show("No se pudo adjuntar la Licencia de Tránsito. El trámite NO fue aprobado.", "error");
+          // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
+          // acción dedicada de Licencia de Tránsito.
+          setApproveTarget(null);
+          setLtFile(null);
+          show(
+            "Trámite aprobado, pero no se pudo adjuntar la Licencia de Tránsito. Reintenta la carga.",
+            "error",
+          );
           return;
         }
       }
-      const updated = await approveOtClientProcedure(approveTarget.id);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
       setApproveTarget(null);
       setLtFile(null);
       show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch {
       show("No se pudo aprobar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // HU #10800 — abre el modal de asignar placa y carga las placas disponibles del rango de la compañía;
+  // si no hay, arranca en modo "fuera de rango".
+  const openAssignPlate = (row: OtClientProcedure) => {
+    setPlateInput("");
+    setAssignMode("range");
+    setAvailablePlates([]);
+    setAssignTarget(row);
+    listPlateDetails(row.clientTenantId, { state: "disponible", scope: { transitOfficeId } })
+      .then((plates) => {
+        setAvailablePlates(plates);
+        setAssignMode(plates.length > 0 ? "range" : "out");
+      })
+      .catch(() => setAssignMode("out"));
+  };
+
+  const confirmAssignPlate = async () => {
+    if (!assignTarget || !plateInput.trim()) return;
+    setActing(true);
+    try {
+      // HU #10800 — del rango (outOfRange=false) o fuera de rango (outOfRange=true).
+      await assignPlateToProcedure(assignTarget.id, plateInput.trim().toUpperCase(), assignMode === "out");
+      // HU #10785 — el status global permanece 'entregado'; avanza el sub-estado interno de placa.
+      setRows((prev) =>
+        prev.map((r) => (r.id === assignTarget.id ? { ...r, plateFlowStatus: "asignado" } : r)),
+      );
+      setAssignTarget(null);
+      setPlateInput("");
+      show("Placa asignada al trámite.", "success");
+    } catch {
+      show("No se pudo asignar la placa.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmRevokePlate = async () => {
+    if (!revokeTarget || !revokePlateReason.trim()) return;
+    setActing(true);
+    try {
+      await revokeProcedurePlate(revokeTarget.id, revokePlateReason.trim());
+      // HU #10785 — el status global permanece 'entregado'; el sub-estado vuelve a 'preasignado'.
+      setRows((prev) =>
+        prev.map((r) => (r.id === revokeTarget.id ? { ...r, plateFlowStatus: "preasignado" } : r)),
+      );
+      setRevokeTarget(null);
+      setRevokePlateReason("");
+      show("Preasignación revocada.", "success");
+    } catch {
+      show("No se pudo revocar la preasignación.", "error");
     } finally {
       setActing(false);
     }
@@ -295,6 +374,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
+  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía). Las placas del rango que
+  // terminan en ese dígito se ordenan primero y se marcan; el OT puede elegir esa u otra cualquiera.
+  const preferredDigit = assignTarget?.platePreferredLastDigit?.trim() ?? "";
+  const orderedPlates = preferredDigit
+    ? [...availablePlates].sort(
+        (a, b) =>
+          Number(b.plate.endsWith(preferredDigit)) - Number(a.plate.endsWith(preferredDigit)),
+      )
+    : availablePlates;
+
   return (
     <div className="space-y-4">
       {isReadOnly && (
@@ -394,6 +483,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             setApproveTarget(row);
           }}
           onReject={setRejectTarget}
+          onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
+          onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
           showApprovalActions={!isReadOnly && !superAdmin}
           onConsolidado={handleConsolidado}
           onAdjuntarLt={
@@ -452,6 +543,117 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               >
                 {acting ? "Procesando…" : "Confirmar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assignTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Asignar placa"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
+            <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
+            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede asignar una placa
+                que termine en ese dígito o cualquier otra. */}
+            {preferredDigit && (
+              <div
+                className="mt-3 rounded-lg px-3 py-2 text-xs"
+                style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
+              >
+                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía. Las placas ★ del
+                rango terminan en ese dígito; puedes asignar esa u otra cualquiera.
+              </div>
+            )}
+            {/* HU #10800 — elegir del rango (select) o registrar una placa fuera de rango (input). */}
+            <div className="mt-4 flex gap-2 text-xs font-semibold">
+              <button
+                type="button"
+                disabled={availablePlates.length === 0}
+                onClick={() => { setAssignMode("range"); setPlateInput(""); }}
+                className={`rounded-lg border px-3 py-1.5 disabled:opacity-40 ${assignMode === "range" ? "text-white" : ""}`}
+                style={assignMode === "range" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
+              >
+                Del rango{availablePlates.length > 0 ? ` (${availablePlates.length})` : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAssignMode("out"); setPlateInput(""); }}
+                className={`rounded-lg border px-3 py-1.5 ${assignMode === "out" ? "text-white" : ""}`}
+                style={assignMode === "out" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
+              >
+                Fuera de rango
+              </button>
+            </div>
+            {assignMode === "range" ? (
+              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+                Placa del rango
+                <select
+                  value={plateInput}
+                  onChange={(e) => setPlateInput(e.target.value)}
+                  aria-label="Placa del rango"
+                  className={`mt-1 ${OT_INPUT_CLS}`}
+                >
+                  <option value="">
+                    {availablePlates.length === 0 ? "No hay placas disponibles" : "Selecciona una placa"}
+                  </option>
+                  {orderedPlates.map((p) => (
+                    <option key={p.id} value={p.plate}>
+                      {p.plate}
+                      {preferredDigit && p.plate.endsWith(preferredDigit) ? " ★" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+                Placa (fuera de rango)
+                <input
+                  type="text"
+                  value={plateInput}
+                  onChange={(e) => setPlateInput(e.target.value)}
+                  placeholder="ABC123"
+                  aria-label="Placa fuera de rango"
+                  className={`mt-1 uppercase ${OT_INPUT_CLS}`}
+                />
+                <span className="mt-1 block text-[11px] font-normal opacity-70">
+                  Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
+                </span>
+              </label>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revokeTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Revocar preasignación"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Revocar preasignación</h2>
+            <p className="mt-2 text-sm opacity-80">{revokeTarget.referenceNumber}</p>
+            <textarea
+              className={`mt-3 ${OT_INPUT_CLS}`}
+              rows={3}
+              value={revokePlateReason}
+              onChange={(e) => setRevokePlateReason(e.target.value)}
+              placeholder="Motivo de la revocación…"
+              aria-label="Motivo de la revocación"
+            />
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Procesando…" : "Revocar"}</button>
             </div>
           </div>
         </div>

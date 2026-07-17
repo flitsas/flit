@@ -118,7 +118,13 @@ public sealed class TramiteLifecycleService(
         instance.Status = command.ToStatus;
         instance.UpdatedAt = now;
         if (command.ToStatus == TramiteEstado.Entregado)
+        {
             instance.SubmittedAt = now;
+            // Feature #10587 / HU #10785 — la ruta de placa NO cambia el status (queda 'entregado'):
+            // fija el sub-estado interno de placa (preasignado Flujo B / asignado Flujo A / null estándar).
+            // Los gates de entrega (EvaluarEntregaAsync) ya corrieron y promovieron el OT elegido.
+            instance.PlateFlowStatus = command.PlateFlowStatus;
+        }
 
         // Feature #10701 — un cambio de estado invalida el consolidado maestro persistido: el
         // expediente cambió, así que el próximo "Ver consolidado" debe regenerarlo antes de mostrarlo.

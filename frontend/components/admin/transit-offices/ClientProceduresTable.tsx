@@ -6,6 +6,12 @@ import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import {
+  esperandoSoatDelGestor,
+  plateFlowChipStyle,
+  plateFlowLabel,
+  puedeDecidirOt,
+} from "@/lib/tramites/estados";
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -24,6 +30,10 @@ export interface ClientProceduresTableProps {
   onConsolidado?: (row: OtClientProcedure) => void;
   /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — asignar placa a un trámite en preasignado (Flujo B). */
+  onAssignPlate?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — revocar la preasignación de un trámite. */
+  onRevoke?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
   /** Abre el panel de documentos del expediente para el trámite. */
@@ -42,6 +52,8 @@ export function ClientProceduresTable({
   showApprovalActions = true,
   onConsolidado,
   onAdjuntarLt,
+  onAssignPlate,
+  onRevoke,
   consolidadoActingId = null,
   onVerDocumentos,
 }: ClientProceduresTableProps) {
@@ -93,10 +105,25 @@ export function ClientProceduresTable({
                 {row.clientTenantName ?? row.clientTenantId}
               </td>
               <td className="border-y px-4 py-3">
-                <OtStatusBadge
-                  label={formatOtProcedureStatus(row.status)}
-                  tone={procedureStatusTone(row.status)}
-                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <OtStatusBadge
+                    label={formatOtProcedureStatus(row.status)}
+                    tone={procedureStatusTone(row.status)}
+                  />
+                  {plateFlowChipStyle(row.plateFlowStatus) && (
+                    <span
+                      title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
+                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
+                        color: plateFlowChipStyle(row.plateFlowStatus)!.color,
+                        border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
+                      }}
+                    >
+                      {plateFlowLabel(row.plateFlowStatus)}
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
@@ -115,7 +142,12 @@ export function ClientProceduresTable({
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
-                  {row.status === "entregado" && showApprovalActions && (
+                  {/* HU #10804 — Aprobar y Rechazar se ocultan JUNTOS en la ruta de placa hasta que la
+                      placa esté 'asignado' y el SOAT 'vigente' (el gestor validó por RUNT o cargó el PDF).
+                      En ruta estándar se muestran como siempre. */}
+                  {row.status === "entregado" &&
+                    puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
+                    showApprovalActions && (
                     <RowActions
                       actions={[
                         {
@@ -133,6 +165,42 @@ export function ClientProceduresTable({
                       ]}
                     />
                   )}
+                  {/* HU #10804 — placa asignada pero SOAT aún no vigente: se avisa por qué no hay acciones. */}
+                  {row.status === "entregado" &&
+                    esperandoSoatDelGestor(row.plateFlowStatus, row.soatEstado) &&
+                    showApprovalActions && (
+                    <span
+                      className="text-[10px] font-medium italic"
+                      style={{ color: "#b45309" }}
+                      title="El gestor debe validar el SOAT (RUNT o PDF) antes de que el OT pueda aprobar o rechazar."
+                    >
+                      Esperando validación de SOAT del gestor
+                    </span>
+                  )}
+                  {/* Feature #10587 / HU #10785 — la ruta de placa vive en plate_flow_status (el status
+                      permanece 'entregado'): asignar (preasignado) y revocar (preasignado/asignado). */}
+                  {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                      onClick={() => onAssignPlate(row)}
+                    >
+                      Asignar placa
+                    </button>
+                  )}
+                  {(row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
+                    showApprovalActions &&
+                    onRevoke && (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "#fca5a5", color: "#b91c1c" }}
+                        onClick={() => onRevoke(row)}
+                      >
+                        Revocar
+                      </button>
+                    )}
                   {row.status === "aprobado" && onAdjuntarLt && (
                     <button
                       type="button"

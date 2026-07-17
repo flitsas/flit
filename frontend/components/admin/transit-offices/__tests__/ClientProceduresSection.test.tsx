@@ -221,7 +221,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     vi.unstubAllGlobals();
   });
 
-  it("aprobar con LT seleccionada adjunta la licencia ANTES de aprobar", async () => {
+  it("aprobar con LT seleccionada aprueba ANTES de adjuntar la licencia", async () => {
     vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({
       id: "att-lt",
       tipo: "licencia_transito",
@@ -239,12 +239,13 @@ describe("ClientProceduresSection — HU #10220", () => {
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
-    await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1"));
-    expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined);
-    // La LT se adjuntó antes que la aprobación.
+    await waitFor(() => expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined));
+    expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1");
+    // La aprobación va PRIMERO: el gate de la LT exige el trámite en aprobado (ruta de placa
+    // Feature #10587: llega a la aprobación en 'asignado', donde adjuntar antes fallaría).
     const ltOrder = vi.mocked(adjuntarOtLicenciaTransito).mock.invocationCallOrder[0];
     const approveOrder = vi.mocked(approveOtClientProcedure).mock.invocationCallOrder[0];
-    expect(ltOrder).toBeLessThan(approveOrder);
+    expect(approveOrder).toBeLessThan(ltOrder);
   });
 
   it("fila aprobada ofrece 'Adjuntar LT' para el OT admin", async () => {

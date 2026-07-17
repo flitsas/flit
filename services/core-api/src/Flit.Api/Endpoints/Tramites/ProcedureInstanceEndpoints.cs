@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Middleware;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
@@ -285,8 +286,9 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado) + reason (obligatorio para
-        // anulado/rechazado). Errores: ProblemDetails con title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado|preasignado|asignado) + reason
+        // (obligatorio para anulado/rechazado). preasignado/asignado = ruta de preasignación de placa
+        // (Feature #10587). Errores: ProblemDetails con title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -319,6 +321,28 @@ internal static class ProcedureInstanceEndpoints
                     detail: errorDetail ?? "La transición solicitada no es válida."),
             };
         }).WithName("TransitionProcedureInstance");
+
+        // Feature #10587 (P-10) — placas DISPONIBLES para la compañía en el OT elegido, para el
+        // selector del wizard de matrícula inicial. Company-facing: el tenant sale del JWT/header.
+        group.MapGet("/plate-preassign/available", async (
+            [FromQuery] Guid transitOfficeId,
+            HttpContext http,
+            IPlateRangeRepository plateRepo,
+            CancellationToken ct) =>
+        {
+            var (resolvedTenant, _) = ResolveTenantContext(http);
+            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "El usuario autenticado no tiene una compañía asignada.");
+
+            if (transitOfficeId == Guid.Empty)
+                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
+
+            var plates = await plateRepo
+                .ListDetailsAsync(tenantId, transitOfficeId, PlateState.Disponible, ct)
+                .ConfigureAwait(false);
+            return Results.Ok(plates);
+        }).WithName("ListAvailablePreassignPlates");
 
         return app;
     }

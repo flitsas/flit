@@ -30,6 +30,7 @@ using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
@@ -104,7 +105,8 @@ public static class AdminOtEndpoints
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
             .WithName("AdminOtCreateWebhook")
@@ -536,14 +538,25 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+        try
         {
-            TenantId = tenantId,
-            ChangedBy = ResolveUserId(httpContext.User),
-            Request = request,
-        }, cancellationToken).ConfigureAwait(false);
+            var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ResolveUserId(httpContext.User),
+                Request = request,
+            }, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result.Requirements);
+            return Results.Ok(result.Requirements);
+        }
+        catch (OtRequirementsScopeException ex)
+        {
+            // El tenant no es un OT aprovisionado (o la oficina es de otro OT): 422, no 500 (ADR-0022).
+            return Results.Problem(
+                title: "ot_requirements_scope",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
     }
 
     private static async Task<IResult> UpdateFeatureFlagAsync(

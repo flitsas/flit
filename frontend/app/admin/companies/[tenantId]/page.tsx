@@ -12,6 +12,7 @@ import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel
 import { OTConsultationRestrictionsPanel } from "@/components/admin/companies/panels/OTConsultationRestrictionsPanel";
 import { OTBlockingPoliciesPanel } from "@/components/admin/companies/panels/OTBlockingPoliciesPanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
+import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
@@ -116,6 +117,7 @@ function CompanyDetail() {
                 otBlockingSlot={<OTBlockingPoliciesPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
               />
             </>
           )}
@@ -136,6 +138,7 @@ function defaultSettings(tenantId: string): TenantSettings {
       onlyOwnVehicles: false,
     },
     baulFirmasActivo: false,
+    preasignacionPlacaActiva: false,
     enrutamientoSMTP: "FLIT_SMTP",
     notificationTarget: "NINGUNO",
     metodosRecaudo: [],

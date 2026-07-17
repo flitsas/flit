@@ -153,6 +153,7 @@ public static class DependencyInjection
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
+        services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
         services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
 

@@ -8,6 +8,8 @@ import userEvent from '@testing-library/user-event';
 const mocks = vi.hoisted(() => ({
   getWizardState: vi.fn(),
   transitionInstance: vi.fn(),
+  // #10611/#10785 — el componente lee la instancia para el soat_estado y el sub-estado de placa.
+  getInstance: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -30,6 +32,8 @@ const wizardWith = (status: string, allowedTransitions: string[]) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'anulado' });
+  // Instancia mínima: sin ruta de placa (plateFlowStatus null) → no se pinta el panel de SOAT.
+  mocks.getInstance.mockResolvedValue({ fieldValues: [], plateFlowStatus: null });
 });
 
 describe('EstadoAcciones — el backend manda', () => {

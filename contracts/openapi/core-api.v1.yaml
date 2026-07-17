@@ -6619,6 +6619,14 @@ components:
           format: date-time
           nullable: true
           description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
+        plateFlowStatus:
+          type: string
+          nullable: true
+          enum: [preasignado, asignado]
+          description: >
+            Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al status
+            global (que permanece en 'entregado'): null (sin ruta de placa), 'preasignado' (entregado
+            al OT, esperando placa) o 'asignado' (placa registrada; pendiente de SOAT + recepción del OT).
         draftFinalizedAt:
           type: string
           format: date-time

@@ -76,6 +76,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 
+    // HU #10650 (Feature #10587) — inventario de preasignación de placa.
+    public DbSet<PlateRangeEntity> PlateRanges => Set<PlateRangeEntity>();
+
+    public DbSet<PlateRangeDetailEntity> PlateRangeDetails => Set<PlateRangeDetailEntity>();
+
     public DbSet<OtWebhookSubscriptionEntity> OtWebhookSubscriptions => Set<OtWebhookSubscriptionEntity>();
 
     public DbSet<OtApiCallLogEntity> OtApiCallLogs => Set<OtApiCallLogEntity>();

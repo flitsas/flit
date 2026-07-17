@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Save, Shuffle, Stamp } from "lucide-react";
+import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,7 +16,7 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "documentos" | "historial";
+type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial";
 
 const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[] = [
   { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
@@ -24,6 +24,8 @@ const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
+  // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
+  { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -39,6 +41,7 @@ export interface CompanyConfigTabsProps {
   otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
+  platesSlot?: ReactNode;
 }
 
 export function CompanyConfigTabs({
@@ -50,6 +53,7 @@ export function CompanyConfigTabs({
   otBlockingSlot,
   auditSlot,
   documentosSlot,
+  platesSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
@@ -103,12 +107,17 @@ export function CompanyConfigTabs({
     }
   };
 
-  const currentTab = TABS.find((t) => t.id === tab);
+  // La pestaña de placas solo aparece si la preasignación está activa para la compañía.
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva),
+    [settings.preasignacionPlacaActiva],
+  );
+  const currentTab = visibleTabs.find((t) => t.id === tab);
 
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
-        {TABS.map((t) => {
+        {visibleTabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
           return (
@@ -148,6 +157,7 @@ export function CompanyConfigTabs({
           />
         )}
         {tab === "documentos" && documentosSlot}
+        {tab === "placas" && platesSlot}
         {tab === "historial" && auditSlot}
       </div>
 

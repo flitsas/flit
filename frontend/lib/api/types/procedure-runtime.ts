@@ -17,6 +17,13 @@ export type InstanceStatus =
   | 'aprobado'
   | 'rechazado';
 
+/**
+ * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
+ * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
+ * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
+ */
+export type PlateFlowStatus = 'preasignado' | 'asignado';
+
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
   id: string;
@@ -48,6 +55,8 @@ export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -66,6 +75,8 @@ export interface InstanceSummary {
   referenceNumber: string;
   modalidad: WizardModalidad;
   estado: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   placa: string | null;
   vin: string | null;
   vehiculoMarca: string | null;
@@ -137,6 +148,8 @@ export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -253,6 +266,16 @@ export interface RuntPersonLookupResult {
   // Detalle de comparendos del SIMIT (best-effort), presente cuando hasPendingFines=true y el SIMIT
   // respondió. El RUNT conductor solo trae el flag; el detalle viene del SIMIT del mismo documento.
   fines?: FineDetail[] | null;
+}
+
+// HU #10611 (Feature #10587) — validación en línea del SOAT (re-consulta RUNT) en estado 'asignado'.
+export type SoatEstado = 'vigente' | 'vencido' | 'unknown';
+export interface ValidateSoatResult {
+  vigente: boolean;
+  soatEstado: SoatEstado;
+  vencimiento: string | null;
+  aseguradora: string | null;
+  message: string;
 }
 
 // ── Autopopulado JURÍDICO desde RUES (persona jurídica / NIT) ───────

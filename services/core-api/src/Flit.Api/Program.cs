@@ -172,6 +172,7 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
+app.MapAdminPlateRangesEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminQuipuxEndpoints();

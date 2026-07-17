@@ -57,6 +57,31 @@ public static class AttachmentRules
     };
 
     /// <summary>
+    /// Tipos de adjunto que constituyen evidencia de SOAT (HU #10611, Feature #10587): se pueden cargar
+    /// con el trámite en <c>asignado</c> (ruta de placa), no solo en borrador — es la vía "cargar PDF"
+    /// para registrar el SOAT que exige la aprobación del OT.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SoatEvidenceTipos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "soat", "soat_manual",
+    };
+
+    public static bool IsSoatEvidenceTipo(string? tipo) =>
+        !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
+
+    /// <summary>
+    /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: solo <c>borrador</c>
+    /// (inmutabilidad). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT se puede cargar
+    /// con el trámite <c>entregado</c> y el sub-estado interno de placa en <c>asignado</c>, para
+    /// desbloquear la aprobación del OT.
+    /// </summary>
+    public static bool AllowsUploadInState(string status, string? plateFlowStatus, string? tipo) =>
+        string.Equals(status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(status, TramiteEstado.Entregado, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(plateFlowStatus, PlateFlowStatus.Asignado, StringComparison.OrdinalIgnoreCase)
+            && IsSoatEvidenceTipo(tipo));
+
+    /// <summary>
     /// Valida tipo/mime/size de un adjunto. Devuelve el código de error (compartido con el contrato
     /// del front) o <c>null</c> si es válido. Reutilizado por la subida multipart y el flujo presigned.
     /// </summary>
@@ -120,7 +145,7 @@ public sealed class UploadAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -187,7 +212,7 @@ public sealed class PresignAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -228,7 +253,7 @@ public sealed class RegisterAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();

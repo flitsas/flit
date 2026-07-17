@@ -8,12 +8,18 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// <param name="ToStatus">Estado destino (<see cref="TramiteEstado"/>).</param>
 /// <param name="Reason">Motivo (RF05). Obligatorio para <c>anulado</c> y <c>rechazado</c>.</param>
 /// <param name="ChangedByUserId">Usuario que ejecuta la transición (claim <c>sub</c>); null si es un proceso automático.</param>
+/// <param name="PlateFlowStatus">
+/// Feature #10587 / HU #10785 — sub-estado interno de placa a fijar en la MISMA transición (solo en la
+/// entrega al OT): <c>preasignado</c> (Flujo B), <c>asignado</c> (Flujo A) o <c>null</c> (ruta estándar).
+/// Ortogonal al status global. Se ignora fuera de <c>ToStatus == Entregado</c>.
+/// </param>
 public sealed record TramiteTransitionCommand(
     Guid InstanceId,
     Guid TenantId,
     string ToStatus,
     string? Reason,
-    Guid? ChangedByUserId);
+    Guid? ChangedByUserId,
+    string? PlateFlowStatus = null);
 
 /// <summary>
 /// Resultado de una transición. <c>ErrorCode</c> null = éxito. Los códigos son los de

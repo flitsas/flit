@@ -128,6 +128,8 @@ export interface TenantSettings {
   tenantId: string;
   switchesMatricula: SwitchesMatricula;
   baulFirmasActivo: boolean;
+  /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
+  preasignacionPlacaActiva: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
@@ -144,6 +146,8 @@ export interface TenantSettings {
 export interface TenantSettingsUpdate {
   switchesMatricula: SwitchesMatricula;
   baulFirmasActivo: boolean;
+  /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
+  preasignacionPlacaActiva: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
