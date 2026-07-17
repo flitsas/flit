@@ -3,9 +3,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   ESTADOS_TRAMITE,
+  esperandoSoatDelGestor,
   esPlateFlowStatus,
   plateFlowChipStyle,
   plateFlowLabel,
+  puedeDecidirOt,
   PLATE_FLOW_LABELS,
 } from '../estados';
 
@@ -47,5 +49,49 @@ describe('plate-flow status (HU #10785)', () => {
   it('conserva los colores del prototipo por sub-estado', () => {
     expect(plateFlowChipStyle('preasignado')?.color).toBe('#0e7490');
     expect(plateFlowChipStyle('asignado')?.color).toBe('#4f46e5');
+  });
+});
+
+// HU #10804 — el OT solo decide (Aprobar/Rechazar) en ruta estándar o con placa asignada + SOAT vigente.
+// Uso de ejemplo: puedeDecidirOt('asignado', 'vigente') → true
+describe('puedeDecidirOt (HU #10804)', () => {
+  // AC4 — ruta estándar (sin sub-estado de placa): siempre puede decidir.
+  it('permite decidir en ruta estándar (plate_flow_status null/desconocido)', () => {
+    expect(puedeDecidirOt(null, null)).toBe(true);
+    expect(puedeDecidirOt(undefined, undefined)).toBe(true);
+    expect(puedeDecidirOt('entregado', null)).toBe(true); // valor no-plateflow ⇒ estándar
+  });
+
+  // AC1 — placa asignada con SOAT vigente: puede decidir.
+  it('permite decidir con placa asignada y SOAT vigente', () => {
+    expect(puedeDecidirOt('asignado', 'vigente')).toBe(true);
+  });
+
+  // AC2 — preasignado: nunca puede decidir (falta asignar placa).
+  it('bloquea la decisión en preasignado sin importar el SOAT', () => {
+    expect(puedeDecidirOt('preasignado', null)).toBe(false);
+    expect(puedeDecidirOt('preasignado', 'vigente')).toBe(false);
+  });
+
+  // AC3 — asignado sin SOAT vigente (null/vencido/unknown): bloquea la decisión.
+  it('bloquea la decisión en asignado cuando el SOAT no está vigente', () => {
+    expect(puedeDecidirOt('asignado', null)).toBe(false);
+    expect(puedeDecidirOt('asignado', 'vencido')).toBe(false);
+    expect(puedeDecidirOt('asignado', 'unknown')).toBe(false);
+  });
+});
+
+// HU #10804 — aviso "Esperando validación de SOAT del gestor" solo en asignado sin SOAT vigente.
+describe('esperandoSoatDelGestor (HU #10804)', () => {
+  it('es true en asignado sin SOAT vigente', () => {
+    expect(esperandoSoatDelGestor('asignado', null)).toBe(true);
+    expect(esperandoSoatDelGestor('asignado', 'vencido')).toBe(true);
+  });
+  it('es false en asignado con SOAT vigente', () => {
+    expect(esperandoSoatDelGestor('asignado', 'vigente')).toBe(false);
+  });
+  it('es false fuera de asignado (preasignado o estándar)', () => {
+    expect(esperandoSoatDelGestor('preasignado', null)).toBe(false);
+    expect(esperandoSoatDelGestor(null, null)).toBe(false);
   });
 });

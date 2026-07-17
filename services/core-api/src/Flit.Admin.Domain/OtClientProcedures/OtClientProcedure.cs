@@ -24,6 +24,14 @@ public sealed class OtClientProcedure
     /// </summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>
+    /// HU #10804 (Feature #10587) — estado del SOAT del vehículo (field_value <c>soat_estado</c>) en la
+    /// ruta de placa: <c>null</c>/<c>unknown</c>/<c>vencido</c> = sin evidencia; <c>vigente</c> = registrado.
+    /// Gobierna (junto con <see cref="PlateFlowStatus"/>) si el OT puede ver Aprobar/Rechazar: solo con la
+    /// placa <c>asignado</c> Y el SOAT <c>vigente</c>. El gate DURO de aprobación ya vive en el backend.
+    /// </summary>
+    public string? SoatEstado { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

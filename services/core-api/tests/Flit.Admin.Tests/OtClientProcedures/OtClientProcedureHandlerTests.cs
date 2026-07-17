@@ -467,6 +467,54 @@ public sealed class OtClientProcedureHandlerTests
         detail.ProcedureInstanceId.Should().BeNull();
     }
 
+    // ---------- HU #10804 (Feature #10587): la bandeja del OT proyecta soat_estado por trámite ----------
+
+    /// <summary>
+    /// Uso de ejemplo: la bandeja del OT expone <c>SoatEstado</c> por fila para que el frontend oculte
+    /// Aprobar/Rechazar hasta que la placa esté <c>asignado</c> con SOAT <c>vigente</c>.
+    /// </summary>
+    [Fact] // HU #10804 — happy path + contrato: soat_estado se proyecta (vigente) y es null sin field.
+    public async Task List_ProyectaSoatEstadoPorTramite()
+    {
+        var db = NewDbName();
+        var asignadoConSoat = Guid.NewGuid();
+        var preasignadoSinSoat = Guid.NewGuid();
+        var estandar = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, asignadoConSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-ASG", PlateFlowStatus.Asignado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = asignadoConSoat,
+                TenantId = ClientTenant,
+                FieldKey = "soat_estado",
+                ValueText = "vigente",
+            });
+            SeedProcedure(seed, preasignadoSinSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-PRE", PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, estandar, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-STD");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+        var result = await handler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = TramiteEstado.Entregado,
+        }, TestContext.Current.CancellationToken);
+
+        // AC1 — asignado con SOAT vigente: el frontend mostrará Aprobar/Rechazar.
+        result.Data.Single(p => p.Id == asignadoConSoat).SoatEstado.Should().Be("vigente");
+        // AC2/AC3 — sin SOAT registrado: soat_estado null → el frontend oculta las acciones.
+        result.Data.Single(p => p.Id == preasignadoSinSoat).SoatEstado.Should().BeNull();
+        // AC4 — ruta estándar: soat_estado null (no aplica) y no gatea la decisión.
+        result.Data.Single(p => p.Id == estandar).SoatEstado.Should().BeNull();
+    }
+
     // ---------- HU #10610 (R06): SOAT gate duro en la aprobación de la ruta de placa ----------
 
     [Theory]

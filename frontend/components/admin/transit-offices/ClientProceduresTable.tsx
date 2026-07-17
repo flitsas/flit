@@ -6,7 +6,12 @@ import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
-import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
+import {
+  esperandoSoatDelGestor,
+  plateFlowChipStyle,
+  plateFlowLabel,
+  puedeDecidirOt,
+} from "@/lib/tramites/estados";
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -137,8 +142,11 @@ export function ClientProceduresTable({
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
+                  {/* HU #10804 — Aprobar y Rechazar se ocultan JUNTOS en la ruta de placa hasta que la
+                      placa esté 'asignado' y el SOAT 'vigente' (el gestor validó por RUNT o cargó el PDF).
+                      En ruta estándar se muestran como siempre. */}
                   {row.status === "entregado" &&
-                    row.plateFlowStatus !== "preasignado" &&
+                    puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
                     showApprovalActions && (
                     <RowActions
                       actions={[
@@ -156,6 +164,18 @@ export function ClientProceduresTable({
                         },
                       ]}
                     />
+                  )}
+                  {/* HU #10804 — placa asignada pero SOAT aún no vigente: se avisa por qué no hay acciones. */}
+                  {row.status === "entregado" &&
+                    esperandoSoatDelGestor(row.plateFlowStatus, row.soatEstado) &&
+                    showApprovalActions && (
+                    <span
+                      className="text-[10px] font-medium italic"
+                      style={{ color: "#b45309" }}
+                      title="El gestor debe validar el SOAT (RUNT o PDF) antes de que el OT pueda aprobar o rechazar."
+                    >
+                      Esperando validación de SOAT del gestor
+                    </span>
                   )}
                   {/* Feature #10587 / HU #10785 — la ruta de placa vive en plate_flow_status (el status
                       permanece 'entregado'): asignar (preasignado) y revocar (preasignado/asignado). */}

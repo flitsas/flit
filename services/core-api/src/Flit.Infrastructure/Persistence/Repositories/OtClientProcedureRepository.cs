@@ -85,6 +85,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
                                 PlateFlowStatus = p.PlateFlowStatus,
+                                // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
+                                // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
+                                // permitida bajo el 'SET LOCAL row_security = off' de ExecuteCrossTenantReadAsync.
+                                SoatEstado = _context.ProcedureInstanceFieldValues
+                                    .Where(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
+                                    .Select(f => f.ValueText)
+                                    .FirstOrDefault(),
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
@@ -570,6 +578,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         ReferenceNumber = p.ReferenceNumber,
                         Status = p.Status,
                         PlateFlowStatus = p.PlateFlowStatus,
+                        // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
+                        SoatEstado = _context.ProcedureInstanceFieldValues
+                            .Where(f => f.ProcedureInstanceId == p.Id
+                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
+                            .Select(f => f.ValueText)
+                            .FirstOrDefault(),
                         TransitOfficeId = p.TransitOfficeId,
                         CreatedAt = p.CreatedAt,
                         SubmittedAt = p.SubmittedAt,
@@ -802,9 +816,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ReferenceNumber = item.ReferenceNumber,
                 Status = item.Status,
                 PlateFlowStatus = item.PlateFlowStatus,
+                SoatEstado = item.SoatEstado,
                 TransitOfficeId = item.TransitOfficeId,
                 CreatedAt = item.CreatedAt,
                 SubmittedAt = item.SubmittedAt,
+                Prioritario = item.Prioritario,
             })
             .ToList();
     }

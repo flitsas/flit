@@ -140,3 +140,28 @@ export function plateFlowLabel(value: string | null | undefined): string | null 
 export function plateFlowChipStyle(value: string | null | undefined): EstadoChipStyle | null {
   return esPlateFlowStatus(value) ? PLATE_FLOW_CHIP_STYLES[value] : null;
 }
+
+/**
+ * HU #10804 (Feature #10587) — ¿el OT puede DECIDIR (Aprobar/Rechazar) este trámite?
+ *
+ * - Ruta estándar (sin sub-estado de placa): sí, como siempre.
+ * - Ruta de placa: solo cuando la placa está `asignado` **y** el SOAT está `vigente`. Mientras esté
+ *   `preasignado` (falta asignar placa) o `asignado` sin SOAT vigente (el gestor aún no validó por
+ *   RUNT ni cargó el PDF), Aprobar y Rechazar se ocultan juntos. Espeja el gate DURO del backend
+ *   (SoatGate), que de todos modos rechazaría la aprobación por API.
+ */
+export function puedeDecidirOt(
+  plateFlowStatus: string | null | undefined,
+  soatEstado: string | null | undefined,
+): boolean {
+  if (!esPlateFlowStatus(plateFlowStatus)) return true; // ruta estándar
+  return plateFlowStatus === 'asignado' && soatEstado === 'vigente';
+}
+
+/** ¿El trámite está en ruta de placa `asignado` pero aún sin SOAT vigente (esperando al gestor)? */
+export function esperandoSoatDelGestor(
+  plateFlowStatus: string | null | undefined,
+  soatEstado: string | null | undefined,
+): boolean {
+  return plateFlowStatus === 'asignado' && soatEstado !== 'vigente';
+}

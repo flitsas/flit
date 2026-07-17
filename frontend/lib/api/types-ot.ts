@@ -53,6 +53,12 @@ export interface OtClientProcedure {
    * (Asignar / Revocar placa) y el badge secundario de la bandeja.
    */
   plateFlowStatus?: string | null;
+  /**
+   * HU #10804 (Feature #10587) — estado del SOAT (null | unknown | vencido | vigente). El OT solo ve
+   * Aprobar/Rechazar en ruta estándar o con la placa `asignado` y el SOAT `vigente` (ver
+   * `puedeDecidirOt`). El gate duro de aprobación ya lo impone el backend.
+   */
+  soatEstado?: string | null;
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;

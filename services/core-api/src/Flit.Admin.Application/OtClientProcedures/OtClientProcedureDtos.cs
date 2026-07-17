@@ -19,6 +19,10 @@ public sealed class OtClientProcedureResponse
     /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>HU #10804 (Feature #10587) — estado del SOAT (soat_estado): null | unknown | vencido | vigente.
+    /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
+    public string? SoatEstado { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -47,6 +51,7 @@ internal static class OtClientProcedureMapper
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
             PlateFlowStatus = procedure.PlateFlowStatus,
+            SoatEstado = procedure.SoatEstado,
             TransitOfficeId = procedure.TransitOfficeId,
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,
