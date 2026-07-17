@@ -12,7 +12,11 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { listAvailablePlatesForCompany, type PlateDetail } from '@/lib/api/admin-plate-ranges';
+import {
+  getPlatePreassignStatus,
+  listAvailablePlatesForCompany,
+  type PlateDetail,
+} from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
@@ -456,6 +460,8 @@ export function PlacaPreasignadaSection({
   // HU #10805 — dígito de preferencia (0-9) para radicar sin placa: guía para el OT al asignar.
   const [preferredDigit, setPreferredDigit] = useState(() => preferredDigitValue ?? '');
   const [savingDigit, setSavingDigit] = useState(false);
+  // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
+  const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -466,6 +472,16 @@ export function PlacaPreasignadaSection({
   useEffect(() => {
     if (!mostrarSelector) return;
     let active = true;
+    // HU #10806 — consulta el estado de la ruta antes de ofrecer el selector: si no está habilitada,
+    // se avisa (el trámite se entregará estándar) en vez de simular que preasigna.
+    getPlatePreassignStatus(organismoId)
+      .then((s) => {
+        if (active) setPreassignEnabled(s.enabled);
+      })
+      .catch(() => {
+        // Ante un fallo de la consulta, no bloquear el flujo: se asume habilitada (default previo).
+        if (active) setPreassignEnabled(true);
+      });
     listAvailablePlatesForCompany(organismoId)
       .then((data) => {
         if (active) {
@@ -492,6 +508,25 @@ export function PlacaPreasignadaSection({
       onRefresh?.();
     } catch {
       setError('No se pudo asignar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // HU #10806 (AC1) — deshacer la selección de placa: limpia el field `plate` (='') y reabre el
+  // selector + el dígito de preferencia. Sin placa, DecideAsync enruta por preasignación (Flujo B),
+  // así que esto es lo que permite volver a la ruta sin placa o al dígito tras haber elegido una.
+  const clearPlate = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: '' },
+      ]);
+      setChanging(true);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo quitar la placa. Inténtalo de nuevo.');
     } finally {
       setSaving(false);
     }
@@ -542,13 +577,24 @@ export function PlacaPreasignadaSection({
           Placa seleccionada: <span className="font-mono font-semibold">{placa}</span>
         </p>
         {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setChanging(true)}
-            className="rounded-lg border px-3 py-1 text-[11px] font-semibold"
-          >
-            Cambiar
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setChanging(true)}
+              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+            >
+              Cambiar
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void clearPlate()}
+              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+            >
+              Quitar placa
+            </button>
+          </>
         )}
       </div>,
     );
@@ -556,6 +602,17 @@ export function PlacaPreasignadaSection({
 
   if (!mostrarSelector) {
     return null;
+  }
+
+  // HU #10806 (AC3) — la ruta de placa NO está habilitada para esta compañía/OT: avisar que el
+  // trámite se entregará de forma estándar, en vez de mostrar el selector como si preasignara.
+  if (preassignEnabled === false) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80" role="status">
+        La preasignación de placa no está habilitada para este organismo de tránsito o tu compañía. El
+        trámite se entregará de forma estándar (sin asignación de placa por el OT).
+      </p>,
+    );
   }
 
   return shell(
@@ -623,7 +680,7 @@ export function PlacaPreasignadaSection({
         </select>
       </label>
 
-      {changing && (
+      {changing && placa !== '' && (
         <button
           type="button"
           onClick={() => setChanging(false)}

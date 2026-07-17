@@ -26,7 +26,7 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
         _plateRepo = plateRepo ?? throw new ArgumentNullException(nameof(plateRepo));
     }
 
-    public async Task<PlateRouteDecision> DecideAsync(
+    public async Task<PlateRouteResult> DecideAsync(
         Guid tenantId,
         Guid instanceId,
         CancellationToken cancellationToken = default)
@@ -41,7 +41,7 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
         if (modalidad is null
             || TramiteModalidadEntradaCodes.FromCode(modalidad) != TramiteModalidadEntrada.MatriculaInicial)
         {
-            return PlateRouteDecision.Standard;
+            return PlateRouteResult.NotMatricula;
         }
 
         var fields = await _context.ProcedureInstanceFieldValues
@@ -55,14 +55,20 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
         var officeRaw = fields.FirstOrDefault(f => f.FieldKey == OfficeFieldKey)?.ValueText;
         if (!Guid.TryParse(officeRaw, out var officeId) || officeId == Guid.Empty)
         {
-            return PlateRouteDecision.Standard;
+            return PlateRouteResult.NoOffice;
         }
 
-        var allowed = await _plateRepo.IsAssignmentAllowedAsync(tenantId, officeId, cancellationToken)
+        // HU #10806 — distinguir "compañía sin preasignación" (estándar) de "compañía activa pero OT
+        // mal configurado" (bloquear), en vez del antiguo bool que degradaba en silencio en ambos casos.
+        var eligibility = await _plateRepo
+            .EvaluateAssignmentEligibilityAsync(tenantId, officeId, cancellationToken)
             .ConfigureAwait(false);
-        if (!allowed)
+        switch (eligibility)
         {
-            return PlateRouteDecision.Standard;
+            case PlateAssignmentEligibility.CompanyDisabled:
+                return PlateRouteResult.NotEnabled;
+            case PlateAssignmentEligibility.Misconfigured:
+                return PlateRouteResult.Misconfigured;
         }
 
         var plate = fields.FirstOrDefault(f => f.FieldKey == PlateFieldKey)?.ValueText;
@@ -73,11 +79,11 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
                 .ConfigureAwait(false);
             if (reserved)
             {
-                return PlateRouteDecision.Asignado;
+                return PlateRouteResult.Reserved;
             }
         }
 
         // Ruta activa pero sin placa disponible elegida → se envía al OT para que asigne (Flujo B).
-        return PlateRouteDecision.Preasignado;
+        return PlateRouteResult.NoPlate;
     }
 }
