@@ -95,6 +95,13 @@ export interface SwitchesMatricula {
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
 export type NotificationTarget = "COMPRADOR" | "RADICADOR" | "NINGUNO";
 
+/**
+ * Fuente de la consulta de comparendos de la compañía (FEATURE 02): `internal` (módulo de
+ * comparendos con fuente base) o `external` (consulta en línea al SIMIT). Su USO en el flujo
+ * del trámite llega en FEATURE 05.
+ */
+export type FinesQuerySource = "internal" | "external";
+
 /** Proveedor primario + orden de fallback para un tipo de consulta RUNT (HU #10478). */
 export interface ConsultationProviderChoice {
   primary: string;
@@ -107,6 +114,16 @@ export interface ConsultationProviderChoice {
  */
 export type ConsultationProviderConfig = Record<string, ConsultationProviderChoice>;
 
+/**
+ * Proveedores de avalúo habilitados por tenant (Feature #10707). `primary` es el sugerido por
+ * defecto; `enabled` incluye siempre a `fasecolda` (proveedor base). Los demás (`base_gravable`,
+ * `mercado_libre`) se habilitan por compañía.
+ */
+export interface AvaluoProviderConfig {
+  primary: string;
+  enabled: string[];
+}
+
 export interface TenantSettings {
   tenantId: string;
   switchesMatricula: SwitchesMatricula;
@@ -117,6 +134,10 @@ export interface TenantSettings {
   // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // Feature #10707 — proveedores de avalúo (el backend siempre lo devuelve).
+  avaluoProviderConfig?: AvaluoProviderConfig;
+  // FEATURE 02 — opcional por compatibilidad; el backend siempre lo devuelve.
+  finesQuerySource?: FinesQuerySource;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -129,6 +150,10 @@ export interface TenantSettingsUpdate {
   // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
   runtFailoverTimeoutMs?: number;
   consultationProviderConfig?: ConsultationProviderConfig;
+  // Feature #10707 — proveedores de avalúo (si se omite el backend conserva el valor previo).
+  avaluoProviderConfig?: AvaluoProviderConfig;
+  // FEATURE 02 — si se omite el backend conserva el valor previo.
+  finesQuerySource?: FinesQuerySource;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
@@ -166,6 +191,55 @@ export interface TransitOffice {
 export interface TransitGrantsResponse {
   transitOfficeIds: string[];
 }
+
+// ── Restricciones de consulta por OT (HU #10759/#10761) ─────────────────────
+/** Consultas restringibles. `vehicle` queda fuera: rompería la hidratación del FUR. */
+export type ConsultationRestrictionKind = "rnmc" | "fines";
+
+/**
+ * Fila de restricción configurada explícitamente. La tabla es DISPERSA: solo existen
+ * filas para los pares que el admin tocó, y la ausencia de fila = consulta PERMITIDA.
+ */
+export interface OtConsultationRestriction {
+  transitOfficeId: string;
+  consultationKind: ConsultationRestrictionKind;
+  enabled: boolean;
+}
+
+// ── Políticas de bloqueo de preflight por OT (FEATURE 05) ────────────────────
+/**
+ * Criterios del preflight cuyo carácter bloqueante (rojo) vs. informativo (amarillo) se
+ * configura por compañía + OT. Ortogonal a {@link ConsultationRestrictionKind} (que decide
+ * SI se consulta): este decide, para una consulta que corre, si su hallazgo negativo bloquea.
+ */
+export type BlockingCriterion = "soat" | "rtm" | "estado_vehiculo" | "fines" | "rnmc";
+
+/**
+ * Fila de política de bloqueo configurada explícitamente. Tabla DISPERSA: la ausencia de fila
+ * = default del criterio ({@link BLOCKING_CRITERION_DEFAULTS}).
+ */
+export interface OtBlockingPolicy {
+  transitOfficeId: string;
+  criterion: BlockingCriterion;
+  blocks: boolean;
+}
+
+/**
+ * Posición por defecto del toggle "¿bloquea el trámite?" cuando la compañía no configuró una fila
+ * (par tenant, OT). Refleja el comportamiento PREVIO del trámite:
+ *  - SOAT/RTM/estado: bloqueaban el pre-vuelo (rojo) → ON.
+ *  - Comparendos: no bloquean la CREACIÓN (pre-vuelo amarillo), pero SÍ la RADICACIÓN al OT
+ *    (gate del paso 4 de traspaso) → ON; apagarlo persiste blocks=false y también libera la
+ *    radicación. (En backend: preflight usa DefaultBlocks=false, el gate usa override ?? true).
+ *  - RNMC: siempre informativo → OFF.
+ */
+export const BLOCKING_CRITERION_DEFAULTS: Record<BlockingCriterion, boolean> = {
+  soat: true,
+  rtm: true,
+  estado_vehiculo: true,
+  fines: true,
+  rnmc: false,
+};
 
 // ── Audit log (AC5) ─────────────────────────────────────────────────────────
 export interface AuditLogEntry {

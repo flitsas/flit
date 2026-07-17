@@ -215,7 +215,10 @@ public static class TraspasoGates
             return GateResult.Block("simit_pendiente", "Consulta SIMIT del comprador obligatoria antes de continuar");
         if (TramiteDocumento.Normalizar(simit.Documento) != doc)
             return GateResult.Block("simit_doc", "La consulta SIMIT no corresponde al documento del comprador");
-        if (simit.TotalComparendos > 0)
+        // FEATURE 05 — los comparendos solo bloquean si la compañía los marcó bloqueantes para el OT
+        // destino (default true = comportamiento previo). Si son informativos, se advierten en el
+        // preflight (warn) pero no vetan el avance.
+        if (simit.TotalComparendos > 0 && ctx.ComparendosBloquean)
             return GateResult.Block("simit_multas", "El comprador tiene comparendos SIMIT pendientes");
 
         return GateResult.Allowed;

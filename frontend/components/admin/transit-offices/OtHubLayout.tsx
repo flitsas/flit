@@ -85,7 +85,7 @@ export function OtHubLayout({
 
       <ModuleTitle title={moduleTitle} subtitle={subtitle} />
 
-      <div className="mt-4 rounded-2xl border bg-white p-4 md:p-6">
+      <div className="mt-4 rounded-2xl border bg-card p-4 md:p-6">
         <OtTabBar
           tabs={OT_HUB_TABS.map((t) => ({ id: t.id, label: t.label }))}
           activeId={activeTab}

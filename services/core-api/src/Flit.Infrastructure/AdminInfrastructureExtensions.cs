@@ -20,6 +20,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -56,6 +57,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        services.AddScoped<IOtConsultationRestrictionRepository, OtConsultationRestrictionRepository>();
+
         // Refactor adminOT — alta/listado de tenants Organismo de Tránsito (OT como
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
@@ -63,6 +67,10 @@ public static class AdminInfrastructureExtensions
         // RF01 — estado operativo del catálogo OT (catálogo LEFT JOIN perfil + tenant),
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
+
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas).
+        // Escritura sobre el catálogo global catalogs.transit_offices (sin RLS), solo SuperAdmin.
+        services.AddScoped<ITransitOfficeQuipuxSettingsWriter, DbTransitOfficeQuipuxSettingsWriter>();
 
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
         // escritura con auditoría atómica (RF22–RF28).
@@ -136,6 +144,15 @@ public static class AdminInfrastructureExtensions
 
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
+
+        // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
+        // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
+        services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
+
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
+        // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
+        services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
 
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.

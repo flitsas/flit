@@ -177,6 +177,97 @@ public sealed class ActorsHandlerTests
         result.Should().BeNull();
     }
 
+    // ── HU #10688 (AC1): correo del representante legal obligatorio en persona jurídica ──
+
+    [Fact]
+    public async Task Put_PersonaJuridica_SinCorreoRL_ReturnsRlEmailRequerido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        // RL sin correo (solo nombre) → debe rechazar en PJ.
+        var rl = new ActorRepresentanteLegal("CC", "123", "Rep Legal", null, null);
+        var actor = new ActorInput("comprador", "NIT", "900123456", "ACME S.A.S.", "empresa@x.com", null,
+            PersonType: "juridical", RepresentanteLegal: rl);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("rl_email_requerido");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Put_PersonaJuridica_SinRepresentanteLegal_ReturnsRlEmailRequerido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", "NIT", "900123456", "ACME S.A.S.", "empresa@x.com", null,
+            PersonType: "juridical");
+
+        var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("rl_email_requerido");
+    }
+
+    [Fact]
+    public async Task Put_PersonaJuridica_CorreoRLInvalido_ReturnsRlEmailRequerido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var rl = new ActorRepresentanteLegal("CC", "123", "Rep Legal", "not-an-email", null);
+        var actor = new ActorInput("comprador", "NIT", "900123456", "ACME S.A.S.", "empresa@x.com", null,
+            PersonType: "juridical", RepresentanteLegal: rl);
+
+        var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("rl_email_requerido");
+    }
+
+    [Fact]
+    public async Task Put_PersonaJuridica_ConCorreoRLValido_Persiste()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var rl = new ActorRepresentanteLegal("CC", "123", "Rep Legal", "rl@x.com", "3001112233");
+        var actor = new ActorInput("comprador", "NIT", "900123456", "ACME S.A.S.", "empresa@x.com", null,
+            PersonType: "juridical", RepresentanteLegal: rl);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().BeNull();
+        var dto = result!.Actors.Should().ContainSingle().Subject;
+        dto.PersonType.Should().Be("juridical");
+        dto.RepresentanteLegal!.Email.Should().Be("rl@x.com");
+    }
+
+    [Fact]
+    public async Task Put_PersonaNatural_SinRL_NoAplicaReglaRlEmail()
+    {
+        // AC5: la ruta de persona natural no exige datos del RL.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        _repo.GetByIdWithActorsAsync(id, tenant, ct).Returns(instance);
+
+        var actor = new ActorInput("comprador", "CC", "123", "Juan Comprador", "c@x.com", null, PersonType: "natural");
+        var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().BeNull();
+    }
+
     // ── Roles por modalidad ───────────────────────────────────────────────────
 
     [Fact]

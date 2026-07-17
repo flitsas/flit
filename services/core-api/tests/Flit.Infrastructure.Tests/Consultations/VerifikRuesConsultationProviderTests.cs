@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using Flit.Infrastructure.Consultations;
 using Flit.Tramites.Application.UseCases.Consultations;
 using FluentAssertions;
@@ -79,5 +81,55 @@ public sealed class VerifikRuesConsultationProviderTests
 
         result.Overall.Should().Be("green");
         result.HydratedFields.Should().NotContain(f => f.FieldKey == "rues_nit");
+    }
+
+    [Fact]
+    public async Task ConsultAsync_ModoReal_EnviaV3ConCategoryRmYToken()
+    {
+        // Ajuste servicio RUES v3: ruta /v3/co/rues-complete, category=RM estático y Bearer token.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new CapturingHandler("""
+            {"data":{"commercialRegistry":{"NIT":"901691963","businessName":"INVERSIONES ARCINIEGAS S.A.S.",
+            "chamberCommerce":"BOGOTA","registrationNumber":"0003650415","registrationStatus":"ACTIVA"}},
+            "signature":{"message":"Certified by Verifik.co"},"id":"4YB3V"}
+            """);
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.verifik.co/") };
+        var verifik = Options.Create(new VerifikOptions { ApiToken = "env-token-123", AuthScheme = "Bearer" });
+        var modes = Options.Create(new ConsultationProviderModeOptions { VerifikRuesMode = "real" });
+        var provider = new VerifikRuesConsultationProvider(http, verifik, modes);
+
+        var result = await provider.ConsultAsync(ContextWithNit("901691963"), ct);
+
+        // La petición sale bien formada.
+        handler.LastRequest.Should().NotBeNull();
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v3/co/rues-complete");
+        var query = handler.LastRequest.RequestUri.Query;
+        query.Should().Contain("documentType=NIT");
+        query.Should().Contain("documentNumber=901691963");
+        query.Should().Contain("category=RM");
+        handler.LastRequest.Headers.Authorization.Should().BeEquivalentTo(
+            new AuthenticationHeaderValue("Bearer", "env-token-123"));
+
+        // La respuesta v3 (data.commercialRegistry) se mapea a los campos hidratados.
+        result.Overall.Should().Be("green");
+        result.Checks[0].Status.Should().Be("ok");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rues_razon_social" && f.ValueText == "INVERSIONES ARCINIEGAS S.A.S.");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rues_estado" && f.ValueText == "ACTIVA");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rues_matricula_mercantil" && f.ValueText == "0003650415");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rues_camara_comercio" && f.ValueText == "BOGOTA");
+    }
+
+    private sealed class CapturingHandler(string responseJson) : HttpMessageHandler
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson, System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
     }
 }

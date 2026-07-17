@@ -64,6 +64,15 @@ public sealed record TraspasoGateContext
     /// impuesto, SIMIT ni biometría.
     /// </summary>
     public bool RiesgoPreflightAceptado { get; init; }
+
+    /// <summary>
+    /// FEATURE 05 — si los comparendos deben bloquear el avance del paso 4 (comprador con multas
+    /// SIMIT pendientes). Configurable por compañía + OT (criterio <c>fines</c>). Default <c>true</c>
+    /// (comportamiento previo): con multas el paso 4 no avanza salvo forzar. Si la compañía marcó
+    /// comparendos como informativo para el OT destino, es <c>false</c> y el gate <c>simit_multas</c>
+    /// no bloquea (coherente con el preflight, que ya baja comparendos a <c>warn</c>).
+    /// </summary>
+    public bool ComparendosBloquean { get; init; } = true;
 }
 
 /// <summary>

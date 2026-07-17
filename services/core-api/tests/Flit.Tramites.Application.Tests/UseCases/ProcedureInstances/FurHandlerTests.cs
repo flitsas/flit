@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
@@ -21,9 +22,17 @@ public sealed class FurHandlerTests
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
     private readonly FakeCertClient _certClient = new();
     private readonly IRuesCertificateGenerator _ruesGenerator = Substitute.For<IRuesCertificateGenerator>();
+    private readonly IRnmcCertificateGenerator _rnmcGenerator = Substitute.For<IRnmcCertificateGenerator>();
     private readonly IProcedureInstancePrendaRepository _prendaRepo = Substitute.For<IProcedureInstancePrendaRepository>();
     private readonly FakeStorage _storage = new();
     private readonly GenerarFurHandler _handler;
+
+    /// <summary>Datos con los que el handler invocó al generador RNMC; null si no lo invocó.</summary>
+    private RnmcCertificateData? CapturedRnmcData =>
+        _rnmcGenerator.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IRnmcCertificateGenerator.GenerateRnmcCertificate))
+            .Select(c => (RnmcCertificateData)c.GetArguments()[0]!)
+            .LastOrDefault();
 
     public FurHandlerTests()
     {
@@ -34,7 +43,14 @@ public sealed class FurHandlerTests
                 return new GeneratedDocument("certificado_rues", $"certificado_rues_{d.Nit}.pdf",
                     "application/pdf", Encoding.UTF8.GetBytes($"RUES {d.RazonSocial} {d.Nit} {d.Estado}"));
             });
-        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+        _rnmcGenerator.GenerateRnmcCertificate(Arg.Any<RnmcCertificateData>())
+            .Returns(ci =>
+            {
+                var d = ci.Arg<RnmcCertificateData>();
+                return new GeneratedDocument("certificado_rnmc", $"certificado_rnmc_{d.ReferenceNumber}.pdf",
+                    "application/pdf", Encoding.UTF8.GetBytes($"%PDF RNMC {d.Entradas.Count}"));
+            });
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
     }
 
     /// <summary>
@@ -82,6 +98,10 @@ public sealed class FurHandlerTests
 
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
@@ -469,6 +489,315 @@ public sealed class FurHandlerTests
         _storage.Deleted.Should().Contain("old/fur");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "fur");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_identidad");
+    }
+
+    // ── HU #10762 · Certificado RNMC ──────────────────────────────────────
+
+    private static ProcedureInstanceActor ActorNatural(ProcedureInstance instance, string rol, string nombre, string doc) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = rol,
+            DocumentType = "CC",
+            DocumentNumber = doc,
+            FullName = nombre,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    /// <summary>
+    /// Snapshot de preflight con los checks indicados. FEATURE 05 — el certificado RNMC ya no lee del
+    /// snapshot sino del field_value <c>rnmc_checks</c>: este helper además lo siembra con los mismos
+    /// checks (con <c>createdAt</c> como fecha de consulta), para que el certificado se genere igual.
+    /// </summary>
+    private static ProcedureInstancePreflightSnapshot Snapshot(
+        ProcedureInstance instance, DateTimeOffset createdAt, params PreflightCheckDto[] checks)
+    {
+        var json = JsonSerializer.Serialize(checks);
+        var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == "rnmc_checks");
+        if (existing is not null)
+        {
+            existing.ValueJson = json;
+        }
+        else
+        {
+            instance.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = instance.TenantId,
+                ProcedureInstanceId = instance.Id,
+                FieldKey = "rnmc_checks",
+                ValueJson = json,
+                Source = "system",
+                CreatedAt = createdAt,
+            });
+        }
+
+        return new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Overall = "green",
+            Checks = json,
+            Provider = "verifik_rnmc",
+            CreatedAt = createdAt,
+        };
+    }
+
+    [Fact]
+    public async Task Generar_SinSnapshotPreflight_NoGeneraCertificadoRnmc()
+    {
+        // AC1: sin preflight corrido no hay dato RNMC que certificar.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns((ProcedureInstancePreflightSnapshot?)null);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rnmc");
+        CapturedRnmcData.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Generar_SnapshotSinChecksRnmc_NoGeneraCertificadoRnmc()
+    {
+        // AC1: preflight corrido pero sin consulta RNMC (p. ej. persona jurídica) → no se emite.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("runt_vehiculo", "RUNT", "ok", "verifik_runt", null)));
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rnmc");
+        CapturedRnmcData.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Generar_ConChecksRnmc_GeneraCertificadoRnmcSystem()
+    {
+        // AC1/AC2: con checks rnmc_ se emite UN certificado_rnmc (Source=system) adjunto al trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null)));
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().ContainSingle(t => t == "certificado_rnmc");
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_rnmc" && a.Source == "system");
+
+        // Los datos del actor se toman de instance.Actors, no del check.
+        var data = CapturedRnmcData!;
+        data.Entradas.Should().ContainSingle();
+        data.Entradas[0].Rol.Should().Be("comprador");
+        data.Entradas[0].Nombre.Should().Be("DANIEL AMADO");
+        data.Entradas[0].Documento.Should().Be("1193552679");
+    }
+
+    [Fact]
+    public async Task Generar_ConChecksRnmc_MapeaEstadosPorParte()
+    {
+        // AC2: ok → SIN MEDIDAS CORRECTIVAS; warn → CON MEDIDAS CORRECTIVAS. El rol sale del segmento
+        // intermedio de la key (rnmc_{rol}_{key}) y el detalle del Message del check.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        instance.Actors.Add(ActorNatural(instance, "vendedor", "MARIA LOPEZ", "52123456"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null),
+            new PreflightCheckDto("rnmc_vendedor_medidas_correctivas", "Medidas correctivas (Policía)",
+                "warn", "verifik_rnmc", "1 medida(s): Riña")));
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var data = CapturedRnmcData!;
+        data.Entradas.Should().HaveCount(2);
+
+        var comprador = data.Entradas.Single(e => e.Rol == "comprador");
+        comprador.Estado.Should().Be("SIN MEDIDAS CORRECTIVAS");
+        comprador.Detalle.Should().BeNull();
+
+        var vendedor = data.Entradas.Single(e => e.Rol == "vendedor");
+        vendedor.Estado.Should().Be("CON MEDIDAS CORRECTIVAS");
+        vendedor.Nombre.Should().Be("MARIA LOPEZ");
+        vendedor.Detalle.Should().Be("1 medida(s): Riña");
+    }
+
+    [Theory]
+    [InlineData("unknown", "SIN DATOS")]
+    [InlineData("error", "NO VERIFICABLE")]
+    public async Task Generar_ConCheckRnmcSinResultado_MapeaEstadoNoConcluyente(string status, string esperado)
+    {
+        // AC2: unknown → SIN DATOS; error → NO VERIFICABLE. Nunca se afirma "sin medidas" sin dato.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                status, "verifik_rnmc", null)));
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        CapturedRnmcData!.Entradas.Single().Estado.Should().Be(esperado);
+    }
+
+    [Fact]
+    public async Task Generar_ConChecksRnmc_ConsultadoEnEsLaFechaDelSnapshot()
+    {
+        // AC2: la fecha de consulta del certificado es la de la corrida de preflight, NO la de generación
+        // del FUR: certificar "consultado hoy" con datos de ayer sería falso.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        var consultadoEn = new DateTimeOffset(2026, 7, 10, 8, 15, 0, TimeSpan.Zero);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, consultadoEn,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null)));
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        CapturedRnmcData!.ConsultadoEn.Should().Be(consultadoEn);
+    }
+
+    [Fact]
+    public async Task Generar_ConChecksRnmc_NoFiltraElProveedorAlCertificado()
+    {
+        // AC2 (regla dura): el nombre del integrador (verifik) NUNCA llega al documento del usuario; la
+        // fuente que se muestra es la entidad oficial y la pinta el generador como literal.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null)));
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var serialized = JsonSerializer.Serialize(CapturedRnmcData!);
+        serialized.Should().NotContainEquivalentOf("verifik");
+    }
+
+    [Fact]
+    public async Task Generar_SinChecksRnmc_BorraElCertificadoRnmcPrevio()
+    {
+        // AC2: regeneración sin RNMC (p. ej. el actor pasó a persona jurídica) no puede dejar el
+        // certificado obsoleto en el expediente.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "certificado_rnmc",
+            Filename = "certificado_rnmc_viejo.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "old/certificado_rnmc",
+            Source = "system",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns((ProcedureInstancePreflightSnapshot?)null);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        _storage.Deleted.Should().Contain("old/certificado_rnmc");
+        instance.Attachments.Should().NotContain(a => a.Tipo == "certificado_rnmc");
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rnmc");
+        _repo.Received(1).RemoveAttachment(Arg.Is<ProcedureInstanceAttachment>(a => a.Tipo == "certificado_rnmc"));
+    }
+
+    [Fact]
+    public async Task Generar_GeneradorRnmcFalla_NoBloqueaElFur_YConservaElCertificadoPrevio()
+    {
+        // AC3: el certificado RNMC es best-effort — si el generador falla, el FUR se emite igual.
+        // Y el certificado previo se CONSERVA: el RNMC sí aplicaba, así que el previo sigue siendo válido;
+        // borrarlo por un fallo transitorio perdería un documento bueno (a diferencia de "ya no aplica").
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "certificado_rnmc",
+            Filename = "certificado_rnmc_previo.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "old/certificado_rnmc",
+            Source = "system",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null)));
+        _rnmcGenerator.GenerateRnmcCertificate(Arg.Any<RnmcCertificateData>())
+            .Returns(_ => throw new InvalidOperationException("QuestPDF caído"));
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("fur").And.NotContain("certificado_rnmc");
+        _storage.Deleted.Should().NotContain("old/certificado_rnmc");
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_rnmc");
+        await _repo.Received(1).SaveChangesAsync(ct);
     }
 }
 

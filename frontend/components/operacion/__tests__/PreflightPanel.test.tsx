@@ -71,3 +71,178 @@ describe('PreflightPanel — RNMC condicionado (HU #10603)', () => {
     expect(screen.queryByText(/Medidas correctivas/)).not.toBeInTheDocument();
   });
 });
+
+// HU #10763 — advertencias y consultas omitidas visibles; el amarillo no ofrece asumir riesgo.
+describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763)', () => {
+  it('kyverum_fines se presenta como SIMIT y nunca filtra el nombre del proveedor', () => {
+    render(
+      <PreflightPanel
+        snapshot={snap([
+          {
+            key: 'comparendos',
+            label: 'Comparendos',
+            status: 'ok',
+            source: 'kyverum_fines',
+            message: 'Sin comparendos pendientes',
+          },
+        ])}
+        {...baseProps}
+      />,
+    );
+    expect(screen.getByText('SIMIT')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/KYVERUM/i);
+  });
+
+  it('flit_fines se presenta como la fuente interna "Comparendos FLIT"', () => {
+    render(
+      <PreflightPanel
+        snapshot={snap([
+          {
+            key: 'comparendos',
+            label: 'Comparendos',
+            status: 'ok',
+            source: 'flit_fines',
+            message: 'Sin comparendos pendientes',
+          },
+        ])}
+        {...baseProps}
+      />,
+    );
+    expect(screen.getByText('Comparendos FLIT')).toBeInTheDocument();
+  });
+
+  it('una consulta omitida por configuración del OT se pinta con su mensaje y fuente FLIT', () => {
+    render(
+      <PreflightPanel
+        snapshot={snap([
+          {
+            key: 'rnmc_omitida',
+            label: 'Medidas correctivas (Policía)',
+            status: 'unknown',
+            source: 'system',
+            message: 'El organismo de tránsito no exige esta consulta.',
+          },
+        ])}
+        {...baseProps}
+      />,
+    );
+    expect(
+      screen.getByText('El organismo de tránsito no exige esta consulta.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('FLIT')).toBeInTheDocument();
+    expect(screen.getByText('unknown')).toBeInTheDocument();
+  });
+});
+
+describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', () => {
+  const warnSnap: PreflightSnapshot = {
+    overall: 'yellow',
+    createdAt: '2026-07-07T00:00:00Z',
+    checks: [
+      {
+        key: 'comparendos',
+        label: 'Comparendos',
+        status: 'warn',
+        source: 'kyverum_fines',
+        message: '2 comparendos pendientes de pago.',
+      },
+      {
+        key: 'soat',
+        label: 'SOAT',
+        status: 'ok',
+        source: 'verifik',
+        message: 'Vigente',
+      },
+    ],
+  };
+
+  it('lista los hallazgos warn y aclara que se puede continuar', () => {
+    render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
+    const franja = screen.getByText('Advertencias del pre-vuelo').closest('div')!;
+    expect(franja).toHaveAttribute('role', 'status');
+    expect(franja).toHaveTextContent('Comparendos');
+    expect(franja).toHaveTextContent('2 comparendos pendientes de pago.');
+    expect(franja).toHaveTextContent(/Puedes continuar con el trámite/);
+    // El check en verde no es un hallazgo: no se resume.
+    expect(franja).not.toHaveTextContent('SOAT');
+  });
+
+  // Corazón de la HU: en amarillo no hay bloqueo que levantar, así que no se pide asumir riesgo.
+  it('NO ofrece asumir el riesgo cuando el pre-vuelo está en amarillo', () => {
+    render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
+    expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('en rojo sigue ofreciendo asumir el riesgo (sin regresión)', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'red',
+          createdAt: '2026-07-07T00:00:00Z',
+          checks: [
+            {
+              key: 'soat',
+              label: 'SOAT',
+              status: 'fail',
+              source: 'verifik',
+              message: 'SOAT vencido',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+    expect(screen.getByText(/Asumo el riesgo/)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+  });
+
+  it('no muestra la franja de advertencias cuando el pre-vuelo está en verde', () => {
+    render(<PreflightPanel snapshot={snap([])} {...baseProps} />);
+    expect(screen.queryByText('Advertencias del pre-vuelo')).not.toBeInTheDocument();
+  });
+
+  it('lista el detalle de cada comparendo bajo la advertencia de multas', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'yellow',
+          createdAt: '2026-07-07T00:00:00Z',
+          checks: [
+            {
+              key: 'simit_comprador_multas',
+              label: 'Multas SIMIT',
+              status: 'warn',
+              source: 'verifik_simit',
+              message: '2 multa(s) pendiente(s) por $544.730 COP',
+              details: [
+                {
+                  numero: '25612001000012662173',
+                  fecha: '2024-05-01',
+                  valor: 344730,
+                  organismo: 'STRIA TTOyTTE MCPAL SABANETA',
+                  estado: 'Pendiente',
+                  infraccion: 'Semáforo en rojo',
+                },
+                {
+                  numero: '25612001000099999999',
+                  valor: 200000,
+                  estado: 'Pendiente',
+                },
+              ],
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+    const detalle = screen.getByRole('list', { name: 'Detalle de comparendos' });
+    expect(detalle).toHaveTextContent('Comparendo 25612001000012662173');
+    expect(detalle).toHaveTextContent('Semáforo en rojo');
+    expect(detalle).toHaveTextContent('STRIA TTOyTTE MCPAL SABANETA');
+    expect(detalle).toHaveTextContent('2024-05-01');
+    // Formateo COP de ambos valores.
+    expect(detalle).toHaveTextContent('$344.730 COP');
+    expect(detalle).toHaveTextContent('$200.000 COP');
+  });
+});

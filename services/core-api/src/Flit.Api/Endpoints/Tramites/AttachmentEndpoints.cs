@@ -135,6 +135,27 @@ internal static class AttachmentEndpoints
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceAttachments");
 
+        // GET preview-url: presigned GET URL con Content-Disposition: inline para visualización en el
+        // navegador sin forzar descarga (Feature #10701 / ADR-0029). -> 200 { url, expiresAt }
+        group.MapGet("/instances/{id:guid}/attachments/{attachmentId:guid}/preview-url", async (
+            Guid id,
+            Guid attachmentId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetAttachmentPreviewUrlHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, attachmentId, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
+                "storage_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No se pudo obtener la URL de previsualización."),
+                _ => Results.Ok(new { url = result!.Url, expiresAt = result.ExpiresAt }),
+            };
+        }).WithName("GetProcedureInstanceAttachmentPreviewUrl");
+
         // GET descarga del binario de un adjunto (DF-1) -> stream con Content-Disposition: attachment
         group.MapGet("/instances/{id:guid}/attachments/{attachmentId:guid}/download", async (
             Guid id,

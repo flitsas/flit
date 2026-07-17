@@ -4,10 +4,14 @@ import { apiFetch } from "./client";
 import { ApiError } from "./types";
 import type {
   AuditLogPageResponse,
+  BlockingCriterion,
   CompaniesIndexParams,
   CompanyListItem,
   CompanyPagedResult,
+  ConsultationRestrictionKind,
   CreateCompanyRequest,
+  OtBlockingPolicy,
+  OtConsultationRestriction,
   TenantSettings,
   TenantSettingsUpdate,
   TransitGrantsResponse,
@@ -121,6 +125,68 @@ export function removeTransitGrant(tenantId: string, transitOfficeId: string): P
   return apiFetch<void>(`${base}/${tenantId}/transit-grants/${transitOfficeId}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * GET /{tenantId}/ot-consultation-restrictions — restricciones de consulta por OT
+ * (HU #10759 AC1/AC5). Tabla dispersa: solo vuelven los pares configurados
+ * explícitamente; la ausencia de fila equivale a consulta permitida.
+ */
+export function fetchOtConsultationRestrictions(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<OtConsultationRestriction[]> {
+  return apiFetch<OtConsultationRestriction[]>(`${base}/${tenantId}/ot-consultation-restrictions`, {
+    signal,
+  });
+}
+
+/**
+ * PUT /{tenantId}/ot-consultation-restrictions/{transitOfficeId}/{kind} — fija el estado
+ * deseado de una consulta (HU #10759 AC1–AC4). Idempotente en ambos sentidos (sin 404).
+ * Lanza ApiValidationError en 422 si el OT no está habilitado para la compañía.
+ */
+export function setOtConsultationRestriction(
+  tenantId: string,
+  transitOfficeId: string,
+  kind: ConsultationRestrictionKind,
+  enabled: boolean,
+): Promise<void> {
+  return apiFetch<void>(
+    `${base}/${tenantId}/ot-consultation-restrictions/${transitOfficeId}/${kind}`,
+    { method: "PUT", body: { enabled } },
+  );
+}
+
+/**
+ * GET /{tenantId}/ot-blocking-policies — políticas de bloqueo de preflight por OT (FEATURE 05).
+ * Tabla dispersa: solo vuelven los pares configurados explícitamente; la ausencia de fila
+ * equivale al default del criterio.
+ */
+export function fetchOtBlockingPolicies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<OtBlockingPolicy[]> {
+  return apiFetch<OtBlockingPolicy[]>(`${base}/${tenantId}/ot-blocking-policies`, {
+    signal,
+  });
+}
+
+/**
+ * PUT /{tenantId}/ot-blocking-policies/{transitOfficeId}/{criterion} — fija si un criterio del
+ * preflight bloquea (true) o solo advierte (false) para un OT (FEATURE 05). Idempotente en ambos
+ * sentidos. Lanza ApiValidationError en 422 si el OT no está habilitado para la compañía.
+ */
+export function setOtBlockingPolicy(
+  tenantId: string,
+  transitOfficeId: string,
+  criterion: BlockingCriterion,
+  blocks: boolean,
+): Promise<void> {
+  return apiFetch<void>(
+    `${base}/${tenantId}/ot-blocking-policies/${transitOfficeId}/${criterion}`,
+    { method: "PUT", body: { blocks } },
+  );
 }
 
 /** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */

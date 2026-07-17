@@ -54,16 +54,19 @@ public sealed class EnsureIdentityHandler(IProcedureInstanceRepository repo)
 
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));
-        if (actor is null
-            || string.IsNullOrWhiteSpace(actor.DocumentNumber)
-            || string.IsNullOrWhiteSpace(actor.DocumentType))
+        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN. Sin documento del
+        // sujeto no hay identidad que asegurar (PJ sin RL con documento cae aquí, como el actor sin documento).
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+        if (subject is null
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento)
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento))
         {
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.SinActor), null);
         }
 
         var now = DateTimeOffset.UtcNow;
-        var tipoActual = actor.DocumentType.Trim();
-        var docActual = actor.DocumentNumber.Trim();
+        var tipoActual = subject.TipoDocumento.Trim();
+        var docActual = subject.NumeroDocumento.Trim();
 
         // 0) Si la parte CAMBIÓ de persona (documento distinto al actor actual), sus validaciones previas
         // pertenecen a OTRA persona y dejan de aplicar: se marcan EXPIRADO para que el gate de identidad no
