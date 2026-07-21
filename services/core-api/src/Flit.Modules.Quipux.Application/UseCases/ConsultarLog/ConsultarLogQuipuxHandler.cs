@@ -13,8 +13,8 @@ namespace Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
 /// </summary>
 /// <remarks>
 /// Es un caso de uso de SOLO LECTURA: no escribe, no transiciona y nunca devuelve payload crudo —
-/// solo el <c>detail</c> ya sanitizado en captura. El enmascarado adicional de datos sensibles es
-/// alcance de la HU #10794 (una segunda barrera sobre esta proyección).
+/// solo el <c>detail</c> ya sanitizado en captura, sobre el que además se aplica el enmascarado de
+/// datos sensibles de la HU #10794 (<see cref="LogQxSensitiveDataMasker"/>) como segunda barrera.
 /// </remarks>
 public sealed class ConsultarLogQuipuxHandler
 {
@@ -87,9 +87,12 @@ public sealed class ConsultarLogQuipuxHandler
             {
                 using var doc = JsonDocument.Parse(ev.Detail);
                 // Clonar: el JsonDocument se libera al salir del using, pero el JsonElement clonado
-                // sobrevive y se serializa tal cual (el detail ya viene sanitizado desde captura).
+                // sobrevive. El detail ya viene sanitizado desde captura; el enmascarado (HU #10794)
+                // es una segunda barrera que oculta cualquier PII que se hubiera colado a una clave
+                // sensible antes de serializar. Las claves técnicas (codigo/duration_ms/origen) no
+                // casan con la lista sensible → se extraen abajo del original y sobreviven al masker.
                 var root = doc.RootElement.Clone();
-                detail = root;
+                detail = LogQxSensitiveDataMasker.Mask(root);
 
                 if (root.ValueKind == JsonValueKind.Object)
                 {

@@ -10,8 +10,9 @@ namespace Flit.Api.Endpoints;
 /// tiempo (<c>tramites.quipux_submission_events</c>) y el detalle técnico sanitizado de cada evento.
 /// </summary>
 /// <remarks>
-/// Por ahora exige SuperAdmin. La HU #10794 introduce el permiso <c>logqx.read</c> y el enmascarado de
-/// datos sensibles; este gate se endurecerá allí (el SuperAdmin ya hace bypass de permisos).
+/// Gate por permiso <c>logqx.read</c> (HU #10794): un usuario con ese permiso —o SuperAdmin, que hace
+/// bypass— accede; cualquier otro autenticado recibe 403. Sin token, 401. El detalle técnico se
+/// devuelve con los datos sensibles enmascarados (<see cref="ConsultarLogQuipuxHandler"/>).
 /// </remarks>
 public static class AdminLogQxEndpoints
 {
@@ -21,17 +22,18 @@ public static class AdminLogQxEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/log-qx")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithTags("Admin · LOG QX");
 
         // GET /api/v1/admin/log-qx?placa=|instanceId=|radicado= — búsqueda + timeline, paginada.
         group.MapGet("", SearchAsync)
+            .RequirePermission("logqx.read")
             .WithName("AdminLogQxSearch")
             .WithSummary("Consulta el LOG QX de una radicación por placa, trámite o radicado")
             .WithDescription("Devuelve las radicaciones Quipux que casan con el filtro (placa, "
                 + "instanceId o radicado), cada una con su línea de tiempo de eventos y el detalle "
-                + "técnico sanitizado (duración, origen y código). Paginado (page/pageSize). Requiere "
-                + "SuperAdmin. Sin filtro lista todas las radicaciones paginadas.")
+                + "técnico sanitizado y enmascarado (duración, origen y código). Paginado "
+                + "(page/pageSize). Requiere el permiso logqx.read (SuperAdmin bypassa). Sin filtro "
+                + "lista todas las radicaciones paginadas.")
             .Produces<ConsultarLogQuipuxResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);

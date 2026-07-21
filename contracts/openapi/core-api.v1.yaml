@@ -58,7 +58,8 @@ tags:
     description: >
       Trazabilidad de punta a punta de la integración Quipux (HU #10793): búsqueda de
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
-      técnico sanitizado. Solo lectura, rol SuperAdmin.
+      técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
+      SuperAdmin bypassa).
 
 paths:
   /api/v1/auth/login:
@@ -906,8 +907,9 @@ paths:
         (`durationMs`) y el origen (worker `quipux_register` / `quipux_status_poll`); los eventos
         históricos sin detalle se devuelven con `detail: null` ("sin payload disponible") sin romper la
         respuesta. La respuesta NUNCA incluye request/response crudos ni PII: solo el `detail` ya
-        sanitizado en captura. Paginado (`page`/`pageSize`). Requiere SuperAdmin. Sin ningún filtro,
-        lista todas las radicaciones paginadas.
+        sanitizado en captura, sobre el que además se enmascaran los datos sensibles (HU #10794).
+        Paginado (`page`/`pageSize`). Requiere el permiso `logqx.read` (SuperAdmin bypassa). Sin
+        ningún filtro, lista todas las radicaciones paginadas.
       security:
         - bearerAuth: []
       parameters:
@@ -946,7 +948,7 @@ paths:
         "401":
           description: No autenticado (sin token JWT).
         "403":
-          description: Sin rol SuperAdmin.
+          description: Autenticado pero sin el permiso logqx.read.
           content:
             application/json:
               schema:

@@ -325,4 +325,52 @@ public sealed class ConsultarLogQuipuxTests
         detail.EnumerateObject().Select(p => p.Name)
             .Should().BeEquivalentTo("codigo", "usa_placa", "intento");
     }
+
+    // ── HU #10794 · AC3 — enmascarado de datos sensibles (segunda barrera sobre el detail) ──
+
+    [Fact]
+    public async Task Masking_MasksSensitiveKeysInDetail_KeepingOnlyLastFourChars()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(Masking_MasksSensitiveKeysInDetail_KeepingOnlyLastFourChars));
+        await SeedCatalogAsync(db);
+        var (submissionId, instanceId) = await SeedSubmissionAsync(db, new SeedOptions());
+        // Un dato de propietario que se hubiera colado al detail pese a la sanitización de captura.
+        await SeedEventAsync(db, submissionId, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok,
+            "{\"codigo\":81,\"documento_propietario\":\"1098765432\",\"usa_placa\":true}", Base);
+
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+
+        var detail = result.Data.Single().Events.Single().Detail!.Value;
+        // Sensible → enmascarado, solo últimos 4 visibles.
+        detail.GetProperty("documento_propietario").GetString().Should().Be("******5432");
+        // Claves técnicas / no sensibles → intactas.
+        detail.GetProperty("codigo").GetInt32().Should().Be(81);
+        detail.GetProperty("usa_placa").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Masking_MasksNestedSensitiveValues_AndPreservesInstrumentationExtraction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(Masking_MasksNestedSensitiveValues_AndPreservesInstrumentationExtraction));
+        await SeedCatalogAsync(db);
+        var (submissionId, instanceId) = await SeedSubmissionAsync(db, new SeedOptions());
+        // Instrumentación (codigo/duration_ms/origen) + PII anidada bajo una clave sensible.
+        await SeedEventAsync(db, submissionId, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok,
+            "{\"codigo\":81,\"duration_ms\":1234,\"origen\":\"quipux_register\","
+            + "\"propietario\":{\"nombre\":\"Juan\",\"cedula\":\"123456789\"}}", Base);
+
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+
+        var ev = result.Data.Single().Events.Single();
+        // La extracción de instrumentación sigue funcionando (se lee del detail original, no del masker).
+        ev.ResponseCode.Should().Be(81);
+        ev.DurationMs.Should().Be(1234);
+        ev.Origin.Should().Be(QuipuxJobNames.Register);
+        // La PII anidada queda enmascarada; los ≤4 chars se ocultan por completo.
+        var propietario = ev.Detail!.Value.GetProperty("propietario");
+        propietario.GetProperty("nombre").GetString().Should().Be("****");        // "Juan" (4) → todo oculto
+        propietario.GetProperty("cedula").GetString().Should().Be("*****6789");   // "123456789" (9) → últimos 4
+    }
 }
