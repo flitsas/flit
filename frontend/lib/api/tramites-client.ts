@@ -14,6 +14,7 @@ import type {
   ConsultationProvidersConfig,
   ConsultationResult,
   CreateInstanceRequest,
+  OperatorProcedureType,
   DocumentOcrResult,
   EnsureIdentityResult,
   FieldValueInput,
@@ -280,6 +281,13 @@ export const tramitesClient = {
     request<ProcedureInstanceSummary>('/api/v1/tramites/instances', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  // FEATURE-08 / HU-FE-06 (CFD-12) — tipos publicados para el selector de operador (botón único).
+  // Requiere X-Tenant-Id; el backend retorna solo publication_status='published'.
+  getProcedureTypes: (tenantId?: string) =>
+    request<OperatorProcedureType[]>('/api/v1/procedure-types', {
+      headers: tenantHeader(tenantId),
     }),
 
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".

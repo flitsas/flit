@@ -19,7 +19,9 @@ export default function NuevoTramitePage() {
   const params = useParams<{ modalidad: string }>();
   const modalidad = params.modalidad;
 
-  if (modalidad !== 'matricula_inicial' && modalidad !== 'traspaso') {
+  // FEATURE-08 / HU-FE-06 (AC-04): el segmento puede ser una modalidad legacy
+  // (matricula_inicial/traspaso) o un procedureTypeCode publicado. Solo un segmento vacío es inválido.
+  if (!modalidad) {
     notFound();
   }
 
@@ -27,12 +29,14 @@ export default function NuevoTramitePage() {
   // para no romper el prerender en `next build`.
   return (
     <Suspense fallback={null}>
-      <CrearInstancia modalidad={modalidad as WizardModalidad} />
+      <CrearInstancia segment={modalidad} />
     </Suspense>
   );
 }
 
-function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
+const KNOWN_MODALIDADES: readonly string[] = ['matricula_inicial', 'traspaso'];
+
+function CrearInstancia({ segment }: { segment: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { state, start } = useProcedureInstance();
@@ -43,7 +47,11 @@ function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
   // creada (no el activo, que aún no se fijó) antes de redirigir. El seed es best-effort: si el PATCH
   // falla, el gestor captura placa/VIN a mano en el paso 1 (no se aborta la creación del trámite).
   const startFlow = useCallback(async () => {
-    const summary = await start({ modalidad });
+    // FEATURE-08 / HU-FE-06: modalidad legacy → start por modalidad; cualquier otro segmento →
+    // procedureTypeCode (tipo publicado del configurador dinámico).
+    const summary = KNOWN_MODALIDADES.includes(segment)
+      ? await start({ modalidad: segment as WizardModalidad })
+      : await start({ procedureTypeCode: segment });
     if (!summary) return;
     const seedVin = searchParams.get('seedVin')?.trim();
     const seedPlaca = searchParams.get('seedPlaca')?.trim();
@@ -62,7 +70,7 @@ function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
     // el create. Sin esto, el SuperAdmin cae en jwtTenantId() (su propio tenant) ≠ el de
     // la instancia → 404 "Procedure instance not found." hasta re-entrar desde la tabla.
     router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
-  }, [modalidad, start, searchParams, router]);
+  }, [segment, start, searchParams, router]);
 
   useEffect(() => {
     if (startedRef.current) return;

@@ -100,7 +100,11 @@ export function useProcedureInstance() {
   // publicados) sigue funcionando pasando un procedureTypeId.
   const start = useCallback(
     async (
-      target: { modalidad: WizardModalidad } | { procedureTypeId: string },
+      target:
+        | { modalidad: WizardModalidad }
+        | { procedureTypeId: string }
+        // FEATURE-08 / HU-FE-06 (CFD-12): alta por código de tipo (botón único de operador).
+        | { procedureTypeCode: string },
     ) => {
       setState((s) => ({ ...s, loading: true, error: null }));
       // El tenant/usuario del create SALEN del JWT del usuario autenticado, no de constantes de dev.
@@ -115,7 +119,9 @@ export function useProcedureInstance() {
         createdByUserId: payload?.sub ?? DEV_USER_ID,
         ...('modalidad' in target
           ? { modalidad: target.modalidad }
-          : { procedureTypeId: target.procedureTypeId }),
+          : 'procedureTypeCode' in target
+            ? { procedureTypeCode: target.procedureTypeCode }
+            : { procedureTypeId: target.procedureTypeId }),
       };
       try {
         const summary = await tramitesClient.createInstance(body);

@@ -48,7 +48,18 @@ export interface CreateInstanceRequest {
   createdByUserId: string;
   modalidad?: WizardModalidad;
   procedureTypeId?: string;
+  // FEATURE-08 / HU-FE-06 (CFD-12): código del tipo publicado (botón único de operador).
+  procedureTypeCode?: string;
   transitOfficeId?: string;
+}
+
+/** Resumen de tipo publicado para el selector de operador (GET /api/v1/procedure-types, CFD-12). */
+export interface OperatorProcedureType {
+  id: string;
+  code: string;
+  name: string;
+  family: string;
+  version: number;
 }
 
 export interface ProcedureInstanceSummary {
