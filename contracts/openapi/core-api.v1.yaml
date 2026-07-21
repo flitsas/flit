@@ -1558,6 +1558,85 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/superadmin/procedure-types/{id}/conformation-profile:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Super Admin]
+      operationId: getConformationProfile
+      summary: Perfil de conformación del tipo de trámite (FEATURE-08 / CFD-01)
+      description: >
+        Retorna el perfil de conformación completo del tipo: `gateProfile`
+        (flags dinámicos del motor), `conformationRules` (actores + su
+        `validationProfile`), `sources` (fuentes externas, HU-BE-03) y
+        `documentRequirements` (documentos, HU-BE-04). En HU-BE-01 `sources` y
+        `documentRequirements` llegan vacíos; la clave siempre está presente.
+        Requiere JWT con rol SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil de conformación del tipo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureConformationProfile"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin.
+        "404":
+          description: El tipo de trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Super Admin]
+      operationId: updateConformationProfile
+      summary: Actualiza el perfil de conformación del tipo (solo en estado draft)
+      description: >
+        Actualiza el `gateProfile` del tipo. Solo editable en estado `draft`:
+        un tipo `published`/`archived` se rechaza con 422 para no alterar tipos
+        vivos ni los trámites en curso que dependen de ellos. HU-BE-01 persiste
+        `gateProfile`; las HUs siguientes (BE-02..05) amplían el cuerpo con
+        entryMode, validaciones, fuentes, actores, documentos y flag de placa.
+        Requiere JWT con rol SuperAdmin (SuperAdminPolicy).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcedureConformationProfileInput"
+      responses:
+        "200":
+          description: Perfil actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcedureConformationProfile"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin.
+        "404":
+          description: El tipo de trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Tipo en estado published/archived — no editable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/superadmin/audit:
     get:
       tags: [Super Admin]
@@ -5139,6 +5218,68 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Trámites · Configurador dinámico (FEATURE-08 / CFD-01) ────────────────
+    ProcedureConformationProfile:
+      type: object
+      description: >
+        Perfil de conformación completo del tipo de trámite (§6.3 plan F08).
+        `gateProfile` y `conformationRules` se materializan en HU-BE-01;
+        `sources` (HU-BE-03) y `documentRequirements` (HU-BE-04) llegan como
+        listas vacías hasta esas HUs — la clave siempre está presente.
+      required: [procedureTypeId, code, publicationStatus, version, gateProfile, conformationRules, sources, documentRequirements]
+      properties:
+        procedureTypeId: { type: string, format: uuid }
+        code: { type: string, example: MATRICULA_NUEVA }
+        publicationStatus: { type: string, enum: [draft, published, archived] }
+        version: { type: integer, example: 1 }
+        gateProfile:
+          type: object
+          additionalProperties: true
+          description: >
+            Flags de conformación del tipo (ver DDL comment de
+            `tramites.procedure_types.gate_profile`): entryMode, requiresBuyer,
+            biometricActors, simitMode, etc. Objeto JSON abierto.
+        conformationRules:
+          type: array
+          items:
+            type: object
+            required: [entityCode, validationProfile]
+            properties:
+              entityCode: { type: string, example: BUYER }
+              validationProfile:
+                type: object
+                additionalProperties: true
+        sources:
+          type: array
+          items:
+            type: object
+            required: [sourceCode, executionOrder, config]
+            properties:
+              sourceCode: { type: string, example: RUNT }
+              executionOrder: { type: integer, example: 1 }
+              config:
+                type: object
+                additionalProperties: true
+        documentRequirements:
+          type: array
+          items:
+            type: object
+            required: [documentTypeCode, isRequired, isDummy]
+            properties:
+              documentTypeCode: { type: string, example: CEDULA }
+              isRequired: { type: boolean }
+              isDummy: { type: boolean }
+              conditionGroup: { type: string, nullable: true }
+    ProcedureConformationProfileInput:
+      type: object
+      description: >
+        Cuerpo del PUT de perfil de conformación. HU-BE-01 solo persiste
+        `gateProfile`; las HUs BE-02..05 amplían este esquema.
+      properties:
+        gateProfile:
+          type: object
+          additionalProperties: true
+          description: Flags de conformación del tipo. Objeto JSON abierto.
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
     AttachmentDto:
       type: object

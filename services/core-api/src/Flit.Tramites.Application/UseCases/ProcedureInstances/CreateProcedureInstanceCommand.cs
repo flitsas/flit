@@ -25,7 +25,8 @@ public sealed record ProcedureInstanceSummary(
 
 public sealed class CreateProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
-    IProcedureTypeRepository typeRepo)
+    IProcedureTypeRepository typeRepo,
+    CaptureTypeSnapshotHandler? snapshotCapture = null)
 {
     // M0: mapeo modalidad → código canónico del procedure_type sembrado (dev seed).
     // matricula_inicial → MATRICULA_NUEVA (familia MATRICULAS), traspaso → TRASPASO_STANDARD (familia TRASPASO).
@@ -104,12 +105,23 @@ public sealed class CreateProcedureInstanceHandler(
         });
 
         var outcome = await repo.AddWithUniqueReferenceAsync(instance, year, ct);
-        return outcome switch
+        if (outcome == AddProcedureInstanceOutcome.ReferenceConflict)
+            return (null, "reference_conflict");
+        if (outcome == AddProcedureInstanceOutcome.ReferencedEntityMissing)
+            return (null, "invalid_reference");
+
+        // CFD-01 / AC#5 (BE-01-AC-03): al crear la instancia se captura un snapshot inmutable del
+        // perfil de conformación del tipo. La instancia en curso quedará protegida de cambios de
+        // configuración posteriores del tipo (lo consume el wizard dinámico en HU-BE-06). Se ejecuta
+        // tras persistir la instancia (la FK del snapshot exige que exista). Opcional para no romper
+        // callers/tests que no ejercen versionado; en runtime siempre se inyecta.
+        if (snapshotCapture is not null)
         {
-            AddProcedureInstanceOutcome.ReferenceConflict => (null, "reference_conflict"),
-            AddProcedureInstanceOutcome.ReferencedEntityMissing => (null, "invalid_reference"),
-            _ => (ToSummary(instance), null),
-        };
+            await snapshotCapture.HandleAsync(
+                instance.Id, procedureType.Id, request.TenantId, request.CreatedByUserId, ct);
+        }
+
+        return (ToSummary(instance), null);
     }
 
     internal static ProcedureInstanceSummary ToSummary(ProcedureInstance e) =>
