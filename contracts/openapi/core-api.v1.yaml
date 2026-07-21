@@ -5866,6 +5866,8 @@ components:
           type: string
           description: "Resultado: `ok | error_transitorio | error_definitivo | omitido`."
         detail:
+          type: object
+          additionalProperties: true
           nullable: true
           description: >
             Detalle sanitizado (objeto JSON arbitrario) tal cual se persistió, o `null` para
