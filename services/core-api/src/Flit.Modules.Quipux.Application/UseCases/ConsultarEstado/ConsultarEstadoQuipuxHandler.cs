@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Flit.Modules.Quipux.Domain.Codigos;
 using Flit.Modules.Quipux.Domain.Configuracion;
@@ -97,6 +98,11 @@ public sealed class ConsultarEstadoQuipuxHandler
             new { codigo_divipo = submission.DivipoCode, sondeo = submission.PollCount },
             command.CorrelationId, cancellationToken);
 
+        // Instrumentación de duración (HU #10793): se mide el elapsed de la llamada HTTP para poder
+        // mostrarlo en el LOG QX. Observabilidad, no cambio de comportamiento — no toca contrato,
+        // reintentos ni timeouts. El origen es el worker de sondeo.
+        var inicioConsulta = Stopwatch.GetTimestamp();
+
         QuipuxValidateStatusResult consulta;
         try
         {
@@ -113,12 +119,20 @@ public sealed class ConsultarEstadoQuipuxHandler
         }
         catch (QuipuxException ex)
         {
+            var duracionError = ElapsedMs(inicioConsulta);
+
             // La ruta de error SÍ registra. En 1.0 saveValidateStatusIntegrationLogOnError leía
             // responseData sobre un DTO de request y lanzaba siempre: nunca dejó rastro de un fallo.
             await _audit.WriteAsync(
                 submission.TenantId, submission.Id, QuipuxStage.ConsultaError,
                 ex.IsTransient ? QuipuxOutcome.ErrorTransitorio : QuipuxOutcome.ErrorDefinitivo,
-                new { motivo = ConsultarEstadoQuipuxMotivos.LlamadaConsultaFallida, transitorio = ex.IsTransient },
+                new
+                {
+                    motivo = ConsultarEstadoQuipuxMotivos.LlamadaConsultaFallida,
+                    transitorio = ex.IsTransient,
+                    duration_ms = duracionError,
+                    origen = QuipuxJobNames.StatusPoll,
+                },
                 command.CorrelationId, cancellationToken);
 
             ConsultarEstadoQuipuxLog.ConsultaFallida(_logger, ex, submission.Id, ex.IsTransient);
@@ -136,7 +150,13 @@ public sealed class ConsultarEstadoQuipuxHandler
 
         await _audit.WriteAsync(
             submission.TenantId, submission.Id, QuipuxStage.ConsultaRespuesta, QuipuxOutcome.Ok,
-            new { codigo = consulta.Codigo, estado_tramite = consulta.EstadoTramiteCodigo },
+            new
+            {
+                codigo = consulta.Codigo,
+                estado_tramite = consulta.EstadoTramiteCodigo,
+                duration_ms = ElapsedMs(inicioConsulta),
+                origen = QuipuxJobNames.StatusPoll,
+            },
             command.CorrelationId, cancellationToken);
 
         // Sin estadoTramite: Quipux aún no resolvió. NO se colapsa a 0 — ese era el fallo de 1.0.
@@ -319,6 +339,10 @@ public sealed class ConsultarEstadoQuipuxHandler
 
         return outcome.Success ? (true, null) : (false, outcome.ErrorCode);
     }
+
+    /// <summary>Milisegundos transcurridos desde un timestamp de <see cref="Stopwatch"/> (HU #10793).</summary>
+    private static long ElapsedMs(long startTimestamp) =>
+        (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
     private static QuipuxSubmissionEvent NuevoEvento(
         QuipuxSubmission submission,

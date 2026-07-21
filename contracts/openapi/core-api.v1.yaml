@@ -54,6 +54,12 @@ tags:
     description: >
       Generación del Certificado de Improntas Digitales vehicular (Res. 17145/2023
       Mintransporte) vía Kyverum RUNT, con persistencia de trazabilidad (rol SuperAdmin).
+  - name: Admin · LOG QX
+    description: >
+      Trazabilidad de punta a punta de la integración Quipux (HU #10793): búsqueda de
+      radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
+      técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
+      SuperAdmin bypassa).
 
 paths:
   /api/v1/auth/login:
@@ -885,6 +891,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CodeErrorResponse"
+
+  /api/v1/admin/log-qx:
+    get:
+      tags: [Admin · LOG QX]
+      operationId: adminLogQxSearch
+      summary: Consulta el LOG QX de una radicación (HU #10793)
+      description: >
+        Trazabilidad de la integración Quipux para soporte/administración. Dado una placa, un id de
+        trámite (`instanceId`) o un radicado, devuelve la(s) radicación(es) que corresponden —el
+        estado final y los códigos QX de `tramites.quipux_submissions`— cada una con su línea de
+        tiempo completa reconstruida de `tramites.quipux_submission_events` (etapa, resultado, detalle
+        sanitizado, `occurred_at`), incluidos los eventos de error y de reintento. Cada evento expone,
+        cuando el detalle instrumentado lo trae, el código de respuesta, la duración de la llamada HTTP
+        (`durationMs`) y el origen (worker `quipux_register` / `quipux_status_poll`); los eventos
+        históricos sin detalle se devuelven con `detail: null` ("sin payload disponible") sin romper la
+        respuesta. La respuesta NUNCA incluye request/response crudos ni PII: solo el `detail` ya
+        sanitizado en captura, sobre el que además se enmascaran los datos sensibles (HU #10794).
+        Paginado (`page`/`pageSize`). Requiere el permiso `logqx.read` (SuperAdmin bypassa). Sin
+        ningún filtro, lista todas las radicaciones paginadas.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          schema: { type: string }
+          description: Placa del vehículo; casa por valor normalizado (mayúsculas, sin espacios).
+        - name: instanceId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Id del trámite (`procedure_instance_id`). Se espera un UUID; si el valor no tiene formato
+            de UUID, la respuesta es una página vacía (no un error), igual que `radicado` no numérico.
+        - name: radicado
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            Número de radicación ≈ código QX (registro o trámite). Si no es numérico, la respuesta es
+            una página vacía.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de radicaciones con su línea de tiempo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogQxPage"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin el permiso logqx.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/admin/ot/profile:
     get:
@@ -5778,6 +5848,101 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/QuipuxColaItem" }
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [data, totalCount, page, pageSize]
+
+    LogQxEvent:
+      type: object
+      description: >
+        Un evento de la línea de tiempo del LOG QX (HU #10793), proyectado de
+        `tramites.quipux_submission_events`. `detail` es el jsonb SANITIZADO tal cual se persistió
+        (nunca request/response crudos ni PII), o `null` = "sin payload disponible".
+      properties:
+        stage:
+          type: string
+          description: >
+            Etapa: `claimed | consolidado_generado | s3_subido | registro_enviado | registro_respuesta
+            | registro_error | consulta_enviada | consulta_respuesta | consulta_error | aprobado |
+            rechazado | dead_letter | reintento_manual | cancelado_manual`.
+        outcome:
+          type: string
+          description: "Resultado: `ok | error_transitorio | error_definitivo | omitido`."
+        detail:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: >
+            Detalle sanitizado (objeto JSON arbitrario) tal cual se persistió, o `null` para
+            registros históricos sin detalle.
+        durationMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: Duración de la llamada HTTP en ms; `null` en eventos previos a la instrumentación.
+        origin:
+          type: string
+          nullable: true
+          description: >
+            Worker que originó el evento (`quipux_register` / `quipux_status_poll`). Se toma del
+            detalle instrumentado; para eventos históricos se deriva de la etapa como aproximación.
+        responseCode:
+          type: integer
+          nullable: true
+          description: Código de respuesta QX del evento, extraído del detalle si está presente.
+        correlationId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt: { type: string, format: date-time }
+      required: [stage, outcome, occurredAt]
+
+    LogQxEntry:
+      type: object
+      description: >
+        Una radicación Quipux (`tramites.quipux_submissions`) enriquecida con datos del trámite y su
+        línea de tiempo de eventos. El estado final y los códigos QX van en la cabecera; el paso a paso
+        en `events`.
+      properties:
+        id: { type: string, format: uuid, description: Id de la submission. }
+        procedureInstanceId: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        clientTenantName: { type: string, description: Razón social del cliente dueño del trámite. }
+        plate:
+          type: string
+          nullable: true
+          description: Placa proyectada de `procedure_instance_field_values`; `null` en trámites por VIN.
+        documentName: { type: string }
+        divipoCode: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [pendiente, registrado, aprobado, rechazado, fallido]
+        attempts: { type: integer }
+        pollCount: { type: integer }
+        qxRegisterCode: { type: integer, nullable: true }
+        qxProcedureCode: { type: integer, nullable: true }
+        rejectionReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        registeredAt: { type: string, format: date-time, nullable: true }
+        lastPolledAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/LogQxEvent" }
+      required:
+        [id, procedureInstanceId, referenceNumber, procedureTypeName, clientTenantName, documentName,
+         status, attempts, pollCount, createdAt, events]
+
+    LogQxPage:
+      type: object
+      description: Página del LOG QX con eco de paginación (HU #10793).
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/LogQxEntry" }
         totalCount: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
