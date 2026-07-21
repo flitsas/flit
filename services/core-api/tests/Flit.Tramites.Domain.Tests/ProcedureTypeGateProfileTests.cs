@@ -74,6 +74,14 @@ public sealed class ProcedureTypeGateProfileTests
         profile.RequiresSignature.Should().BeTrue();
     }
 
+    [Fact]
+    public void FromJson_ParsesRequiresPlateRequest()
+    {
+        // FEATURE-08 / HU-BE-05 (CFD-08).
+        var profile = ProcedureTypeGateProfile.FromJson("{ \"requiresPlateRequest\": true }");
+        profile.RequiresPlateRequest.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("PLATE", true)]
     [InlineData("VIN", true)]

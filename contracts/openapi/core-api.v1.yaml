@@ -5298,6 +5298,11 @@ components:
             validateCompanyRule: { type: boolean }
             validateOtOperability: { type: boolean }
             validateDuplicateProcedure: { type: boolean }
+            requiresPlateRequest:
+              type: boolean
+              description: >
+                HU-BE-05 / CFD-08. Si es true, el wizard incluye el paso `plate_request`
+                (activación condicional en HU-BE-06).
         sources:
           type: array
           description: >
