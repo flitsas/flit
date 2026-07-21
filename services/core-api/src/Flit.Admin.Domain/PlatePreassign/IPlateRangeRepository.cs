@@ -45,6 +45,24 @@ public sealed record PlateOpResult(bool Success, string? Error)
 }
 
 /// <summary>
+/// Elegibilidad de la preasignación entre una compañía y un OT (HU #10806). Distingue el caso en que
+/// la compañía NO usa preasignación (ruta estándar sin fricción) del caso en que SÍ la tiene activa
+/// pero el OT está mal configurado (grant/allow ausente) — que debe bloquear la radicación, no
+/// degradar en silencio.
+/// </summary>
+public enum PlateAssignmentEligibility
+{
+    /// <summary>Flag de la compañía + grant vigente + allow_plate_preassign del OT: se puede preasignar.</summary>
+    Allowed,
+
+    /// <summary>La compañía no tiene <c>plate_preassign_enabled</c>: ruta estándar (sin bloqueo).</summary>
+    CompanyDisabled,
+
+    /// <summary>La compañía sí tiene el flag, pero falta el grant vigente o <c>allow_plate_preassign</c> del OT.</summary>
+    Misconfigured,
+}
+
+/// <summary>
 /// Inventario de rangos de placas de preasignación (Feature #10587). RLS permisiva a nivel BD;
 /// la autorización (flag de la compañía + allow_plate_preassign del OT + grant) se aplica en la
 /// capa de aplicación antes de invocar estas operaciones de escritura.
@@ -91,6 +109,16 @@ public interface IPlateRangeRepository
     /// (<c>plate_preassign_enabled</c>) + grant vigente (compañía↔OT) + <c>allow_plate_preassign</c> del OT.
     /// </summary>
     Task<bool> IsAssignmentAllowedAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10806 — evalúa la elegibilidad con detalle: distingue "compañía sin preasignación" (ruta
+    /// estándar) de "compañía activa pero OT mal configurado" (bloqueo). Misma lectura que
+    /// <see cref="IsAssignmentAllowedAsync"/> (que equivale a <c>== Allowed</c>).
+    /// </summary>
+    Task<PlateAssignmentEligibility> EvaluateAssignmentEligibilityAsync(
         Guid companyTenantId,
         Guid transitOfficeId,
         CancellationToken cancellationToken = default);

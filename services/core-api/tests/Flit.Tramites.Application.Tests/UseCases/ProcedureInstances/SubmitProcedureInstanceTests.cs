@@ -331,10 +331,39 @@ public sealed class SubmitProcedureInstanceTests
         instance.PlateFlowStatus.Should().Be(expectedSubStatus);
     }
 
+    [Fact] // HU #10806 (AC4) — compañía con preasignación activa pero OT mal configurado: la radicación
+           // se BLOQUEA con plate_route_misconfigured, en vez de degradar a estándar en silencio.
+    public async Task HandleAsync_RutaMalConfigurada_BloqueaRadicacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        Wire(instance, ct);
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var lifecycle = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
+        var handler = new SubmitProcedureInstanceHandler(lifecycle, _repo, new FakePlatePolicy(PlateRouteDecision.Blocked));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().Be("plate_route_misconfigured");
+        result.Should().BeNull();
+    }
+
     private sealed class FakePlatePolicy(PlateRouteDecision decision) : IPlatePreassignPolicy
     {
-        public Task<PlateRouteDecision> DecideAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
-            Task.FromResult(decision);
+        public Task<PlateRouteResult> DecideAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
+            Task.FromResult(decision switch
+            {
+                PlateRouteDecision.Asignado => PlateRouteResult.Reserved,
+                PlateRouteDecision.Preasignado => PlateRouteResult.NoPlate,
+                PlateRouteDecision.Blocked => PlateRouteResult.Misconfigured,
+                _ => PlateRouteResult.NotEnabled,
+            });
     }
 
     [Fact]
