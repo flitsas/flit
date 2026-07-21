@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -66,55 +66,58 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
   // Organismos de tránsito habilitados para la compañía consultada. Para SuperAdmin
   // dependen de la empresa elegida; sin empresa no hay OTs que listar.
   useEffect(() => {
-    const tenantForOffices = isSuper ? filters.tenantId : undefined;
-    if (isSuper && !tenantForOffices) {
-      setTransitOffices([]);
-      return;
-    }
     let cancelled = false;
-    tramitesClient
-      .listTransitOffices(tenantForOffices || undefined)
-      .then((items) => {
+    async function loadOffices() {
+      const tenantForOffices = isSuper ? filters.tenantId : undefined;
+      if (isSuper && !tenantForOffices) {
+        if (!cancelled) setTransitOffices([]);
+        return;
+      }
+      try {
+        const items = await tramitesClient.listTransitOffices(tenantForOffices || undefined);
         if (!cancelled) setTransitOffices(items);
-      })
-      .catch(() => setTransitOffices([]));
+      } catch {
+        if (!cancelled) setTransitOffices([]);
+      }
+    }
+    void loadOffices();
     return () => {
       cancelled = true;
     };
   }, [isSuper, filters.tenantId]);
 
-  const load = useCallback(async (signal: AbortSignal) => {
-    if (!isValidRange(applied.range)) {
-      setUiStatus("error");
-      setErrorMessage("El rango de fechas no es válido.");
-      return;
-    }
-    if (isSuper && !applied.tenantId) {
-      // SuperAdmin sin compañía elegida: el backend exige tenantId. No consultamos (evita el
-      // 400) y guiamos a seleccionar una compañía en lugar de mostrar un error.
-      setData(null);
-      setErrorMessage(undefined);
-      setUiStatus("empty");
-      return;
-    }
-    setUiStatus("loading");
-    try {
-      const res = await fetchDetailedReport(toQueryParams(applied, page, 20), signal);
-      if (signal.aborted) return;
-      setData(res);
-      setUiStatus(res.items.length === 0 ? "empty" : "ready");
-    } catch (error) {
-      if (signal.aborted || (error as Error).name === "AbortError") return;
-      setErrorMessage(describeError(error));
-      setUiStatus("error");
-    }
-  }, [applied, page, reloadKey, isSuper]);
-
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal);
+    async function load() {
+      if (!isValidRange(applied.range)) {
+        setUiStatus("error");
+        setErrorMessage("El rango de fechas no es válido.");
+        return;
+      }
+      if (isSuper && !applied.tenantId) {
+        // SuperAdmin sin compañía elegida: el backend exige tenantId. No consultamos (evita el
+        // 400) y guiamos a seleccionar una compañía en lugar de mostrar un error.
+        setData(null);
+        setErrorMessage(undefined);
+        setUiStatus("empty");
+        return;
+      }
+      setUiStatus("loading");
+      try {
+        const res = await fetchDetailedReport(toQueryParams(applied, page, 20), controller.signal);
+        if (controller.signal.aborted) return;
+        setData(res);
+        setUiStatus(res.items.length === 0 ? "empty" : "ready");
+      } catch (error) {
+        if (controller.signal.aborted || (error as Error).name === "AbortError") return;
+        setErrorMessage(describeError(error));
+        setUiStatus("error");
+      }
+    }
+    void load();
     return () => controller.abort();
-  }, [load]);
+    // reloadKey fuerza recarga manual (botón reintentar).
+  }, [applied, page, reloadKey, isSuper]);
 
   function handleSearch() {
     setApplied(filters);
