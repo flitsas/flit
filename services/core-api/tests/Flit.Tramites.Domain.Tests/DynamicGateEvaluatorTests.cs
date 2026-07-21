@@ -29,12 +29,14 @@ public sealed class DynamicGateEvaluatorTests
         new("fur", "signature_fur"),
     ];
 
-    private static readonly IReadOnlySet<string> NoActors = new HashSet<string>();
+    // Actores requeridos por MATRICULA_INICIAL: solo el comprador (BUYER), con RUNT obligatorio.
+    private static List<ActorGateState> MatriculaActors(bool present, bool runt) =>
+        [new ActorGateState("BUYER", present, runt, RequiresRunt: true)];
 
     [Fact]
     public void Evaluate_EmptyInstance_AllStepsIncomplete_CannotSubmit()
     {
-        var ctx = new DynamicWizardContext(); // nada hecho
+        var ctx = new DynamicWizardContext { Actors = MatriculaActors(present: false, runt: false) };
 
         var state = DynamicGateEvaluator.Evaluate(MatriculaProfile(), MatriculaSteps(), ctx);
 
@@ -42,6 +44,8 @@ public sealed class DynamicGateEvaluatorTests
         state.Steps[0].SectionType.Should().Be("vehicle_query");
         state.Steps[0].Status.Should().Be("incomplete");
         state.Steps[0].Reasons.Should().Contain(DynamicGateEvaluator.VehiculoNoConsultado);
+        state.Steps[2].Status.Should().Be("incomplete"); // actor_form: comprador ausente
+        state.Steps[2].Reasons.Should().Contain(DynamicGateEvaluator.CompradorPendiente);
         state.CanSubmit.Should().BeFalse();
         state.Blockers.Should().Contain(DynamicGateEvaluator.DocumentosIncompletos);
         state.Blockers.Should().Contain(DynamicGateEvaluator.IdentidadNoAprobada);
@@ -55,8 +59,7 @@ public sealed class DynamicGateEvaluatorTests
         {
             VehiculoConsultado = true,
             DocumentosCompletos = true,
-            HasBuyer = true,
-            BuyerRuntConsultado = true,
+            Actors = MatriculaActors(present: true, runt: true),
             // sin biometría ni FUR
         };
 
@@ -78,8 +81,7 @@ public sealed class DynamicGateEvaluatorTests
         {
             VehiculoConsultado = true,
             DocumentosCompletos = true,
-            HasBuyer = true,
-            BuyerRuntConsultado = true,
+            Actors = MatriculaActors(present: true, runt: true),
             BiometricsApproved = new HashSet<string> { "BUYER" },
             FurGenerado = true,
         };
@@ -94,12 +96,67 @@ public sealed class DynamicGateEvaluatorTests
     [Fact]
     public void Evaluate_ActorForm_MissingBuyerRunt_Incomplete()
     {
-        var ctx = new DynamicWizardContext { VehiculoConsultado = true, DocumentosCompletos = true, HasBuyer = true, BuyerRuntConsultado = false };
+        var ctx = new DynamicWizardContext
+        {
+            VehiculoConsultado = true,
+            DocumentosCompletos = true,
+            Actors = MatriculaActors(present: true, runt: false),
+        };
 
         var state = DynamicGateEvaluator.Evaluate(MatriculaProfile(), MatriculaSteps(), ctx);
 
         state.Steps[2].Status.Should().Be("incomplete");
         state.Steps[2].Reasons.Should().Contain(DynamicGateEvaluator.CompradorPendiente);
+    }
+
+    [Fact]
+    public void Evaluate_ActorForm_GenericActors_ValidatesOwnerAndLessee_AnyProcedure()
+    {
+        // BE-06 (multiplicidad/actores genéricos): un tipo NO-traspaso con OWNER + LESSEE (p.ej. cambio de
+        // locatario / varios propietarios). El gate valida CUALQUIER actor por su regla, sin sesgo
+        // buyer/seller. OWNER presente pero sin RUNT y LESSEE ausente ⇒ ambos pendientes con su reason.
+        var profile = new ProcedureTypeGateProfile();
+        var steps = new List<DynamicWizardStep> { new("actores", "actor_form") };
+        var ctx = new DynamicWizardContext
+        {
+            Actors =
+            [
+                new ActorGateState("OWNER", Present: true, RuntConsultado: false, RequiresRunt: true),
+                new ActorGateState("LESSEE", Present: false, RuntConsultado: false, RequiresRunt: false),
+            ],
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(profile, steps, ctx);
+
+        state.Steps[0].Status.Should().Be("incomplete");
+        state.Steps[0].Reasons.Should().Contain(DynamicGateEvaluator.VendedorPendiente); // OWNER
+        state.Steps[0].Reasons.Should().Contain("actor_pendiente:LESSEE");
+
+        // Con ambos completos (OWNER con RUNT, LESSEE presente) el paso queda completo.
+        var okCtx = new DynamicWizardContext
+        {
+            Actors =
+            [
+                new ActorGateState("OWNER", Present: true, RuntConsultado: true, RequiresRunt: true),
+                new ActorGateState("LESSEE", Present: true, RuntConsultado: false, RequiresRunt: false),
+            ],
+        };
+        DynamicGateEvaluator.Evaluate(profile, steps, okCtx).Steps[0].Status.Should().Be("complete");
+    }
+
+    [Fact]
+    public void Evaluate_ActorForm_MultipleOwners_OnePresent_Completes()
+    {
+        // "Múltiples propietarios en cualquier trámite": allowsMultiple habilita añadir más, pero el gate
+        // solo exige ≥1 presente. Un OWNER (sin RUNT requerido) presente ⇒ paso completo.
+        var profile = new ProcedureTypeGateProfile();
+        var steps = new List<DynamicWizardStep> { new("propietarios", "actor_form") };
+        var ctx = new DynamicWizardContext
+        {
+            Actors = [new ActorGateState("OWNER", Present: true, RuntConsultado: false, RequiresRunt: false)],
+        };
+
+        DynamicGateEvaluator.Evaluate(profile, steps, ctx).Steps[0].Status.Should().Be("complete");
     }
 
     [Fact]

@@ -201,10 +201,6 @@ public sealed class GetWizardStateHandler(
         }
 
         var fv = FieldValues(instance);
-        var comprador = ParteOf(instance, "comprador");
-        var vendedor = ParteOf(instance, "vendedor");
-        var runtComprador = RuntOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor");
         var preflight = PreflightOf(instance);
 
         var approvedParties = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
@@ -215,10 +211,7 @@ public sealed class GetWizardStateHandler(
             VehiculoConsultado = HasVehiculoConsulta(fv),
             PreflightProviderError = preflight?.ProviderError == true,
             DocumentosCompletos = DocumentosObligatoriosCompletos(instance),
-            HasBuyer = comprador is not null,
-            BuyerRuntConsultado = runtComprador?.Consultado == true,
-            HasSeller = vendedor is not null,
-            SellerRuntConsultado = runtVendedor?.Consultado == true,
+            Actors = BuildActorGateStates(instance, root),
             ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
             BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
             FurGenerado = FurGenerado(instance),
@@ -259,6 +252,53 @@ public sealed class GetWizardStateHandler(
         if (approvedParties.Contains("locatario")) codes.Add("LESSEE");
         return codes;
     }
+
+    /// <summary>
+    /// Deriva el estado de los actores requeridos (BE-06, gate genérico) desde las reglas de conformación
+    /// congeladas en el snapshot. Una regla por-actor (entidad ≠ VEHICLE) = un actor requerido; su
+    /// presencia/RUNT se lee de <c>instance.Actors</c>. Genérico: OWNER/BUYER/SELLER/LESSEE y varios
+    /// propietarios en cualquier tipo, sin sesgo buyer/seller.
+    /// </summary>
+    private static List<ActorGateState> BuildActorGateStates(
+        ProcedureInstance instance, JsonObject root)
+    {
+        var actors = new List<ActorGateState>();
+        if (root["conformationRules"] is not JsonArray ruleArr)
+            return actors;
+
+        foreach (var node in ruleArr)
+        {
+            if (node is not JsonObject ruleObj)
+                continue;
+            var entityCode = (ruleObj["entityCode"] as JsonValue)?.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(entityCode) ||
+                entityCode.Equals("VEHICLE", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var ruleProfile = ConformationRuleProfile.FromJson(ruleObj["validationProfile"]?.ToJsonString());
+            var actorTypes = ActorTypesForEntity(entityCode);
+            var present = actorTypes.Any(t => ParteOf(instance, t) is not null);
+            var runtConsultado = actorTypes.Any(t => RuntOf(instance, t)?.Consultado == true);
+
+            actors.Add(new ActorGateState(
+                entityCode.ToUpperInvariant(), present, runtConsultado, ruleProfile.RequiresRunt));
+        }
+        return actors;
+    }
+
+    /// <summary>
+    /// Códigos de <c>actorType</c> de la instancia que corresponden a una entidad del gate_profile.
+    /// Inverso de <see cref="MapPartiesToEntityCodes"/>: en FLIT la parte vendedora/propietaria es OWNER.
+    /// </summary>
+    private static IReadOnlyList<string> ActorTypesForEntity(string entityCode) =>
+        entityCode.ToUpperInvariant() switch
+        {
+            "BUYER" => ["comprador"],
+            "SELLER" => ["vendedor"],
+            "OWNER" => ["vendedor", "propietario"],
+            "LESSEE" => ["locatario"],
+            _ => [entityCode.ToLowerInvariant()],
+        };
 
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);

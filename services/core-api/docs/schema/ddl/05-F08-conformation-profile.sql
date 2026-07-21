@@ -46,8 +46,9 @@ Esquema JSON esperado:
   "entryMode": "PLATE" | "VIN" | "BOTH",
   "requiresSeller": bool,
   "requiresBuyer": bool,
-  "allowsMultipleBuyer": bool,
-  "allowsMultipleSeller": bool,
+  -- NOTA: la multiplicidad de actores NO va aquí. Es por-actor en
+  -- conformation_rules.validation_profile.allowsMultiple (genérico OWNER/BUYER/LESSEE,
+  -- cualquier tipo). Se deprecaron allowsMultipleBuyer/allowsMultipleSeller (BE-06).
   "requiresCommercialValue": bool,
   "commercialValueSource": "FASECOLDA" | "BASE_GRAVABLE" | "MERCADO_LIBRE" | null,
   "requiresBiometrics": bool,

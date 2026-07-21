@@ -16,8 +16,10 @@ public sealed record ProcedureTypeGateProfile
     public string? EntryMode { get; init; }
     public bool RequiresSeller { get; init; }
     public bool RequiresBuyer { get; init; }
-    public bool AllowsMultipleBuyer { get; init; }
-    public bool AllowsMultipleSeller { get; init; }
+    // NOTA (BE-06, multiplicidad genérica): la multiplicidad de actores NO vive aquí. Es una propiedad
+    // POR-ACTOR en conformation_rules.validation_profile.allowsMultiple (ver ConformationRuleProfile),
+    // válida para OWNER/BUYER/LESSEE y cualquier actor en cualquier tipo. Se deprecaron
+    // allowsMultipleBuyer/allowsMultipleSeller para no tener dos fuentes de verdad sesgadas a traspaso.
     public bool RequiresCommercialValue { get; init; }
     public string? CommercialValueSource { get; init; }
     public bool RequiresBiometrics { get; init; }

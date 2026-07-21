@@ -55,7 +55,7 @@ DECLARE v_type uuid; v_step uuid;
 BEGIN
     INSERT INTO tramites.procedure_types (id, code, name, family, version, gate_profile, publication_status, published_at, is_active, created_at)
     VALUES (uuidv7(), 'TRASPASO_SIMPLE', 'Traspaso Simple', 'traspaso', 1,
-        '{"entryMode":"PLATE","requiresSeller":true,"requiresBuyer":true,"allowsMultipleBuyer":true,"requiresCommercialValue":true,"commercialValueSource":"FASECOLDA","requiresBiometrics":true,"biometricActors":["OWNER","BUYER"],"requiresSignature":true,"validateOtOperability":true,"validatePazSalvoImpuesto":true,"simitMode":"INTERNAL"}'::jsonb,
+        '{"entryMode":"PLATE","requiresSeller":true,"requiresBuyer":true,"requiresCommercialValue":true,"commercialValueSource":"FASECOLDA","requiresBiometrics":true,"biometricActors":["OWNER","BUYER"],"requiresSignature":true,"validateOtOperability":true,"validatePazSalvoImpuesto":true,"simitMode":"INTERNAL"}'::jsonb,
         'published', now(), true, now())
     ON CONFLICT (code) DO UPDATE SET gate_profile = EXCLUDED.gate_profile, family = EXCLUDED.family,
         publication_status = 'published', published_at = now(), updated_at = now()

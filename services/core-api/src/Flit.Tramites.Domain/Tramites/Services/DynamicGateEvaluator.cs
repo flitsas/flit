@@ -3,6 +3,21 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// <summary>Un paso del wizard dinámico: su código y el <c>section_type</c> que lo renderiza (CFD-09).</summary>
 public sealed record DynamicWizardStep(string StepCode, string SectionType);
 
+/// <summary>
+/// Estado de un actor requerido por el tipo, para el gate <c>actor_form</c> genérico (BE-06). Se deriva
+/// de una regla de conformación (por-actor), NO de flags buyer/seller del gate_profile: aplica a
+/// OWNER/BUYER/SELLER/LESSEE y a "múltiples propietarios" en CUALQUIER trámite, no solo traspaso.
+/// <paramref name="EntityCode"/> es el código de entidad (BUYER/OWNER/…). <paramref name="Present"/> =
+/// hay al menos un actor de ese tipo capturado. <paramref name="RequiresRunt"/> viene del
+/// <c>validation_profile</c> de la regla. La multiplicidad (<c>allowsMultiple</c>) no bloquea: solo
+/// permite añadir más; un actor requerido necesita ≥1 presente igual.
+/// </summary>
+public sealed record ActorGateState(
+    string EntityCode,
+    bool Present,
+    bool RuntConsultado,
+    bool RequiresRunt);
+
 /// <summary>Resultado de un paso del wizard dinámico.</summary>
 public sealed record DynamicWizardStepResult(
     int Index,
@@ -28,10 +43,12 @@ public sealed record DynamicWizardContext
     public bool VehiculoConsultado { get; init; }
     public bool PreflightProviderError { get; init; }
     public bool DocumentosCompletos { get; init; }
-    public bool HasBuyer { get; init; }
-    public bool BuyerRuntConsultado { get; init; }
-    public bool HasSeller { get; init; }
-    public bool SellerRuntConsultado { get; init; }
+    /// <summary>
+    /// Actores requeridos por el tipo (uno por regla de conformación no-VEHICLE), con su estado de
+    /// captura/RUNT. Conduce el gate <c>actor_form</c> de forma genérica — cualquier actor en cualquier
+    /// tipo, incluidos varios propietarios (OWNER con <c>allowsMultiple</c>).
+    /// </summary>
+    public IReadOnlyList<ActorGateState> Actors { get; init; } = [];
     public decimal ValorVenta { get; init; }
     /// <summary>Códigos de actor con identidad/biometría aprobada (e.g. BUYER, OWNER).</summary>
     public IReadOnlySet<string> BiometricsApproved { get; init; } = new HashSet<string>();
@@ -114,10 +131,14 @@ public static class DynamicGateEvaluator
                 return DocumentosOk(profile, ctx) ? Complete() : Incomplete(reasons, DocumentosIncompletos);
 
             case "actor_form":
-                if (profile.RequiresSeller && (!ctx.HasSeller || !ctx.SellerRuntConsultado))
-                    reasons.Add(VendedorPendiente);
-                if (profile.RequiresBuyer && (!ctx.HasBuyer || !ctx.BuyerRuntConsultado))
-                    reasons.Add(CompradorPendiente);
+                // Genérico: cada actor requerido (una regla de conformación por-actor) debe estar
+                // presente y, si su regla exige RUNT, consultado. No hay sesgo buyer/seller: OWNER,
+                // LESSEE y "múltiples propietarios" en cualquier tipo se validan por igual.
+                foreach (var actor in ctx.Actors)
+                {
+                    if (!actor.Present || (actor.RequiresRunt && !actor.RuntConsultado))
+                        reasons.Add(ActorPendingReason(actor.EntityCode));
+                }
                 return reasons.Count == 0 ? Complete() : ("incomplete", reasons);
 
             case "commercial":
@@ -209,4 +230,19 @@ public static class DynamicGateEvaluator
 
     private static string StepKey(DynamicWizardStep step, int index) =>
         string.IsNullOrWhiteSpace(step.StepCode) ? $"paso_{index}" : step.StepCode;
+
+    /// <summary>
+    /// Código de reason por actor faltante. Mantiene paridad con el camino estático para los actores
+    /// comunes (BUYER→<c>comprador_pendiente</c>, OWNER→<c>vendedor_pendiente</c> — en FLIT la parte
+    /// vendedora es la entidad OWNER) y usa un código genérico <c>actor_pendiente:{CODE}</c> para el
+    /// resto (LESSEE, coopropietarios, etc.), de modo que cualquier actor en cualquier tipo tenga reason.
+    /// </summary>
+    private static string ActorPendingReason(string entityCode) =>
+        (entityCode ?? string.Empty).ToUpperInvariant() switch
+        {
+            "BUYER" => CompradorPendiente,
+            "OWNER" => VendedorPendiente,
+            "" => "actor_pendiente",
+            var code => $"actor_pendiente:{code}",
+        };
 }
