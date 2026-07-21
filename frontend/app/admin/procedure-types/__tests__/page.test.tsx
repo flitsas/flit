@@ -57,6 +57,11 @@ vi.mock('@/components/superadmin/ParametrizationWizard', () => ({
   ),
 }));
 
+// Stub del preview (probado aparte): expone el typeId recibido.
+vi.mock('@/components/superadmin/parametrizacion/ProcedureTypePreview', () => ({
+  ProcedureTypePreview: ({ typeId }: { typeId: string }) => <span>PREVIEW_STUB:{typeId}</span>,
+}));
+
 describe('AdminProcedureTypesPage (FE-07)', () => {
   it('renderiza el título y el listado de tipos', () => {
     render(<AdminProcedureTypesPage />);
@@ -78,6 +83,16 @@ describe('AdminProcedureTypesPage (FE-07)', () => {
     render(<AdminProcedureTypesPage />);
     await user.click(screen.getByRole('button', { name: /editar traspaso simple/i }));
     expect(screen.getByText('WIZARD_STUB:pt-1')).toBeInTheDocument();
+  });
+
+  it('al pulsar "Visualizar" abre la vista de solo lectura con el nombre del tipo', async () => {
+    const user = userEvent.setup();
+    render(<AdminProcedureTypesPage />);
+    await user.click(screen.getByRole('button', { name: /visualizar traspaso simple/i }));
+    expect(screen.getByText('PREVIEW_STUB:pt-1')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /parametrización · traspaso simple/i }),
+    ).toBeInTheDocument();
   });
 
   it('al salir del asistente guardando vuelve al listado y recarga', async () => {

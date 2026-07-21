@@ -6,6 +6,7 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { ProcedureTypeList } from '@/components/superadmin/ProcedureTypeList';
 import { ParametrizationWizard } from '@/components/superadmin/ParametrizationWizard';
+import { ProcedureTypePreview } from '@/components/superadmin/parametrizacion/ProcedureTypePreview';
 import { useProcedureTypes } from '@/hooks/useProcedureTypes';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 
@@ -17,7 +18,11 @@ import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametriza
  * (Gestión documental): back "Volver al inicio", ModuleTitle con la acción primaria
  * FUERA de la caja del título, y la tarjeta contenedora rounded-2xl border bg-white/60.
  */
-type View = { mode: 'list' } | { mode: 'new' } | { mode: 'edit'; id: string };
+type View =
+  | { mode: 'list' }
+  | { mode: 'new' }
+  | { mode: 'edit'; id: string }
+  | { mode: 'view'; id: string; name: string };
 
 export default function AdminProcedureTypesPage() {
   const router = useRouter();
@@ -45,6 +50,31 @@ export default function AdminProcedureTypesPage() {
     setPublishSuccess(`Tipo ${updated.code} publicado.`);
     return updated;
   };
+
+  // Vista solo-lectura: preview de los pasos configurados del tipo (mismo chrome que el listado).
+  if (view.mode === 'view') {
+    return (
+      <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+        <button
+          type="button"
+          onClick={() => setView({ mode: 'list' })}
+          className="flex w-fit items-center gap-1.5 text-xs font-semibold"
+          style={{ color: '#557EFF' }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Volver al listado
+        </button>
+
+        <ModuleTitle
+          title={`Parametrización · ${view.name}`}
+          subtitle="Vista de solo lectura de los pasos configurados, tal como los verá el operario."
+        />
+
+        <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+          <ProcedureTypePreview typeId={view.id} />
+        </div>
+      </div>
+    );
+  }
 
   // Vista asistente: el ParametrizationWizard ocupa todo el alto (gestiona su propio scroll).
   if (view.mode !== 'list') {
@@ -96,6 +126,10 @@ export default function AdminProcedureTypesPage() {
           onEdit={(id) => {
             setPublishSuccess(null);
             setView({ mode: 'edit', id });
+          }}
+          onView={(id) => {
+            const t = items.find((it) => it.id === id);
+            setView({ mode: 'view', id, name: t?.name ?? t?.code ?? 'Trámite' });
           }}
           onReload={reload}
           onPublish={handlePublish}

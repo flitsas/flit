@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Eye } from 'lucide-react';
 import type { ProcedureTypeSummary, PublicationStatus } from '@/lib/api/types/procedure-parametrization';
 import { EmptyState } from './states/EmptyState';
 import { LoadingState } from './states/LoadingState';
@@ -24,6 +25,7 @@ interface ProcedureTypeListProps {
   error: string | null;
   onNew: () => void;
   onEdit: (id: string) => void;
+  onView: (id: string) => void;
   onReload: () => void;
   onPublish: (id: string) => Promise<ProcedureTypeSummary>;
   selectedId: string | null;
@@ -37,6 +39,7 @@ export function ProcedureTypeList({
   error,
   onNew,
   onEdit,
+  onView,
   onReload,
   onPublish,
   selectedId,
@@ -145,6 +148,19 @@ export function ProcedureTypeList({
                 </span>
               </div>
               <div className="col-span-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onView(item.id);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border"
+                  style={{ color: '#557EFF' }}
+                  aria-label={`Visualizar ${item.name}`}
+                >
+                  <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                  Visualizar
+                </button>
                 {isDraft && (
                   <>
                     <button
