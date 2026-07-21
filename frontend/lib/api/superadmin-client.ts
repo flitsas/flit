@@ -10,6 +10,10 @@ import type {
   ExternalDataSource,
   ConsultationTemplate,
 } from './types/procedure-parametrization';
+import type {
+  ConformationProfileInput,
+  ProcedureConformationProfile,
+} from './types/procedure-parametrization-f08';
 import { getToken } from './client';
 
 export interface RbacModule {
@@ -141,6 +145,18 @@ export const superadminClient = {
     request<ConformationRuleItem[]>(
       `/api/v1/superadmin/procedure-types/${id}/conformation-rules`,
       { method: 'PUT', body: JSON.stringify(rules) },
+    ),
+
+  // FEATURE-08 (CFD-01/02/03..) — perfil de conformación (gate_profile + fuentes + actores + documentos).
+  getConformationProfile: (id: string) =>
+    request<ProcedureConformationProfile>(
+      `/api/v1/superadmin/procedure-types/${id}/conformation-profile`,
+    ),
+
+  updateConformationProfile: (id: string, input: ConformationProfileInput) =>
+    request<ProcedureConformationProfile>(
+      `/api/v1/superadmin/procedure-types/${id}/conformation-profile`,
+      { method: 'PUT', body: JSON.stringify(input) },
     ),
 
   getSteps: (id: string) =>
