@@ -474,13 +474,31 @@ export function PlacaPreasignadaSection({
     let active = true;
     // HU #10806 — consulta el estado de la ruta antes de ofrecer el selector: si no está habilitada,
     // se avisa (el trámite se entregará estándar) en vez de simular que preasigna.
+    // HU #10806 (Alternativa C) — persiste la decisión de ruta en borrador como field_value
+    // `plate_route_active`. Es la fuente que consume el trigger de BD para fijar automáticamente
+    // `plate_flow_status = 'preasignado'` al radicar sin placa, aunque el binario del API esté desfasado.
+    const persistRouteActive = (enabled: boolean) => {
+      void tramitesClient
+        .patchFieldValues(instanceId, [
+          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled) },
+        ])
+        .catch(() => {
+          /* no bloquear el wizard si la persistencia falla; el submit sigue decidiendo la ruta */
+        });
+    };
     getPlatePreassignStatus(organismoId)
       .then((s) => {
-        if (active) setPreassignEnabled(s.enabled);
+        if (active) {
+          setPreassignEnabled(s.enabled);
+          persistRouteActive(s.enabled);
+        }
       })
       .catch(() => {
         // Ante un fallo de la consulta, no bloquear el flujo: se asume habilitada (default previo).
-        if (active) setPreassignEnabled(true);
+        if (active) {
+          setPreassignEnabled(true);
+          persistRouteActive(true);
+        }
       });
     listAvailablePlatesForCompany(organismoId)
       .then((data) => {
@@ -495,7 +513,7 @@ export function PlacaPreasignadaSection({
     return () => {
       active = false;
     };
-  }, [organismoId, mostrarSelector]);
+  }, [organismoId, mostrarSelector, instanceId]);
 
   const pick = async (plate: string) => {
     setSaving(true);

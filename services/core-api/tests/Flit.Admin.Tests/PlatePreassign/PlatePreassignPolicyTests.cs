@@ -62,6 +62,35 @@ public sealed class PlatePreassignPolicyTests
             .Decision.Should().Be(PlateRouteDecision.Preasignado);
     }
 
+    [Fact] // HU #10806 — el dígito de preferencia es informativo: sin placa (con o sin dígito) ⇒ Flujo B.
+    public async Task Decide_FlujoB_SinPlacaConDigitoPreferencia_Preasignado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office);
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: null);
+            // El radicador expresó un dígito de preferencia pero NO eligió placa: no debe alterar la ruta.
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(), ProcedureInstanceId = instance, TenantId = company,
+                FieldKey = "plate_preferred_last_digit", ValueText = "7",
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Preasignado);
+        result.Reason.Should().Be(PlateRouteReason.NoPlate);
+    }
+
     [Fact]
     public async Task Decide_NoMatriculaInicial_Standard()
     {
