@@ -39,7 +39,6 @@ export function DocumentChecklistSection({
               data-testid={`checklist-${req.documentTypeCode}`}
               data-dummy={req.isDummy ? 'true' : 'false'}
               className="flex items-center gap-3 rounded-xl p-3 border"
-              style={{ borderColor: '#DFE5ED' }}
             >
               <span className="flex-1 text-xs font-semibold">{req.documentTypeCode}</span>
               <span

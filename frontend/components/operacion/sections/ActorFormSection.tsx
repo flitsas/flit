@@ -72,7 +72,6 @@ export function ActorFormSection({
           <fieldset
             key={rule.entityCode}
             className="rounded-2xl p-4 border space-y-3"
-            style={{ borderColor: '#DFE5ED' }}
             data-testid={`actor-${rule.entityCode}`}
           >
             <legend className="text-xs font-bold px-1">{label}</legend>
@@ -107,7 +106,6 @@ export function ActorFormSection({
                 onChange={(e) => onChange?.(rule.entityCode, { ...value, fullName: e.target.value })}
                 aria-label={`Nombre de ${label}`}
                 className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-                style={{ borderColor: '#DFE5ED' }}
               />
             </div>
 
@@ -122,7 +120,6 @@ export function ActorFormSection({
                 onChange={(e) => onChange?.(rule.entityCode, { ...value, documentNumber: e.target.value })}
                 aria-label={isJuridical ? `NIT de ${label}` : `Documento de ${label}`}
                 className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-                style={{ borderColor: '#DFE5ED' }}
               />
             </div>
 
@@ -140,7 +137,6 @@ export function ActorFormSection({
                   }
                   aria-label={`Representante legal de ${label}`}
                   className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-                  style={{ borderColor: '#DFE5ED' }}
                 />
               </div>
             )}

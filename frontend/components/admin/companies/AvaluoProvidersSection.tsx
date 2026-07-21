@@ -99,7 +99,6 @@ export function AvaluoProvidersSection({
           value={form.avaluoPrimary}
           onChange={(e) => onChange({ avaluoPrimary: e.target.value })}
           className="w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
-          style={{ borderColor: "#DFE5ED" }}
         >
           {primaryOptions.map((option) => (
             <option key={option.value} value={option.value}>

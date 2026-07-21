@@ -124,7 +124,6 @@ export function SourcesStep({ procedureTypeId, initialSources, onSaved }: Source
                     onChange={(e) => setSimitMode(e.target.value as SimitMode)}
                     aria-label="Modo SIMIT"
                     className="px-2 py-1 rounded-lg border text-xs"
-                    style={{ borderColor: '#DFE5ED' }}
                   >
                     <option value="INTERNAL">Interno</option>
                     <option value="ONLINE">En línea</option>

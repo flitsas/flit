@@ -57,7 +57,6 @@ export function VehicleQuerySection({
             placeholder="ABC123"
             aria-label="Placa del vehículo"
             className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
       )}
@@ -75,7 +74,6 @@ export function VehicleQuerySection({
             placeholder="8XXXXXXXXXXXXXXXX"
             aria-label="VIN del vehículo"
             className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           />
         </div>
       )}

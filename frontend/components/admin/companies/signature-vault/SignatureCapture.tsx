@@ -134,7 +134,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
 
       {/* El canvas se mantiene montado para conservar el trazo; se oculta en modo carga. */}
       <div className={mode === "draw" ? "space-y-2" : "hidden"}>
-        <div className="overflow-hidden rounded-xl border-2 border-dashed" style={{ borderColor: "#DFE5ED" }}>
+        <div className="overflow-hidden rounded-xl border-2 border-dashed">
           <canvas
             ref={canvasRef}
             width={760}
@@ -224,7 +224,7 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50"
-      style={active ? { background: "#557EFF", borderColor: "#557EFF", color: "#fff" } : { borderColor: "#DFE5ED" }}
+      style={active ? { background: "#557EFF", borderColor: "#557EFF", color: "#fff" } : undefined}
     >
       {children}
     </button>

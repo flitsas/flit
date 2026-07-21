@@ -41,7 +41,6 @@ export function CommercialSection({
             onChange={(e) => onChange?.(Number(e.target.value))}
             aria-label="Valor de venta"
             className="w-full px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-            style={{ borderColor: '#DFE5ED' }}
           />
           {commercialValueSource && (
             <p className="text-[10px] opacity-60">

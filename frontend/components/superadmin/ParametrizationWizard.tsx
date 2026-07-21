@@ -10,11 +10,19 @@ import { Step5Campos } from './wizard/Step5Campos';
 import { Step6Bindings } from './wizard/Step6Bindings';
 import { Step7Validar } from './wizard/Step7Validar';
 import { Step8Guardar } from './wizard/Step8Guardar';
+import { ConformationProfileStep } from './parametrizacion/ConformationProfileStep';
+import { SourcesStep } from './parametrizacion/SourcesStep';
+import { DocumentRequirementsStep } from './parametrizacion/DocumentRequirementsStep';
 
+// FEATURE-08 (CFD-01..CFD-11): los pasos "Entrada", "Fuentes" y "Documentos" del configurador
+// dinámico se insertan tras "Aristas". Los índices de los handlers se ajustan en consecuencia.
 const WIZARD_STEPS = [
   'Identidad',
   'Tipología',
   'Aristas',
+  'Entrada',
+  'Fuentes',
+  'Documentos',
   'Pasos',
   'Campos',
   'Bindings',
@@ -70,15 +78,17 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
       await saveConformationAndProceed();
       return;
     }
-    if (step === 3) {
+    // Pasos 3/4/5 (Entrada/Fuentes/Documentos, FEATURE-08): cada uno persiste desde su propio
+    // componente; el pie solo avanza.
+    if (step === 6) {
       await saveStepsAndProceed();
       return;
     }
-    if (step === 4) {
+    if (step === 7) {
       await saveCamposAndProceed();
       return;
     }
-    if (step === 6) {
+    if (step === 9) {
       return;
     }
     setStep(step + 1);
@@ -93,7 +103,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
   };
 
   const isLastStep = step === WIZARD_STEPS.length - 1;
-  const isValidateStep = step === 6;
+  const isValidateStep = step === 9;
 
   return (
     <div className="h-full w-full px-6 pt-5 pb-24 flex flex-col gap-4 overflow-hidden">
@@ -165,7 +175,32 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
           {step === 2 && (
             <Step3Aristas rules={conformationRules} onToggle={toggleRule} />
           )}
-          {step === 3 && (
+          {/* FEATURE-08: Entrada / Fuentes / Documentos del configurador dinámico. */}
+          {step === 3 &&
+            (state.procedureTypeId ? (
+              <ConformationProfileStep
+                procedureTypeId={state.procedureTypeId}
+                onSaved={() => setStep(step + 1)}
+              />
+            ) : (
+              <p className="text-xs opacity-60">Guarda la identidad del tipo para configurar la entrada.</p>
+            ))}
+          {step === 4 &&
+            (state.procedureTypeId ? (
+              <SourcesStep procedureTypeId={state.procedureTypeId} onSaved={() => setStep(step + 1)} />
+            ) : (
+              <p className="text-xs opacity-60">Guarda la identidad del tipo para configurar las fuentes.</p>
+            ))}
+          {step === 5 &&
+            (state.procedureTypeId ? (
+              <DocumentRequirementsStep
+                procedureTypeId={state.procedureTypeId}
+                onSaved={() => setStep(step + 1)}
+              />
+            ) : (
+              <p className="text-xs opacity-60">Guarda la identidad del tipo para configurar los documentos.</p>
+            ))}
+          {step === 6 && (
             <Step4Pasos
               steps={steps}
               onMove={moveStep}
@@ -173,7 +208,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               onRemove={removeStep}
             />
           )}
-          {step === 4 && (
+          {step === 7 && (
             <Step5Campos
               steps={steps}
               vehicleActive={vehicleActive}
@@ -182,8 +217,8 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               onApplyVehicleTemplate={applyVehicleTemplate}
             />
           )}
-          {step === 5 && <Step6Bindings />}
-          {step === 6 && (
+          {step === 8 && <Step6Bindings />}
+          {step === 9 && (
             <Step7Validar
               validationResult={validationResult}
               loading={loading}
@@ -191,7 +226,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               onValidate={runValidation}
             />
           )}
-          {step === 7 && (
+          {step === 10 && (
             <Step8Guardar
               identity={identity}
               rules={conformationRules}

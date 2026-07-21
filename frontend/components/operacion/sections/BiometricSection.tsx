@@ -34,7 +34,6 @@ export function BiometricSection({ actors, approvedActors = [] }: BiometricSecti
               key={actor}
               data-testid={`biometric-${actor}`}
               className="flex items-center justify-between rounded-xl p-3 border"
-              style={{ borderColor: '#DFE5ED' }}
             >
               <span className="text-xs font-semibold">{ACTOR_LABELS[actor] ?? actor}</span>
               <span

@@ -79,7 +79,6 @@ export function DocumentRequirementsStep({
           placeholder="CÓDIGO DE DOCUMENTO"
           aria-label="Código de documento"
           className="flex-1 px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-          style={{ borderColor: '#DFE5ED' }}
         />
         <button
           type="button"
@@ -97,7 +96,6 @@ export function DocumentRequirementsStep({
             key={row.documentTypeCode}
             data-testid={`doc-${row.documentTypeCode}`}
             className="flex items-center gap-3 rounded-xl p-3 border"
-            style={{ borderColor: '#DFE5ED' }}
           >
             <span className="flex-1 text-xs font-semibold">{row.documentTypeCode}</span>
             <label className="flex items-center gap-1 text-[11px]">

@@ -63,7 +63,7 @@ export function ParametrizationHelp() {
         const panelId = `help-panel-${section.id}`;
         const buttonId = `help-button-${section.id}`;
         return (
-          <div key={section.id} className="rounded-xl border" style={{ borderColor: '#DFE5ED' }}>
+          <div key={section.id} className="rounded-xl border">
             <h3 className="m-0">
               <button
                 type="button"
