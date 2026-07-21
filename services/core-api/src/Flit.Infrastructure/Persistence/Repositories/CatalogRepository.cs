@@ -30,4 +30,7 @@ internal sealed class CatalogRepository(FlitDbContext db) : ICatalogRepository
 
     public Task<ProcedureEntity?> GetProcedureEntityByCodeAsync(string code, CancellationToken ct) =>
         db.ProcedureEntities.FirstOrDefaultAsync(e => e.Code == code, ct);
+
+    public Task<ExternalDataSource?> GetExternalDataSourceByCodeAsync(string code, CancellationToken ct) =>
+        db.ExternalDataSources.FirstOrDefaultAsync(e => e.Code == code, ct);
 }

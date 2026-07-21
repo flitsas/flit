@@ -29,7 +29,9 @@ public sealed record ProcedureConformationProfileDto(
     IReadOnlyList<ProcedureSourceDto> Sources,
     IReadOnlyList<ProcedureDocumentRequirementDto> DocumentRequirements);
 
-public sealed class GetConformationProfileHandler(IProcedureTypeRepository repository)
+public sealed class GetConformationProfileHandler(
+    IProcedureTypeRepository repository,
+    IProcedureTypeSourceRepository? sourceRepo = null)
 {
     public async Task<(ProcedureConformationProfileDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -46,8 +48,15 @@ public sealed class GetConformationProfileHandler(IProcedureTypeRepository repos
                 ProfileJson.ParseOrEmpty(r.ValidationProfile)))
             .ToList();
 
-        // HU-BE-01 (esqueleto): sources y documentRequirements se materializan en HU-BE-03 / HU-BE-04.
-        // El contrato ya expone las 4 claves (AC BE-01-AC-05).
+        // HU-BE-03 (CFD-04): fuentes externas por tipo, ordenadas por execution_order.
+        List<ProcedureSourceDto> sources = sourceRepo is null
+            ? []
+            : (await sourceRepo.ListByTypeAsync(entity.Id, ct))
+                .Select(s => new ProcedureSourceDto(
+                    s.SourceCode, s.ExecutionOrder, ProfileJson.ParseOrEmpty(s.Config)))
+                .ToList();
+
+        // documentRequirements se materializa en HU-BE-04. El contrato ya expone las 4 claves (AC BE-01-AC-05).
         var dto = new ProcedureConformationProfileDto(
             entity.Id,
             entity.Code,
@@ -55,7 +64,7 @@ public sealed class GetConformationProfileHandler(IProcedureTypeRepository repos
             entity.Version,
             ProfileJson.ParseOrEmpty(entity.GateProfile),
             rules,
-            [],
+            sources,
             []);
 
         return (dto, null);

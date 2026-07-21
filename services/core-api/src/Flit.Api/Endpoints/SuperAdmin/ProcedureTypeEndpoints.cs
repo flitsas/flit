@@ -150,6 +150,10 @@ internal static class ProcedureTypeEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
                 "invalid_entry_mode" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "entryMode inválido: use PLATE, VIN o BOTH."),
                 "not_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "Tipo en estado published — no editable."),
+                string e when e.StartsWith("entity_not_found:") =>
+                    Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: $"Actor no encontrado en el catálogo: {e["entity_not_found:".Length..]}"),
+                string e when e.StartsWith("source_not_found:") =>
+                    Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: $"Fuente externa no encontrada en el catálogo: {e["source_not_found:".Length..]}"),
                 _ => Results.Ok(result)
             };
         }).WithName("UpdateConformationProfile");

@@ -5298,6 +5298,35 @@ components:
             validateCompanyRule: { type: boolean }
             validateOtOperability: { type: boolean }
             validateDuplicateProcedure: { type: boolean }
+        sources:
+          type: array
+          description: >
+            Fuentes externas por tipo (HU-BE-03 / CFD-04). Se resuelven por `sourceCode`
+            (RUNT, SIMIT, …); código inexistente → 422. `config` lleva p. ej. `simitMode`.
+          items:
+            type: object
+            required: [sourceCode, executionOrder]
+            properties:
+              sourceCode: { type: string, example: RUNT }
+              executionOrder: { type: integer, example: 1 }
+              config:
+                type: object
+                additionalProperties: true
+        conformationRules:
+          type: array
+          description: >
+            Actores del tipo con su `validationProfile` (HU-BE-03 / CFD-05, incluye LESSEE).
+            Se resuelven por `entityCode`; código inexistente → 422.
+          items:
+            type: object
+            required: [entityCode]
+            properties:
+              entityCode: { type: string, example: LESSEE }
+              validationProfile:
+                type: object
+                additionalProperties: true
+              isActive: { type: boolean }
+              sortOrder: { type: integer }
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
     AttachmentDto:
       type: object

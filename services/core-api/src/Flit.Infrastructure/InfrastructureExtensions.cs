@@ -80,6 +80,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
         // FEATURE-08 / HU-BE-01 (CFD-01/AC#5) — snapshot inmutable del tipo por instancia.
         services.AddScoped<IProcedureTypeSnapshotRepository, ProcedureTypeSnapshotRepository>();
+        // FEATURE-08 / HU-BE-03 (CFD-04) — fuentes externas por tipo (catálogo global).
+        services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
