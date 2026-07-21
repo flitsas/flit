@@ -5,8 +5,11 @@ import { Download } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { exportDetailedReport, fetchDetailedReport, type DetailedReportPage } from "@/lib/api/detailed-report";
+import { tramitesClient } from "@/lib/api/tramites-client";
 import { ApiError } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
+import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
+import type { TransitOfficeOption } from "@/lib/api/types/procedure-runtime";
 import type { UiStatus } from "@/components/admin/UiStateBoundary";
 import { isValidRange } from "../_reportes/range";
 import { DetailedReportFiltersPanel } from "./DetailedReportFiltersPanel";
@@ -31,17 +34,67 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
   const [errorMessage, setErrorMessage] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
+  const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
+  const [transitOffices, setTransitOffices] = useState<TransitOfficeOption[]>([]);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!isSuper) return;
-    void fetchCompaniesIndex().then(setCompanies).catch(() => setCompanies([]));
+    const controller = new AbortController();
+    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) setCompanies(res.data);
+      })
+      .catch(() => setCompanies([]));
+    return () => controller.abort();
   }, [isSuper]);
+
+  // Catálogo de tipos de trámite (published) para el selector unificado tipo/categoría.
+  useEffect(() => {
+    let cancelled = false;
+    tramitesClient
+      .listPublishedProcedureTypes()
+      .then((items) => {
+        if (!cancelled) setProcedureTypes(items);
+      })
+      .catch(() => setProcedureTypes([]));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Organismos de tránsito habilitados para la compañía consultada. Para SuperAdmin
+  // dependen de la empresa elegida; sin empresa no hay OTs que listar.
+  useEffect(() => {
+    const tenantForOffices = isSuper ? filters.tenantId : undefined;
+    if (isSuper && !tenantForOffices) {
+      setTransitOffices([]);
+      return;
+    }
+    let cancelled = false;
+    tramitesClient
+      .listTransitOffices(tenantForOffices || undefined)
+      .then((items) => {
+        if (!cancelled) setTransitOffices(items);
+      })
+      .catch(() => setTransitOffices([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuper, filters.tenantId]);
 
   const load = useCallback(async (signal: AbortSignal) => {
     if (!isValidRange(applied.range)) {
       setUiStatus("error");
       setErrorMessage("El rango de fechas no es válido.");
+      return;
+    }
+    if (isSuper && !applied.tenantId) {
+      // SuperAdmin sin compañía elegida: el backend exige tenantId. No consultamos (evita el
+      // 400) y guiamos a seleccionar una compañía en lugar de mostrar un error.
+      setData(null);
+      setErrorMessage(undefined);
+      setUiStatus("empty");
       return;
     }
     setUiStatus("loading");
@@ -55,7 +108,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
       setErrorMessage(describeError(error));
       setUiStatus("error");
     }
-  }, [applied, page, reloadKey]);
+  }, [applied, page, reloadKey, isSuper]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,6 +161,8 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         onSearch={handleSearch}
         isSuper={isSuper}
         companies={companies}
+        procedureTypes={procedureTypes}
+        transitOffices={transitOffices}
         compact={embedded}
       />
 
@@ -128,6 +183,11 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         data={data}
         uiStatus={uiStatus}
         errorMessage={errorMessage}
+        emptyMessage={
+          isSuper && !applied.tenantId
+            ? "Selecciona una compañía para ver sus trámites."
+            : "No hay trámites en el rango de fechas seleccionado."
+        }
         onRetry={() => setReloadKey((k) => k + 1)}
         page={page}
         onPageChange={setPage}
@@ -138,7 +198,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 400) return "Revisa los filtros mínimos: fechas, tipo/categoría y un atributo adicional.";
+    if (error.status === 400) return "Revisa el rango de fechas y la compañía seleccionada.";
     if (error.status === 403) return "No tienes permiso para consultar este reporte.";
   }
   return "No se pudo cargar el reporte detallado.";

@@ -64,7 +64,7 @@ export function fetchDetailedReport(
   signal?: AbortSignal,
 ): Promise<DetailedReportPage> {
   return apiFetch<DetailedReportPage>(`${base}/procedures`, {
-    query: params as Record<string, string | number | boolean | undefined>,
+    query: { ...params },
     signal,
   });
 }
@@ -72,7 +72,7 @@ export function fetchDetailedReport(
 export function exportDetailedReport(params: DetailedReportFilters): Promise<void> {
   const { page: _p, pageSize: _s, ...rest } = params;
   return downloadFile(`${base}/procedures/export`, {
-    query: rest as Record<string, string | number | boolean | undefined>,
-    filename: `reporte_detallado_${params.from}_${params.to}.xlsx`,
+    query: { ...rest },
+    fallbackFilename: `reporte_detallado_${params.from}_${params.to}.xlsx`,
   });
 }

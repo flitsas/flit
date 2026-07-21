@@ -8,6 +8,7 @@ interface DetailedReportGridProps {
   data: DetailedReportPage | null;
   uiStatus: UiStatus;
   errorMessage?: string;
+  emptyMessage?: string;
   onRetry?: () => void;
   page: number;
   onPageChange: (page: number) => void;
@@ -17,6 +18,7 @@ export function DetailedReportGrid({
   data,
   uiStatus,
   errorMessage,
+  emptyMessage = "No hay trámites que coincidan con los filtros seleccionados.",
   onRetry,
   page,
   onPageChange,
@@ -26,7 +28,7 @@ export function DetailedReportGrid({
   return (
     <UiStateBoundary
       status={uiStatus}
-      emptyMessage="No hay trámites que coincidan con los filtros seleccionados."
+      emptyMessage={emptyMessage}
       errorMessage={errorMessage}
       onRetry={onRetry}
       skeletonRows={6}
