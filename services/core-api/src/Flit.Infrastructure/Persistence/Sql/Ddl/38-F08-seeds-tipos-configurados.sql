@@ -8,14 +8,18 @@
 -- El flag F08_DynamicProcedures NO se activa aquí (activación deliberada por tenant en DEV — ver pie).
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- MATRICULA_INICIAL — entrada VIN, comprador (PN/PJ), RUNT, biometría[BUYER], firma, placa
+-- MATRICULA_INICIAL — entrada VIN, comprador (PN/PJ), RUNT, biometría[BUYER], firma
+-- Paridad con el flujo estático pre-F08 (5 pasos): consulta VIN · documentos · comprador · identidad
+-- · FUR. La solicitud de placa NO es un paso del wizard (se resuelve en la entrega / PlateFlowStatus,
+-- Feature #10587), por eso no se cablea aquí ni se activa requiresPlateRequest. plate_request queda
+-- disponible como section_type del catálogo (BE-05) para tipos que sí lo necesiten como paso.
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE v_type uuid; v_step uuid;
 BEGIN
     INSERT INTO tramites.procedure_types (id, code, name, family, version, gate_profile, publication_status, published_at, is_active, created_at)
     VALUES (uuidv7(), 'MATRICULA_INICIAL', 'Matrícula Inicial', 'matricula', 1,
-        '{"entryMode":"VIN","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"requiresPlateRequest":true,"validateOtOperability":true,"validateDuplicateProcedure":true}'::jsonb,
+        '{"entryMode":"VIN","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"validateOtOperability":true,"validateDuplicateProcedure":true}'::jsonb,
         'published', now(), true, now())
     ON CONFLICT (code) DO UPDATE SET gate_profile = EXCLUDED.gate_profile, family = EXCLUDED.family,
         publication_status = 'published', published_at = now(), updated_at = now()
@@ -34,9 +38,7 @@ BEGIN
     INSERT INTO tramites.procedure_sections (id, procedure_step_id, code, title, sort_order, layout, section_type, created_at) VALUES (uuidv7(), v_step, 'comprador', 'Comprador', 1, 'single', 'actor_form', now());
     INSERT INTO tramites.procedure_steps (id, procedure_type_id, code, title, sort_order, is_active, created_at) VALUES (uuidv7(), v_type, 'identidad', 'Identidad', 4, true, now()) RETURNING id INTO v_step;
     INSERT INTO tramites.procedure_sections (id, procedure_step_id, code, title, sort_order, layout, section_type, created_at) VALUES (uuidv7(), v_step, 'identidad', 'Identidad', 1, 'single', 'biometric', now());
-    INSERT INTO tramites.procedure_steps (id, procedure_type_id, code, title, sort_order, is_active, created_at) VALUES (uuidv7(), v_type, 'placa', 'Solicitud de placa', 5, true, now()) RETURNING id INTO v_step;
-    INSERT INTO tramites.procedure_sections (id, procedure_step_id, code, title, sort_order, layout, section_type, created_at) VALUES (uuidv7(), v_step, 'placa', 'Solicitud de placa', 1, 'single', 'plate_request', now());
-    INSERT INTO tramites.procedure_steps (id, procedure_type_id, code, title, sort_order, is_active, created_at) VALUES (uuidv7(), v_type, 'fur', 'Firma / FUR', 6, true, now()) RETURNING id INTO v_step;
+    INSERT INTO tramites.procedure_steps (id, procedure_type_id, code, title, sort_order, is_active, created_at) VALUES (uuidv7(), v_type, 'fur', 'Firma / FUR', 5, true, now()) RETURNING id INTO v_step;
     INSERT INTO tramites.procedure_sections (id, procedure_step_id, code, title, sort_order, layout, section_type, created_at) VALUES (uuidv7(), v_step, 'fur', 'Firma / FUR', 1, 'single', 'signature_fur', now());
 
     INSERT INTO tramites.conformation_rules (id, procedure_type_id, procedure_entity_id, is_active, sort_order, validation_profile, created_at)
