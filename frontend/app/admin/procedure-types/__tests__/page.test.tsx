@@ -23,6 +23,12 @@ const hookApi = vi.hoisted(() => ({
   publish: vi.fn(),
 }));
 
+// El App Router de Next no está montado en jsdom: se moquea useRouter (la página lo usa
+// para el back "Volver al inicio", igual que los demás módulos admin).
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 vi.mock('@/hooks/useProcedureTypes', () => ({
   useProcedureTypes: () => ({
     items: [draft],
