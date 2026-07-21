@@ -142,7 +142,7 @@ public sealed class ConsultarLogQuipuxTests
         await SeedEventAsync(db, submissionId, QuipuxStage.RegistroError, QuipuxOutcome.ErrorTransitorio, "{\"codigo\":500}", Base.AddMinutes(5));
         await SeedEventAsync(db, submissionId, QuipuxStage.ReintentoManual, QuipuxOutcome.Ok, null, Base.AddMinutes(10));
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         result.TotalCount.Should().Be(1);
         var entry = result.Data.Should().ContainSingle().Subject;
@@ -169,7 +169,7 @@ public sealed class ConsultarLogQuipuxTests
         await SeedEventAsync(db, submissionId, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok,
             "{\"codigo\":81,\"duration_ms\":1234,\"origen\":\"quipux_register\"}", Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var ev = result.Data.Single().Events.Single();
         ev.ResponseCode.Should().Be(81);
@@ -187,7 +187,7 @@ public sealed class ConsultarLogQuipuxTests
         // Evento previo a la instrumentación: sin duration_ms ni origen en el detail.
         await SeedEventAsync(db, submissionId, QuipuxStage.ConsultaRespuesta, QuipuxOutcome.Ok, "{\"codigo\":81}", Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var ev = result.Data.Single().Events.Single();
         ev.DurationMs.Should().BeNull();
@@ -278,7 +278,23 @@ public sealed class ConsultarLogQuipuxTests
         await SeedCatalogAsync(db);
         await SeedSubmissionAsync(db, new SeedOptions(Plate: "ABC123"));
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, Guid.NewGuid(), null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, Guid.NewGuid().ToString(), null, null, null), ct);
+
+        result.TotalCount.Should().Be(0);
+        result.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SearchByInstanceId_NonUuid_ReturnsEmpty_WithoutError()
+    {
+        // Borde: un instanceId que no es UUID (p. ej. el usuario teclea un número con el eje "Trámite"
+        // seleccionado) NO debe reventar; se resuelve como página vacía, igual que un radicado no numérico.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(SearchByInstanceId_NonUuid_ReturnsEmpty_WithoutError));
+        await SeedCatalogAsync(db);
+        await SeedSubmissionAsync(db, new SeedOptions(Plate: "ABC123"));
+
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, "3", null, null, null), ct);
 
         result.TotalCount.Should().Be(0);
         result.Data.Should().BeEmpty();
@@ -293,7 +309,7 @@ public sealed class ConsultarLogQuipuxTests
         var (submissionId, instanceId) = await SeedSubmissionAsync(db, new SeedOptions());
         await SeedEventAsync(db, submissionId, QuipuxStage.ReintentoManual, QuipuxOutcome.Ok, null, Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var ev = result.Data.Single().Events.Single();
         ev.Detail.Should().BeNull(); // "sin payload disponible"
@@ -314,7 +330,7 @@ public sealed class ConsultarLogQuipuxTests
         const string sanitized = "{\"codigo\":81,\"usa_placa\":true,\"intento\":1}";
         await SeedEventAsync(db, submissionId, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok, sanitized, Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var ev = result.Data.Single().Events.Single();
         ev.Detail.Should().NotBeNull();
@@ -339,7 +355,7 @@ public sealed class ConsultarLogQuipuxTests
         await SeedEventAsync(db, submissionId, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok,
             "{\"codigo\":81,\"documento_propietario\":\"1098765432\",\"usa_placa\":true}", Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var detail = result.Data.Single().Events.Single().Detail!.Value;
         // Sensible → enmascarado, solo últimos 4 visibles.
@@ -361,7 +377,7 @@ public sealed class ConsultarLogQuipuxTests
             "{\"codigo\":81,\"duration_ms\":1234,\"origen\":\"quipux_register\","
             + "\"propietario\":{\"nombre\":\"Juan\",\"cedula\":\"123456789\"}}", Base);
 
-        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId, null, null, null), ct);
+        var result = await NewHandler(db).HandleAsync(new ConsultarLogQuipuxQuery(null, instanceId.ToString(), null, null, null), ct);
 
         var ev = result.Data.Single().Events.Single();
         // La extracción de instrumentación sigue funcionando (se lee del detail original, no del masker).

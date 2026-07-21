@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, Check, Search, Clock, Cpu } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, Copy, Check, Search, Clock, Cpu, FileText } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Pagination } from "@/components/atom/Pagination";
@@ -16,6 +17,10 @@ import { fetchLogQx, type LogQxEntry, type LogQxEvent, type LogQxStatus } from "
  * y muestra la línea de tiempo de cada una con el detalle técnico expandible (visor JSON +
  * copia). 4 estados de UI (cargando/error/vacío/lleno) vía `UiStateBoundary` y
  * "sin payload disponible" para eventos históricos sin `detail`.
+ *
+ * HU #10796 (correlación): si se monta con `initialInstanceId` (deep-link
+ * `/?m=log-qx&instanceId=…` desde el detalle de un trámite), auto-aplica la búsqueda por ese
+ * trámite al montar. Cada radicación enlaza de vuelta a su trámite (`/tramites/{id}`).
  */
 
 /** Eje de búsqueda: los tres son excluyentes (se consulta por el elegido). */
@@ -24,8 +29,15 @@ type SearchAxis = "placa" | "instanceId" | "radicado";
 const AXIS_META: Record<SearchAxis, { label: string; placeholder: string }> = {
   placa: { label: "Placa", placeholder: "Ej. ABC123" },
   instanceId: { label: "Trámite (ID)", placeholder: "UUID del trámite" },
-  radicado: { label: "Radicado", placeholder: "Código QX (numérico)" },
+  radicado: { label: "Código QX", placeholder: "Ej. 81 (registro) · 2/3 (estado)" },
 };
+
+/**
+ * El eje "Trámite (ID)" busca por el UUID del trámite (el backend lo enlaza como `Guid`). Un valor
+ * que no es UUID hace fallar el binding con 400: se valida en el cliente para dar un aviso claro en
+ * vez de un error crudo (p. ej. escribir un número teniendo seleccionado "Trámite (ID)").
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Estilo del chip de estado por estado final de la radicación (convención tintada HU #10494). */
 const STATUS_STYLE: Record<LogQxStatus, { label: string; bg: string; color: string; border: string }> = {
@@ -75,7 +87,19 @@ function formatDuration(ms: number | null): string | null {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
 }
 
-export function LogQx() {
+/**
+ * Estado del trámite que devuelve Quipux en `estadoTramite.codigo` (2 = aprobado, 3 = rechazado).
+ * Se muestra con su significado para que soporte no vea un número pelado. Otros códigos (estados
+ * intermedios que Quipux no documenta) se muestran tal cual; ausente = "—".
+ */
+function formatEstadoTramite(code: number | null | undefined): string {
+  if (code == null) return "—";
+  if (code === 2) return "2 — Aprobado";
+  if (code === 3) return "3 — Rechazado";
+  return code.toString();
+}
+
+export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}) {
   // Controles de búsqueda (UI) y la búsqueda efectivamente aplicada al backend.
   const [axis, setAxis] = useState<SearchAxis>("placa");
   const [text, setText] = useState("");
@@ -91,10 +115,38 @@ export function LogQx() {
   // Guard anti-race: solo se aplica el resultado de la petición más reciente.
   const reqIdRef = useRef(0);
 
+  // HU #10796 (AC1) — deep-link: si llega `initialInstanceId` (desde el enlace "Ver LOG QX" del
+  // detalle de un trámite), auto-aplica la búsqueda por ese trámite UNA sola vez al montar. El
+  // efecto de fetch de abajo se dispara solo con `setApplied`. `seededRef` evita re-aplicar en
+  // el doble-mount de Strict Mode o en re-renders si la prop cambia de referencia.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !initialInstanceId) return;
+    seededRef.current = true;
+    setAxis("instanceId");
+    setText(initialInstanceId);
+    setApplied({ axis: "instanceId", text: initialInstanceId });
+  }, [initialInstanceId]);
+
   const load = useCallback(async (search: { axis: SearchAxis; text: string }, targetPage: number) => {
+    const value = search.text.trim() || undefined;
+
+    // Guard: el eje "Trámite (ID)" requiere un UUID. Sin esto, un valor no-UUID (p. ej. "3") revienta
+    // el binding Guid del backend con 400. Se avisa en el cliente y no se dispara la petición.
+    if (search.axis === "instanceId" && value && !UUID_RE.test(value)) {
+      reqIdRef.current++; // invalida cualquier respuesta en vuelo
+      setEntries(null);
+      setTotal(0);
+      setFetching(false);
+      setError(
+        'El identificador de trámite no tiene un formato válido. '
+          + 'Si buscas por número, cambia el eje a "Código QX".',
+      );
+      return;
+    }
+
     const reqId = ++reqIdRef.current;
     setFetching(true);
-    const value = search.text.trim() || undefined;
     try {
       const res = await fetchLogQx({
         placa: search.axis === "placa" ? value : undefined,
@@ -153,7 +205,7 @@ export function LogQx() {
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="LOG QX"
-        subtitle="Trazabilidad de punta a punta de la integración Quipux: busca por placa, trámite o radicado y consulta la línea de tiempo de la radicación con su detalle técnico."
+        subtitle="Trazabilidad de punta a punta de la integración Quipux: busca por placa, trámite o código QX y consulta la línea de tiempo de la radicación con su detalle técnico."
       />
 
       <form
@@ -205,7 +257,7 @@ export function LogQx() {
         onRetry={handleRetry}
         emptyMessage={
           notSearchedYet
-            ? "Ingresa una placa, un id de trámite o un radicado y presiona Buscar para consultar el LOG QX."
+            ? "Ingresa una placa, un id de trámite o un código QX y presiona Buscar para consultar el LOG QX."
             : "Ninguna radicación Quipux coincide con la búsqueda. Verifica el valor o cambia el eje de búsqueda."
         }
       >
@@ -254,12 +306,22 @@ function LogQxEntryCard({ entry }: { entry: LogQxEntry }) {
             {entry.plate ? ` · Placa ${entry.plate}` : ""}
           </p>
         </div>
-        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-          <MetaField label="Radicado registro" value={entry.qxRegisterCode?.toString() ?? "—"} />
-          <MetaField label="Radicado trámite" value={entry.qxProcedureCode?.toString() ?? "—"} />
-          <MetaField label="DIVIPO" value={entry.divipoCode ?? "—"} />
-          <MetaField label="Creado" value={formatFecha(entry.createdAt)} />
-        </dl>
+        <div className="flex items-center gap-3 flex-wrap">
+          <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+            <MetaField label="Código registro (QX)" value={entry.qxRegisterCode?.toString() ?? "—"} />
+            <MetaField label="Estado trámite (QX)" value={formatEstadoTramite(entry.qxProcedureCode)} />
+            <MetaField label="DIVIPO" value={entry.divipoCode ?? "—"} />
+            <MetaField label="Creado" value={formatFecha(entry.createdAt)} />
+          </dl>
+          {/* HU #10796 (AC2) — correlación de vuelta al detalle del trámite. */}
+          <Link
+            href={`/tramites/${entry.procedureInstanceId}`}
+            aria-label={`Ver el trámite ${entry.referenceNumber}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] dark:border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Ver trámite
+          </Link>
+        </div>
       </div>
 
       {entry.rejectionReason && (

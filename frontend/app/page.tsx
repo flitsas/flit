@@ -85,7 +85,7 @@ function HomeContent() {
       {module === "ayuda"        && <Ayuda />}
       {module === "rbac"         && <RbacAdmin />}
       {module === "auditoria"    && isSuperAdminUser && <Auditoria />}
-      {module === "log-qx"       && canLogQx && <LogQx />}
+      {module === "log-qx"       && canLogQx && <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />}
     </Shell>
   );
 }

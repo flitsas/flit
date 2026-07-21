@@ -922,7 +922,9 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
-          description: Id del trámite (`procedure_instance_id`).
+          description: >
+            Id del trámite (`procedure_instance_id`). Se espera un UUID; si el valor no tiene formato
+            de UUID, la respuesta es una página vacía (no un error), igual que `radicado` no numérico.
         - name: radicado
           in: query
           required: false

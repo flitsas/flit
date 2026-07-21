@@ -38,9 +38,24 @@ public sealed class ConsultarLogQuipuxHandler
         var page = NormalizePage(query.Page);
         var pageSize = NormalizePageSize(query.PageSize);
 
+        // instanceId llega como texto libre (el borde HTTP no revienta con 400 ante un valor no-UUID):
+        // si viene y no parsea a Guid, no puede casar con ninguna radicación → página vacía, mismo
+        // criterio que un radicado no numérico. Ausente/vacío = sin filtro por trámite.
+        Guid? instanceId = null;
+        var rawInstance = Trim(query.InstanceId);
+        if (rawInstance is not null)
+        {
+            if (!Guid.TryParse(rawInstance, out var parsed))
+            {
+                return new ConsultarLogQuipuxResult([], 0, page, pageSize);
+            }
+
+            instanceId = parsed;
+        }
+
         var domainQuery = new QuipuxLogQuery(
             Trim(query.Placa),
-            query.ProcedureInstanceId,
+            instanceId,
             Trim(query.Radicado),
             page,
             pageSize);

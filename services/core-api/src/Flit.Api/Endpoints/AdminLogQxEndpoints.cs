@@ -45,7 +45,7 @@ public static class AdminLogQxEndpoints
         [FromServices] ConsultarLogQuipuxHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] string? placa = null,
-        [FromQuery] Guid? instanceId = null,
+        [FromQuery] string? instanceId = null,
         [FromQuery] string? radicado = null,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
