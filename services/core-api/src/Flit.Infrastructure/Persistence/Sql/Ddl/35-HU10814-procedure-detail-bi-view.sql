@@ -103,7 +103,6 @@ LEFT JOIN LATERAL (
     FROM tramites.procedure_instance_attachments att
     WHERE att.procedure_instance_id = pi.id
       AND att.tipo = 'transferencia_dominio'
-      AND att.deleted_at IS NULL
     LIMIT 1
 ) domain_att ON TRUE
 WHERE pi.deleted_at IS NULL;
