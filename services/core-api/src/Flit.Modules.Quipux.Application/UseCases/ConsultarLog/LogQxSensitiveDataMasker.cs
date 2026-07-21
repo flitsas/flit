@@ -6,9 +6,11 @@ namespace Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
 /// <summary>
 /// Enmascarado de datos sensibles del <c>detail</c> de un evento del LOG QX (HU #10794). Es una
 /// SEGUNDA BARRERA sobre el jsonb que ya viene sanitizado desde captura: recorre el detail y, para
-/// cualquier clave cuyo nombre sugiera PII (documento, cédula, NIT, correo, teléfono, nombre,
-/// dirección, propietario…), enmascara su valor dejando solo los últimos 4 caracteres. Así, aunque
-/// un dato sensible se filtrara al detail pese a la sanitización, nunca se devuelve en crudo.
+/// cualquier clave cuyo nombre sugiera PII de una persona (propietario, funcionario, cédula, NIT,
+/// correo, teléfono, nombre, apellido, dirección…), enmascara su valor dejando solo los últimos 4
+/// caracteres. Así, aunque un dato sensible se filtrara al detail pese a la sanitización, nunca se
+/// devuelve en crudo. Los identificadores del trámite que NO son PII (placa, VIN, nombre de documento,
+/// código DIVIPO, tipos) pasan intactos: son datos de negocio que la pantalla muestra a propósito.
 /// </summary>
 /// <remarks>
 /// Se aplica solo al <c>detail</c> técnico (donde podría colarse un dato del propietario), no a los
@@ -25,11 +27,19 @@ internal static class LogQxSensitiveDataMasker
     /// Fragmentos que marcan una clave como sensible (match case-insensitive por subcadena). Se cubren
     /// las variantes con y sin tilde porque el jsonb puede traer cualquiera.
     /// </summary>
+    /// <remarks>
+    /// Apuntan a PII de PERSONAS (propietario/funcionario, cédula, NIT, contacto, nombre/dirección),
+    /// no a la palabra "documento" a secas: el <c>documento</c> del payload de radicación es el NOMBRE
+    /// del archivo (derivado de razón social + placa, datos de negocio que la pantalla ya muestra), no
+    /// el número de identidad de nadie. Los números de identidad SÍ se enmascaran porque su clave
+    /// siempre lleva el contexto de la persona: <c>documento_propietario</c>, <c>nroDocumentoFuncionario</c>, etc.
+    /// </remarks>
     private static readonly string[] SensitiveKeyFragments =
     [
-        "documento", "document", "cedula", "cédula", "identificacion", "identificación",
-        "nit", "correo", "email", "mail", "telefono", "teléfono", "celular", "phone",
-        "propietario", "nombre", "apellido", "direccion", "dirección", "address",
+        "propietario", "funcionario", "comprador", "vendedor",
+        "cedula", "cédula", "identificacion", "identificación", "nit",
+        "correo", "email", "mail", "telefono", "teléfono", "celular", "phone",
+        "nombre", "apellido", "direccion", "dirección", "address",
     ];
 
     /// <summary>

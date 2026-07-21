@@ -185,13 +185,19 @@ public sealed class RegistrarDocumentoQuipuxHandler
 
         await _audit.WriteAsync(
             submission.TenantId, submission.Id, QuipuxStage.RegistroEnviado, QuipuxOutcome.Ok,
+            // Identificadores NO sensibles del trámite que se radica (placa/vin/nombre de documento,
+            // organismo y tipos): son datos de negocio que la pantalla ya muestra, y sin ellos el
+            // evento no permite reconocer QUÉ trámite se envió. La PII del propietario/funcionario NO
+            // va aquí — sigue fuera del detail por diseño (a diferencia de FLIT 1.0, que serializaba
+            // el request completo). El campo que no aplica (placa o vin) va vacío, igual que a Quipux.
             new
             {
+                placa = request.Placa,
+                vin = request.Vin,
+                documento = request.Documento,
                 tipo_tramite = request.TipoTramite,
                 tipo_requisito = request.TipoRequisito,
                 codigo_divipo = request.CodigoDivipo,
-                usa_placa = !string.IsNullOrEmpty(request.Placa),
-                usa_vin = !string.IsNullOrEmpty(request.Vin),
                 intento = submission.Attempts,
             },
             command.CorrelationId, cancellationToken);
