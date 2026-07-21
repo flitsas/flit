@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -30,12 +31,18 @@ public sealed class TramiteLifecycleService(
     IIdentityValidationPolicy? identityPolicy = null,
     IProcedureInstancePrendaRepository? prendaRepo = null,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
+    IDynamicProceduresPolicy? dynamicPolicy = null,
+    IProcedureTypeSnapshotRepository? snapshotRepo = null,
     ISignatureVaultPolicy? vaultPolicy = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
         identityPolicy ?? NullIdentityValidationPolicy.Instance;
+
+    // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → SubmitGate estático).
+    private readonly IDynamicProceduresPolicy _dynamicPolicy =
+        dynamicPolicy ?? NullDynamicProceduresPolicy.Instance;
 
     // ADR-0025 §4 / HU #10645 — baúl de firmas: un actor NIT cubierto por una firma activa+vigente
     // cuenta como identidad aprobada en el gate de preparación (SubmitGate). Default seguro en tests.
@@ -99,7 +106,17 @@ public sealed class TramiteLifecycleService(
             var docsCompletos = matrixCompleteness is null
                 ? null
                 : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
-            var gateErrors = SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
+
+            // FEATURE-08 / HU-BE-06 (AC-06): para tipos dinámicos (flag F08_DynamicProcedures + snapshot)
+            // el gate de preparación se delega en DynamicGateEvaluator.CanSubmitBlockers; en cualquier
+            // otro caso se conserva SubmitGate estático (sin regresión).
+            ProcedureTypeSnapshotRecord? snapshot = null;
+            if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct).ConfigureAwait(false))
+                snapshot = await snapshotRepo.GetByInstanceIdAsync(instance.Id, command.TenantId, ct).ConfigureAwait(false);
+
+            var gateErrors = snapshot is not null
+                ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
+                : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
             if (gateErrors.Count > 0)
                 return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
 
@@ -249,6 +266,62 @@ public sealed class TramiteLifecycleService(
             string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
+    }
+
+    /// <summary>
+    /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
+    /// del submit con <see cref="DynamicGateEvaluator.CanSubmitBlockers"/> desde el gate_profile del
+    /// snapshot y las señales de la instancia. Reusa la completitud documental del gestor cuando existe.
+    /// </summary>
+    private static IReadOnlyList<string> EvaluateDynamicSubmit(
+        ProcedureInstance instance,
+        ProcedureTypeSnapshotRecord snapshot,
+        IReadOnlySet<string> approvedParties,
+        bool? docsCompletosOverride)
+    {
+        var root = JsonNode.Parse(snapshot.Snapshot) as JsonObject ?? [];
+        var gateProfile = ProcedureTypeGateProfile.FromJson(root["gateProfile"]?.ToJsonString());
+
+        var ctx = new DynamicWizardContext
+        {
+            DocumentosCompletos = docsCompletosOverride ?? DocsCompletos(instance),
+            BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
+            FurGenerado = instance.Attachments.Any(a =>
+                string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)),
+            PreflightProviderError = LatestPreflightHasProviderError(instance),
+            UploadedDocumentCodes = new HashSet<string>(
+                instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
+        };
+
+        return DynamicGateEvaluator.CanSubmitBlockers(gateProfile, ctx);
+    }
+
+    private static bool DocsCompletos(ProcedureInstance instance)
+    {
+        var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
+        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
+        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
+        return computed?.Completo ?? true;
+    }
+
+    private static bool LatestPreflightHasProviderError(ProcedureInstance instance)
+    {
+        var latest = instance.PreflightSnapshots.OrderByDescending(s => s.CreatedAt).FirstOrDefault();
+        if (latest is null)
+            return false;
+        var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
+        return checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Mapea partes aprobadas (comprador/vendedor/locatario) a códigos de entidad (BUYER/OWNER/LESSEE).</summary>
+    private static HashSet<string> MapPartiesToEntityCodes(IReadOnlySet<string> approvedParties)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (approvedParties.Contains(BiometricRules.ParteComprador)) codes.Add("BUYER");
+        if (approvedParties.Contains(BiometricRules.ParteVendedor)) codes.Add("OWNER");
+        if (approvedParties.Contains("locatario")) codes.Add("LESSEE");
+        return codes;
     }
 
     /// <summary>

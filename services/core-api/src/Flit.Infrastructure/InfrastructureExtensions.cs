@@ -79,6 +79,15 @@ public static class InfrastructureExtensions
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
+        // FEATURE-08 / HU-BE-01 (CFD-01/AC#5) — snapshot inmutable del tipo por instancia.
+        services.AddScoped<IProcedureTypeSnapshotRepository, ProcedureTypeSnapshotRepository>();
+        // FEATURE-08 / HU-BE-03 (CFD-04) — fuentes externas por tipo (catálogo global).
+        services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
+        // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
+        services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
+        // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
+            OtRules.DynamicProceduresPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
