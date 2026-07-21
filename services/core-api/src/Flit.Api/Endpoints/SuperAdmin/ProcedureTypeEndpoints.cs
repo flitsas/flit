@@ -148,6 +148,7 @@ internal static class ProcedureTypeEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                "invalid_entry_mode" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "entryMode inválido: use PLATE, VIN o BOTH."),
                 "not_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "Tipo en estado published — no editable."),
                 _ => Results.Ok(result)
             };

@@ -1620,6 +1620,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProcedureConformationProfile"
+        "400":
+          description: entryMode inválido (debe ser PLATE, VIN o BOTH).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: No autenticado.
         "403":
@@ -5273,13 +5279,25 @@ components:
     ProcedureConformationProfileInput:
       type: object
       description: >
-        Cuerpo del PUT de perfil de conformación. HU-BE-01 solo persiste
-        `gateProfile`; las HUs BE-02..05 amplían este esquema.
+        Cuerpo del PUT de perfil de conformación. HU-BE-01 persiste `gateProfile`;
+        HU-BE-02 valida `entryMode` (PLATE/VIN/BOTH → 400 si es inválido) y las
+        banderas de validación inicial. HUs BE-04/05 amplían el objeto.
       properties:
         gateProfile:
           type: object
           additionalProperties: true
-          description: Flags de conformación del tipo. Objeto JSON abierto.
+          description: >
+            Flags de conformación del tipo (objeto JSON abierto). Campos de HU-BE-02:
+            `entryMode` (PLATE|VIN|BOTH), `validateCompanyRule`, `validateOtOperability`,
+            `validateDuplicateProcedure` (bool). Ver el comentario DDL de
+            `tramites.procedure_types.gate_profile` para el esquema completo.
+          properties:
+            entryMode:
+              type: string
+              enum: [PLATE, VIN, BOTH]
+            validateCompanyRule: { type: boolean }
+            validateOtOperability: { type: boolean }
+            validateDuplicateProcedure: { type: boolean }
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
     AttachmentDto:
       type: object

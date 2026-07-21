@@ -113,6 +113,57 @@ public sealed class ConformationProfileTests
     }
 
     [Fact]
+    public async Task Put_InvalidEntryMode_ReturnsInvalidEntryModeAndDoesNotPersist()
+    {
+        // BE-02-AC-02: entryMode fuera del catálogo → 400 (invalid_entry_mode), sin persistir.
+        var ct = TestContext.Current.CancellationToken;
+        var type = Draft(gateProfile: "{}");
+        _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
+        var sut = new UpdateConformationProfileHandler(_repo);
+
+        var input = new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = "UNKNOWN" });
+
+        var (result, error) = await sut.HandleAsync(type.Id, input, ct);
+
+        error.Should().Be("invalid_entry_mode");
+        result.Should().BeNull();
+        await _repo.DidNotReceive().UpdateAsync(Arg.Any<ProcedureType>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Put_NonStringEntryMode_ReturnsInvalidEntryMode()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var type = Draft(gateProfile: "{}");
+        _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
+        var sut = new UpdateConformationProfileHandler(_repo);
+
+        var input = new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = 5 });
+
+        var (_, error) = await sut.HandleAsync(type.Id, input, ct);
+
+        error.Should().Be("invalid_entry_mode");
+    }
+
+    [Fact]
+    public async Task Put_ValidEntryModeVin_Persists()
+    {
+        // BE-02-AC-01: entryMode PLATE/VIN/BOTH válido se guarda.
+        var ct = TestContext.Current.CancellationToken;
+        var type = Draft(gateProfile: "{}");
+        _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
+        var sut = new UpdateConformationProfileHandler(_repo);
+
+        var input = new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = "VIN" });
+
+        var (result, error) = await sut.HandleAsync(type.Id, input, ct);
+
+        error.Should().BeNull();
+        result!.GateProfile["entryMode"]!.GetValue<string>().Should().Be("VIN");
+        await _repo.Received(1).UpdateAsync(type, ct);
+    }
+
+    [Fact]
     public async Task Put_DraftType_PersistsGateProfileAndReturnsProfile()
     {
         var ct = TestContext.Current.CancellationToken;

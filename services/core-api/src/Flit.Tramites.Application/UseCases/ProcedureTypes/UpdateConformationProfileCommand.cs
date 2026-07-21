@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureTypes;
 
@@ -33,6 +35,13 @@ public sealed class UpdateConformationProfileHandler(IProcedureTypeRepository re
         if (entity.PublicationStatus != PublicationStatus.Draft)
             return (null, "not_editable");
 
+        // FEATURE-08 / HU-BE-02 (CFD-02): entryMode, si se envía, debe ser PLATE/VIN/BOTH.
+        if (TryReadEntryMode(input.GateProfile, out var entryMode)
+            && !ProcedureTypeGateProfile.IsValidEntryMode(entryMode))
+        {
+            return (null, "invalid_entry_mode");
+        }
+
         if (input.GateProfile is not null)
             entity.GateProfile = input.GateProfile.ToJsonString();
 
@@ -59,5 +68,23 @@ public sealed class UpdateConformationProfileHandler(IProcedureTypeRepository re
             []);
 
         return (dto, null);
+    }
+
+    /// <summary>
+    /// Lee <c>entryMode</c> del gate_profile de entrada. Devuelve <c>false</c> si está ausente o es
+    /// JSON <c>null</c> (no hay nada que validar). Un valor no-string se devuelve como texto para que
+    /// falle la validación de catálogo (no es PLATE/VIN/BOTH).
+    /// </summary>
+    private static bool TryReadEntryMode(JsonNode? gateProfile, out string? entryMode)
+    {
+        entryMode = null;
+        var node = gateProfile?["entryMode"];
+        if (node is null)
+            return false;
+
+        entryMode = node.GetValueKind() == JsonValueKind.String
+            ? node.GetValue<string>()
+            : node.ToJsonString();
+        return true;
     }
 }

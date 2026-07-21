@@ -81,6 +81,10 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile.
+                "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
+                "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
+                "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(statusCode: 409, title: "DUPLICATE_ACTIVE_PROCEDURE", detail: "Ya existe un trámite activo del mismo tipo para la placa/VIN."),
                 _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
             };
         }).WithName("CreateProcedureInstance");
