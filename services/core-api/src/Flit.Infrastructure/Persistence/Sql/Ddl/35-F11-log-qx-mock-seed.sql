@@ -8,7 +8,8 @@
 -- El LOG QX hace INNER JOIN submissions × procedure_instances × procedure_types × tenants, así que
 -- los 5 trámites QXSEED deben existir o no se ve nada. Sus FK padres ya vienen de seeds dev
 -- comiteados con el MISMO gate: tenant 0ad1c0de-…-0008 (SeedMockCompanies), tipos 33333333/44444444
--- (SeedProcedureTypes), usuario 11111111 (HU10200_DevSeed), OT aaaaaaaa-0001 (HU10133_OtAdminDevSeed).
+-- (SeedProcedureTypes), usuario 22222222 (HU10200_DevSeed — 11111111 es el TENANT FLITDEV, no un user),
+-- OT aaaaaaaa-0001 (HU10133_OtAdminDevSeed / catálogo RUNT).
 --
 -- Sin BEGIN/COMMIT: EF envuelve la migración en su propia transacción. Idempotente y determinista:
 -- ON CONFLICT en las instancias; delete-then-insert en placas / radicaciones / eventos (re-ejecutable
@@ -27,7 +28,7 @@ INSERT INTO tramites.procedure_instances
      transit_office_id, status, modalidad_entrada, checklist_estado)
 SELECT
     v.id, '0ad1c0de-0000-4000-8000-000000000008'::uuid, v.procedure_type_id, v.reference_number,
-    '11111111-1111-1111-1111-111111111111'::uuid, 'aaaaaaaa-0001-4000-8000-000000000001'::uuid,
+    '22222222-2222-2222-2222-222222222222'::uuid, 'aaaaaaaa-0001-4000-8000-000000000001'::uuid,
     'entregado', v.modalidad, '{}'::jsonb
 FROM (VALUES
     ('5eed0001-0000-4000-8000-000000000001'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 'QXSEED-001', 'traspaso'),
@@ -36,8 +37,9 @@ FROM (VALUES
     ('5eed0001-0000-4000-8000-000000000004'::uuid, '44444444-4444-4444-4444-444444444444'::uuid, 'QXSEED-004', 'matricula_inicial'),
     ('5eed0001-0000-4000-8000-000000000005'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 'QXSEED-005', 'traspaso')
 ) AS v(id, procedure_type_id, reference_number, modalidad)
-WHERE EXISTS (SELECT 1 FROM identity.users u   WHERE u.id = '11111111-1111-1111-1111-111111111111')
+WHERE EXISTS (SELECT 1 FROM identity.users u   WHERE u.id = '22222222-2222-2222-2222-222222222222')
   AND EXISTS (SELECT 1 FROM identity.tenants t WHERE t.id = '0ad1c0de-0000-4000-8000-000000000008')
+  AND EXISTS (SELECT 1 FROM catalogs.transit_offices o WHERE o.id = 'aaaaaaaa-0001-4000-8000-000000000001')
 ON CONFLICT (tenant_id, reference_number) DO NOTHING;
 
 -- ============================================================================
@@ -101,44 +103,49 @@ WHERE EXISTS (SELECT 1 FROM tramites.procedure_instances pi WHERE pi.id = v.inst
 -- 4. Timeline (quipux_submission_events, 32) — un recorrido por cada estado, con duration_ms/origen/
 --    codigo en el detail, errores y reintentos, enmascarado (propietario_*) y eventos sin payload
 --    (detail NULL = "sin payload disponible"). id por defecto (uuidv7); el DELETE de arriba ya limpió.
+--    WHERE EXISTS por submission: si la sección 3 omitió las radicaciones (padres ausentes), no
+--    insertamos huérfanos — evita 23503 en CI cuando el seed se ejecuta a medias.
 -- ============================================================================
 INSERT INTO tramites.quipux_submission_events
     (tenant_id, submission_id, stage, outcome, detail, correlation_id, occurred_at)
-VALUES
+SELECT v.tenant_id, v.submission_id, v.stage, v.outcome, v.detail, v.correlation_id, v.occurred_at
+FROM (VALUES
   -- 001 · PENDIENTE (en cola)
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000001','claimed','ok','{"origen":"quipux_register","batch":"BATCH-001"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001','2026-07-20 08:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000001','consolidado_generado','ok','{"origen":"quipux_register","duration_ms":320,"paginas":8}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001','2026-07-20 08:00:01+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000001','s3_subido','ok','{"origen":"quipux_register","duration_ms":540,"bucket":"qxinterconnect","key":"FLIT/QXSEED-001.pdf"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001','2026-07-20 08:00:02+00'),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000001'::uuid,'claimed','ok','{"origen":"quipux_register","batch":"BATCH-001"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001'::uuid,'2026-07-20 08:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000001'::uuid,'consolidado_generado','ok','{"origen":"quipux_register","duration_ms":320,"paginas":8}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001'::uuid,'2026-07-20 08:00:01+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000001'::uuid,'s3_subido','ok','{"origen":"quipux_register","duration_ms":540,"bucket":"qxinterconnect","key":"FLIT/QXSEED-001.pdf"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000001'::uuid,'2026-07-20 08:00:02+00'::timestamptz),
   -- 002 · REGISTRADO (81 = almacenado OK)
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000002','claimed','ok','{"origen":"quipux_register","batch":"BATCH-002"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002','2026-07-20 09:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000002','consolidado_generado','ok','{"origen":"quipux_register","duration_ms":410}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002','2026-07-20 09:00:01+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000002','s3_subido','ok','{"origen":"quipux_register","duration_ms":600}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002','2026-07-20 09:00:02+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000002','registro_enviado','ok','{"origen":"quipux_register","tipoTramite":13}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002','2026-07-20 09:00:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000002','registro_respuesta','ok','{"origen":"quipux_register","duration_ms":1240,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002','2026-07-20 09:00:05+00'),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000002'::uuid,'claimed','ok','{"origen":"quipux_register","batch":"BATCH-002"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002'::uuid,'2026-07-20 09:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000002'::uuid,'consolidado_generado','ok','{"origen":"quipux_register","duration_ms":410}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002'::uuid,'2026-07-20 09:00:01+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000002'::uuid,'s3_subido','ok','{"origen":"quipux_register","duration_ms":600}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002'::uuid,'2026-07-20 09:00:02+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000002'::uuid,'registro_enviado','ok','{"origen":"quipux_register","tipoTramite":13}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002'::uuid,'2026-07-20 09:00:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000002'::uuid,'registro_respuesta','ok','{"origen":"quipux_register","duration_ms":1240,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000002'::uuid,'2026-07-20 09:00:05+00'::timestamptz),
   -- 003 · APROBADO (estadoTramite 2; el evento aprobado lleva PII → enmascarado por el backend)
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','claimed','ok','{"origen":"quipux_register","batch":"BATCH-003"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 10:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','consolidado_generado','ok','{"origen":"quipux_register","duration_ms":300}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 10:00:01+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','s3_subido','ok','{"origen":"quipux_register","duration_ms":520}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 10:00:02+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 10:00:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','registro_respuesta','ok','{"origen":"quipux_register","duration_ms":1100,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 10:00:05+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','consulta_enviada','ok','{"origen":"quipux_status_poll"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 11:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":430,"codigo":81,"sigue_en_tramite":true}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 11:00:01+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":390,"codigo":81,"estado_tramite":2}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 12:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000003','aprobado','ok','{"origen":"quipux_status_poll","codigo":81,"estado_tramite":2,"propietario_documento":"1094567890","propietario_nombre":"Juan Perez Gomez"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003','2026-07-20 12:00:01+00'),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'claimed','ok','{"origen":"quipux_register","batch":"BATCH-003"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 10:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'consolidado_generado','ok','{"origen":"quipux_register","duration_ms":300}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 10:00:01+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'s3_subido','ok','{"origen":"quipux_register","duration_ms":520}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 10:00:02+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 10:00:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'registro_respuesta','ok','{"origen":"quipux_register","duration_ms":1100,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 10:00:05+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'consulta_enviada','ok','{"origen":"quipux_status_poll"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 11:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":430,"codigo":81,"sigue_en_tramite":true}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 11:00:01+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":390,"codigo":81,"estado_tramite":2}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 12:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000003'::uuid,'aprobado','ok','{"origen":"quipux_status_poll","codigo":81,"estado_tramite":2,"propietario_documento":"1094567890","propietario_nombre":"Juan Perez Gomez"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000003'::uuid,'2026-07-20 12:00:01+00'::timestamptz),
   -- 004 · RECHAZADO (estadoTramite 3; incluye un evento con detail NULL = "sin payload disponible")
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','claimed','ok','{"origen":"quipux_register","batch":"BATCH-004"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 13:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','s3_subido','ok',NULL,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 13:00:02+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','registro_enviado','ok','{"origen":"quipux_register","tipoTramite":13}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 13:00:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','registro_respuesta','ok','{"origen":"quipux_register","duration_ms":980,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 13:00:05+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":410,"codigo":81,"estado_tramite":3}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 14:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000004','rechazado','error_definitivo','{"origen":"quipux_status_poll","estado_tramite":3,"motivo":"Documento consolidado ilegible"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004','2026-07-20 14:00:01+00'),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'claimed','ok','{"origen":"quipux_register","batch":"BATCH-004"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 13:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'s3_subido','ok',NULL::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 13:00:02+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'registro_enviado','ok','{"origen":"quipux_register","tipoTramite":13}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 13:00:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'registro_respuesta','ok','{"origen":"quipux_register","duration_ms":980,"codigo":81,"mensaje":"Los datos se almacenaron correctamente"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 13:00:05+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'consulta_respuesta','ok','{"origen":"quipux_status_poll","duration_ms":410,"codigo":81,"estado_tramite":3}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 14:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000004'::uuid,'rechazado','error_definitivo','{"origen":"quipux_status_poll","estado_tramite":3,"motivo":"Documento consolidado ilegible"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000004'::uuid,'2026-07-20 14:00:01+00'::timestamptz),
   -- 005 · FALLIDO (errores + reintento manual; incluye un evento con detail NULL)
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','claimed','ok','{"origen":"quipux_register","batch":"BATCH-005"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005','2026-07-20 15:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','consolidado_generado','ok',NULL,'5eedc0aa-0000-4000-8000-000000000005','2026-07-20 15:00:01+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','s3_subido','ok','{"origen":"quipux_register","duration_ms":700}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005','2026-07-20 15:00:02+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16,"intento":1}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005','2026-07-20 15:00:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','registro_error','error_transitorio','{"origen":"quipux_register","duration_ms":60000,"codigo":72,"mensaje":"Se ha excedido el tiempo máximo de espera","intento":1}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005','2026-07-20 15:01:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','reintento_manual','ok','{"origen":"manual","motivo":"Re-encolado por soporte"}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005','2026-07-20 16:00:00+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16,"intento":2}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005','2026-07-20 16:00:03+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','registro_error','error_definitivo','{"origen":"quipux_register","duration_ms":850,"codigo":76,"mensaje":"Información no disponible (error interno del organismo de tránsito)","intento":2}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005','2026-07-20 16:00:05+00'),
-  ('0ad1c0de-0000-4000-8000-000000000008','5eed5b01-0000-4000-8000-000000000005','dead_letter','error_definitivo','{"origen":"quipux_register","intentos":2,"motivo":"max_attempts alcanzado"}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005','2026-07-20 16:00:06+00');
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'claimed','ok','{"origen":"quipux_register","batch":"BATCH-005"}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005'::uuid,'2026-07-20 15:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'consolidado_generado','ok',NULL::jsonb,'5eedc0aa-0000-4000-8000-000000000005'::uuid,'2026-07-20 15:00:01+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'s3_subido','ok','{"origen":"quipux_register","duration_ms":700}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005'::uuid,'2026-07-20 15:00:02+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16,"intento":1}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005'::uuid,'2026-07-20 15:00:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'registro_error','error_transitorio','{"origen":"quipux_register","duration_ms":60000,"codigo":72,"mensaje":"Se ha excedido el tiempo máximo de espera","intento":1}'::jsonb,'5eedc0aa-0000-4000-8000-000000000005'::uuid,'2026-07-20 15:01:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'reintento_manual','ok','{"origen":"manual","motivo":"Re-encolado por soporte"}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005'::uuid,'2026-07-20 16:00:00+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'registro_enviado','ok','{"origen":"quipux_register","tipoTramite":16,"intento":2}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005'::uuid,'2026-07-20 16:00:03+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'registro_error','error_definitivo','{"origen":"quipux_register","duration_ms":850,"codigo":76,"mensaje":"Información no disponible (error interno del organismo de tránsito)","intento":2}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005'::uuid,'2026-07-20 16:00:05+00'::timestamptz),
+  ('0ad1c0de-0000-4000-8000-000000000008'::uuid,'5eed5b01-0000-4000-8000-000000000005'::uuid,'dead_letter','error_definitivo','{"origen":"quipux_register","intentos":2,"motivo":"max_attempts alcanzado"}'::jsonb,'5eedc0bb-0000-4000-8000-000000000005'::uuid,'2026-07-20 16:00:06+00'::timestamptz)
+) AS v(tenant_id, submission_id, stage, outcome, detail, correlation_id, occurred_at)
+WHERE EXISTS (SELECT 1 FROM tramites.quipux_submissions s WHERE s.id = v.submission_id);
