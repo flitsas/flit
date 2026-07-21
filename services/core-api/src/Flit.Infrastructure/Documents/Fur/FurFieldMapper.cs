@@ -123,11 +123,36 @@ public static class FurFieldMapper
             && data.FirmaImagenes is not null
             && TryGetFirmaImagen(data.FirmaImagenes, rol, out var image))
         {
-            dict[fieldId] = new FurFieldValue(null, image);
+            var sidecar = TryBuildFirmaBaulSidecar(data.FirmaBaulMetadatos, rol);
+            dict[fieldId] = new FurFieldValue(null, image, sidecar);
             return;
         }
 
         dict[fieldId] = Text(fallbackText);
+    }
+
+    private static string? TryBuildFirmaBaulSidecar(
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? metadata,
+        string rol)
+    {
+        if (metadata is null)
+            return null;
+
+        foreach (var key in FirmaRolKeys(rol))
+        {
+            if (!metadata.TryGetValue(key, out var meta))
+                continue;
+
+            return string.Join('\n',
+            [
+                $"Doc. {meta.DocumentNumber}",
+                meta.FullName,
+                $"Vig. {meta.VigenciaDesde:dd/MM/yyyy} — {meta.VigenciaHasta:dd/MM/yyyy}",
+                $"Hash: {meta.SignatureVaultId:D}",
+            ]);
+        }
+
+        return null;
     }
 
     private static bool TryGetFirmaImagen(IReadOnlyDictionary<string, byte[]> images, string rol, out byte[] bytes)

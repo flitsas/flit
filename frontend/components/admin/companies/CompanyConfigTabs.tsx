@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
+import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,9 +16,16 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial";
+type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial" | "baul";
 
-const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[] = [
+interface TabDef {
+  id: TabId;
+  label: string;
+  icon: typeof Stamp;
+  isConfig: boolean;
+}
+
+const TABS: TabDef[] = [
   { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
   { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
@@ -28,6 +35,9 @@ const TABS: { id: TabId; label: string; icon: typeof Stamp; isConfig: boolean }[
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
+
+// HU #10644 — pestaña del Baúl de Firmas; solo se muestra si `baulFirmasActivo` está activo.
+const BAUL_TAB: TabDef = { id: "baul", label: "Baúl de Firmas", icon: FileSignature, isConfig: false };
 
 export interface CompanyConfigTabsProps {
   settings: TenantSettings;
@@ -41,6 +51,9 @@ export interface CompanyConfigTabsProps {
   otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
+  /** Panel del Baúl de Firmas (HU #10644). Solo se muestra si `baulFirmasActivo` está activo. */
+  baulFirmasSlot?: ReactNode;
+  /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
   platesSlot?: ReactNode;
 }
 
@@ -53,9 +66,16 @@ export function CompanyConfigTabs({
   otBlockingSlot,
   auditSlot,
   documentosSlot,
+  baulFirmasSlot,
   platesSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
+  // La pestaña de placas solo aparece si la preasignación está activa; la del Baúl solo si el toggle
+  // `baulFirmasActivo` está activo en la config guardada.
+  const visibleTabs = useMemo(() => {
+    const base = TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva);
+    return settings.baulFirmasActivo ? [...base, BAUL_TAB] : base;
+  }, [settings.preasignacionPlacaActiva, settings.baulFirmasActivo]);
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
   const [initialForm, setInitialForm] = useState<SettingsForm>(() => formFromSettings(settings));
@@ -107,19 +127,16 @@ export function CompanyConfigTabs({
     }
   };
 
-  // La pestaña de placas solo aparece si la preasignación está activa para la compañía.
-  const visibleTabs = useMemo(
-    () => TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva),
-    [settings.preasignacionPlacaActiva],
-  );
-  const currentTab = visibleTabs.find((t) => t.id === tab);
+  // Si la pestaña activa deja de existir (p. ej. se desactivó el Baúl o las placas), recae en la primera.
+  const currentTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
+  const activeTabId = currentTab.id;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {visibleTabs.map((t) => {
           const Icon = t.icon;
-          const active = tab === t.id;
+          const active = activeTabId === t.id;
           return (
             <button
               key={t.id}
@@ -140,13 +157,13 @@ export function CompanyConfigTabs({
       </div>
 
       <div role="tabpanel" className="flex-1">
-        {tab === "matricula" && (
+        {activeTabId === "matricula" && (
           <MatriculaInicialTab form={form} onChange={patch} fieldErrors={fieldErrors} />
         )}
-        {tab === "traspasos" && (
+        {activeTabId === "traspasos" && (
           <TraspasosTab form={form} onChange={patch} whitelistSlot={whitelistSlot} />
         )}
-        {tab === "config" && (
+        {activeTabId === "config" && (
           <ConfiguracionEmpresaTab
             form={form}
             onChange={patch}
@@ -156,9 +173,10 @@ export function CompanyConfigTabs({
             fieldErrors={fieldErrors}
           />
         )}
-        {tab === "documentos" && documentosSlot}
-        {tab === "placas" && platesSlot}
-        {tab === "historial" && auditSlot}
+        {activeTabId === "documentos" && documentosSlot}
+        {activeTabId === "placas" && platesSlot}
+        {activeTabId === "historial" && auditSlot}
+        {activeTabId === "baul" && baulFirmasSlot}
       </div>
 
       {errorBanner && (

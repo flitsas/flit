@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { LogQxLink } from './LogQxLink';
 
 /**
  * HU-2 (N03, RF05) — timeline vertical del historial de transiciones de estado del trámite
@@ -184,22 +185,27 @@ export function EstadoTimelinePanel({ instanceId }: { instanceId: string }) {
         padding: '0 16px',
       }}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#475569',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          padding: 0,
-        }}
-      >
-        {open ? '▾' : '▸'} Historial de estados
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#475569',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          {open ? '▾' : '▸'} Historial de estados
+        </button>
+        {/* HU #10796 — correlación al LOG QX. Se muestra solo si el usuario puede leer el LOG QX
+            y el trámite tiene radicación Quipux; es hermano del toggle (visible aunque esté colapsado). */}
+        <LogQxLink instanceId={instanceId} />
+      </div>
       {open ? (
         <div
           style={{

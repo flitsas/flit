@@ -32,7 +32,8 @@ public sealed class TramiteLifecycleService(
     IProcedureInstancePrendaRepository? prendaRepo = null,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
-    IProcedureTypeSnapshotRepository? snapshotRepo = null) : ITramiteLifecycleService
+    IProcedureTypeSnapshotRepository? snapshotRepo = null,
+    ISignatureVaultPolicy? vaultPolicy = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
@@ -42,6 +43,10 @@ public sealed class TramiteLifecycleService(
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → SubmitGate estático).
     private readonly IDynamicProceduresPolicy _dynamicPolicy =
         dynamicPolicy ?? NullDynamicProceduresPolicy.Instance;
+
+    // ADR-0025 §4 / HU #10645 — baúl de firmas: un actor NIT cubierto por una firma activa+vigente
+    // cuenta como identidad aprobada en el gate de preparación (SubmitGate). Default seguro en tests.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
     // R10 (HU #10597) — repo de prenda para el gate de traspaso. Null en tests que no lo ejercitan
     // (el gate se omite de forma segura); en producción lo inyecta el contenedor.
@@ -89,7 +94,7 @@ public sealed class TramiteLifecycleService(
             // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
             // en otro trámite del tenant, sin clonar.
             var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-                repo, instance, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+                repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
             // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
             // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
             var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(

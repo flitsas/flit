@@ -5,11 +5,13 @@ import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
   listAvailablePlatesForCompany: vi.fn(),
+  getPlatePreassignStatus: vi.fn(),
   patchFieldValues: vi.fn(),
 }));
 
 vi.mock('@/lib/api/admin-plate-ranges', () => ({
   listAvailablePlatesForCompany: mocks.listAvailablePlatesForCompany,
+  getPlatePreassignStatus: mocks.getPlatePreassignStatus,
 }));
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: { patchFieldValues: mocks.patchFieldValues },
@@ -30,6 +32,7 @@ const plate = (id: string, p: string) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.listAvailablePlatesForCompany.mockResolvedValue([plate('1', 'ABC100'), plate('2', 'ABC101')]);
+  mocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   mocks.patchFieldValues.mockResolvedValue({});
 });
 
@@ -65,6 +68,17 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
     expect(await screen.findByText(/No hay placas disponibles/i)).toBeInTheDocument();
   });
 
+  // HU #10806 AC3 — ruta de placa NO habilitada para la compañía/OT: avisa y NO muestra el selector.
+  it('AC3 (HU #10806) — preasignación no habilitada: muestra aviso y oculta el selector', async () => {
+    mocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
+    render(
+      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
+    );
+    expect(await screen.findByText(/no está habilitada para este organismo/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
+  });
+
   it('AC4 — elegir una placa la persiste (field plate) y refresca', async () => {
     const onRefresh = vi.fn();
     const user = userEvent.setup();
@@ -91,7 +105,37 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
     expect(screen.getByText(/Placa seleccionada:/i)).toBeInTheDocument();
     expect(screen.getByText('ABC100')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cambiar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Quitar placa/i })).toBeInTheDocument();
     expect(mocks.listAvailablePlatesForCompany).not.toHaveBeenCalled();
+  });
+
+  // HU #10806 AC1 — "Quitar placa" limpia el field plate (='') y reabre el selector + el dígito,
+  // de modo que se pueda radicar sin placa o con dígito de preferencia tras haber elegido una.
+  it('AC1 (HU #10806) — "Quitar placa" limpia el field plate y reabre el selector', async () => {
+    const onRefresh = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <PlacaPreasignadaSection
+        instanceId="inst-x" organismoId="o" plateValue="ABC100" plateSource="user"
+        readOnly={false} onRefresh={onRefresh}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Quitar placa/i }));
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-x', [
+        { formFieldId: null, fieldKey: 'plate', valueText: '' },
+      ]),
+    );
+    expect(onRefresh).toHaveBeenCalled();
+    // Tras el refresh, el padre re-renderiza sin placa → reaparece el selector y el dígito.
+    rerender(
+      <PlacaPreasignadaSection
+        instanceId="inst-x" organismoId="o" plateValue="" plateSource=""
+        readOnly={false} onRefresh={onRefresh}
+      />,
+    );
+    expect(await screen.findByLabelText(/Buscar placa/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Dígito de preferencia de placa/i)).toBeInTheDocument();
   });
 });
 

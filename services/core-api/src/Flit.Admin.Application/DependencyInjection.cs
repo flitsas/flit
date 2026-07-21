@@ -159,6 +159,13 @@ public static class DependencyInjection
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
 
+        // HU #10643 (ADR-0025) — baúl de firmas: CRUD SuperAdmin. ISignatureVaultReader/Repository
+        // e ISignatureVaultArtifactStorage se registran en AddAdminInfrastructure.
+        services.AddScoped<Companies.SignatureVault.CreateSignatureVault.CreateSignatureVaultHandler>();
+        services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
+        services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
+        services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
+
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
         services.AddScoped<ListImprontasHandler>();

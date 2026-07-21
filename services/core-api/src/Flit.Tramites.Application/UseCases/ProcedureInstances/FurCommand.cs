@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -37,8 +38,13 @@ public sealed class GenerarFurHandler(
     IRnmcCertificateGenerator rnmcGenerator,
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
-    ILogger<GenerarFurHandler> logger)
+    ILogger<GenerarFurHandler> logger,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
+    // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -56,7 +62,7 @@ public sealed class GenerarFurHandler(
         // actor), no una fila propia del trámite. Si falta, el FUR se genera con el sello "NO FIRMADO" y sin
         // certificado (no se declara "APROBADO" en falso). La RADICACIÓN sí sigue exigiendo identidad (#10459).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-            repo, instance, DateTimeOffset.UtcNow, ct);
+            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
         var identidadValidada = BiometriaGateOk(identidadAprobada, esTraspaso);
 
         var fv = instance.FieldValues
@@ -87,7 +93,12 @@ public sealed class GenerarFurHandler(
         var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
         var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda);
+        // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
+        // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
+        // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
+        var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -239,7 +250,9 @@ public sealed class GenerarFurHandler(
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
-        bool tienePrenda, string? acreedorPrenda)
+        bool tienePrenda, string? acreedorPrenda,
+        IReadOnlyDictionary<string, byte[]>? firmaImagenes,
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -297,10 +310,79 @@ public sealed class GenerarFurHandler(
                 Get(fv, "fur_observations"),
                 Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
                 Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
+            FirmaImagenes: firmaImagenes,
+            FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda);
+    }
+
+    /// <summary>
+    /// HU #10645 (ADR-0025 §4) — resuelve la IMAGEN de la firma del baúl por parte con actor JURÍDICO (NIT)
+    /// cubierto por una firma activa+vigente. Descarga el artefacto vía <see cref="IAttachmentStorage.OpenReadAsync"/>
+    /// (best-effort) y lo mapea por rol ("comprador"/"vendedor") para <see cref="FurDocumentData.FirmaImagenes"/>;
+    /// los metadatos del baúl (<see cref="FurDocumentData.FirmaBaulMetadatos"/>) se estampan a la derecha de la
+    /// imagen. NUNCA rompe el FUR: cualquier fallo de lectura se registra como warning y la parte cae al sello
+    /// de texto. Devuelve null en ambos diccionarios si ninguna parte tiene firma de baúl.
+    /// </summary>
+    private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
+        ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
+    {
+        var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        Dictionary<string, byte[]>? images = null;
+        Dictionary<string, FirmaBaulMetadata>? metadata = null;
+
+        foreach (var role in roles)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+            if (actor is null || !EsActorJuridico(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+                continue;
+
+            var match = await _vaultPolicy.ResolveAsync(instance.TenantId, actor.DocumentNumber.Trim(), ct);
+            if (match is null || string.IsNullOrWhiteSpace(match.StoragePath))
+                continue;
+
+            try
+            {
+                var stream = await storage.OpenReadAsync(match.StoragePath, ct);
+                if (stream is null)
+                    continue;
+
+                await using (stream.ConfigureAwait(false))
+                {
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms, ct);
+                    if (ms.Length == 0)
+                        continue;
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = ms.ToArray();
+                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[role] =
+                        new FirmaBaulMetadata(
+                            match.DocumentNumber,
+                            match.FullName,
+                            match.VigenciaDesde,
+                            match.VigenciaHasta,
+                            match.SignatureVaultId);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Best-effort (ADR-0025 §4): si el artefacto de firma no se puede leer, se omite la imagen y la
+                // parte cae al sello de texto. No se bloquea la generación del FUR.
+                GenerarFurLog.FirmaBaulNoDisponible(logger, ex, instance.Id);
+            }
+        }
+
+        return (images, metadata);
+    }
+
+    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
+    private static bool EsActorJuridico(string? documentType)
+    {
+        var t = documentType?.Trim();
+        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
@@ -590,6 +672,10 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo leer el artefacto de la firma del baúl (instancia {InstanceId}); la parte cae al sello de texto sin bloquear el FUR.")]
+    public static partial void FirmaBaulNoDisponible(ILogger logger, Exception ex, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo generar el certificado RNMC (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]

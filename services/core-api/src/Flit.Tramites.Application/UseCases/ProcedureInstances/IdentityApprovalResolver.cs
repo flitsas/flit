@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -21,12 +22,25 @@ internal static class IdentityApprovalResolver
     /// <see cref="ApprovedPartiesFromKeys"/> (claves precomputadas en lote, sin N+1).
     /// </summary>
     public static async Task<IReadOnlySet<string>> ResolveApprovedPartiesAsync(
-        IProcedureInstanceRepository repo, ProcedureInstance instance, DateTimeOffset now, CancellationToken ct)
+        IProcedureInstanceRepository repo, ProcedureInstance instance, DateTimeOffset now, CancellationToken ct,
+        ISignatureVaultPolicy? vaultPolicy = null)
     {
+        var vault = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
             var (tipoDoc, documento) = ActorDoc(instance, parte);
+
+            // 0) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14): un actor JURÍDICO (NIT) cubierto por una
+            // firma de baúl ACTIVA+VIGENTE cuenta como identidad APROBADA — así el SubmitGate y el gate del
+            // FUR lo tratan como validado sin exigir biométrica. Precedencia D8: el baúl va PRIMERO. Solo NIT;
+            // las personas naturales caen a los pasos 1/2. Null-safe: sin baúl habilitado devuelve null.
+            if (EsActorJuridico(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
+                && await vault.ResolveAsync(instance.TenantId, documento.Trim(), ct) is not null)
+            {
+                approved.Add(parte);
+                continue;
+            }
 
             // 1) Fila PROPIA del trámite (aprobada+vigente+documento del actor): validó EN este trámite.
             if (HasLocalVigente(instance, parte, tipoDoc, documento, now))
@@ -54,6 +68,12 @@ internal static class IdentityApprovalResolver
     /// (<see cref="BiometricRules.IdentidadKey"/>) MÁS la fila propia del trámite. Puro y sin E/S: lo usa el
     /// listado, que precomputa las claves del tenant en UNA consulta (evita N+1). Las claves ya incluyen las
     /// filas propias del tenant, pero el fallback local mantiene consistencia con dobles/mocks.
+    /// <para><b>Baúl de firmas (HU #10645):</b> esta ruta de LOTE NO consulta el baúl. Resolver la firma de
+    /// baúl por parte exige una llamada asíncrona a <see cref="ISignatureVaultPolicy"/> por (tenant, NIT)
+    /// que no se puede precomputar barato desde las claves de identidad biométrica (romería N+1 en el
+    /// listado). Los chips del listado son informativos; los gates que SÍ importan (SubmitGate vía
+    /// <c>TramiteLifecycleService</c> y el gate del FUR) usan la ruta per-instancia
+    /// <see cref="ResolveApprovedPartiesAsync"/>, que sí resuelve el baúl.</para>
     /// </summary>
     public static IReadOnlySet<string> ApprovedPartiesFromKeys(
         ProcedureInstance instance, IReadOnlySet<string> approvedKeys, DateTimeOffset now)
@@ -77,6 +97,14 @@ internal static class IdentityApprovalResolver
         }
 
         return approved;
+    }
+
+    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
+    private static bool EsActorJuridico(string? documentType)
+    {
+        var t = documentType?.Trim();
+        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

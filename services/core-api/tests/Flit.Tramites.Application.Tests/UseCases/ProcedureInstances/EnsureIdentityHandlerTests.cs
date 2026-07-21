@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using FluentAssertions;
@@ -18,6 +19,7 @@ public sealed class EnsureIdentityHandlerTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private const string TipoDoc = "CC";
     private const string Documento = "1020304050";
+    private const string Nit = "900123456";
 
     public EnsureIdentityHandlerTests()
     {
@@ -237,6 +239,108 @@ public sealed class EnsureIdentityHandlerTests
         error.Should().Be("not_found");
     }
 
+    // ── Baúl de firmas (ADR-0025 §4, HU #10645, R14) ────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_ActorJuridicoConFirmaBaulVigente_FirmaBaul_NoBuscaReusoCrossTramite()
+    {
+        // Actor NIT + firma de baúl activa+vigente → outcome firma_baul (sin exigir validación,
+        // ValidationId null). Precedencia D8: el baúl gana a la reutilización cross-trámite, por lo que
+        // NO se consulta FindVigenteApprovedByDocument (paso 2).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        var vault = new FakeVaultPolicy(Match());
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
+        result.ValidationId.Should().BeNull();
+        vault.Calls.Should().Be(1);
+        vault.LastNit.Should().Be(Nit);
+        await _repo.DidNotReceive().FindVigenteApprovedByDocumentAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_BaulYReusoDisponibles_BaulTienePrecedencia()
+    {
+        // Aunque exista una identidad reutilizable cross-trámite, el baúl (D8: paso 1.5) tiene precedencia:
+        // el desenlace es firma_baul, no reusada.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(TenantId, "NIT", Nit, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow.AddDays(-2)));
+        var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
+    }
+
+    [Fact]
+    public async Task Handle_ActorJuridicoSinFirmaBaul_CaeAlFlujoNormal()
+    {
+        // Actor NIT pero baúl deshabilitado / sin firma vigente (política devuelve null) → cae al flujo
+        // normal: sin reuso cross-trámite disponible → requiere_validacion.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(TenantId, "NIT", Nit, Arg.Any<DateTimeOffset>(), ct)
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+        var vault = new FakeVaultPolicy(null);
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
+        vault.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_PersonaNatural_NoConsultaElBaul()
+    {
+        // El baúl SOLO aplica a actores jurídicos (NIT). Una persona natural (CC) nunca consulta el baúl,
+        // aunque la política tuviera una firma: su flujo de identidad queda intacto.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador(); // CC
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+        var vault = new FakeVaultPolicy(Match());
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
+        vault.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_ActorNitConValidacionLocalVigente_YaVigente_NoConsultaBaul()
+    {
+        // Precedencia: una validación PROPIA vigente del trámite (paso 1) se resuelve ANTES del baúl (1.5).
+        // El baúl no se consulta cuando ya hay ya_vigente local para el documento del actor.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        instance.BiometricValidations.Add(ValidationNit(BiometricEstados.Aprobado, DateTimeOffset.UtcNow));
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        var vault = new FakeVaultPolicy(Match());
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
+        vault.Calls.Should().Be(0);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────────────────────
 
     private static ProcedureInstance MatriculaConComprador() => new()
@@ -277,4 +381,44 @@ public sealed class EnsureIdentityHandlerTests
             ValidatedAt = validadoAt,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+
+    /// <summary>Matrícula cuyo comprador es una persona JURÍDICA (NIT) — el único caso que consume el baúl.</summary>
+    private static ProcedureInstance MatriculaConCompradorNit()
+    {
+        var instance = MatriculaConComprador();
+        var actor = instance.Actors.First();
+        actor.DocumentType = "NIT";
+        actor.DocumentNumber = Nit;
+        actor.FullName = "Renting SAS";
+        return instance;
+    }
+
+    /// <summary>Validación biométrica local con el documento del actor JURÍDICO (NIT) para el caso ya_vigente.</summary>
+    private static ProcedureInstanceBiometricValidation ValidationNit(string estado, DateTimeOffset? validadoAt)
+    {
+        var v = Validation(estado, validadoAt);
+        v.DocumentType = "NIT";
+        v.DocumentNumber = Nit;
+        return v;
+    }
+
+    private static SignatureVaultMatch Match() => new(
+        Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        "900123456");
+
+    /// <summary>Doble de <see cref="ISignatureVaultPolicy"/>: devuelve el match configurado y cuenta las consultas.</summary>
+    private sealed class FakeVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
+    {
+        public int Calls { get; private set; }
+        public string? LastNit { get; private set; }
+
+        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            LastNit = nitEmpresa;
+            return Task.FromResult(match);
+        }
+    }
 }

@@ -836,6 +836,8 @@ export type EnsureIdentityOutcome =
   | 'ya_vigente'           // el trámite ya tiene una validación aprobada y vigente
   | 'en_proceso'           // ya hay una validación en curso
   | 'reusada'              // se clonó una validación vigente de la persona (identidad aprobada)
+  | 'firma_baul'           // HU #10646 — actor jurídico (NIT) con firma electrónica vigente en el baúl:
+                           // la identidad queda satisfecha server-side, sin biométrica (validationId null)
   | 'requiere_validacion'  // no hay vigente → el front dispara la validación automáticamente
   | 'sin_actor';           // la parte aún no tiene actor con documento
 

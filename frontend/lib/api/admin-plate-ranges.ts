@@ -145,6 +145,20 @@ export function listAvailablePlatesForCompany(
   });
 }
 
+/**
+ * HU #10806 (AC3) — ¿la ruta de preasignación está habilitada para la compañía del radicador en el
+ * OT elegido? El wizard lo consulta para avisar cuando el trámite se entregará de forma estándar.
+ */
+export function getPlatePreassignStatus(
+  transitOfficeId: string,
+  signal?: AbortSignal,
+): Promise<{ enabled: boolean }> {
+  return apiFetch<{ enabled: boolean }>("/api/v1/tramites/plate-preassign/status", {
+    query: { transitOfficeId },
+    signal,
+  });
+}
+
 export const PLATE_STATE_LABELS: Record<PlateState, string> = {
   disponible: "Disponible",
   preasignada: "Preasignada",

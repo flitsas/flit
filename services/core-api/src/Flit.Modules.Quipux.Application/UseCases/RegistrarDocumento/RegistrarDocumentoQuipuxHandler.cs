@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Flit.Modules.Quipux.Domain.Codigos;
 using Flit.Modules.Quipux.Domain.Configuracion;
@@ -195,6 +196,11 @@ public sealed class RegistrarDocumentoQuipuxHandler
             },
             command.CorrelationId, cancellationToken);
 
+        // Instrumentación de duración (HU #10793): elapsed de la llamada HTTP de registro, para el
+        // LOG QX. Observabilidad pura — no cambia contrato, reintentos ni timeouts. Origen = worker
+        // registrador.
+        var inicioRegistro = Stopwatch.GetTimestamp();
+
         QuipuxRegisterResult respuesta;
         try
         {
@@ -205,7 +211,13 @@ public sealed class RegistrarDocumentoQuipuxHandler
             await _audit.WriteAsync(
                 submission.TenantId, submission.Id, QuipuxStage.RegistroRespuesta,
                 ex.IsTransient ? QuipuxOutcome.ErrorTransitorio : QuipuxOutcome.ErrorDefinitivo,
-                new { motivo = RegistrarDocumentoQuipuxMotivos.LlamadaRegistroFallida, transitorio = ex.IsTransient },
+                new
+                {
+                    motivo = RegistrarDocumentoQuipuxMotivos.LlamadaRegistroFallida,
+                    transitorio = ex.IsTransient,
+                    duration_ms = ElapsedMs(inicioRegistro),
+                    origen = QuipuxJobNames.Register,
+                },
                 command.CorrelationId, cancellationToken);
 
             RegistrarDocumentoQuipuxLog.RegistroFallido(_logger, ex, submission.Id, ex.IsTransient);
@@ -223,7 +235,12 @@ public sealed class RegistrarDocumentoQuipuxHandler
             await _audit.WriteAsync(
                 submission.TenantId, submission.Id, QuipuxStage.RegistroRespuesta,
                 QuipuxOutcome.ErrorTransitorio,
-                new { codigo = respuesta.Codigo },
+                new
+                {
+                    codigo = respuesta.Codigo,
+                    duration_ms = ElapsedMs(inicioRegistro),
+                    origen = QuipuxJobNames.Register,
+                },
                 command.CorrelationId, cancellationToken);
 
             return await ErrorReintentableAsync(
@@ -232,7 +249,8 @@ public sealed class RegistrarDocumentoQuipuxHandler
         }
 
         return await MarcarRegistradoAsync(
-            submission, respuesta.Codigo, yaEstabaEnQuipux: false, command, cancellationToken);
+            submission, respuesta.Codigo, yaEstabaEnQuipux: false, ElapsedMs(inicioRegistro),
+            command, cancellationToken);
     }
 
     /// <summary>
@@ -254,6 +272,10 @@ public sealed class RegistrarDocumentoQuipuxHandler
             new { motivo = "consulta_previa_a_reintento", intento = submission.Attempts },
             command.CorrelationId, cancellationToken);
 
+        // Instrumentación de duración (HU #10793): esta consulta previa la hace el propio worker
+        // registrador, así que el origen sigue siendo Register (no el sondeo).
+        var inicioConsultaPrevia = Stopwatch.GetTimestamp();
+
         QuipuxValidateStatusResult consulta;
         try
         {
@@ -273,7 +295,13 @@ public sealed class RegistrarDocumentoQuipuxHandler
             await _audit.WriteAsync(
                 submission.TenantId, submission.Id, QuipuxStage.ConsultaError,
                 ex.IsTransient ? QuipuxOutcome.ErrorTransitorio : QuipuxOutcome.ErrorDefinitivo,
-                new { motivo = RegistrarDocumentoQuipuxMotivos.ConsultaPreviaFallida, transitorio = ex.IsTransient },
+                new
+                {
+                    motivo = RegistrarDocumentoQuipuxMotivos.ConsultaPreviaFallida,
+                    transitorio = ex.IsTransient,
+                    duration_ms = ElapsedMs(inicioConsultaPrevia),
+                    origen = QuipuxJobNames.Register,
+                },
                 command.CorrelationId, cancellationToken);
 
             RegistrarDocumentoQuipuxLog.ConsultaPreviaFallida(_logger, ex, submission.Id);
@@ -283,9 +311,17 @@ public sealed class RegistrarDocumentoQuipuxHandler
                 QuipuxStage.ConsultaError, command, cancellationToken);
         }
 
+        var duracionConsultaPrevia = ElapsedMs(inicioConsultaPrevia);
+
         await _audit.WriteAsync(
             submission.TenantId, submission.Id, QuipuxStage.ConsultaRespuesta, QuipuxOutcome.Ok,
-            new { codigo = consulta.Codigo, estado_tramite = consulta.EstadoTramiteCodigo },
+            new
+            {
+                codigo = consulta.Codigo,
+                estado_tramite = consulta.EstadoTramiteCodigo,
+                duration_ms = duracionConsultaPrevia,
+                origen = QuipuxJobNames.Register,
+            },
             command.CorrelationId, cancellationToken);
 
         if (!QuipuxCodigos.EsRegistroExitoso(consulta.Codigo))
@@ -297,7 +333,8 @@ public sealed class RegistrarDocumentoQuipuxHandler
         RegistrarDocumentoQuipuxLog.YaRegistradoEnQuipux(_logger, submission.Id, submission.Attempts);
 
         return await MarcarRegistradoAsync(
-            submission, consulta.Codigo, yaEstabaEnQuipux: true, command, cancellationToken);
+            submission, consulta.Codigo, yaEstabaEnQuipux: true, duracionConsultaPrevia,
+            command, cancellationToken);
     }
 
     /// <summary>
@@ -313,6 +350,7 @@ public sealed class RegistrarDocumentoQuipuxHandler
         QuipuxSubmission submission,
         int codigo,
         bool yaEstabaEnQuipux,
+        long durationMs,
         RegistrarDocumentoQuipuxCommand command,
         CancellationToken cancellationToken)
     {
@@ -335,6 +373,8 @@ public sealed class RegistrarDocumentoQuipuxHandler
                     motivo = RegistrarDocumentoQuipuxMotivos.TransicionFallida,
                     error = errorTransicion,
                     codigo,
+                    duration_ms = durationMs,
+                    origen = QuipuxJobNames.Register,
                 },
                 command.CorrelationId, cancellationToken);
 
@@ -353,7 +393,14 @@ public sealed class RegistrarDocumentoQuipuxHandler
             submission,
             NuevoEvento(
                 submission, QuipuxStage.RegistroRespuesta, QuipuxOutcome.Ok,
-                new { codigo, ya_estaba_en_quipux = yaEstabaEnQuipux }, command.CorrelationId, ahora),
+                new
+                {
+                    codigo,
+                    ya_estaba_en_quipux = yaEstabaEnQuipux,
+                    duration_ms = durationMs,
+                    origen = QuipuxJobNames.Register,
+                },
+                command.CorrelationId, ahora),
             cancellationToken);
 
         RegistrarDocumentoQuipuxLog.Registrado(_logger, submission.Id, submission.ProcedureInstanceId, codigo);
@@ -599,6 +646,10 @@ public sealed class RegistrarDocumentoQuipuxHandler
     /// ids, banderas) — NUNCA el request/response crudos, que llevan PII del propietario.
     /// </summary>
     private static string Detalle(object detalle) => JsonSerializer.Serialize(detalle);
+
+    /// <summary>Milisegundos transcurridos desde un timestamp de <see cref="Stopwatch"/> (HU #10793).</summary>
+    private static long ElapsedMs(long startTimestamp) =>
+        (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
     private static string? Leer(Dictionary<string, string?> fieldValues, string campo) =>
         fieldValues.TryGetValue(campo, out var valor) && !string.IsNullOrWhiteSpace(valor)
