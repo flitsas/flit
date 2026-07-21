@@ -334,6 +334,63 @@ public sealed class CreateProcedureInstanceTests
         result.Should().NotBeNull();
     }
 
+    // ── FEATURE-08 / HU-BE-08 (CFD-12) — procedureTypeCode ─────────────────────
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_ResolvesPublishedTypeByCode()
+    {
+        // BE-08-AC-06
+        var ct = TestContext.Current.CancellationToken;
+        var pt = PublishedType("TRASPASO_SIMPLE", "traspaso");
+        _typeRepo.GetByCodePublishedAsync("TRASPASO_SIMPLE", ct).Returns(pt);
+        StubReferenceGenerator();
+
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), ProcedureTypeId: null, Guid.NewGuid(), null,
+            Modalidad: null, ProcedureTypeCode: "TRASPASO_SIMPLE");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
+        result!.ProcedureTypeId.Should().Be(pt.Id);
+        await _typeRepo.Received(1).GetByCodePublishedAsync("TRASPASO_SIMPLE", ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_UnknownOrUnpublished_ReturnsNotFound()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _typeRepo.GetByCodePublishedAsync("GHOST", ct).Returns((ProcedureType?)null);
+
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), null, Guid.NewGuid(), null, ProcedureTypeCode: "GHOST");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().Be("not_found");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_TakesPrecedenceOverModalidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = PublishedType("TRASPASO_SIMPLE", "traspaso");
+        _typeRepo.GetByCodePublishedAsync("TRASPASO_SIMPLE", ct).Returns(pt);
+        StubReferenceGenerator();
+
+        // Se envían ambos: el código tiene precedencia (no se llama la resolución por modalidad).
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), null, Guid.NewGuid(), null,
+            Modalidad: "matricula_inicial", ProcedureTypeCode: "TRASPASO_SIMPLE");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
+        result!.ProcedureTypeId.Should().Be(pt.Id);
+        await _typeRepo.DidNotReceive().GetByCodePublishedAsync("MATRICULA_NUEVA", ct);
+    }
+
     [Fact]
     public async Task HandleAsync_BothProcedureTypeIdAndModalidad_ReturnsInvalidRequest()
     {

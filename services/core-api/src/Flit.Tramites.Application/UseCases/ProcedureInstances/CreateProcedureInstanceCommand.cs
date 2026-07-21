@@ -14,7 +14,9 @@ public sealed record CreateProcedureInstanceRequest(
     Guid? ProcedureTypeId,
     Guid CreatedByUserId,
     Guid? TransitOfficeId,
-    string? Modalidad = null);
+    string? Modalidad = null,
+    // FEATURE-08 / HU-BE-08 (CFD-12): código del tipo. Tiene precedencia sobre modalidad.
+    string? ProcedureTypeCode = null);
 
 public sealed record ProcedureInstanceSummary(
     Guid Id,
@@ -48,15 +50,24 @@ public sealed class CreateProcedureInstanceHandler(
         CreateProcedureInstanceRequest request,
         CancellationToken ct = default)
     {
+        var hasCode = !string.IsNullOrWhiteSpace(request.ProcedureTypeCode);
         var hasTypeId = request.ProcedureTypeId is { } id && id != Guid.Empty;
         var hasModalidad = !string.IsNullOrWhiteSpace(request.Modalidad);
 
-        // Exactamente uno de {procedureTypeId, modalidad} debe venir.
-        if (hasTypeId == hasModalidad)
-            return (null, "invalid_request");
-
         ProcedureType? procedureType;
-        if (hasTypeId)
+        if (hasCode)
+        {
+            // CFD-12: el código tiene precedencia. Resuelve solo tipos publicados.
+            procedureType = await typeRepo.GetByCodePublishedAsync(request.ProcedureTypeCode!.Trim(), ct);
+            if (procedureType is null)
+                return (null, "not_found");
+        }
+        else if (hasTypeId == hasModalidad)
+        {
+            // Exactamente uno de {procedureTypeId, modalidad} debe venir cuando no hay código.
+            return (null, "invalid_request");
+        }
+        else if (hasTypeId)
         {
             procedureType = await typeRepo.GetByIdAsync(request.ProcedureTypeId!.Value, ct);
             if (procedureType is null)

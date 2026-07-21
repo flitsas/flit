@@ -1558,6 +1558,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/procedure-types:
+    get:
+      tags: [Tramites - Catálogo]
+      operationId: listPublishedProcedureTypesForOperator
+      summary: Lista tipos de trámite publicados para operadores (FEATURE-08 / CFD-12)
+      description: >
+        Devuelve los tipos con `publication_status = 'published'` para el selector del
+        botón único de creación de trámite. No requiere rol SuperAdmin; sí JWT de
+        operador y header `X-Tenant-Id`. Catálogo global: no se filtra por tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Lista de tipos publicados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProcedureTypeSummaryF08"
+        "400":
+          description: Falta el header X-Tenant-Id.
+        "401":
+          description: No autenticado.
+
   /api/v1/superadmin/procedure-types/{id}/conformation-profile:
     parameters:
       - name: id
@@ -5225,6 +5255,16 @@ components:
 
   schemas:
     # ── Trámites · Configurador dinámico (FEATURE-08 / CFD-01) ────────────────
+    ProcedureTypeSummaryF08:
+      type: object
+      description: Resumen de tipo publicado para el selector de operador (CFD-12, §6.1).
+      required: [id, code, name, family, version]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: TRASPASO_SIMPLE }
+        name: { type: string, example: Traspaso Simple }
+        family: { type: string, example: traspaso }
+        version: { type: integer, example: 1 }
     ProcedureConformationProfile:
       type: object
       description: >

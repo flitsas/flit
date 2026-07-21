@@ -30,6 +30,8 @@ public static class DependencyInjection
         // FEATURE-08 / HU-BE-01 (CFD-01) — perfil de conformación (gate_profile) + snapshot por instancia.
         services.AddScoped<GetConformationProfileHandler>();
         services.AddScoped<UpdateConformationProfileHandler>();
+        // FEATURE-08 / HU-BE-08 (CFD-12) — listado de tipos publicados para el selector de operador.
+        services.AddScoped<GetPublishedProcedureTypesHandler>();
 
         services.AddScoped<CaptureTypeSnapshotHandler>();
         services.AddScoped<CreateProcedureInstanceHandler>();
