@@ -36,7 +36,7 @@ public sealed class PlatePreassignPolicyTests
         var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
         var decision = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
 
-        decision.Should().Be(PlateRouteDecision.Asignado);
+        decision.Decision.Should().Be(PlateRouteDecision.Asignado);
         var detail = await ctx.PlateRangeDetails.FirstAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
         detail.ProcedureInstanceId.Should().Be(instance);
     }
@@ -59,7 +59,36 @@ public sealed class PlatePreassignPolicyTests
         await using var ctx = NewContext(db);
         var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
         (await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken))
-            .Should().Be(PlateRouteDecision.Preasignado);
+            .Decision.Should().Be(PlateRouteDecision.Preasignado);
+    }
+
+    [Fact] // HU #10806 — el dígito de preferencia es informativo: sin placa (con o sin dígito) ⇒ Flujo B.
+    public async Task Decide_FlujoB_SinPlacaConDigitoPreferencia_Preasignado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office);
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: null);
+            // El radicador expresó un dígito de preferencia pero NO eligió placa: no debe alterar la ruta.
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(), ProcedureInstanceId = instance, TenantId = company,
+                FieldKey = "plate_preferred_last_digit", ValueText = "7",
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Preasignado);
+        result.Reason.Should().Be(PlateRouteReason.NoPlate);
     }
 
     [Fact]
@@ -80,7 +109,7 @@ public sealed class PlatePreassignPolicyTests
         await using var ctx = NewContext(db);
         var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
         (await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken))
-            .Should().Be(PlateRouteDecision.Standard);
+            .Decision.Should().Be(PlateRouteDecision.Standard);
     }
 
     [Fact]
@@ -100,8 +129,37 @@ public sealed class PlatePreassignPolicyTests
 
         await using var ctx = NewContext(db);
         var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
-        (await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken))
-            .Should().Be(PlateRouteDecision.Standard);
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+        result.Decision.Should().Be(PlateRouteDecision.Standard);
+        // La compañía no tiene el flag → estándar sin fricción (no bloqueo).
+        result.Reason.Should().Be(PlateRouteReason.PreassignNotEnabled);
+    }
+
+    [Fact] // HU #10806 — la compañía SÍ tiene preasignación activa pero el OT está mal configurado
+           // (sin grant/allow): se bloquea la radicación en vez de degradar a estándar en silencio.
+    public async Task Decide_CompaniaActivaPeroOtMalConfigurado_Blocked()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            // Solo el flag de la compañía; falta el grant y el allow_plate_preassign del OT.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(), TenantId = company, PlatePreassignEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: null);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+        result.Decision.Should().Be(PlateRouteDecision.Blocked);
+        result.Reason.Should().Be(PlateRouteReason.PreassignMisconfigured);
     }
 
     private static async Task SeedRouteAsync(FlitDbContext ctx, Guid company, Guid office)

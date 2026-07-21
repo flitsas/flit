@@ -168,39 +168,51 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
     public async Task<bool> IsAssignmentAllowedAsync(
         Guid companyTenantId,
         Guid transitOfficeId,
-        CancellationToken cancellationToken = default)
-    {
-        var companyFlag = await _context.TenantOperationalPolicies
-            .AsNoTracking()
-            .Where(p => p.TenantId == companyTenantId)
-            .Select(p => (bool?)p.PlatePreassignEnabled)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false) ?? false;
+        CancellationToken cancellationToken = default) =>
+        await EvaluateAssignmentEligibilityAsync(companyTenantId, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false) == PlateAssignmentEligibility.Allowed;
 
-        if (!companyFlag)
+    // HU #10806 — evalúa el AND de tres flags devolviendo el MOTIVO del corte. Lee bajo el guard
+    // cross-tenant (row_security off), consistente con ListEligibleCompaniesAsync, porque toca filas
+    // del OT (ot_requirements) y del grant que pertenecen a tenants distintos al de la compañía.
+    public Task<PlateAssignmentEligibility> EvaluateAssignmentEligibilityAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(async () =>
         {
-            return false;
-        }
+            var companyFlag = await _context.TenantOperationalPolicies
+                .AsNoTracking()
+                .Where(p => p.TenantId == companyTenantId)
+                .Select(p => (bool?)p.PlatePreassignEnabled)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false) ?? false;
 
-        var grant = await _context.TenantTransitOfficeGrants
-            .AsNoTracking()
-            .AnyAsync(
-                g => g.TenantId == companyTenantId && g.TransitOfficeId == transitOfficeId && g.IsEnabled,
-                cancellationToken)
-            .ConfigureAwait(false);
+            // La compañía no usa preasignación → ruta estándar, sin fricción ni bloqueo.
+            if (!companyFlag)
+            {
+                return PlateAssignmentEligibility.CompanyDisabled;
+            }
 
-        if (!grant)
-        {
-            return false;
-        }
+            var grant = await _context.TenantTransitOfficeGrants
+                .AsNoTracking()
+                .AnyAsync(
+                    g => g.TenantId == companyTenantId && g.TransitOfficeId == transitOfficeId && g.IsEnabled,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        return await _context.OtRequirements
-            .AsNoTracking()
-            .Where(r => r.TransitOfficeId == transitOfficeId)
-            .Select(r => (bool?)r.AllowPlatePreassign)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false) ?? false;
-    }
+            var otAllows = await _context.OtRequirements
+                .AsNoTracking()
+                .Where(r => r.TransitOfficeId == transitOfficeId)
+                .Select(r => (bool?)r.AllowPlatePreassign)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false) ?? false;
+
+            // La compañía SÍ tiene el flag pero el OT no está habilitado (grant/allow) → mala config.
+            return grant && otAllows
+                ? PlateAssignmentEligibility.Allowed
+                : PlateAssignmentEligibility.Misconfigured;
+        }, cancellationToken);
 
     // HU #10797 — compañías elegibles para recibir un rango de este OT (alimenta el selector de la consola,
     // en vez de escribir el tenant id): OT con allow_plate_preassign + grant vigente + preasignación activa
