@@ -24,9 +24,37 @@ export interface GateProfile {
   [key: string]: unknown;
 }
 
-/** Cuerpo del PUT /conformation-profile. HU-FE-01 envía solo gateProfile. */
+/** Fuente externa a habilitar por el tipo (CFD-04). `config` lleva p. ej. `simitMode`. */
+export interface ConformationSourceInput {
+  sourceCode: string;
+  executionOrder: number;
+  config?: Record<string, unknown>;
+}
+
+/** Regla de conformación (actor) a persistir con su perfil de validación (CFD-05, incl. LESSEE). */
+export interface ConformationRuleInput {
+  entityCode: string;
+  validationProfile?: Record<string, unknown>;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+/**
+ * Cuerpo del PUT /conformation-profile. HU-FE-01 envía gateProfile; HU-FE-02 añade sources +
+ * conformationRules; HU-FE-03 añade documentRequirements. Campos opcionales: se envían solo los que
+ * cambian.
+ */
 export interface ConformationProfileInput {
   gateProfile?: GateProfile;
+  sources?: ConformationSourceInput[];
+  conformationRules?: ConformationRuleInput[];
+  documentRequirements?: {
+    documentTypeCode: string;
+    isRequired?: boolean;
+    isDummy?: boolean;
+    conditionGroup?: string | null;
+    sortOrder?: number;
+  }[];
 }
 
 export interface ConformationRuleProfile {
