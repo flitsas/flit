@@ -18,7 +18,25 @@ public sealed class ProcedureDocumentRequirement
 
     public short DefaultSortOrder { get; set; }
 
+    /// <summary>
+    /// Buzón dummy CFD-06: el documento se muestra en el checklist pero no bloquea
+    /// la validación del paso. Útil para documentos informativos o de referencia.
+    /// </summary>
+    public bool IsDummy { get; set; }
+
+    /// <summary>
+    /// Grupo condicional (ej: "prenda"). El requisito solo aplica si la condición
+    /// del grupo está activa en la instancia del trámite. <c>null</c> = siempre aplica.
+    /// </summary>
+    public string? ConditionGroup { get; set; }
+
+    public long RowVersion { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public Guid? CreatedBy { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    public Guid? UpdatedBy { get; set; }
 }

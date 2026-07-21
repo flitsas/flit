@@ -29,6 +29,11 @@ internal sealed class ProcedureDocumentRequirementConfiguration
         builder.Property(x => x.DefaultSortOrder).IsRequired();
         builder.Property(x => x.CreatedAt).IsRequired();
 
+        // F08 Fase 2b: extensión CFD-06 (dummy/condicional) + A16 (row_version)
+        builder.Property(x => x.IsDummy).IsRequired().HasDefaultValue(false);
+        builder.Property(x => x.ConditionGroup).HasMaxLength(50);
+        builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
+
         builder.HasIndex(x => x.DocumentTypeId)
             .HasDatabaseName("ix_procedure_document_requirements_document_type_id");
 

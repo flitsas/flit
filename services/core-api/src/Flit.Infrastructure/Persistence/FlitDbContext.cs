@@ -154,6 +154,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
 
+    // FEATURE-08 / Fase 2b — catálogo global de fuentes por tipo (CFD-04, ADR-0019 excepción A4/A20).
+    public DbSet<ProcedureTypeSource> ProcedureTypeSources => Set<ProcedureTypeSource>();
+
+    // FEATURE-08 / Fase 2b — snapshots inmutables del tipo al crear instancia (CFD-01/AC#5).
+    public DbSet<ProcedureTypeSnapshot> ProcedureTypeSnapshots => Set<ProcedureTypeSnapshot>();
+
     // Quipux — radicación de trámites en secretarías de tránsito. El activador es el modo QX del
     // perfil OT (admin.transit_office_profiles.operation_mode = 'quipux').
     public DbSet<QuipuxSubmission> QuipuxSubmissions => Set<QuipuxSubmission>();
