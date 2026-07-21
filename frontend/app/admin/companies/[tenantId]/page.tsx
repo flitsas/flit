@@ -14,6 +14,7 @@ import { OTBlockingPoliciesPanel } from "@/components/admin/companies/panels/OTB
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
+import { SignatureVaultTab } from "@/components/admin/companies/signature-vault/SignatureVaultTab";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
@@ -117,6 +118,7 @@ function CompanyDetail() {
                 otBlockingSlot={<OTBlockingPoliciesPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                baulFirmasSlot={<SignatureVaultTab tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
               />
             </>

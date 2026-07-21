@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileSignature,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -34,6 +35,14 @@ interface Props {
    * oculta: ahí la biométrica es una subsección dentro de "Generar FUR".
    */
   hideIntro?: boolean;
+  /**
+   * HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
+   * El backend deja el paso completo server-side y no crea validación biométrica (ni expone un flag por
+   * parte en el estado biométrico), así que la señal llega del outcome `firma_baul` de ensureIdentity que
+   * captura el wizard. Para estas partes se muestra el estado "cubierto por el baúl" y se omite la
+   * biométrica manual.
+   */
+  vaultCoveredPartes?: BiometricParte[];
 }
 
 /** Partes que requieren biométrica por modalidad. */
@@ -77,7 +86,13 @@ function useIsSuperAdmin(): boolean {
  * refresca solo (polling) hasta aprobado/rechazado. Con `mock` el clic simula la validación (score 95).
  * El status/gating lo decide el wizard server-driven: este paso refresca tras iniciar/simular.
  */
-export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = false }: Props) {
+export function BiometricStep({
+  instanceId,
+  modalidad,
+  onRefresh,
+  hideIntro = false,
+  vaultCoveredPartes = [],
+}: Props) {
   const partes = partesFor(modalidad);
   // Solo lectura (Track C): sin iniciar/simular validación.
   const readOnly = useWizardReadOnly();
@@ -197,6 +212,7 @@ export function BiometricStep({ instanceId, modalidad, onRefresh, hideIntro = fa
                 instanceId={instanceId}
                 provider={provider}
                 validation={validation}
+                vaultCovered={vaultCoveredPartes.includes(parte)}
                 onChanged={() => void handleRefresh()}
               />
             );
@@ -235,18 +251,21 @@ function ParteCard({
   instanceId,
   provider,
   validation,
+  vaultCovered,
   onChanged,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
   provider: string;
   validation: BiometricValidation | null;
+  vaultCovered: boolean;
   onChanged: () => void;
 }) {
   const estado = validation?.status;
   const isAdmin = useIsSuperAdmin();
   // La bitácora solo aplica a validaciones Kyverum (mock no genera eventos) y solo para soporte.
-  const showAudit = isAdmin && validation != null && validation.provider === KYVERUM;
+  // No aplica a la cobertura por baúl (no hay validación biométrica que auditar).
+  const showAudit = !vaultCovered && isAdmin && validation != null && validation.provider === KYVERUM;
   return (
     <fieldset
       className="rounded-xl border p-4"
@@ -254,7 +273,11 @@ function ParteCard({
     >
       <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
 
-      {estado === 'aprobado' ? (
+      {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
+          satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}
+      {vaultCovered ? (
+        <VaultCoveredView />
+      ) : estado === 'aprobado' ? (
         <VerifiedView validation={validation!} />
       ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
         // El enlace de captura solo se muestra si NO está vencido. Un enlace vencido (validation.expired:
@@ -286,6 +309,38 @@ function ParteCard({
         <IdentityAuditPanel instanceId={instanceId} validationId={validation!.id} />
       )}
     </fieldset>
+  );
+}
+
+/**
+ * HU #10646 — estado "cubierto por el baúl": la parte es un actor jurídico (NIT) con firma electrónica
+ * vigente en el baúl, así que su identidad queda satisfecha con esa firma y NO requiere biométrica. Se
+ * presenta como "Firma electrónica (baúl)" — sin botones de iniciar/simular/reintentar validación.
+ */
+function VaultCoveredView() {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-xl p-3"
+      style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
+        style={{ background: '#557EFF', color: 'white' }}
+        aria-hidden
+      >
+        <FileSignature className="h-5 w-5" />
+      </span>
+      <div className="space-y-0.5">
+        <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+          Firma electrónica (baúl)
+        </p>
+        <p className="text-[11px] opacity-70">
+          Identidad cubierta por la firma electrónica del baúl. No requiere validación biométrica.
+        </p>
+      </div>
+    </div>
   );
 }
 

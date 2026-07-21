@@ -43,4 +43,7 @@ public sealed class FurFieldManifest
 }
 
 /// <summary>Valor resuelto de un campo para el overlay.</summary>
-public sealed record FurFieldValue(string? Text, byte[]? ImageBytes = null);
+/// <param name="ImageSidecarText">
+/// Texto multilínea pintado a la derecha de <see cref="ImageBytes"/> (metadatos del baúl de firmas).
+/// </param>
+public sealed record FurFieldValue(string? Text, byte[]? ImageBytes = null, string? ImageSidecarText = null);

@@ -711,4 +711,71 @@ public sealed class WizardStateHandlerTests
 
         result!.CanSubmit.Should().BeFalse();
     }
+
+    // ── HU #10645 (ADR-0025 §4) — baúl de firmas cuenta como identidad aprobada en el gate ──────
+
+    [Fact]
+    public async Task Get_Matricula_CompradorNitCubiertoPorBaul_IdentidadAprobadaSinBiometrica()
+    {
+        // Un comprador JURÍDICO (NIT) con firma de baúl activa+vigente cuenta como identidad APROBADA en
+        // el gate (IdentityApprovalResolver ruta per-instancia): el paso 4 queda complete SIN fila biométrica
+        // y el submit se habilita. Esto es lo que consumen SubmitGate y el gate del FUR.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(ActorNit("comprador"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var handler = new GetWizardStateHandler(_repo, vaultPolicy: new StubVaultPolicy(VaultMatch()));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("complete");
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.IdentidadNoAprobada);
+        result.CanSubmit.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Get_Matricula_CompradorNitSinBaul_IdentidadNoAprobada()
+    {
+        // Control negativo: el MISMO comprador NIT sin baúl (política nula por defecto) NO queda aprobado
+        // (no hay biométrica de una persona jurídica) → paso 4 incomplete y submit vetado. Prueba que es el
+        // baúl —y no otra cosa— quien habilita la identidad en el test anterior.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(ActorNit("comprador"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    private static ProcedureInstanceActor ActorNit(string actorType, string nit = "900123456") =>
+        new()
+        {
+            ActorType = actorType,
+            DocumentType = "NIT",
+            DocumentNumber = nit,
+            FullName = "Renting SAS",
+            Email = "renting@x.com",
+        };
+
+    private static SignatureVaultMatch VaultMatch() => new(
+        Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        "900123456");
+
+    private sealed class StubVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
+    {
+        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+            => Task.FromResult(match);
+    }
 }

@@ -50,13 +50,21 @@ export function ConfiguracionEmpresaTab({
 
   return (
     <div className="space-y-4">
-      <ToggleSwitch
-        id="baulFirmasActivo"
-        label="Baúl de firmas activo"
-        description="Guarda de forma segura las firmas digitales de la compañía para reutilizarlas al firmar los documentos de cada trámite, sin tener que capturarlas en cada radicación."
-        checked={form.baulFirmasActivo}
-        onChange={(v) => onChange({ baulFirmasActivo: v })}
-      />
+      <fieldset>
+        <legend className="text-xs font-semibold">Parámetros de firma</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Controla cómo se firman los documentos de cada trámite. Los cambios aplican solo a las
+          radicaciones nuevas: las que ya están en curso conservan la configuración con la que se
+          iniciaron.
+        </p>
+        <ToggleSwitch
+          id="baulFirmasActivo"
+          label="Firma precargada (baúl)"
+          description="Guarda de forma segura las firmas digitales de la compañía en el baúl para reutilizarlas al firmar los documentos de cada trámite, sin tener que capturarlas en cada radicación."
+          checked={form.baulFirmasActivo}
+          onChange={(v) => onChange({ baulFirmasActivo: v })}
+        />
+      </fieldset>
 
       <ToggleSwitch
         id="preasignacionPlacaActiva"

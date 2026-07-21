@@ -333,6 +333,47 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["vehicle_owner_signature"].Text.Should().Contain("comprador/compraventa");
     }
 
+    [Fact]
+    public void FurFieldMapper_VaultSignatureImage_IncludesSidecarMetadata()
+    {
+        var vaultId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var data = FullData() with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { ["comprador"] = [0x89, 0x50, 0x4E, 0x47] },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>
+            {
+                ["comprador"] = new FirmaBaulMetadata(
+                    "900123456",
+                    "RENTING SAS",
+                    new DateOnly(2026, 1, 1),
+                    new DateOnly(2026, 12, 31),
+                    vaultId),
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        var sig = values["vehicle_owner_signature"];
+        sig.ImageBytes.Should().NotBeNullOrEmpty();
+        sig.ImageSidecarText.Should().Contain("Doc. 900123456");
+        sig.ImageSidecarText.Should().Contain("RENTING SAS");
+        sig.ImageSidecarText.Should().Contain("01/01/2026");
+        sig.ImageSidecarText.Should().Contain("31/12/2026");
+        sig.ImageSidecarText.Should().Contain(vaultId.ToString("D"));
+    }
+
+    [Fact]
+    public void FurFieldMapper_VaultSignatureImage_WithoutMetadata_OmitsSidecar()
+    {
+        var data = FullData() with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { ["comprador"] = [0x01, 0x02] },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["vehicle_owner_signature"].ImageBytes.Should().NotBeNullOrEmpty();
+        values["vehicle_owner_signature"].ImageSidecarText.Should().BeNull();
+    }
+
     // ── HU #10256 fix — resolutor de fuentes embebido (raíz del HTTP 500 en runtime alpine) ──
 
     [Fact]
