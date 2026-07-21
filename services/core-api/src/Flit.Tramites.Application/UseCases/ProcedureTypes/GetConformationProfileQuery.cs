@@ -31,7 +31,8 @@ public sealed record ProcedureConformationProfileDto(
 
 public sealed class GetConformationProfileHandler(
     IProcedureTypeRepository repository,
-    IProcedureTypeSourceRepository? sourceRepo = null)
+    IProcedureTypeSourceRepository? sourceRepo = null,
+    IProcedureTypeDocumentRepository? docRepo = null)
 {
     public async Task<(ProcedureConformationProfileDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -56,7 +57,14 @@ public sealed class GetConformationProfileHandler(
                     s.SourceCode, s.ExecutionOrder, ProfileJson.ParseOrEmpty(s.Config)))
                 .ToList();
 
-        // documentRequirements se materializa en HU-BE-04. El contrato ya expone las 4 claves (AC BE-01-AC-05).
+        // HU-BE-04 (CFD-06): requisitos documentales por tipo.
+        List<ProcedureDocumentRequirementDto> documentRequirements = docRepo is null
+            ? []
+            : (await docRepo.ListByTypeAsync(entity.Id, ct))
+                .Select(d => new ProcedureDocumentRequirementDto(
+                    d.DocumentTypeCode, d.IsRequired, d.IsDummy, d.ConditionGroup))
+                .ToList();
+
         var dto = new ProcedureConformationProfileDto(
             entity.Id,
             entity.Code,
@@ -65,7 +73,7 @@ public sealed class GetConformationProfileHandler(
             ProfileJson.ParseOrEmpty(entity.GateProfile),
             rules,
             sources,
-            []);
+            documentRequirements);
 
         return (dto, null);
     }

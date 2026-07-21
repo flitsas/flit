@@ -5327,6 +5327,22 @@ components:
                 additionalProperties: true
               isActive: { type: boolean }
               sortOrder: { type: integer }
+        documentRequirements:
+          type: array
+          description: >
+            Documentos requeridos por tipo (HU-BE-04 / CFD-06). Se resuelven por
+            `documentTypeCode`; código inexistente → 422. `isDummy` no bloquea el paso.
+            Los flags `requiresCommercialValue`/`commercialValueSource`/`requiresBiometrics`/
+            `biometricActors`/`requiresSignature` viajan dentro de `gateProfile`.
+          items:
+            type: object
+            required: [documentTypeCode]
+            properties:
+              documentTypeCode: { type: string, example: CEDULA }
+              isRequired: { type: boolean }
+              isDummy: { type: boolean }
+              conditionGroup: { type: string, nullable: true }
+              sortOrder: { type: integer }
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
     AttachmentDto:
       type: object

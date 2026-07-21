@@ -55,6 +55,25 @@ public sealed class ProcedureTypeGateProfileTests
         profile.EntryMode.Should().Be("VIN");
     }
 
+    [Fact]
+    public void FromJson_ParsesCommercialBiometricAndSignatureFlags()
+    {
+        // FEATURE-08 / HU-BE-04 (CFD-06/CFD-07): flags comercial/identidad/firma en gate_profile.
+        var json = """
+        { "requiresCommercialValue": true, "commercialValueSource": "FASECOLDA",
+          "requiresBiometrics": true, "biometricActors": ["BUYER","OWNER"],
+          "requiresSignature": true }
+        """;
+
+        var profile = ProcedureTypeGateProfile.FromJson(json);
+
+        profile.RequiresCommercialValue.Should().BeTrue();
+        profile.CommercialValueSource.Should().Be("FASECOLDA");
+        profile.RequiresBiometrics.Should().BeTrue();
+        profile.BiometricActors.Should().ContainInOrder("BUYER", "OWNER");
+        profile.RequiresSignature.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("PLATE", true)]
     [InlineData("VIN", true)]

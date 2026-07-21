@@ -82,6 +82,8 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureTypeSnapshotRepository, ProcedureTypeSnapshotRepository>();
         // FEATURE-08 / HU-BE-03 (CFD-04) — fuentes externas por tipo (catálogo global).
         services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
+        // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
+        services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();

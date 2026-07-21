@@ -14,16 +14,22 @@ public sealed record ConformationSourceInput(string SourceCode, int ExecutionOrd
 public sealed record ConformationRuleUpsertInput(
     string EntityCode, JsonNode? ValidationProfile, bool IsActive = true, short SortOrder = 0);
 
+/// <summary>Requisito documental a persistir por tipo (CFD-06). El documento se referencia por código.</summary>
+public sealed record ConformationDocumentRequirementInput(
+    string DocumentTypeCode, bool IsRequired = false, bool IsDummy = false,
+    string? ConditionGroup = null, int SortOrder = 0);
+
 /// <summary>
 /// Entrada del PUT de perfil de conformación (§6.3 plan). HU-BE-01 persiste <c>gateProfile</c>;
 /// HU-BE-02 valida <c>entryMode</c> + flags de validación; HU-BE-03 añade <c>sources</c> +
-/// <c>conformationRules</c>. Campos opcionales: <c>null</c> = no tocar esa sección. HUs BE-04/05
-/// amplían el <c>gateProfile</c> (documentos, comercial, identidad/firma, placa).
+/// <c>conformationRules</c>; HU-BE-04 añade <c>documentRequirements</c> (y los flags comercial/
+/// identidad/firma viajan dentro de <c>gateProfile</c>). Campos opcionales: <c>null</c> = no tocar.
 /// </summary>
 public sealed record UpdateConformationProfileInput(
     JsonNode? GateProfile,
     IReadOnlyList<ConformationSourceInput>? Sources = null,
-    IReadOnlyList<ConformationRuleUpsertInput>? ConformationRules = null);
+    IReadOnlyList<ConformationRuleUpsertInput>? ConformationRules = null,
+    IReadOnlyList<ConformationDocumentRequirementInput>? DocumentRequirements = null);
 
 /// <summary>
 /// Actualiza el perfil de conformación del tipo. Solo editable en estado <c>draft</c>: un tipo
@@ -35,7 +41,8 @@ public sealed record UpdateConformationProfileInput(
 public sealed class UpdateConformationProfileHandler(
     IProcedureTypeRepository repository,
     ICatalogRepository? catalogRepo = null,
-    IProcedureTypeSourceRepository? sourceRepo = null)
+    IProcedureTypeSourceRepository? sourceRepo = null,
+    IProcedureTypeDocumentRepository? docRepo = null)
 {
     public async Task<(ProcedureConformationProfileDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -108,10 +115,29 @@ public sealed class UpdateConformationProfileHandler(
             await sourceRepo.ReplaceSourcesAsync(entity.Id, upserts, ct);
         }
 
+        // FEATURE-08 / HU-BE-04 (CFD-06): requisitos documentales por tipo (resueltos por código).
+        if (input.DocumentRequirements is not null && docRepo is not null)
+        {
+            var reqUpserts = new List<ProcedureDocumentRequirementUpsert>(input.DocumentRequirements.Count);
+            foreach (var d in input.DocumentRequirements)
+            {
+                var docTypeId = await docRepo.ResolveDocumentTypeIdAsync(d.DocumentTypeCode, ct);
+                if (docTypeId is null)
+                    return (null, $"document_type_not_found:{d.DocumentTypeCode}");
+
+                reqUpserts.Add(new ProcedureDocumentRequirementUpsert(
+                    docTypeId.Value, d.IsRequired, d.IsDummy, d.ConditionGroup, d.SortOrder));
+            }
+
+            await docRepo.ReplaceRequirementsAsync(entity.Id, reqUpserts, ct);
+        }
+
         await repository.UpdateAsync(entity, ct);
         await repository.SaveChangesAsync(ct);
         if (input.Sources is not null && sourceRepo is not null)
             await sourceRepo.SaveChangesAsync(ct);
+        if (input.DocumentRequirements is not null && docRepo is not null)
+            await docRepo.SaveChangesAsync(ct);
 
         var rules = (persistedRules ?? [.. entity.ConformationRules])
             .OrderBy(r => r.SortOrder)
@@ -127,6 +153,13 @@ public sealed class UpdateConformationProfileHandler(
                     s.SourceCode, s.ExecutionOrder, ProfileJson.ParseOrEmpty(s.Config)))
                 .ToList();
 
+        List<ProcedureDocumentRequirementDto> documentRequirements = docRepo is null
+            ? []
+            : (await docRepo.ListByTypeAsync(entity.Id, ct))
+                .Select(d => new ProcedureDocumentRequirementDto(
+                    d.DocumentTypeCode, d.IsRequired, d.IsDummy, d.ConditionGroup))
+                .ToList();
+
         var dto = new ProcedureConformationProfileDto(
             entity.Id,
             entity.Code,
@@ -135,7 +168,7 @@ public sealed class UpdateConformationProfileHandler(
             ProfileJson.ParseOrEmpty(entity.GateProfile),
             rules,
             sources,
-            []);
+            documentRequirements);
 
         return (dto, null);
     }
