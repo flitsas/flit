@@ -6,6 +6,7 @@ import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
+import { ReportesDetallados } from "@/components/atom/modules/ReportesDetallados";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
@@ -76,6 +77,7 @@ function HomeContent() {
       {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
       {module === "tramites"     && <Tramites />}
       {module === "reportes"     && <Reportes />}
+      {module === "reportes-detallados" && <ReportesDetallados />}
       {module === "validaciones" && <Validaciones />}
       {module === "usuarios"     && <Usuarios />}
       {module === "ayuda"        && <Ayuda />}

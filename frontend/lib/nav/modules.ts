@@ -7,6 +7,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "dashboard",
   "tramites",
   "reportes",
+  "reportes-detallados",
   "validaciones",
   "usuarios",
   "ayuda",
