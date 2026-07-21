@@ -769,7 +769,9 @@ public sealed class WizardStateHandlerTests
 
     private static SignatureVaultMatch VaultMatch() => new(
         Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",
-        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)));
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        "900123456");
 
     private sealed class StubVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
     {

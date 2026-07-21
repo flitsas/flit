@@ -404,7 +404,9 @@ public sealed class EnsureIdentityHandlerTests
 
     private static SignatureVaultMatch Match() => new(
         Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",
-        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)));
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        "900123456");
 
     /// <summary>Doble de <see cref="ISignatureVaultPolicy"/>: devuelve el match configurado y cuenta las consultas.</summary>
     private sealed class FakeVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy

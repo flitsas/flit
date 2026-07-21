@@ -96,9 +96,9 @@ public sealed class GenerarFurHandler(
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
-        var firmaImagenes = await ResolveVaultSignatureImagesAsync(instance, esTraspaso, ct);
+        var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -251,7 +251,8 @@ public sealed class GenerarFurHandler(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
         bool tienePrenda, string? acreedorPrenda,
-        IReadOnlyDictionary<string, byte[]>? firmaImagenes)
+        IReadOnlyDictionary<string, byte[]>? firmaImagenes,
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -310,6 +311,7 @@ public sealed class GenerarFurHandler(
                 Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
                 Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
             FirmaImagenes: firmaImagenes,
+            FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
@@ -320,14 +322,16 @@ public sealed class GenerarFurHandler(
     /// HU #10645 (ADR-0025 §4) — resuelve la IMAGEN de la firma del baúl por parte con actor JURÍDICO (NIT)
     /// cubierto por una firma activa+vigente. Descarga el artefacto vía <see cref="IAttachmentStorage.OpenReadAsync"/>
     /// (best-effort) y lo mapea por rol ("comprador"/"vendedor") para <see cref="FurDocumentData.FirmaImagenes"/>;
-    /// el mapper la estampa en el espacio de firma. NUNCA rompe el FUR: cualquier fallo de lectura se registra
-    /// como warning y la parte cae al sello de texto. Devuelve null si ninguna parte tiene firma de baúl.
+    /// los metadatos del baúl (<see cref="FurDocumentData.FirmaBaulMetadatos"/>) se estampan a la derecha de la
+    /// imagen. NUNCA rompe el FUR: cualquier fallo de lectura se registra como warning y la parte cae al sello
+    /// de texto. Devuelve null en ambos diccionarios si ninguna parte tiene firma de baúl.
     /// </summary>
-    private async Task<IReadOnlyDictionary<string, byte[]>?> ResolveVaultSignatureImagesAsync(
+    private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
         ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
     {
         var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
         Dictionary<string, byte[]>? images = null;
+        Dictionary<string, FirmaBaulMetadata>? metadata = null;
 
         foreach (var role in roles)
         {
@@ -353,6 +357,13 @@ public sealed class GenerarFurHandler(
                     if (ms.Length == 0)
                         continue;
                     (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = ms.ToArray();
+                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[role] =
+                        new FirmaBaulMetadata(
+                            match.DocumentNumber,
+                            match.FullName,
+                            match.VigenciaDesde,
+                            match.VigenciaHasta,
+                            match.SignatureVaultId);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -363,7 +374,7 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        return images;
+        return (images, metadata);
     }
 
     /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>

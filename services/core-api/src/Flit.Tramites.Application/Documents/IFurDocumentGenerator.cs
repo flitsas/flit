@@ -45,6 +45,17 @@ public sealed record VehiculoDatos(
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);
 
 /// <summary>
+/// Metadatos de la firma del baúl estampados junto a la imagen en el FUR (ADR-0025 §4): documento y
+/// nombre del firmante, vigencia y UUID de la firma custodiada.
+/// </summary>
+public sealed record FirmaBaulMetadata(
+    string DocumentNumber,
+    string FullName,
+    DateOnly VigenciaDesde,
+    DateOnly VigenciaHasta,
+    Guid SignatureVaultId);
+
+/// <summary>
 /// Datos del trámite ensamblados para generar los documentos. Vehículo (atributos completos),
 /// partes (comprador/vendedor), organismo de tránsito, valor, causal y referencias del sello de firma.
 /// </summary>
@@ -62,6 +73,7 @@ public sealed record FurDocumentData(
     DateTime? FechaTramite = null,
     string? Observaciones = null,
     IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
+    IReadOnlyDictionary<string, FirmaBaulMetadata>? FirmaBaulMetadatos = null,
     // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
     // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).
     bool IdentidadValidada = true,

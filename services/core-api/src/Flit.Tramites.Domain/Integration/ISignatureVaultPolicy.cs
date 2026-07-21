@@ -13,7 +13,9 @@ public sealed record SignatureVaultMatch(
     string SignatureHash,
     string StoragePath,
     string StorageSha256,
-    DateOnly VigenciaHasta);
+    DateOnly VigenciaDesde,
+    DateOnly VigenciaHasta,
+    string DocumentNumber);
 
 /// <summary>
 /// Puerto para resolver la firma precargada del baúl aplicable a un actor jurídico (por NIT),
