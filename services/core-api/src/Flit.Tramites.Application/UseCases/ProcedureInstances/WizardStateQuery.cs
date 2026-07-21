@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -16,7 +17,17 @@ public sealed record WizardStepDto(
     string Key,
     string Label,
     string Status,           // complete | incomplete | locked
-    IReadOnlyList<string> Reasons);
+    IReadOnlyList<string> Reasons)
+{
+    /// <summary>
+    /// FEATURE-08 / HU-BE-06 (CFD-09): tipo de renderer del paso (section_type) cuando el wizard es
+    /// dinámico. Null en el camino estático (matrícula/traspaso hardcoded).
+    /// </summary>
+    public string? SectionType { get; init; }
+
+    /// <summary>Configuración del renderer para el frontend (SectionRendererRegistry). Null si no aplica.</summary>
+    public JsonNode? SectionConfig { get; init; }
+}
 
 /// <summary>
 /// Estado server-driven del wizard, derivado de los gates del dominio.
@@ -71,11 +82,17 @@ public sealed class GetWizardStateHandler(
     ISignatureVaultPolicy? vaultPolicy = null,
     IConsultationBlockingPolicy? blockingPolicy = null,
     IRnmcRequirementPolicy? rnmcPolicy = null,
-    IConsultationRestrictionPolicy? restrictionPolicy = null)
+    IConsultationRestrictionPolicy? restrictionPolicy = null,
+    IDynamicProceduresPolicy? dynamicPolicy = null,
+    IProcedureTypeSnapshotRepository? snapshotRepo = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
     public const string FurPendiente = "fur_pendiente";
+
+    // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → camino estático).
+    private readonly IDynamicProceduresPolicy _dynamicPolicy =
+        dynamicPolicy ?? NullDynamicProceduresPolicy.Instance;
 
     // HU #10548 — política de exigibilidad de identidad por OT (default permisivo en tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
@@ -105,6 +122,16 @@ public sealed class GetWizardStateHandler(
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+
+        // FEATURE-08 / HU-BE-06 (CFD-09): wizard dinámico flag-guarded. Solo cuando F08_DynamicProcedures
+        // está habilitado para el tenant Y la instancia tiene snapshot (tipo dinámico). En cualquier otro
+        // caso se preserva el camino estático (BuildMatricula/BuildTraspaso) sin regresión (AC-02).
+        if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct))
+        {
+            var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
+            if (snapshot is not null)
+                return (await BuildDynamicStateAsync(instance, snapshot, ct), null);
+        }
 
         // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
         // vigente de la persona en N trámites sin clonar (HU #10350).
@@ -146,6 +173,108 @@ public sealed class GetWizardStateHandler(
         };
         return (state, null);
     }
+
+    /// <summary>
+    /// FEATURE-08 / HU-BE-06 — computa el estado del wizard desde el snapshot del tipo (gate_profile +
+    /// stepSectionTypes) y las MISMAS señales de la instancia que el camino estático, delegando en
+    /// <see cref="DynamicGateEvaluator"/>. Mapea el resultado al contrato con <c>sectionType</c> por paso.
+    /// </summary>
+    private async Task<WizardStateDto> BuildDynamicStateAsync(
+        ProcedureInstance instance, ProcedureTypeSnapshotRecord snapshot, CancellationToken ct)
+    {
+        var root = JsonNode.Parse(snapshot.Snapshot) as JsonObject ?? [];
+        var gateProfile = ProcedureTypeGateProfile.FromJson(root["gateProfile"]?.ToJsonString());
+
+        var steps = new List<DynamicWizardStep>();
+        if (root["stepSectionTypes"] is JsonArray stepArr)
+        {
+            foreach (var node in stepArr)
+            {
+                if (node is not JsonObject stepObj)
+                    continue;
+                var stepCode = (stepObj["stepCode"] as JsonValue)?.ToString() ?? string.Empty;
+                var firstType = "generic_form";
+                if (stepObj["sectionTypes"] is JsonArray sts && sts.Count > 0)
+                    firstType = (sts[0] as JsonValue)?.ToString() ?? "generic_form";
+                steps.Add(new DynamicWizardStep(stepCode, firstType));
+            }
+        }
+
+        var fv = FieldValues(instance);
+        var comprador = ParteOf(instance, "comprador");
+        var vendedor = ParteOf(instance, "vendedor");
+        var runtComprador = RuntOf(instance, "comprador");
+        var runtVendedor = RuntOf(instance, "vendedor");
+        var preflight = PreflightOf(instance);
+
+        var approvedParties = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
+
+        var ctx = new DynamicWizardContext
+        {
+            VehiculoConsultado = HasVehiculoConsulta(fv),
+            PreflightProviderError = preflight?.ProviderError == true,
+            DocumentosCompletos = DocumentosObligatoriosCompletos(instance),
+            HasBuyer = comprador is not null,
+            BuyerRuntConsultado = runtComprador?.Consultado == true,
+            HasSeller = vendedor is not null,
+            SellerRuntConsultado = runtVendedor?.Consultado == true,
+            ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
+            BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
+            FurGenerado = FurGenerado(instance),
+            PlateRequestCompleted = PlateRequestCompleted(fv),
+            UploadedDocumentCodes = new HashSet<string>(
+                instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
+        };
+
+        var result = DynamicGateEvaluator.Evaluate(gateProfile, steps, ctx);
+
+        var wizardSteps = result.Steps
+            .Select(s => new WizardStepDto(s.Index, s.Key, SectionLabel(s.SectionType), s.Status, s.Reasons)
+            {
+                SectionType = s.SectionType,
+            })
+            .ToList();
+
+        return new WizardStateDto(
+            instance.ModalidadEntrada ?? string.Empty,
+            instance.TipologiaCodigo,
+            result.Steps.Count,
+            wizardSteps,
+            result.CanSubmit,
+            result.Blockers,
+            instance.Status,
+            TramiteStateMachine.TransitionsFrom(instance.Status));
+    }
+
+    /// <summary>
+    /// Mapea las partes aprobadas (comprador/vendedor/locatario) a los códigos de entidad del
+    /// gate_profile (BUYER/OWNER/LESSEE) para compararlas con <c>biometricActors</c>.
+    /// </summary>
+    private static HashSet<string> MapPartiesToEntityCodes(IReadOnlySet<string> approvedParties)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (approvedParties.Contains("comprador")) codes.Add("BUYER");
+        if (approvedParties.Contains("vendedor")) codes.Add("OWNER");
+        if (approvedParties.Contains("locatario")) codes.Add("LESSEE");
+        return codes;
+    }
+
+    private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
+        string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);
+
+    private static string SectionLabel(string sectionType) => sectionType switch
+    {
+        "vehicle_query" => "Consulta del vehículo",
+        "document_checklist" => "Documentos",
+        "actor_form" => "Actores",
+        "commercial" => "Valor comercial",
+        "biometric" => "Identidad",
+        "signature_fur" => "Firma / FUR",
+        "plate_request" => "Solicitud de placa",
+        "prenda_decision" => "Prenda",
+        _ => "Datos",
+    };
 
     /// <summary>Une comprador y vendedor al set aprobado (identidad deshabilitada, HU #10548).</summary>
     private static HashSet<string> IdentitySatisfiedForAllParties(IReadOnlySet<string> approved) =>

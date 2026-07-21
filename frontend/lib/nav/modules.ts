@@ -13,6 +13,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "ayuda",
   "rbac",
   "auditoria",
+  "log-qx",
 ];
 
 /**
@@ -26,8 +27,14 @@ export const ALL_MODULE_IDS: ModuleId[] = [
  * bloque `currentUser?.isSuperAdmin`). Por eso el montaje real del componente en
  * `app/page.tsx` sigue gateado explícitamente por `isSuperAdmin`, y el backend
  * (`GET /api/v1/superadmin/audit`) exige `SuperAdminPolicy` de todos modos.
+ *
+ * "log-qx" (HU #10795) sigue el mismo patrón que "auditoria": el gate real es el permiso
+ * `logqx.read` (o SuperAdmin) evaluado en el dock y en el render de `app/page.tsx`
+ * (`canReadLogQx`), no el catálogo RBAC — el módulo backend se sembró con code `logqx`
+ * (sin guion), que NO casa con el id de ruta `log-qx`. Se lista aquí solo para que
+ * `parseModule` no rebote a "dashboard" tras `router.replace("/?m=log-qx")`.
  */
-export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda", "auditoria"];
+export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda", "auditoria", "log-qx"];
 
 /**
  * Construye la lista de módulos válidos para la SPA: los accesibles por RBAC más los

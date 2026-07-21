@@ -33,6 +33,7 @@ using Flit.Modules.Quipux.Application.UseCases.EncolarEnvio;
 using Flit.Modules.Quipux.Domain.Configuracion;
 using Flit.Modules.Quipux.Domain.Consola;
 using Flit.Modules.Quipux.Domain.Envios;
+using Flit.Modules.Quipux.Domain.LogQx;
 using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
@@ -78,6 +79,15 @@ public static class InfrastructureExtensions
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
+        // FEATURE-08 / HU-BE-01 (CFD-01/AC#5) — snapshot inmutable del tipo por instancia.
+        services.AddScoped<IProcedureTypeSnapshotRepository, ProcedureTypeSnapshotRepository>();
+        // FEATURE-08 / HU-BE-03 (CFD-04) — fuentes externas por tipo (catálogo global).
+        services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
+        // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
+        services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
+        // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
+            OtRules.DynamicProceduresPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
@@ -629,6 +639,10 @@ public static class InfrastructureExtensions
         // Consola de cola QX (HU #10774): lectura por secretaría destino + acciones manuales. Puerto
         // aparte del de los workers — sin claim/lease, con filtro explícito por transit_office_id.
         services.AddScoped<IQuipuxSubmissionConsoleRepository, DbQuipuxSubmissionConsoleRepository>();
+
+        // LOG QX (HU #10793): lectura de trazabilidad para soporte/admin. Solo consulta (sin claim ni
+        // transiciones), cross-tenant por el mismo motivo que la consola de cola.
+        services.AddScoped<IQuipuxLogRepository, DbQuipuxLogRepository>();
         services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
         services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
 

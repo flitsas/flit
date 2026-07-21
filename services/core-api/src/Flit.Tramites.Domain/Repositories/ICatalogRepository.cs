@@ -10,4 +10,7 @@ public interface ICatalogRepository
     Task<ConsultationTemplate?> GetConsultationTemplateByIdAsync(Guid id, CancellationToken ct = default);
     Task<ConsultationTemplate?> GetConsultationTemplateByCodeAsync(string code, CancellationToken ct = default);
     Task<ProcedureEntity?> GetProcedureEntityByCodeAsync(string code, CancellationToken ct = default);
+
+    /// <summary>Resuelve una fuente externa por su código (RUNT, SIMIT, …); null si no existe (CFD-04).</summary>
+    Task<ExternalDataSource?> GetExternalDataSourceByCodeAsync(string code, CancellationToken ct = default);
 }

@@ -17,6 +17,10 @@ internal sealed class ProcedureSectionConfiguration : IEntityTypeConfiguration<P
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Title).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Layout).HasMaxLength(20).IsRequired().HasDefaultValue("single");
+
+        // F08 Fase 2b: tipo de renderer para SectionRendererRegistry (CFD-09)
+        builder.Property(x => x.SectionType).HasMaxLength(40).IsRequired().HasDefaultValue("generic_form");
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 

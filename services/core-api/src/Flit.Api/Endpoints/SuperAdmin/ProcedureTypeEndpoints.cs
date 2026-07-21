@@ -124,6 +124,42 @@ internal static class ProcedureTypeEndpoints
             };
         }).WithName("UpsertConformationRules");
 
+        // FEATURE-08 / HU-BE-01 (CFD-01) — perfil de conformación del tipo (gate_profile +
+        // conformationRules + sources + documentRequirements). GET lo lee completo; PUT lo actualiza
+        // solo en estado draft (published/archived → 422).
+        group.MapGet("/procedure-types/{id:guid}/conformation-profile", async (
+            Guid id,
+            GetConformationProfileHandler handler,
+            CancellationToken ct) =>
+        {
+            var (result, error) = await handler.HandleAsync(id, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found.")
+                : Results.Ok(result);
+        }).WithName("GetConformationProfile");
+
+        group.MapPut("/procedure-types/{id:guid}/conformation-profile", async (
+            Guid id,
+            UpdateConformationProfileInput input,
+            UpdateConformationProfileHandler handler,
+            CancellationToken ct) =>
+        {
+            var (result, error) = await handler.HandleAsync(id, input, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                "invalid_entry_mode" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "entryMode inválido: use PLATE, VIN o BOTH."),
+                "not_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "Tipo en estado published — no editable."),
+                string e when e.StartsWith("entity_not_found:") =>
+                    Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: $"Actor no encontrado en el catálogo: {e["entity_not_found:".Length..]}"),
+                string e when e.StartsWith("source_not_found:") =>
+                    Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: $"Fuente externa no encontrada en el catálogo: {e["source_not_found:".Length..]}"),
+                string e when e.StartsWith("document_type_not_found:") =>
+                    Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: $"Tipo de documento no encontrado en el catálogo: {e["document_type_not_found:".Length..]}"),
+                _ => Results.Ok(result)
+            };
+        }).WithName("UpdateConformationProfile");
+
         group.MapGet("/procedure-types/{id:guid}/steps", async (
             Guid id,
             GetProcedureStepsHandler handler,
