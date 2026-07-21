@@ -88,12 +88,14 @@ function formatDuration(ms: number | null): string | null {
 }
 
 /**
- * Estado del trámite que devuelve Quipux en `estadoTramite.codigo` (2 = aprobado, 3 = rechazado).
- * Se muestra con su significado para que soporte no vea un número pelado. Otros códigos (estados
- * intermedios que Quipux no documenta) se muestran tal cual; ausente = "—".
+ * Estado del trámite que devuelve Quipux en `estadoTramite.codigo`: 1 = no hay cambios (sigue en
+ * trámite), 2 = aprobado, 3 = rechazado. Se muestra con su significado para que soporte no vea un
+ * número pelado. Solo 2 y 3 son terminales; el 1 aparece en el detail de eventos de sondeo mientras
+ * el organismo aún no resuelve. Otros códigos no documentados se muestran tal cual; ausente = "—".
  */
 function formatEstadoTramite(code: number | null | undefined): string {
   if (code == null) return "—";
+  if (code === 1) return "1 — Sin cambios";
   if (code === 2) return "2 — Aprobado";
   if (code === 3) return "3 — Rechazado";
   return code.toString();
