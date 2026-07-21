@@ -30,6 +30,7 @@ import {
   Send,
   ScrollText,
   Radar,
+  SlidersHorizontal,
 } from "lucide-react";
 
 export type ModuleId =
@@ -188,6 +189,14 @@ export function Shell({
         icon: FolderCog,
         active: pathname.startsWith("/admin/documents"),
         onClick: () => window.location.assign("/admin/documents"),
+      },
+      {
+        // FE-07 (HU #10842) — Configurador de tipos de trámite (Feature 08). SuperAdmin-only.
+        key: "admin-procedure-types",
+        label: "Parametrización de trámites",
+        icon: SlidersHorizontal,
+        active: pathname.startsWith("/admin/procedure-types"),
+        onClick: () => window.location.assign("/admin/procedure-types"),
       },
       {
         key: "admin-improntas",
