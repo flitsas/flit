@@ -11,12 +11,13 @@ import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
 import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { Auditoria } from "@/components/atom/modules/Auditoria";
+import { LogQx } from "@/components/atom/modules/LogQx";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { buildValidModules, parseModule } from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { canReadLogQx, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 
 function HomeContent() {
   const router = useRouter();
@@ -28,6 +29,9 @@ function HomeContent() {
   // Shell.tsx, bloque `currentUser?.isSuperAdmin`), no por `accessibleCodes`. Se re-lee de
   // forma perezosa (no reactiva) porque el JWT no cambia durante la sesión de la SPA.
   const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  // LOG QX (HU #10795) — gate por permiso `logqx.read` (o SuperAdmin). Se re-lee de forma
+  // perezosa (no reactiva) igual que `isSuperAdminUser`: el JWT no cambia durante la sesión.
+  const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
   // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
@@ -81,6 +85,7 @@ function HomeContent() {
       {module === "ayuda"        && <Ayuda />}
       {module === "rbac"         && <RbacAdmin />}
       {module === "auditoria"    && isSuperAdminUser && <Auditoria />}
+      {module === "log-qx"       && canLogQx && <LogQx />}
     </Shell>
   );
 }

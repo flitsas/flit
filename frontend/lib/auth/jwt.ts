@@ -105,6 +105,32 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
   );
 }
 
+/** Slug del permiso que gobierna el módulo LOG QX (HU #10794/#10795). */
+export const LOG_QX_READ_PERMISSION = "logqx.read";
+
+/**
+ * Indica si el payload contiene un slug de permiso en el claim `permissions`
+ * (array de strings; comparación case-insensitive). El JWT es la fuente de verdad
+ * de permisos en runtime — no confiar para autorización real (la API valida).
+ */
+export function hasPermission(payload: JwtPayload | null, slug: string): boolean {
+  if (!payload || !Array.isArray(payload.permissions)) {
+    return false;
+  }
+  const target = slug.toLowerCase();
+  return payload.permissions.some(
+    (p) => typeof p === "string" && p.toLowerCase() === target,
+  );
+}
+
+/**
+ * Puede leer el LOG QX (HU #10795): tiene el permiso `logqx.read` o es SuperAdmin
+ * (bypass total, igual que el gate del backend en `PermissionAuthorizationHandler`).
+ */
+export function canReadLogQx(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, LOG_QX_READ_PERMISSION);
+}
+
 /**
  * Indica si el payload contiene el rol ot_admin (comparación case-insensitive).
  */

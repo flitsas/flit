@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -29,6 +29,7 @@ import {
   Fingerprint,
   Send,
   ScrollText,
+  Radar,
 } from "lucide-react";
 
 export type ModuleId =
@@ -39,7 +40,8 @@ export type ModuleId =
   | "usuarios"
   | "ayuda"
   | "rbac"
-  | "auditoria";
+  | "auditoria"
+  | "log-qx";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -109,6 +111,7 @@ function useCurrentUser() {
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
       isOtAdmin: isOtAdmin(payload),
+      canReadLogQx: canReadLogQx(payload),
     };
   });
   return user;
@@ -238,6 +241,20 @@ export function Shell({
       // la SPA hacia /empresa/usuarios, ya deprecado).
       active: !onAdminRoute && active === "usuarios",
       onClick: () => onNav("usuarios"),
+    });
+  }
+
+  // LOG QX (HU #10795): trazabilidad Quipux para soporte/administración. Bloque propio
+  // gateado por el permiso `logqx.read` (o SuperAdmin, vía canReadLogQx) — se muestra para
+  // SuperAdmin y para un rol de soporte con el permiso, sin depender del claim SuperAdmin.
+  // No se duplica: el bloque isSuperAdmin de arriba no incluye "log-qx".
+  if (currentUser?.canReadLogQx) {
+    entries.push({
+      key: "log-qx",
+      label: "LOG QX",
+      icon: Radar,
+      active: !onAdminRoute && active === "log-qx",
+      onClick: () => onNav("log-qx"),
     });
   }
 
