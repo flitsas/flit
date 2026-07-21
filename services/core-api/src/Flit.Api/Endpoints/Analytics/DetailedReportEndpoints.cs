@@ -70,7 +70,6 @@ public static class DetailedReportEndpoints
         return err switch
         {
             "invalid_range" => AnalyticsEndpointsHelpers.InvalidRange(),
-            "missing_filters" => AnalyticsEndpointsHelpers.MissingFilters(),
             _ => Results.Ok(result),
         };
     }
@@ -102,7 +101,6 @@ public static class DetailedReportEndpoints
         return err switch
         {
             "invalid_range" => AnalyticsEndpointsHelpers.InvalidRange(),
-            "missing_filters" => AnalyticsEndpointsHelpers.MissingFilters(),
             _ => Results.Stream(
                 async stream =>
                 {
@@ -173,8 +171,4 @@ internal static class AnalyticsEndpointsHelpers
     public static IResult InvalidRange() =>
         Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "El rango de fechas es inválido: 'from' no puede ser posterior a 'to'.");
-
-    public static IResult MissingFilters() =>
-        Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
-            detail: "Faltan filtros mínimos: fechas, tipo de trámite (o categoría) y al menos un atributo adicional.");
 }

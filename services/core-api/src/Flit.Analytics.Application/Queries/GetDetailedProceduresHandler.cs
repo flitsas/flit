@@ -31,9 +31,8 @@ public sealed class GetDetailedProceduresHandler(IDetailedReportReadRepository r
         if (query.From > query.To)
             return (null, "invalid_range");
 
-        if (!HasMinimumFilters(query))
-            return (null, "missing_filters");
-
+        // El único filtro obligatorio es el rango de fechas: sin más filtros se devuelven
+        // todos los trámites de la compañía en el rango (paginados).
         var page = query.Page <= 0 ? 1 : query.Page;
         var pageSize = query.PageSize <= 0 ? DefaultPageSize : Math.Min(query.PageSize, MaxPageSize);
         var filter = new DetailedReportFilter(
@@ -52,22 +51,6 @@ public sealed class GetDetailedProceduresHandler(IDetailedReportReadRepository r
 
         var result = await repo.GetProceduresAsync(filter, page, pageSize, ct).ConfigureAwait(false);
         return (result, null);
-    }
-
-    internal static bool HasMinimumFilters(GetDetailedProceduresQuery query)
-    {
-        var hasProcedureType = query.ProcedureTypeId is not null
-            || !string.IsNullOrWhiteSpace(query.Category);
-        if (!hasProcedureType)
-            return false;
-
-        return query.TransitOfficeId is not null
-            || !string.IsNullOrWhiteSpace(query.Status)
-            || !string.IsNullOrWhiteSpace(query.ReferenceNumber)
-            || !string.IsNullOrWhiteSpace(query.PersonDocument)
-            || !string.IsNullOrWhiteSpace(query.PersonName)
-            || query.HasTransformation is not null
-            || query.IsLeasing is not null;
     }
 
     private static string? Normalize(string? value) =>

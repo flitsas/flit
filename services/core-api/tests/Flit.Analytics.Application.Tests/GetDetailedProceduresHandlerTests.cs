@@ -40,15 +40,21 @@ public sealed class GetDetailedProceduresHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_SinFiltrosMinimos_DevuelveMissingFilters()
+    public async Task HandleAsync_SoloRangoFechas_DevuelveTodosLosRegistros()
     {
+        // El único filtro obligatorio es el rango de fechas: sin más filtros se consultan
+        // todos los trámites de la compañía en el rango.
+        var summary = new DetailedReportSummaryDto(0, [], [], []);
+        _repo.GetProceduresAsync(Arg.Any<DetailedReportFilter>(), 1, 20, Ct)
+            .Returns(new DetailedProceduresPageDto([], 0, 1, 20, summary));
+
         var (page, error) = await new GetDetailedProceduresHandler(_repo).HandleAsync(
             new GetDetailedProceduresQuery(Tenant, From, To, null, null, null, null, null, null, null, null, null, 1, 20),
             Ct);
 
-        page.Should().BeNull();
-        error.Should().Be("missing_filters");
-        await _repo.DidNotReceiveWithAnyArgs().GetProceduresAsync(default!, 0, 0, Ct);
+        error.Should().BeNull();
+        page.Should().NotBeNull();
+        await _repo.Received(1).GetProceduresAsync(Arg.Any<DetailedReportFilter>(), 1, 20, Ct);
     }
 
     [Fact]

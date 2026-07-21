@@ -24,12 +24,23 @@ public sealed class ExportDetailedProceduresHandlerTests
     }
 
     [Fact]
-    public void Validate_SinFiltrosMinimos_DevuelveMissingFilters()
+    public void Validate_SoloRangoFechas_DevuelveFilter()
     {
+        // Sin más filtros que el rango de fechas la exportación es válida (todos los trámites).
         var (filter, error) = ExportDetailedProceduresHandler.Validate(
             new ExportDetailedProceduresQuery(Tenant, From, To, null, null, null, null, null, null, null, null, null));
 
+        error.Should().BeNull();
+        filter.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Validate_RangoInvalido_DevuelveInvalidRange()
+    {
+        var (filter, error) = ExportDetailedProceduresHandler.Validate(
+            new ExportDetailedProceduresQuery(Tenant, To, From, null, null, null, null, null, null, null, null, null));
+
         filter.Should().BeNull();
-        error.Should().Be("missing_filters");
+        error.Should().Be("invalid_range");
     }
 }

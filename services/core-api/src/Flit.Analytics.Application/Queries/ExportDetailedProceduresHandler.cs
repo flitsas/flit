@@ -25,15 +25,8 @@ public static class ExportDetailedProceduresHandler
         if (query.From > query.To)
             return (null, "invalid_range");
 
-        var getQuery = new GetDetailedProceduresQuery(
-            query.TenantId, query.From, query.To,
-            query.TransitOfficeId, query.ProcedureTypeId, query.Category, query.Status,
-            query.ReferenceNumber, query.PersonDocument, query.PersonName,
-            query.HasTransformation, query.IsLeasing, 1, 1);
-
-        if (!GetDetailedProceduresHandler.HasMinimumFilters(getQuery))
-            return (null, "missing_filters");
-
+        // Solo el rango de fechas es obligatorio (alineado con la consulta): sin más filtros
+        // se exportan todos los trámites de la compañía en el rango.
         return (new DetailedReportFilter(
             query.TenantId,
             query.From,
