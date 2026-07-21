@@ -86,6 +86,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
+        // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
+        // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
+        // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
+        || path.StartsWithSegments("/api/v1/tramites/plate-preassign", StringComparison.OrdinalIgnoreCase)
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
         // y un company-user podía leer/reencolar las atascadas de otra compañía.

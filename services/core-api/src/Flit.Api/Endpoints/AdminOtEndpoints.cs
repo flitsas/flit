@@ -30,6 +30,7 @@ using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
@@ -104,7 +105,8 @@ public static class AdminOtEndpoints
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
             .WithName("AdminOtCreateWebhook")
@@ -190,6 +192,39 @@ public static class AdminOtEndpoints
         group.MapGet("/client-procedures/{id:guid}/consolidado", DownloadClientProcedureConsolidadoAsync)
             .WithName("AdminOtDownloadClientProcedureConsolidado")
             .WithSummary("Descarga el PDF del expediente consolidado de un trámite de cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
+            .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
+            .WithName("AdminOtListClientProcedureDocuments")
+            .WithSummary("Lista los adjuntos del trámite de un cliente OT (sin binarios, con flags de consolidado)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/preview-url", GetClientProcedureDocumentPreviewUrlAsync)
+            .WithName("AdminOtGetClientProcedureDocumentPreviewUrl")
+            .WithSummary("Obtiene la URL de previsualización inline de un adjunto del trámite de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/download", DownloadClientProcedureDocumentAsync)
+            .WithName("AdminOtDownloadClientProcedureDocument")
+            .WithSummary("Descarga el binario de un adjunto del trámite de un cliente OT")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -314,29 +349,36 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin: se refuerza SuperAdminPolicy sobre el
+        // OtModulePolicy del grupo (combinación AND → solo SuperAdmin, el ot_admin recibe 403).
         group.MapPost("/users/{userId:guid}/suspend", SuspendUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtSuspendUser")
-            .WithSummary("Suspende temporalmente a un usuario del tenant OT")
+            .WithSummary("Suspende temporalmente a un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
         group.MapDelete("/users/{userId:guid}/suspend", UnsuspendUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtUnsuspendUser")
-            .WithSummary("Levanta la suspensión activa de un usuario del tenant OT")
+            .WithSummary("Levanta la suspensión activa de un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
         // HU #10623 — DELETE /users/{userId} — elimina (soft-delete reversible) a un usuario del
-        // tenant OT resuelto. Restaurar es EXCLUSIVO de SuperAdmin — ver
+        // tenant OT resuelto. Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin recibe 403).
+        // Restaurar también es EXCLUSIVO de SuperAdmin — ver
         // POST /api/v1/superadmin/users/{userId}/restore.
         group.MapDelete("/users/{userId:guid}", DeleteUserAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtDeleteUser")
-            .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT")
+            .WithSummary("Elimina (soft-delete reversible) a un usuario del tenant OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -496,14 +538,25 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+        try
         {
-            TenantId = tenantId,
-            ChangedBy = ResolveUserId(httpContext.User),
-            Request = request,
-        }, cancellationToken).ConfigureAwait(false);
+            var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ResolveUserId(httpContext.User),
+                Request = request,
+            }, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result.Requirements);
+            return Results.Ok(result.Requirements);
+        }
+        catch (OtRequirementsScopeException ex)
+        {
+            // El tenant no es un OT aprovisionado (o la oficina es de otro OT): 422, no 500 (ADR-0022).
+            return Results.Problem(
+                title: "ot_requirements_scope",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
     }
 
     private static async Task<IResult> UpdateFeatureFlagAsync(
@@ -1044,6 +1097,165 @@ public static class AdminOtEndpoints
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
             _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+        };
+    }
+
+    // ── Consolidado Maestro OT (Feature #10701 / HU #10706) ─────────────────────────────────────
+
+    private static async Task<IResult> GenerateClientProcedureConsolidadoMaestroAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var guardResult = await quipuxReadOnlyGuard
+            .ValidateActionAsync(tenantId, "generar_consolidado_maestro", cancellationToken)
+            .ConfigureAwait(false);
+        if (!guardResult.IsAllowed)
+            return Results.Json(new { error = "QUIPUX_READONLY" }, statusCode: StatusCodes.Status403Forbidden);
+
+        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            async () =>
+            {
+                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
+                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
+                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
+                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
+                IReadOnlyList<string> precedencia;
+                try
+                {
+                    var matriz = await matrixResolver
+                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    precedencia = matriz.Select(m => m.Codigo).ToList();
+                }
+                catch
+                {
+                    precedencia = [];
+                }
+
+                return await handler
+                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
+            "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
+            "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
+            _ => Results.Ok(result),
+        };
+    }
+
+    // ── Documentos y preview inline del trámite de cliente OT (Feature #10701 / HU #10704) ────────
+
+    private static async Task<IResult> ListClientProcedureDocumentsAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (error is "not_found")
+            return Results.NotFound(new { error = "Trámite no encontrado" });
+
+        var docs = attachments!.Attachments;
+        var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+
+        return Results.Ok(new
+        {
+            data = docs,
+            consolidado = hasConsolidado,
+            consolidado_maestro = hasConsolidadoMaestro,
+        });
+    }
+
+    private static async Task<IResult> GetClientProcedureDocumentPreviewUrlAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GetAttachmentPreviewUrlHandler previewHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (previewResult, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => previewHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = previewResult!.Url, expiresAt = previewResult.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> DownloadClientProcedureDocumentAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.DownloadAttachmentHandler downloadHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (download, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => downloadHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "file_missing" => Results.NotFound(new { error = "file_missing" }),
+            _ => Results.File(download!.Content, download.Mimetype, download.Filename),
         };
     }
 

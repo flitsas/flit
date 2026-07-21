@@ -172,8 +172,10 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
+app.MapAdminPlateRangesEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
+app.MapAdminQuipuxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
 app.MapAdminSignatureVaultEndpoints();
@@ -206,6 +208,7 @@ app.MapTramitesConsolidadoEndpoints();
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
+app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
 

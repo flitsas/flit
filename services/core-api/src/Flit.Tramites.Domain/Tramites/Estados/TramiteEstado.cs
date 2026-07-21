@@ -14,6 +14,10 @@ public static class TramiteEstado
     public const string Aprobado = "aprobado";
     public const string Rechazado = "rechazado";
 
+    // Feature #10587 (matrícula inicial): la ruta de placa NO introduce estados de trámite. El
+    // progreso de placa vive en un sub-estado interno ortogonal al status global (que permanece en
+    // 'entregado'); ver <see cref="PlateFlowStatus"/> y <see cref="PlateFlowStateMachine"/> (HU #10785).
+
     /// <summary>Todos los estados válidos (para validación de entrada y checks DDL).</summary>
     public static readonly IReadOnlyList<string> Todos =
         [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado];

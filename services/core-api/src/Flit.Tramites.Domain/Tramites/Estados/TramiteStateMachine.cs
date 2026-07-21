@@ -12,6 +12,9 @@ public static class TramiteStateMachine
         new(StringComparer.Ordinal)
         {
             [TramiteEstado.Borrador] = [TramiteEstado.Anulado, TramiteEstado.Preparado],
+            // Feature #10587 / HU #10785 — la ruta de placa NO bifurca la máquina de estados: el
+            // trámite entra a la decisión del OT siempre desde 'entregado'. El progreso de placa
+            // (preasignado/asignado) es un sub-estado interno ortogonal (ver PlateFlowStateMachine).
             [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
             [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],

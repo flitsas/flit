@@ -61,6 +61,13 @@ public sealed class ConsolidadoHandlerTests
                 return Task.FromResult<Stream?>(null);
             return Task.FromResult<Stream?>(new MemoryStream(bytes));
         }
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(
+                string.IsNullOrWhiteSpace(storagePath)
+                    ? null
+                    : ($"https://s3.test/view/{Uri.EscapeDataString(storagePath)}", DateTimeOffset.UtcNow.AddMinutes(10)));
     }
 
     private static ProcedureInstance MatriculaInstance(Guid id, Guid tenantId)
@@ -100,9 +107,10 @@ public sealed class ConsolidadoHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        // Obligatorios del checklist de traspaso + FUR + certificado + compraventa.
+        // Obligatorios del checklist de traspaso + FUR + certificados (comprador y vendedor) + compraventa.
         AddAttachment(instance, "fur", "fur.pdf", "%PDF-fur");
         AddAttachment(instance, "certificado_identidad", "cert.pdf", "%PDF-cert");
+        AddAttachment(instance, "certificado_identidad_vendedor", "cert_vend.pdf", "%PDF-cert-vend");
         AddAttachment(instance, "compraventa", "compraventa.pdf", "%PDF-compraventa");
         AddAttachment(instance, "impronta", "impronta.pdf", "%PDF-impronta");
         AddAttachment(instance, "soat", "soat.pdf", "%PDF-soat");
@@ -128,7 +136,7 @@ public sealed class ConsolidadoHandlerTests
             SizeBytes = 10,
             Sha256 = $"sha-{tipo}",
             StoragePath = path,
-            Source = tipo is "fur" or "certificado_identidad" ? "system" : "user",
+            Source = tipo is "fur" or "certificado_identidad" or "certificado_identidad_vendedor" ? "system" : "user",
             UploadedAt = DateTimeOffset.UtcNow,
         });
     }
@@ -223,6 +231,35 @@ public sealed class ConsolidadoHandlerTests
         result!.Document.Tipo.Should().Be("consolidado");
         instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado")
             .Which.Payload.Should().Contain("compraventa");
+    }
+
+    [Fact]
+    public async Task HandleAsync_Traspaso_IncluyeAmbosCertificadosEnOrden()
+    {
+        // El certificado de identidad del vendedor se fusiona tras el del comprador y antes de la
+        // compraventa (prelación de TraspasoConsolidadoOrdering).
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        var content = ConsolidadoContent();
+        var idxComprador = content.IndexOf("cert.pdf", StringComparison.Ordinal);
+        var idxVendedor = content.IndexOf("cert_vend.pdf", StringComparison.Ordinal);
+        var idxCompraventa = content.IndexOf("compraventa.pdf", StringComparison.Ordinal);
+        idxComprador.Should().BeGreaterThanOrEqualTo(0);
+        idxVendedor.Should().BeGreaterThanOrEqualTo(0);
+        idxComprador.Should().BeLessThan(idxVendedor);
+        idxVendedor.Should().BeLessThan(idxCompraventa);
     }
 
     [Fact]

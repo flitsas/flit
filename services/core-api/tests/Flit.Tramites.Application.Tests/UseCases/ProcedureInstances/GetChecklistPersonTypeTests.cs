@@ -11,8 +11,10 @@ using Xunit;
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
-/// HU #10542 — el checklist de un traspaso oculta el ítem <c>cedulas</c> cuando el actor es
-/// persona natural (AC1) y lo conserva para persona jurídica (AC3), de punta a punta a través
+/// HU #10542 + ajuste RUES — el checklist de un traspaso oculta el ítem <c>cedulas</c> cuando el
+/// actor es persona natural (identidad digital) y también cuando es persona jurídica/NIT (el
+/// documento de identidad lo cubre el certificado RUES autogenerado — supersede HU #10542 AC3).
+/// Se conserva solo cuando no hay tipo de persona resuelto. Verificado de punta a punta a través
 /// del <see cref="GetChecklistHandler"/>.
 /// </summary>
 public sealed class GetChecklistPersonTypeTests
@@ -78,8 +80,10 @@ public sealed class GetChecklistPersonTypeTests
     }
 
     [Fact]
-    public async Task Checklist_PersonaJuridica_ConservaCedula()
+    public async Task Checklist_PersonaJuridica_OcultaCedula()
     {
+        // Ajuste RUES: para actor NIT/persona jurídica el documento de identidad lo cubre el certificado
+        // RUES autogenerado ⇒ ya no se ofrece 'cedulas' en el checklist de carga (supersede HU #10542 AC3).
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -89,7 +93,8 @@ public sealed class GetChecklistPersonTypeTests
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Items.Should().Contain(i => i.Key == "cedulas");
+        result!.Items.Should().NotContain(i => i.Key == "cedulas");
+        result.FaltanObligatorios.Should().NotContain("cedulas");
     }
 
     [Fact]

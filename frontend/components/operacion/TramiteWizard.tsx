@@ -37,8 +37,16 @@ import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload } from '@/lib/auth/jwt';
+import {
+  isTenantOwnDocument,
+  normalizeNitDigits,
+  OWNER_NOT_TENANT_MESSAGE,
+} from '@/lib/tramites/vehicleOwnership';
 import {
   sanitizeVin,
   validateVin,
@@ -675,6 +683,7 @@ export function TramiteWizard(props: Props) {
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
                 vaultCoveredPartes={vaultCoveredPartes}
+                rnmcEnabled={wizard?.rnmcEnabled ?? false}
               />
             </div>
           )}
@@ -1031,6 +1040,15 @@ function ConsultaStep({
   const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
   const hideOwnerDocType = !isVin && platePrimaryProvider === 'kyverum_runt';
 
+  // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
+  // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
+  // y, si el gestor lo edita a otro, se bloquea la consulta al RUNT con un mensaje claro.
+  const [onlyOwnVehicles, setOnlyOwnVehicles] = useState(false);
+  const tenantNitDigits = normalizeNitDigits(
+    (decodeJwtPayload(getToken())?.company_nit as string | undefined) ?? '',
+  );
+  const ownershipAutofilled = useRef(false);
+
   // Carga (o recarga) la instancia y rehidrata inputs + field_values.
   const loadInstance = async () => {
     if (!instanceId) return;
@@ -1063,9 +1081,26 @@ function ConsultaStep({
     if (isVin) return;
     void tramitesClient
       .getConsultationConfig()
-      .then((cfg) => setPlatePrimaryProvider(cfg.vehiclePlate))
+      .then((cfg) => {
+        setPlatePrimaryProvider(cfg.vehiclePlate);
+        // FEATURE 02 — flag para adaptar la captura del propietario en traspaso.
+        setOnlyOwnVehicles(cfg.onlyOwnVehicles);
+      })
       .catch(() => {});
   }, [isVin]);
+
+  // FEATURE 02 — autorrelleno del documento del tenant (NIT) cuando la política está activa. Una sola
+  // vez y solo si el campo está vacío: no pisa lo hidratado de la instancia ni lo que el gestor escriba.
+  useEffect(() => {
+    if (isVin || !onlyOwnVehicles || !tenantNitDigits || ownershipAutofilled.current) return;
+    ownershipAutofilled.current = true;
+    if (ownerDocNumber.trim()) return;
+    // Autorrelleno del NIT del tenant: set state en efecto, misma excepción aceptada en el wizard
+    // que la rehidratación de la instancia (el valor viene de una consulta async, no del render).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOwnerDocType('NIT');
+    setOwnerDocNumber(tenantNitDigits);
+  }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
 
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
@@ -1108,6 +1143,13 @@ function ConsultaStep({
           ? 'Ingresa el VIN antes de consultar.'
           : 'Ingresa la placa y el documento del propietario antes de consultar.',
       );
+      return;
+    }
+    // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
+    // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
+    if (!isVin && onlyOwnVehicles &&
+        !isTenantOwnDocument(ownerDocType, ownerDocNumber.trim(), tenantNitDigits)) {
+      setError(OWNER_NOT_TENANT_MESSAGE);
       return;
     }
     // Validación de formato antes de gastar una consulta al RUNT.
@@ -1200,6 +1242,24 @@ function ConsultaStep({
       await tramitesClient.patchFieldValues(instanceId, [
         { formFieldId: null, fieldKey, valueText, valueJson: null },
       ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
+  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
+  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
+  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
+  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
+    if (!instanceId || items.length === 0) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(
+        instanceId,
+        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
+      );
       await loadInstance();
       onRefresh();
     } finally {
@@ -1343,6 +1403,13 @@ function ConsultaStep({
 
       <VehicleDataCard fieldValues={fieldValues} />
 
+      <VehicleTransformationsCard
+        fieldValues={fieldValues}
+        readOnly={readOnly}
+        saving={atributosSaving}
+        onPatch={saveTransformacion}
+      />
+
       <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
         <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
         <p className="text-[11px] opacity-55 -mt-1.5">
@@ -1434,6 +1501,7 @@ function StepBody({
   identityOperable = false,
   identityApproved = false,
   vaultCoveredPartes = [],
+  rnmcEnabled = false,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1443,6 +1511,8 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
+  rnmcEnabled?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -1509,6 +1579,7 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1524,8 +1595,10 @@ function StepBody({
           embeddedInWizard
           layout="split"
           // El vendedor es el propietario registrado validado en el paso 1:
-          // siembra su documento (editable) desde owner_document_* de la consulta.
+          // siembra su documento desde owner_document_* y consulta RUNT al llegar.
           seedDocumentoFromOwner
+          autoConsultRunt
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1621,6 +1694,7 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            rnmcEnabled={rnmcEnabled}
           />
         </div>
       );

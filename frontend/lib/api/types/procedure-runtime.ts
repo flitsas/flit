@@ -17,6 +17,13 @@ export type InstanceStatus =
   | 'aprobado'
   | 'rechazado';
 
+/**
+ * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
+ * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
+ * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
+ */
+export type PlateFlowStatus = 'preasignado' | 'asignado';
+
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
   id: string;
@@ -48,6 +55,8 @@ export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -66,6 +75,8 @@ export interface InstanceSummary {
   referenceNumber: string;
   modalidad: WizardModalidad;
   estado: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   placa: string | null;
   vin: string | null;
   vehiculoMarca: string | null;
@@ -137,6 +148,8 @@ export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -183,6 +196,22 @@ export interface ConsultationProvidersConfig {
   vehicleVin: string;
   vehiclePlate: string;
   conductor: string;
+  // FEATURE 02 — política "solo vehículos propios" del tenant. Cuando es true, el wizard autorrellena
+  // el documento del tenant (NIT) en la consulta de traspaso y bloquea la consulta si se edita a otro.
+  onlyOwnVehicles: boolean;
+}
+
+/**
+ * Representante legal / apoderado de una persona jurídica (persona natural). Solo aplica cuando
+ * el actor es jurídico (NIT). Se captura manualmente o se autopobla desde el RUNT y viaja embebido
+ * en actor.metadata (sin columnas nuevas). No es un actor de primera clase.
+ */
+export interface RepresentanteLegal {
+  tipoDocumento?: ActorDocumentType;
+  numeroDocumento?: string;
+  nombreCompleto?: string;
+  email?: string;
+  telefono?: string;
 }
 
 export interface ProcedureActor {
@@ -200,6 +229,8 @@ export interface ProcedureActor {
    * checklist (el documento llega desde la validación de identidad).
    */
   personType?: ActorPersonType;
+  /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
+  representanteLegal?: RepresentanteLegal;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -232,6 +263,40 @@ export interface RuntPersonLookupResult {
   nroPazYSalvo?: string | null;     // Número del paz y salvo
   hasActiveLicense?: boolean;       // true si tiene al menos 1 licencia ACTIVA
   licenseCategories?: string | null; // "B1" o "B1,C1"
+  // Detalle de comparendos del SIMIT (best-effort), presente cuando hasPendingFines=true y el SIMIT
+  // respondió. El RUNT conductor solo trae el flag; el detalle viene del SIMIT del mismo documento.
+  fines?: FineDetail[] | null;
+}
+
+// HU #10611 (Feature #10587) — validación en línea del SOAT (re-consulta RUNT) en estado 'asignado'.
+export type SoatEstado = 'vigente' | 'vencido' | 'unknown';
+export interface ValidateSoatResult {
+  vigente: boolean;
+  soatEstado: SoatEstado;
+  vencimiento: string | null;
+  aseguradora: string | null;
+  message: string;
+}
+
+// ── Autopopulado JURÍDICO desde RUES (persona jurídica / NIT) ───────
+// POST /instances/{id}/rues-lookup  body { documentNumber }
+// Bifurcación del "Consultar RUNT" cuando el actor es persona jurídica. Siempre 200 ante una
+// petición válida; `found` indica si RUES halló la empresa. Si no, el usuario completa la razón
+// social manualmente (fallback).
+export interface RuesPersonLookupInput {
+  documentNumber: string;
+}
+
+export interface RuesPersonLookupResult {
+  found: boolean;
+  razonSocial: string | null;
+  estado: string | null;             // ACTIVA / INACTIVA / …
+  documentNumber: string;
+  matriculaMercantil: string | null;
+  camaraComercio: string | null;
+  documentType: 'NIT';
+  source: 'RUES';
+  mode: 'real' | 'mock';
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -247,6 +312,20 @@ export interface PreflightAction {
   href?: string;
 }
 
+/**
+ * Detalle de un comparendo/multa pendiente, para listarlo bajo la advertencia de multas del
+ * pre-vuelo. Todos los campos son opcionales (cada fuente expone lo que trae). Nunca lleva datos del
+ * infractor (Habeas Data): solo información del comparendo.
+ */
+export interface FineDetail {
+  numero?: string | null;
+  fecha?: string | null;
+  valor?: number | null;
+  organismo?: string | null;
+  estado?: string | null;
+  infraccion?: string | null;
+}
+
 export interface PreflightCheck {
   key: string;
   label: string;
@@ -254,6 +333,8 @@ export interface PreflightCheck {
   source: string;
   message: string;
   action?: PreflightAction | null;
+  /** Detalle line-by-line del hallazgo (hoy: los comparendos de un check de multas). */
+  details?: FineDetail[] | null;
 }
 
 export interface PreflightSnapshot {
@@ -409,6 +490,12 @@ export interface WizardState {
    * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
    */
   identityValidationEnabled?: boolean;
+  /**
+   * FEATURE 05 — `true` si el RNMC aplica a este trámite (el OT destino lo exige y la compañía no lo
+   * inhabilitó para ese OT). Solo entonces el formulario de actores muestra la fecha de expedición del
+   * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
+   */
+  rnmcEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -427,6 +514,30 @@ export interface CommercialData {
   tasaImpuesto: number | null;
   derechos: number | null;
   metodoPago: CommercialMetodoPago | null;
+  // Feature #10707 — trazabilidad del avalúo (opcional; el back las persiste).
+  valueOrigin?: 'suggestion' | 'manual' | null;
+  suggestedSource?: string | null;
+  suggestedValue?: number | null;
+}
+
+// ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+
+export type AvaluoSourceKey = 'fasecolda' | 'base_gravable' | 'mercado_libre';
+export type AvaluoStatus = 'ok' | 'no_data' | 'error';
+
+export interface AvaluoSource {
+  source: AvaluoSourceKey | string;
+  status: AvaluoStatus | string;
+  value: number | null;
+  currency: string;
+  message: string | null;
+  muestras: number | null;
+}
+
+export interface SuggestedCommercialValue {
+  sugerido: number | null;
+  fuentePrincipal: string | null;
+  sources: AvaluoSource[];
 }
 
 // ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
@@ -545,6 +656,12 @@ export interface IdentityAuditEvent {
 export interface IdentityAuditResponse {
   validationId: string;
   events: IdentityAuditEvent[];
+  /**
+   * true cuando la identidad está reutilizada de otro trámite del mismo cliente (HU #10350): la
+   * bitácora es la real de esa validación, pero corresponde al trámite donde se realizó. La UI lo
+   * explica en vez de mostrar un error.
+   */
+  referencedFromOtherProcedure?: boolean;
 }
 
 /**

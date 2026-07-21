@@ -167,9 +167,25 @@ describe("Usuarios — pestaña Eliminados (#10624, SuperAdmin)", () => {
     });
   });
 
-  it("AC2 (SuperAdmin): sin botón Eliminar en la tabla de Usuarios para SuperAdmin (patrón existente de solo-lectura cross-tenant)", async () => {
+  it("SuperAdmin ve el botón Eliminar en la tabla de Usuarios (bloquear/eliminar es exclusivo de SuperAdmin)", async () => {
+    const activeUser: TenantUser = {
+      ...deletedUser,
+      id: "active-1",
+      fullName: "Carlos Ruiz",
+      status: "active",
+      deletedAt: undefined,
+    };
+    vi.mocked(getUsers).mockImplementation(async (onlyDeleted?: boolean) =>
+      onlyDeleted ? [deletedUser] : [activeUser],
+    );
     render(<Usuarios />);
-    await screen.findByRole("button", { name: /^eliminados$/i });
-    expect(screen.queryByRole("button", { name: /eliminar usuario/i })).not.toBeInTheDocument();
+    await screen.findByText("Carlos Ruiz");
+    expect(
+      screen.getByRole("button", { name: /eliminar usuario carlos ruiz/i }),
+    ).toBeInTheDocument();
+    // Y también las acciones de bloqueo (suspender / desactivar), exclusivas de SuperAdmin.
+    expect(
+      screen.getByRole("button", { name: /suspender temporalmente a carlos ruiz/i }),
+    ).toBeInTheDocument();
   });
 });

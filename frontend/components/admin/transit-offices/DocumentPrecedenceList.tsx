@@ -111,9 +111,9 @@ export function DocumentPrecedenceList({
           onDragStart={() => setDragIndex(index)}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => onDrop(index)}
-          className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
           style={{
-            borderColor: keyboardIndex === index ? "#557EFF" : "#DFE5ED",
+            borderColor: keyboardIndex === index ? "#557EFF" : undefined,
             boxShadow: keyboardIndex === index ? "0 0 0 2px #557EFF33" : undefined,
           }}
         >
@@ -126,7 +126,7 @@ export function DocumentPrecedenceList({
           >
             <GripVertical className="h-4 w-4 opacity-50" aria-hidden="true" />
           </button>
-          <span className="flex-1 text-xs font-semibold" style={{ color: "#162744" }}>
+          <span className="flex-1 text-xs font-semibold text-foreground">
             {item.document_name}
           </span>
           <span className="text-[10px] opacity-60">#{item.sort_order}</span>

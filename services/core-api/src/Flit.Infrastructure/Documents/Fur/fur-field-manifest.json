@@ -96,6 +96,6 @@
     { "id": "vehicle_buyer_phone", "page": 1, "type": "text", "x": 428, "y": 428, "w": 44, "h": 12, "fontSize": 7, "bold": true, "align": "left" },
     { "id": "vehicle_buyer_signature", "page": 1, "type": "multiline", "x": 146, "y": 444, "w": 335, "h": 30, "fontSize": 6, "bold": false, "align": "left" },
 
-    { "id": "observations", "page": 1, "type": "multiline", "x": 156, "y": 462, "w": 620, "h": 28, "fontSize": 6.5, "bold": true, "align": "left" }
+    { "id": "observations", "page": 1, "type": "multiline", "x": 495, "y": 396, "w": 495, "h": 28, "fontSize": 6.5, "bold": true, "align": "left" }
   ]
 }

@@ -101,7 +101,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
       }
     >
       <div className="space-y-4">
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Nombre
           <input
             className={`mt-1 ${OT_INPUT_CLS}`}
@@ -111,7 +111,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
         </label>
 
         <fieldset className="space-y-2">
-          <legend className="text-xs font-semibold" style={{ color: "#162744" }}>
+          <legend className="text-xs font-semibold text-foreground">
             Condiciones
           </legend>
           {conditions.map((cond, index) => (
@@ -189,7 +189,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
           )}
         </fieldset>
 
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Lógica
           <select
             className={`mt-1 ${OT_INPUT_CLS}`}
@@ -201,7 +201,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
           </select>
         </label>
 
-        <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label className="block text-xs font-semibold text-foreground">
           Acción
           <select
             className={`mt-1 ${OT_INPUT_CLS}`}
@@ -217,7 +217,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
         </label>
 
         {actionType === "cola_especial" && (
-          <label className="block text-xs font-semibold" style={{ color: "#162744" }}>
+          <label className="block text-xs font-semibold text-foreground">
             Nombre de cola
             <input
               className={`mt-1 ${OT_INPUT_CLS}`}

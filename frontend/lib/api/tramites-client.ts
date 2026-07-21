@@ -9,6 +9,7 @@ import type {
   BiometricValidationsResponse,
   ChecklistView,
   CommercialData,
+  SuggestedCommercialValue,
   CompletarBiometriaResult,
   ConsultationProvidersConfig,
   ConsultationResult,
@@ -35,6 +36,7 @@ import type {
   ParticipantsResponse,
   PortalFirmaUrl,
   PortalView,
+  FineDetail,
   PreflightSnapshot,
   PresignAttachmentResponse,
   ProcedureActor,
@@ -45,6 +47,9 @@ import type {
   ProcedureInstanceSummary,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
+  ValidateSoatResult,
+  RuesPersonLookupInput,
+  RuesPersonLookupResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -69,21 +74,27 @@ interface PreflightSnapshotDto {
     status: PreflightSnapshot['checks'][number]['status'];
     source: string;
     message?: string;
+    details?: FineDetail[] | null;
   }>;
   provider?: string;
   createdAt: string;
 }
 
+function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
+  return dtos.map((c) => ({
+    key: c.key,
+    label: c.label,
+    status: c.status,
+    source: c.source,
+    message: c.message ?? '',
+    details: c.details ?? null,
+  }));
+}
+
 function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
   return {
     overall: dto.overall,
-    checks: dto.checks.map((c) => ({
-      key: c.key,
-      label: c.label,
-      status: c.status,
-      source: c.source,
-      message: c.message ?? '',
-    })),
+    checks: mapChecks(dto.checks),
     createdAt: dto.createdAt,
   };
 }
@@ -407,6 +418,22 @@ export const tramitesClient = {
       },
     ),
 
+  // Autopopulado JURÍDICO del actor desde RUES por NIT (bifurcación del "Consultar RUNT" para
+  // persona jurídica). Siempre 200 ante petición válida; `found=false` => fallback manual.
+  ruesPersonLookup: (
+    instanceId: string,
+    input: RuesPersonLookupInput,
+    tenantId?: string,
+  ) =>
+    request<RuesPersonLookupResult>(
+      `/api/v1/tramites/instances/${instanceId}/rues-lookup`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(input),
+      },
+    ),
+
   // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
   // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
   // placa es Kyverum RUNT, que lo resuelve solo).
@@ -442,6 +469,14 @@ export const tramitesClient = {
       createdAt: new Date().toISOString(),
     };
   },
+
+  // HU #10611 (Feature #10587) — valida el SOAT re-consultando el RUNT del vehículo con el trámite
+  // en 'asignado'. El backend marca soat_estado (vigente/vencido/unknown) sin cambiar de estado.
+  validateSoatViaRunt: (instanceId: string, tenantId?: string) =>
+    request<ValidateSoatResult>(
+      `/api/v1/tramites/instances/${instanceId}/soat/validate-runt`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 
   // ── Documentos / checklist (Slice 3) ────────────────────────────
   // Checklist guiado por la tipología: qué docTipos exige el trámite y
@@ -580,6 +615,18 @@ export const tramitesClient = {
     return { blob, filename: filename || attachmentId, mimetype };
   },
 
+  // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
+  // El backend valida tenant + ownership antes de emitir { url, expiresAt }.
+  fetchAttachmentPreviewUrl: (
+    instanceId: string,
+    attachmentId: string,
+    tenantId?: string,
+  ) =>
+    request<{ url: string; expiresAt: string }>(
+      `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/preview-url`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
   // DELETE adjunto -> 204.
   deleteAttachment: (
     instanceId: string,
@@ -637,6 +684,25 @@ export const tramitesClient = {
     return dto ? mapPreflight(dto) : null;
   },
 
+  // ── RNMC (FEATURE 05) — consulta desacoplada del pre-vuelo ──────
+  // POST corre la consulta RNMC por cada actor natural (con su fecha de expedición) y persiste;
+  // GET trae el último resultado. Ambos devuelven la lista de checks (rnmc_{rol}_medidas_correctivas).
+  runRnmc: async (instanceId: string, tenantId?: string): Promise<PreflightSnapshot['checks']> => {
+    const dtos = await request<PreflightSnapshotDto['checks']>(
+      `/api/v1/tramites/instances/${instanceId}/rnmc`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    );
+    return mapChecks(dtos ?? []);
+  },
+
+  getRnmc: async (instanceId: string, tenantId?: string): Promise<PreflightSnapshot['checks']> => {
+    const dtos = await request<PreflightSnapshotDto['checks']>(
+      `/api/v1/tramites/instances/${instanceId}/rnmc`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return mapChecks(dtos ?? []);
+  },
+
   // ── Datos comerciales (traspaso) — GET/PUT /commercial ──────────
   getCommercial: (instanceId: string, tenantId?: string) =>
     request<CommercialData>(
@@ -656,6 +722,13 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(data),
       },
+    ),
+
+  // ── Avalúo comercial (Feature #10707) — GET /commercial/suggested-value ──
+  getSuggestedCommercialValue: (instanceId: string, tenantId?: string) =>
+    request<SuggestedCommercialValue>(
+      `/api/v1/tramites/instances/${instanceId}/commercial/suggested-value`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
@@ -974,6 +1047,19 @@ export const tramitesClient = {
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
+      },
+    ),
+
+  // PATCH diferir la impronta al paso FUR: marca el ítem de checklist como "se generará
+  // automáticamente" (sin adjuntar) para poder continuar el paso 2 aunque sea obligatoria. `false`
+  // revierte la marca. NO permite radicar sin la impronta real (SubmitGate la sigue exigiendo).
+  setImprontaDiferida: (instanceId: string, diferida: boolean, tenantId?: string) =>
+    request<void>(
+      `/api/v1/tramites/instances/${instanceId}/checklist/impronta-diferida`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ diferida }),
       },
     ),
 

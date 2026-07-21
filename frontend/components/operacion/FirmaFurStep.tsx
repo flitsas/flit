@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -12,10 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { listAvailablePlatesForCompany, type PlateDetail } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
+import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
   BiometricValidation,
@@ -24,6 +27,7 @@ import type {
   InstanceStatus,
   Participant,
   ParticipantRol,
+  PreflightCheck,
   ProcedureAttachment,
   Signature,
   SignatureParte,
@@ -37,12 +41,78 @@ interface Props {
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras una acción (server-driven). */
   onRefresh?: () => void;
+  /** FEATURE 05 — el RNMC aplica al trámite: se consulta por actor y se muestra en el resumen. */
+  rnmcEnabled?: boolean;
 }
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
 };
+
+// FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
+const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
+  ok: { dot: '#8CC63F', text: '#8CC63F' },
+  warn: { dot: '#F9AC00', text: '#F9AC00' },
+  fail: { dot: '#FF4E00', text: '#FF4E00' },
+  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  error: { dot: '#FF4E00', text: '#FF4E00' },
+};
+
+/**
+ * FEATURE 05 — resultado de la consulta RNMC (medidas correctivas de la Policía) por actor. Se
+ * consulta al entrar al paso final (ya con la fecha de expedición de cada actor), no en el pre-vuelo.
+ * Reutiliza `sourceLabel` (verifik_rnmc→RNMC) y `checkRoleSuffix` (comprador/vendedor) del pre-vuelo.
+ */
+function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
+  return (
+    <div className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]">
+      <div className="mb-3 flex items-center gap-2">
+        <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+        <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
+        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
+      </div>
+      {loading && checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Consultando el RNMC de los actores…</p>
+      ) : checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+      ) : (
+        <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
+          {checks.map((c) => {
+            const s = RNMC_STATUS_STYLE[c.status] ?? RNMC_STATUS_STYLE.unknown;
+            return (
+              <li key={c.key} className="flex items-start gap-2.5 rounded-xl border p-2.5">
+                <span
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: s.dot }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold">
+                      {c.label}
+                      {checkRoleSuffix(c.key)}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold" style={{ color: s.text }}>
+                      {c.status}
+                    </span>
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+                    >
+                      {sourceLabel(c.source)}
+                    </span>
+                  </div>
+                  {c.message && <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
   { value: 'comprador', label: 'Comprador' },
@@ -122,7 +192,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * wizard tras cada acción y delega la verificación autoritativa al backend
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
-export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
+export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = false }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
   const readOnly = useWizardReadOnly();
@@ -137,6 +207,10 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
+  // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
+  const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
+  const [rnmcLoading, setRnmcLoading] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
@@ -170,12 +244,29 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
     }
   }, [instanceId]);
 
+  // FEATURE 05 — al entrar a este paso (ya con la fecha de expedición de cada actor) se dispara la
+  // consulta RNMC: POST corre la consulta por actor natural y persiste, y devuelve los checks. Si el
+  // RNMC no aplica al trámite (rnmcEnabled=false) no se llama nada.
+  const loadRnmc = useCallback(async () => {
+    if (!instanceId || !rnmcEnabled) return;
+    setRnmcLoading(true);
+    try {
+      const checks = await tramitesClient.runRnmc(instanceId);
+      setRnmcChecks(checks);
+    } catch {
+      // El RNMC es informativo en este paso; su fallo no bloquea la firma/FUR.
+    } finally {
+      setRnmcLoading(false);
+    }
+  }, [instanceId, rnmcEnabled]);
+
   useEffect(() => {
     // Carga al montar: el setState ocurre tras el await (no es setState síncrono).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDetail();
     void loadExpediente();
-  }, [loadDetail, loadExpediente]);
+    void loadRnmc();
+  }, [loadDetail, loadExpediente, loadRnmc]);
 
   const fv = useCallback(
     (key: string): string =>
@@ -244,6 +335,23 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
 
+      {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
+          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}
+      {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
+        <PlacaPreasignadaSection
+          instanceId={instanceId}
+          organismoId={organismo.id}
+          plateValue={fv('plate')}
+          plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+          preferredDigitValue={fv('plate_preferred_last_digit')}
+          readOnly={readOnly}
+          onRefresh={() => {
+            void loadDetail();
+            onRefresh?.();
+          }}
+        />
+      )}
+
       <MatriculaResumen
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
@@ -273,7 +381,10 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
+        soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
       />
+
+      {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
       <ExpedienteVisor
         instanceId={instanceId}
@@ -308,6 +419,220 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         />
       )}
     </div>
+  );
+}
+
+// ── Placa preasignada (Flujo A, HU #10799) ────────────────────────────
+
+/**
+ * Sección explícita del paso FUR para elegir la placa preasignada del rango del OT (Flujo A). Reemplaza
+ * la antigua fase modal. No aplica si el VIN ya tiene placa del RUNT (source 'consultation', AC2). Si no
+ * hay placas disponibles, informa que el OT la asignará (Flujo B, AC3). Con buscador para rangos grandes.
+ */
+export function PlacaPreasignadaSection({
+  instanceId,
+  organismoId,
+  plateValue,
+  plateSource,
+  preferredDigitValue = '',
+  readOnly,
+  onRefresh,
+}: {
+  instanceId: string;
+  organismoId: string;
+  plateValue: string;
+  plateSource: string;
+  /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
+  preferredDigitValue?: string;
+  readOnly: boolean;
+  onRefresh?: () => void;
+}) {
+  const [plates, setPlates] = useState<PlateDetail[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+  // HU #10805 — dígito de preferencia (0-9) para radicar sin placa: guía para el OT al asignar.
+  const [preferredDigit, setPreferredDigit] = useState(() => preferredDigitValue ?? '');
+  const [savingDigit, setSavingDigit] = useState(false);
+
+  const placa = plateValue.trim();
+  // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
+  const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
+  const placaElegida = placa !== '' && plateSource === 'user';
+  const mostrarSelector = !readOnly && !vinTienePlacaRunt && (!placaElegida || changing);
+
+  useEffect(() => {
+    if (!mostrarSelector) return;
+    let active = true;
+    listAvailablePlatesForCompany(organismoId)
+      .then((data) => {
+        if (active) {
+          setPlates(data);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [organismoId, mostrarSelector]);
+
+  const pick = async (plate: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: plate },
+      ]);
+      setChanging(false);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // HU #10805 — persiste el dígito de preferencia (o lo limpia con ''). Solo es una guía para el OT;
+  // no cambia el enrutamiento: sin placa el trámite sigue cayendo por preasignación.
+  const saveDigit = async (value: string) => {
+    setPreferredDigit(value);
+    setSavingDigit(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value },
+      ]);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo guardar el dígito de preferencia. Inténtalo de nuevo.');
+    } finally {
+      setSavingDigit(false);
+    }
+  };
+
+  const filtered = query.trim()
+    ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
+    : plates;
+
+  const shell = (children: ReactNode) => (
+    <section className="rounded-2xl border border-[#DFE5ED] p-5 dark:border-white/10">
+      <h3 className="text-sm font-bold">Placa preasignada</h3>
+      {children}
+    </section>
+  );
+
+  if (vinTienePlacaRunt) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80">
+        El vehículo ya tiene placa asignada según el RUNT (<span className="font-mono font-semibold">{placa}</span>).
+        No aplica la preasignación de placa.
+      </p>,
+    );
+  }
+
+  if (placaElegida && !changing) {
+    return shell(
+      <div className="mt-2 flex items-center gap-3">
+        <p className="text-xs opacity-80">
+          Placa seleccionada: <span className="font-mono font-semibold">{placa}</span>
+        </p>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setChanging(true)}
+            className="rounded-lg border px-3 py-1 text-[11px] font-semibold"
+          >
+            Cambiar
+          </button>
+        )}
+      </div>,
+    );
+  }
+
+  if (!mostrarSelector) {
+    return null;
+  }
+
+  return shell(
+    <div className="mt-2 flex flex-col gap-3">
+      <p className="text-[11px] opacity-70">
+        Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
+        trámite se enviará al OT para que asigne la placa.
+      </p>
+      {error && (
+        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+          {error}
+        </p>
+      )}
+      {loaded && plates.length === 0 ? (
+        <p className="text-xs opacity-80">
+          No hay placas disponibles en el rango; el trámite se enviará al OT para que asigne la placa.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2">
+            <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar placa…"
+              aria-label="Buscar placa disponible"
+              className="w-full bg-transparent text-xs outline-none"
+            />
+          </div>
+          <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+            {filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={saving}
+                onClick={() => void pick(p.plate)}
+                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
+              >
+                {p.plate}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
+      <label className="mt-1 flex flex-col gap-1 text-[11px] font-semibold">
+        Dígito de preferencia (opcional)
+        <span className="text-[10px] font-normal opacity-70">
+          Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
+          guía: puede asignar una placa que termine en ese dígito u otra.
+        </span>
+        <select
+          value={preferredDigit}
+          disabled={savingDigit}
+          onChange={(e) => void saveDigit(e.target.value)}
+          aria-label="Dígito de preferencia de placa"
+          className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
+        >
+          <option value="">Sin preferencia</option>
+          {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <option key={d} value={d}>
+              Termina en {d}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {changing && (
+        <button
+          type="button"
+          onClick={() => setChanging(false)}
+          className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold"
+        >
+          Cancelar
+        </button>
+      )}
+    </div>,
   );
 }
 
@@ -494,6 +819,8 @@ function OrganismoModal({
         { formFieldId: null, fieldKey: 'transit_office_name', valueText: org.name },
         { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.cityCode },
       ]);
+      // HU #10799 — la selección de placa (Flujo A) ya no vive aquí: es una SECCIÓN explícita del paso FUR
+      // (PlacaPreasignadaSection). El modal solo confirma el OT.
       onConfirmed();
     } catch {
       setError('No se pudo guardar el organismo. Inténtalo de nuevo.');
@@ -1261,7 +1588,7 @@ function ImprontaSection({
 // ── FUR / compraventa ─────────────────────────────────────────────────
 
 /** Tipos de documento generados por el FUR. */
-const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad']);
+const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
 
 function FurSection({
   instanceId,
@@ -1397,8 +1724,8 @@ function FurSection({
             >
               <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold capitalize">
-                  {d.tipo} · {d.filename}
+                <p className="text-xs font-semibold">
+                  {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
                 </p>
                 <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
                   SHA-256: {d.sha256}
@@ -1466,7 +1793,190 @@ function FurSection({
           )}
         </div>
       )}
+
+      {/* HU #10611 (Feature #10587) — asignación de SOAT de la ruta de placa, ubicada bajo el
+          Expediente consolidado (movida desde EstadoAcciones). Se auto-oculta salvo sub-estado
+          de placa 'asignado' (el OT ya asignó la placa). */}
+      <SoatSection instanceId={instanceId} onRefresh={onRefresh} />
     </section>
+  );
+}
+
+/**
+ * SOAT de la ruta de placa (HU #10611, Feature #10587). Se muestra en el paso FUR, debajo del
+ * Expediente consolidado, y SOLO cuando el sub-estado de placa es 'asignado' (el OT ya asignó la
+ * placa): el gestor/radicador registra el SOAT validando por RUNT o cargando el PDF. Sin un SOAT
+ * vigente el OT no puede aprobar la matrícula (gate no subsanable, R06). Autocontenido: lee su
+ * propio estado (plate_flow_status + soat_estado) por instanceId, como hacía EstadoAcciones.
+ */
+function SoatSection({
+  instanceId,
+  onRefresh,
+}: {
+  instanceId: string | null;
+  onRefresh?: () => void;
+}) {
+  const [plateFlowStatus, setPlateFlowStatus] = useState<string | null>(null);
+  const [soatEstado, setSoatEstado] = useState<string | null>(null);
+  const [soatWorking, setSoatWorking] = useState(false);
+  const [soatMsg, setSoatMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    // Lee el sub-estado de placa y el soat_estado persistido para reflejar el registro previo.
+    tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (!active) return;
+        setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        setSoatEstado(d?.fieldValues?.find((f) => f.fieldKey === 'soat_estado')?.valueText ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  // Opción 1 — re-consulta el RUNT del vehículo; si el SOAT viene vigente, el backend marca
+  // soat_estado=vigente y desbloquea la aprobación del OT (sin cambiar de estado el trámite).
+  const validarSoatRunt = async () => {
+    if (!instanceId) return;
+    setSoatWorking(true);
+    setError(null);
+    setSoatMsg(null);
+    try {
+      const r = await tramitesClient.validateSoatViaRunt(instanceId);
+      setSoatEstado(r.soatEstado);
+      setSoatMsg(r.message);
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo validar el SOAT por RUNT.');
+    } finally {
+      setSoatWorking(false);
+    }
+  };
+
+  // Opción 2 — carga el PDF del SOAT (permitido en 'asignado') y lo registra como evidencia vigente.
+  const subirSoatPdf = async (file: File) => {
+    if (!instanceId) return;
+    setSoatWorking(true);
+    setError(null);
+    setSoatMsg(null);
+    try {
+      await tramitesClient.uploadAttachment(instanceId, 'soat', file);
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'soat_estado', valueText: 'vigente' },
+      ]);
+      setSoatEstado('vigente');
+      setSoatMsg('SOAT cargado (PDF). El trámite queda listo para la recepción y aprobación del OT.');
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el PDF del SOAT.');
+    } finally {
+      setSoatWorking(false);
+    }
+  };
+
+  // Solo aplica a la ruta de placa una vez el OT asignó la placa (sub-estado 'asignado').
+  if (plateFlowStatus !== 'asignado') return null;
+
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <div>
+        <h5 className="text-xs font-bold">SOAT del vehículo</h5>
+        <p className="text-[11px] opacity-70">
+          Requerido para que el OT reciba y apruebe. Valida el SOAT por consulta RUNT o carga el
+          PDF; sin un SOAT vigente el OT no puede aprobar la matrícula (gate no subsanable).
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-semibold uppercase tracking-wide opacity-60">SOAT:</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            soatEstado === 'vigente'
+              ? 'bg-green-100 text-green-700'
+              : soatEstado === 'vencido'
+                ? 'bg-orange-100 text-orange-700'
+                : 'bg-slate-100 text-slate-600'
+          }`}
+        >
+          {soatEstado === 'vigente'
+            ? 'Vigente'
+            : soatEstado === 'vencido'
+              ? 'Vencido'
+              : soatEstado === 'unknown'
+                ? 'No reportado'
+                : 'Sin registrar'}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={soatWorking}
+          onClick={() => void validarSoatRunt()}
+          className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+        >
+          {soatWorking ? 'Validando…' : 'Validar por RUNT'}
+        </button>
+        <button
+          type="button"
+          disabled={soatWorking}
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-lg border border-slate-300 px-3.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-60"
+        >
+          Cargar PDF del SOAT
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (f) void subirSoatPdf(f);
+          }}
+        />
+      </div>
+
+      {soatMsg ? (
+        <p
+          className={`m-0 text-xs ${
+            soatEstado === 'vigente'
+              ? 'text-green-700'
+              : soatEstado === 'vencido'
+                ? 'text-orange-700'
+                : 'text-slate-500'
+          }`}
+          role={soatEstado === 'vigente' ? undefined : 'alert'}
+        >
+          {soatMsg}
+        </p>
+      ) : soatEstado === 'vigente' ? (
+        <p className="m-0 text-xs text-green-700">
+          SOAT registrado como vigente. El OT ya puede recibir y aprobar la matrícula.
+        </p>
+      ) : soatEstado === 'vencido' ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          SOAT vencido: el OT no podrá aprobar hasta que esté vigente (gate no subsanable).
+        </p>
+      ) : (
+        <p className="m-0 text-xs text-slate-500">
+          SOAT sin registrar. Valida por RUNT o carga el PDF; sin SOAT el OT no puede aprobar.
+        </p>
+      )}
+
+      {error ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

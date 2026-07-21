@@ -6,6 +6,7 @@ export type OtHubTabId =
   | "rules"
   | "documents"
   | "requirements"
+  | "plate-ranges"
   | "usuarios"
   | "mandatarios";
 
@@ -22,6 +23,7 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
+  { id: "plate-ranges", label: "Preasignación de placa", segment: "plate-ranges" },
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
   { id: "mandatarios", label: "Mandatario", segment: "mandatarios" },
 ];

@@ -27,6 +27,8 @@ import {
   Briefcase,
   Landmark,
   Fingerprint,
+  Send,
+  ScrollText,
 } from "lucide-react";
 
 export type ModuleId =
@@ -36,7 +38,8 @@ export type ModuleId =
   | "validaciones"
   | "usuarios"
   | "ayuda"
-  | "rbac";
+  | "rbac"
+  | "auditoria";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -191,11 +194,25 @@ export function Shell({
         onClick: () => window.location.assign("/admin/improntas"),
       },
       {
+        key: "admin-quipux",
+        label: "Quipux",
+        icon: Send,
+        active: pathname.startsWith("/admin/quipux"),
+        onClick: () => window.location.assign("/admin/quipux"),
+      },
+      {
         key: "rbac",
         label: "RBAC Admin",
         icon: Lock,
         active: !onAdminRoute && active === "rbac",
         onClick: () => onNav("rbac"),
+      },
+      {
+        key: "auditoria",
+        label: "Auditoría",
+        icon: ScrollText,
+        active: !onAdminRoute && active === "auditoria",
+        onClick: () => onNav("auditoria"),
       },
     );
   }

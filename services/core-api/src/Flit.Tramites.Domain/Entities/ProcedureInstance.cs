@@ -16,6 +16,16 @@ public sealed class ProcedureInstance
     public Guid? TransitOfficeId { get; set; }
 
     /// <summary>
+    /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
+    /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
+    /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al
+    /// OT, esperando placa) y <c>asignado</c> (placa registrada; pendiente de SOAT + recepción del OT).
+    /// Ver <see cref="Tramites.Estados.PlateFlowStatus"/>. Columna agregada por migración SQL cruda
+    /// (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public string? PlateFlowStatus { get; set; }
+
+    /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
     /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
     /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el
@@ -31,6 +41,17 @@ public sealed class ProcedureInstance
     /// vida ni los gates. Default false. Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations).
     /// </summary>
     public bool Prioritario { get; set; }
+
+    /// <summary>
+    /// Feature #10701 / HU #10706 — marca de vigencia del expediente consolidado maestro. En
+    /// <c>true</c> el <c>consolidado_maestro</c> persistido refleja el estado actual del expediente:
+    /// el botón único "Ver consolidado" lo muestra tal cual (sin regenerar). Cualquier cambio
+    /// importante —transición de estado (aprobar/rechazar/…) o adjuntar la Licencia de Tránsito—
+    /// la baja a <c>false</c>, y la siguiente petición regenera el PDF antes de mostrarlo. Default
+    /// false (un trámite sin consolidado vigente se genera al primer clic). Columna agregada por
+    /// migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public bool ConsolidadoMaestroVigente { get; set; }
 
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

@@ -1,3 +1,5 @@
+using Flit.Admin.Application.Auditing;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Domain.Permissions;
 using Microsoft.AspNetCore.Builder;
@@ -46,7 +48,9 @@ internal static class SecurityPermissionsEndpoints
             {
                 return Results.Conflict(new { code = "PERMISSION_SLUG_DUPLICATE" });
             }
-        }).WithName("CreatePermission");
+        }).WithName("CreatePermission")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Permissions, AuditVocabulary.Operations.Create, "permission", "PERMISSION"));
 
         group.MapMethods("/permissions/{id:guid}/deactivate", ["PATCH"], async (
             Guid id,
@@ -62,7 +66,9 @@ internal static class SecurityPermissionsEndpoints
             {
                 return Results.NotFound();
             }
-        }).WithName("DeactivatePermission");
+        }).WithName("DeactivatePermission")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Permissions, AuditVocabulary.Operations.Update, "permission", "PERMISSION", "id"));
 
         group.MapDelete("/permissions/{id:guid}", async (
             Guid id,
@@ -82,7 +88,9 @@ internal static class SecurityPermissionsEndpoints
             {
                 return Results.Conflict(new { code = "PERMISSION_IN_USE" });
             }
-        }).WithName("DeletePermission");
+        }).WithName("DeletePermission")
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Permissions, AuditVocabulary.Operations.Delete, "permission", "PERMISSION", "id"));
     }
 
     private sealed record CreatePermissionRequest(

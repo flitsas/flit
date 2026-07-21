@@ -238,6 +238,6 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_city=Text:330,428,36,12,7,Left
         vehicle_buyer_phone=Text:428,428,44,12,7,Left
         vehicle_buyer_signature=Multiline:146,444,335,30,6,Left
-        observations=Multiline:156,462,620,28,6.5,Left
+        observations=Multiline:495,396,495,28,6.5,Left
         """;
 }

@@ -437,6 +437,7 @@ secrets*) — compartidos por todos los ambientes (un solo VPS):
 |--------|----------|
 | `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | Acceso SSH al VPS |
 | `GHCR_PAT` | Login a GHCR en el VPS para `pull` (scope `read:packages`) |
+| `GHCR_USERNAME` | Usuario GitHub **dueño del PAT** usado en `docker login` en el VPS (no usar `github.actor` — rompe deploys si mergea otro usuario). Secret de repositorio o variable `GHCR_USERNAME`. |
 
 **Secrets de Environment** (*Settings → Environments → {develop, staging, production}*)
 — específicos por ambiente:

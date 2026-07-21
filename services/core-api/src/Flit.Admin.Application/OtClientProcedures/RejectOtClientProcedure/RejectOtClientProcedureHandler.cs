@@ -6,7 +6,9 @@ namespace Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 /// <summary>Rechaza un trámite entregado de un cliente OT (HU #10217 AC3 · N 03: entregado→rechazado).</summary>
 public sealed class RejectOtClientProcedureHandler
 {
-    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
+    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot). La ruta de
+    // placa (Feature #10587 / HU #10785) NO cambia el status: el trámite siempre está 'entregado' cuando
+    // el OT decide (el progreso de placa es un sub-estado interno).
     private const string EstadoEntregado = "entregado";
 
     private readonly IOtClientProcedureRepository _repository;

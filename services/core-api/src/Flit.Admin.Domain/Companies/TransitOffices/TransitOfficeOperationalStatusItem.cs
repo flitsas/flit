@@ -37,5 +37,26 @@ public sealed class TransitOfficeOperationalStatusItem
     /// Modo de operación del perfil OT — <c>admin.transit_office_profiles.operation_mode</c>.
     /// <c>null</c> cuando la oficina aún no tiene tenant.
     /// </summary>
+    /// <remarks>
+    /// Describe al OT-CLIENTE (su consola queda en solo lectura porque aprueba dentro de
+    /// Quipux). NO decide si FLIT radica trámites a esta secretaría por Quipux: eso lo
+    /// determinan <see cref="DivipoCode"/> y las banderas <c>Quipux*</c>, que son del catálogo.
+    /// </remarks>
     public string? OperationMode { get; init; }
+
+    /// <summary>
+    /// Código DIVIPO de la secretaría — <c>catalogs.transit_offices.divipo_code</c> (HU #10710).
+    /// <c>null</c> = aún no se conoce (estado normal: solo 6 de 317 están cargadas). Sin él la
+    /// secretaría NO es elegible para radicar por Quipux, aunque tenga banderas activas.
+    /// </summary>
+    public string? DivipoCode { get; init; }
+
+    /// <summary>¿Se radican las MATRÍCULAS de esta secretaría por Quipux? (HU #10710)</summary>
+    public bool QuipuxRegistration { get; init; }
+
+    /// <summary>¿Se radican los TRASPASOS de esta secretaría por Quipux? (HU #10710)</summary>
+    public bool QuipuxTransfer { get; init; }
+
+    /// <summary>¿Se radican los OTROS trámites de esta secretaría por Quipux? (HU #10710)</summary>
+    public bool QuipuxOther { get; init; }
 }

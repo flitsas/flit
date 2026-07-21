@@ -8,16 +8,18 @@ import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
 import { ApiError } from "@/lib/api/types";
 
+// Bloquear/desactivar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin ya no pueden),
+// por eso el módulo se renderiza aquí con un SuperAdmin.
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: true,
+    isSuperAdmin: true,
+    isAdminCompany: false,
     isOtAdmin: false,
     permissions: [],
     tenantId: "tenant-1",
     userId: "admin-1",
-    roleId: "role-admin",
-    roleCode: "AdminCompany",
+    roleId: "role-super",
+    roleCode: "SuperAdmin",
   }),
 }));
 

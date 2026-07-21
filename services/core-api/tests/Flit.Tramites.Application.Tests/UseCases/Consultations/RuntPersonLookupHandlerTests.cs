@@ -23,7 +23,8 @@ public sealed class RuntPersonLookupHandlerTests
         // a verifik_conductor, que es lo que estos tests stubbean.
         _registry.Resolve("kyverum_runt_conductor").Returns((IConsultationProvider?)null);
         var resolver = new ConsultationProviderChainResolver(_registry, new ConsultationChainOptions());
-        _sut = new RuntPersonLookupHandler(_repo, resolver, new NullOverrideProvider());
+        // El mismo registry alimenta la consulta SIMIT best-effort del detalle de comparendos.
+        _sut = new RuntPersonLookupHandler(_repo, resolver, new NullOverrideProvider(), _registry);
     }
 
     private sealed class NullOverrideProvider : IConsultationTenantOverrideProvider
@@ -74,6 +75,31 @@ public sealed class RuntPersonLookupHandlerTests
         new("verifik_conductor", "yellow",
             [new ConsultationCheck("conductor", "Persona en RUNT", "unknown", "verifik_conductor", "Persona no encontrada en RUNT")],
             []);
+
+    // Igual que FoundResult pero con el flag de multas en "true": dispara la consulta SIMIT del detalle.
+    private static ConsultationResult FoundConFinesResult() =>
+        new("verifik_conductor", "yellow",
+            [new ConsultationCheck("conductor_identidad", "Persona en RUNT", "ok", "verifik_conductor", null)],
+            [
+                new HydratedField("person_full_name", "DANIEL AMADO GARCIA", null),
+                new HydratedField("person_has_pending_fines", "true", null),
+                new HydratedField("person_has_active_license", "true", null),
+            ]);
+
+    // Proveedor de multas (verifik_simit) que devuelve un comparendo con detalle.
+    private sealed class FinesProviderStub : IConsultationProvider
+    {
+        public string Key => "verifik_simit";
+        public ConsultationContext? CapturedContext { get; private set; }
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
+        {
+            CapturedContext = ctx;
+            var multas = FinesCheckFactory.Multas("verifik_simit", 1, 344_730m,
+                [new FineDetail("25612001000012662173", "2024-05-01", 344_730m, "STRIA SABANETA", "Pendiente", "Semáforo en rojo")]);
+            return Task.FromResult(new ConsultationResult("verifik_simit", "yellow", [multas], []));
+        }
+    }
 
     [Fact]
     public async Task HandleAsync_InvalidRequest_WhenBlankDocument()
@@ -189,6 +215,51 @@ public sealed class RuntPersonLookupHandlerTests
         result.HasActiveLicense.Should().BeTrue();
         result.LicenseCategories.Should().Be("B1");
         result.NroPazYSalvo.Should().Be("PAZ-Y-SALVO-001");
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConMultas_AdjuntaDetalleDeComparendosDesdeSimit()
+    {
+        // El RUNT marca multas (flag) pero no trae el detalle: se consulta el SIMIT del mismo documento
+        // y su detalle de comparendos viaja en el DTO para pintarlo junto a la alerta en la ficha.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _registry.Resolve("verifik_conductor").Returns(new FakeProvider(FoundConFinesResult()));
+        var fines = new FinesProviderStub();
+        _registry.Resolve("verifik_simit").Returns(fines);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "1193552679", ct);
+
+        error.Should().BeNull();
+        result!.HasPendingFines.Should().BeTrue();
+        result.Fines.Should().ContainSingle();
+        result.Fines![0].Numero.Should().Be("25612001000012662173");
+        result.Fines[0].Valor.Should().Be(344_730m);
+        result.Fines[0].Infraccion.Should().Be("Semáforo en rojo");
+        // El SIMIT se consultó con el documento del actor.
+        fines.CapturedContext!.FieldValues["owner_document_number"].Should().Be("1193552679");
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinMultas_NoConsultaSimit_NiAdjuntaDetalle()
+    {
+        // Sin flag de multas no se gasta una consulta SIMIT: el detalle queda en null.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _registry.Resolve("verifik_conductor").Returns(new FakeProvider(FoundResult()));
+        var fines = new FinesProviderStub();
+        _registry.Resolve("verifik_simit").Returns(fines);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
+
+        error.Should().BeNull();
+        result!.HasPendingFines.Should().BeFalse();
+        result.Fines.Should().BeNull();
+        fines.CapturedContext.Should().BeNull();
     }
 
     [Fact]

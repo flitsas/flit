@@ -44,6 +44,25 @@ public sealed class GetConsultationConfigHandlerTests
         result.Conductor.Should().Be("kyverum_runt_conductor");
     }
 
+    // FEATURE 02 — el flag only_own_vehicles del tenant se refleja para que el wizard adapte la captura.
+    [Fact]
+    public async Task SinOverride_OnlyOwnVehiclesEsFalse()
+    {
+        var result = await Handler(tenantOverride: null).HandleAsync(Guid.NewGuid(), Ct());
+        result.OnlyOwnVehicles.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConOnlyOwnVehicles_SeReflejaEnElResultado()
+    {
+        var tenantOverride = new ConsultationTenantOverride(
+            Chains: null, FailoverTimeoutMs: null, OnlyOwnVehicles: true);
+
+        var result = await Handler(tenantOverride).HandleAsync(Guid.NewGuid(), Ct());
+
+        result.OnlyOwnVehicles.Should().BeTrue();
+    }
+
     private sealed class StubOverrideProvider(ConsultationTenantOverride? value)
         : IConsultationTenantOverrideProvider
     {

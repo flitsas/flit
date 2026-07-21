@@ -56,7 +56,7 @@ export function TransitOfficeStatusDialog({
       size="sm"
       zClassName="z-[90]"
       title={deactivating ? "Desactivar organismo de tránsito" : "Activar organismo de tránsito"}
-      titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
+      titleClassName="text-lg font-semibold text-foreground"
     >
       <p className="mt-2 text-sm opacity-80">
         ¿Confirmas {deactivating ? "desactivar" : "activar"} el organismo de tránsito{" "}

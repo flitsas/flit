@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // Diferir la impronta al paso FUR: marca el ítem de checklist sin adjuntar para no bloquear el paso 2.
+        services.AddScoped<SetImprontaDiferidaHandler>();
         // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se
         // registra en Infraestructura SOLO si Rues:Enabled=true; sin él, el handler cae a carga manual.
         services.AddScoped<GenerarRuesAttachmentHandler>();
@@ -67,8 +69,13 @@ public static class DependencyInjection
         services.AddScoped<GetPrendaVigenteHandler>();
         services.AddScoped<GetCommercialHandler>();
         services.AddScoped<PutCommercialHandler>();
+        services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
+
+        // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
+        services.AddScoped<RunRnmcConsultHandler>();
+        services.AddScoped<GetRnmcHandler>();
         services.AddScoped<GetWizardStateHandler>();
         // HU #10478 — proveedor de consulta resuelto por tenant, para adaptar la UI del wizard.
         services.AddScoped<UseCases.Consultations.GetConsultationConfigHandler>();
@@ -119,6 +126,9 @@ public static class DependencyInjection
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
+        // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
+        services.AddScoped<GetAttachmentPreviewUrlHandler>();
+        services.AddScoped<GenerarConsolidadoMaestroHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();
@@ -143,6 +153,9 @@ public static class DependencyInjection
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
+        services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
+        // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
+        services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
 
         // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
         // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura

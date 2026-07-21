@@ -107,12 +107,18 @@ internal static class IdentityApprovalResolver
             || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Tipo+número de documento del actor de la parte (nulls si no hay actor o le falta documento).</summary>
+    /// <summary>
+    /// Tipo+número de documento del SUJETO de identidad de la parte (HU #10688): el actor si es natural, el
+    /// representante legal si es jurídico. Nulls si no hay actor o al sujeto le falta documento.
+    /// </summary>
     private static (string? TipoDoc, string? Documento) ActorDoc(ProcedureInstance instance, string parte)
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        return (actor?.DocumentType, actor?.DocumentNumber);
+        if (actor is null)
+            return (null, null);
+        var subject = IdentitySubjectResolver.For(actor);
+        return (subject.TipoDocumento, subject.NumeroDocumento);
     }
 
     /// <summary>¿El trámite tiene una validación PROPIA de la parte aprobada+vigente y del documento del actor?</summary>

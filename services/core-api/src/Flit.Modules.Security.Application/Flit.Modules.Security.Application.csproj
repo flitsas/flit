@@ -9,6 +9,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
+    <!-- HU #10678: auditoría administrativa/seguridad transversal (IAdminAuditWriter,
+         IAuditContextAccessor) vive en Flit.Admin.Application, que no referencia este módulo
+         (sin dependencia circular). -->
+    <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

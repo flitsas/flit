@@ -156,4 +156,19 @@ public sealed class TenantEnforcementMiddlewareTests
         next.Should().BeFalse();
         ctx.Response.StatusCode.Should().Be(401);
     }
+
+    // Feature #10587 (bug de validación manual) — el endpoint de placas disponibles del wizard (Flujo A)
+    // es runtime tenant-scoped: el radicador de la compañía queda atado al tenant del token. Antes NO
+    // estaba en IsRuntimeScoped → http.Items no traía el tenant → el endpoint daba 403 al radicador.
+    [Fact]
+    public async Task PlatePreassignAvailable_CompanyUser_ResuelveTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/plate-preassign/available",
+            User("Radicador", CompanyTenant));
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
 }

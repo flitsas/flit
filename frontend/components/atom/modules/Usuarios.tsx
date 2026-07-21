@@ -284,9 +284,10 @@ export function Usuarios() {
                     </div>
                     <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
                     <div className="flex items-center justify-end gap-1">
-                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
-                          no hay una cuenta real que editar. */}
-                      {u.status !== "pending" && !isSuperAdmin && (
+                      {/* Editar información (nombre/correo): disponible para SuperAdmin,
+                          AdminCompany y ot_admin. AC4 (HU #10622): sin botón para usuarios
+                          pendientes — todavía no hay una cuenta real que editar. */}
+                      {u.status !== "pending" && (
                         <button
                           title="Editar usuario"
                           aria-label={`Editar usuario ${u.fullName}`}
@@ -297,7 +298,9 @@ export function Usuarios() {
                           <Pencil className="h-4 w-4" />
                         </button>
                       )}
-                      {u.status !== "pending" && !isSuperAdmin && (
+                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
+                          AdminCompany y ot_admin no pueden suspender ni reactivar. */}
+                      {u.status !== "pending" && isSuperAdmin && (
                         u.isSuspended ? (
                           <button
                             title="Desbloquear usuario"
@@ -331,9 +334,10 @@ export function Usuarios() {
                           </>
                         )
                       )}
-                      {/* AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
+                      {/* Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden).
+                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
                           nunca puede auto-eliminarse. */}
-                      {u.status !== "pending" && !isSuperAdmin && u.id !== currentUserId && (
+                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
                         <button
                           title="Eliminar usuario"
                           aria-label={`Eliminar usuario ${u.fullName}`}
@@ -345,8 +349,9 @@ export function Usuarios() {
                         </button>
                       )}
                       {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
-                          invitationId. */}
-                      {u.status === "pending" && !isSuperAdmin && (
+                          invitationId. Gestión de invitaciones disponible para todos los
+                          administradores (parte del flujo de invitar). */}
+                      {u.status === "pending" && (
                         <ResendInvitationButton
                           invitationId={u.id}
                           fullName={u.fullName}
@@ -354,8 +359,9 @@ export function Usuarios() {
                         />
                       )}
                       {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
-                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
-                      {u.status === "pending" && !isSuperAdmin && (
+                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending").
+                          Disponible para todos los administradores (gestión de invitaciones). */}
+                      {u.status === "pending" && (
                         <button
                           type="button"
                           title="Cancelar invitación"

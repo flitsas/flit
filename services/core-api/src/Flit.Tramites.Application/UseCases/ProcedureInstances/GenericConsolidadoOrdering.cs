@@ -15,6 +15,7 @@ internal static class GenericConsolidadoOrdering
         "fur",
         "licencia_transito",
         "certificado_identidad",
+        "certificado_identidad_vendedor",
     ];
 
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase)
@@ -26,6 +27,29 @@ internal static class GenericConsolidadoOrdering
     internal static IReadOnlyList<ProcedureInstanceAttachment> SelectOrdered(
         IEnumerable<ProcedureInstanceAttachment> attachments) =>
         SelectByPrecedence(attachments, DefaultPrecedence);
+
+    /// <summary>
+    /// Orden del consolidado maestro (Feature #10701 / HU #10706 AC1) a partir de la matriz
+    /// documental resuelta del tenant/OT (<c>ResolvedDocumentMatrixResolver</c> /
+    /// <c>ot_document_precedence</c>). Los documentos generados (FUR, licencia, certificados)
+    /// conservan su prelación de cabecera; luego van los documentos en el orden de la matriz; y
+    /// los no clasificados (ni generados ni en la matriz) quedan al final como "Anexos", por fecha.
+    /// </summary>
+    /// <param name="matrixCodes">Códigos de documento en el orden resuelto de la matriz.</param>
+    internal static IReadOnlyList<ProcedureInstanceAttachment> SelectByResolvedMatrix(
+        IEnumerable<ProcedureInstanceAttachment> attachments,
+        IReadOnlyList<string> matrixCodes)
+    {
+        // Cabecera de documentos generados + orden de la matriz (sin duplicar los ya listados).
+        var precedence = new List<string>(DefaultPrecedence);
+        foreach (var code in matrixCodes)
+        {
+            if (!precedence.Contains(code, StringComparer.OrdinalIgnoreCase))
+                precedence.Add(code);
+        }
+
+        return SelectByPrecedence(attachments, precedence);
+    }
 
     /// <summary>
     /// Orden por una prelación explícita (p. ej. la matriz documental configurada, RF26).

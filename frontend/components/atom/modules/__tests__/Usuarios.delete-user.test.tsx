@@ -1,5 +1,6 @@
-// HU #10623 — Botón "Eliminar" del menú de acciones (AdminCompany). AC1: confirmación clara
-// (solo SuperAdmin restaura). AC2: sin auto-eliminación. AC4: sin pestaña "Eliminados".
+// HU #10623 — Botón "Eliminar" del menú de acciones. Eliminar es EXCLUSIVO de SuperAdmin,
+// así que las acciones se prueban como SuperAdmin. AC1: confirmación clara (solo SuperAdmin
+// restaura). AC2: sin auto-eliminación. AC4: la pestaña "Eliminados" no la ve AdminCompany.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,17 +8,33 @@ import { Usuarios } from "../Usuarios";
 import { getUsers, deleteUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
 
+// Permisos mutables: la mayoría de los casos corren como SuperAdmin (única figura que puede
+// eliminar); el caso AC4 baja a AdminCompany para verificar que NO ve la pestaña "Eliminados".
+const SUPER_ADMIN_PERMS = {
+  isSuperAdmin: true,
+  isAdminCompany: false,
+  isOtAdmin: false,
+  permissions: [] as string[],
+  tenantId: "tenant-1",
+  userId: "user-self",
+  roleId: "role-super",
+  roleCode: "SuperAdmin",
+};
+const ADMIN_COMPANY_PERMS = {
+  isSuperAdmin: false,
+  isAdminCompany: true,
+  isOtAdmin: false,
+  permissions: [] as string[],
+  tenantId: "tenant-1",
+  userId: "user-self",
+  roleId: "role-admin",
+  roleCode: "AdminCompany",
+};
+
+const perms = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+
 vi.mock("@/hooks/usePermissions", () => ({
-  usePermissions: () => ({
-    isSuperAdmin: false,
-    isAdminCompany: true,
-    isOtAdmin: false,
-    permissions: [],
-    tenantId: "tenant-1",
-    userId: "user-self",
-    roleId: "role-admin",
-    roleCode: "AdminCompany",
-  }),
+  usePermissions: () => perms.current,
 }));
 
 vi.mock("@/lib/api/security", () => ({
@@ -67,9 +84,10 @@ const selfUser: TenantUser = {
   rowVersion: 1,
 };
 
-describe("Usuarios — botón Eliminar (#10623, AdminCompany)", () => {
+describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    perms.current = { ...SUPER_ADMIN_PERMS };
   });
 
   it("AC2: no muestra el botón Eliminar sobre la propia fila del usuario autenticado", async () => {
@@ -115,11 +133,16 @@ describe("Usuarios — botón Eliminar (#10623, AdminCompany)", () => {
     await waitFor(() => expect(getUsers).toHaveBeenCalledTimes(2));
   });
 
-  it("AC4: no muestra la pestaña Eliminados (exclusiva de SuperAdmin)", async () => {
+  it("AC4: un AdminCompany no ve la pestaña Eliminados (exclusiva de SuperAdmin) ni el botón Eliminar", async () => {
+    perms.current = { ...ADMIN_COMPANY_PERMS };
     vi.mocked(getUsers).mockResolvedValue([otherUser]);
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
     expect(screen.queryByRole("button", { name: /^eliminados$/i })).not.toBeInTheDocument();
+    // Eliminar es exclusivo de SuperAdmin: el AdminCompany no debe ver el botón.
+    expect(
+      screen.queryByRole("button", { name: /eliminar usuario ana torres/i }),
+    ).not.toBeInTheDocument();
   });
 });
