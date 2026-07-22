@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { superadminClient } from '@/lib/api/superadmin-client';
+import { fetchDocumentTypes } from '@/lib/api/admin-document-types';
+import type { DocumentType } from '@/lib/api/types-documents';
 
 export interface DocumentRequirementItem {
   documentTypeCode: string;
@@ -17,8 +19,9 @@ interface DocumentRequirementsStepProps {
 
 /**
  * FEATURE-08 / HU-FE-03 (CFD-06) — paso "Documentos" del wizard de parametrización SuperAdmin.
- * Agrega documentos requeridos por el tipo (obligatorio / buzón dummy) y persiste vía
- * PUT /conformation-profile (documentRequirements[]).
+ * Los documentos requeridos por el tipo se ELIGEN de una lista: el catálogo de documentos ya creados
+ * en el Admin de Documentos (fetchDocumentTypes), no se escriben a mano. Se marca cada uno como
+ * obligatorio / buzón (dummy) y se persiste vía PUT /conformation-profile (documentRequirements[]).
  */
 export function DocumentRequirementsStep({
   procedureTypeId,
@@ -26,15 +29,43 @@ export function DocumentRequirementsStep({
   onSaved,
 }: DocumentRequirementsStepProps) {
   const [rows, setRows] = useState<DocumentRequirementItem[]>(initialRequirements);
-  const [newCode, setNewCode] = useState('');
+  const [catalog, setCatalog] = useState<DocumentType[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [selectedCode, setSelectedCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const addRow = () => {
-    const code = newCode.trim().toUpperCase();
-    if (!code || rows.some((r) => r.documentTypeCode === code)) return;
-    setRows((prev) => [...prev, { documentTypeCode: code, isRequired: true, isDummy: false }]);
-    setNewCode('');
+  useEffect(() => {
+    let active = true;
+    fetchDocumentTypes({ page: 1, pageSize: 200 })
+      .then((res) => {
+        if (!active) return;
+        setCatalog(res.data.filter((d) => d.estado === 'activo'));
+      })
+      .catch(() => {
+        if (active) setCatalogError('No se pudo cargar el catálogo de documentos.');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Nombre por código (para etiquetar filas ya elegidas), tomado del catálogo.
+  const nameByCode = useMemo(
+    () => new Map(catalog.map((d) => [d.codigo, d.nombre])),
+    [catalog],
+  );
+
+  // Documentos del catálogo aún no agregados (los que se pueden elegir).
+  const options = useMemo(
+    () => catalog.filter((d) => !rows.some((r) => r.documentTypeCode === d.codigo)),
+    [catalog, rows],
+  );
+
+  const addSelected = () => {
+    if (!selectedCode || rows.some((r) => r.documentTypeCode === selectedCode)) return;
+    setRows((prev) => [...prev, { documentTypeCode: selectedCode, isRequired: true, isDummy: false }]);
+    setSelectedCode('');
   };
 
   const patchRow = (code: string, patch: Partial<DocumentRequirementItem>) =>
@@ -68,22 +99,38 @@ export function DocumentRequirementsStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-bold mb-1">Documentos requeridos</h2>
-        <p className="text-xs opacity-60">Define qué documentos exige el trámite y cuáles son buzón (no bloquean).</p>
+        <p className="text-xs opacity-60">
+          Elige del catálogo de documentos qué exige el trámite y marca cuáles son buzón (no bloquean).
+        </p>
       </div>
 
+      {catalogError && (
+        <p role="alert" className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+          {catalogError}
+        </p>
+      )}
+
       <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={newCode}
-          onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-          placeholder="CÓDIGO DE DOCUMENTO"
-          aria-label="Código de documento"
-          className="flex-1 px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF]"
-        />
+        <select
+          value={selectedCode}
+          onChange={(e) => setSelectedCode(e.target.value)}
+          aria-label="Documento del catálogo"
+          className="flex-1 px-3 py-2 rounded-xl border outline-none focus:border-[#557EFF] bg-white dark:bg-[#0B0F14]"
+        >
+          <option value="">
+            {catalog.length === 0 ? 'Sin documentos en el catálogo' : 'Selecciona un documento…'}
+          </option>
+          {options.map((d) => (
+            <option key={d.id} value={d.codigo}>
+              {d.nombre} ({d.codigo})
+            </option>
+          ))}
+        </select>
         <button
           type="button"
-          onClick={addRow}
-          className="rounded-xl px-4 py-2 text-sm font-bold border"
+          onClick={addSelected}
+          disabled={!selectedCode}
+          className="rounded-xl px-4 py-2 text-sm font-bold border disabled:opacity-40"
           style={{ borderColor: '#557EFF', color: '#557EFF' }}
         >
           Agregar
@@ -97,7 +144,10 @@ export function DocumentRequirementsStep({
             data-testid={`doc-${row.documentTypeCode}`}
             className="flex items-center gap-3 rounded-xl p-3 border"
           >
-            <span className="flex-1 text-xs font-semibold">{row.documentTypeCode}</span>
+            <span className="flex-1 text-xs font-semibold">
+              {nameByCode.get(row.documentTypeCode) ?? row.documentTypeCode}
+              <span className="ml-1 font-mono opacity-50">({row.documentTypeCode})</span>
+            </span>
             <label className="flex items-center gap-1 text-[11px]">
               <input
                 type="checkbox"
