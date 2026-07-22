@@ -6,3 +6,7 @@ allowBuilds:
   unrs-resolver: true
   esbuild: true
   '@biomejs/biome': true
+
+# next@16.2.x pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice.
+overrides:
+  sharp: 0.35.3
