@@ -29,7 +29,6 @@ COMMENT ON TABLE tramites.procedure_type_sources IS
 COMMENT ON COLUMN tramites.procedure_type_sources.config IS
 'Configuración especial de la fuente para el tipo. Esquema: { "simitMode": "INTERNAL" | "ONLINE", "optimizeDailyCache": bool }';
 
-DROP TRIGGER IF EXISTS tr_procedure_type_sources_audit ON tramites.procedure_type_sources;
-CREATE TRIGGER tr_procedure_type_sources_audit
-    AFTER INSERT OR UPDATE OR DELETE ON tramites.procedure_type_sources
-    FOR EACH ROW EXECUTE FUNCTION public.trg_audit_log();
+-- Sin trigger trg_audit_log: la tabla tiene PK compuesta (sin columna id) y
+-- public.trg_audit_log() asigna NEW.id → falla en INSERT/UPDATE/DELETE.
+-- Auditoría de fuentes queda cubierta por RBAC + logs de aplicación.
