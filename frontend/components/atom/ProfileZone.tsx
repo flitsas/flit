@@ -85,8 +85,8 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
       </div>
 
       {showPwdModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.4)", backdropFilter: "blur(8px)" }}>
-          <div className="glass rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(15,23,42,0.4)", backdropFilter: "blur(8px)" }}>
+          <div className="glass rounded-2xl p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800">Cambiar Contraseña</h3>
               <button onClick={() => setShowPwdModal(false)} className="p-1 rounded-lg hover:bg-white/70"><X className="h-4 w-4" /></button>

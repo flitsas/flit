@@ -189,7 +189,7 @@ export function Usuarios() {
         }
       />
 
-      <div className="flex items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
+      <div className="flex flex-wrap items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -216,9 +216,9 @@ export function Usuarios() {
 
       {tab === "usuarios" && (
         <>
-          <div className="flex flex-col">
+          <div className="flex flex-col overflow-x-auto">
             <div
-              className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+              className="grid min-w-[720px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
               style={{
                 gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                 background: "#DFE5ED",
@@ -254,7 +254,7 @@ export function Usuarios() {
                     // de rol). u.id solo no es único — se compone con u.roleId para evitar el
                     // warning de React "two children with the same key".
                     key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                    className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                    className="grid min-w-[720px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
                       gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                       }}
@@ -391,9 +391,9 @@ export function Usuarios() {
         // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
         // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
         // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
-        <div className="flex flex-col">
+        <div className="flex flex-col overflow-x-auto">
           <div
-            className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+            className="grid min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
             style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
           >
             <div>Usuario</div>
@@ -419,7 +419,7 @@ export function Usuarios() {
                 // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
                 // key cuando el JOIN produce N filas por usuario con N roles.
                 key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                className="grid min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                 style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
               >
                 <div>
@@ -488,8 +488,8 @@ export function Usuarios() {
               No hay roles configurados para este tenant. Contacta al Super Admin.
             </div>
           ) : (
-            <div className="flex flex-col">
-              <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
+            <div className="flex flex-col overflow-x-auto">
+              <div className="grid grid-cols-12 min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
                 <div className="col-span-2">Código</div>
                 <div className="col-span-4">Nombre</div>
                 <div className="col-span-4">Descripción</div>
@@ -497,7 +497,7 @@ export function Usuarios() {
               </div>
               <div className="space-y-2 pt-2">
                 {roles.map((r) => (
-                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
+                  <div key={r.id} className="grid grid-cols-12 min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
                     <div className="col-span-2 font-mono opacity-80">{r.code}</div>
                     <div className="col-span-4 font-semibold">{r.name}</div>
                     <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
@@ -741,8 +741,8 @@ function InviteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 py-6">
+      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto border">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold">Invitar usuario</h3>
@@ -848,7 +848,7 @@ function InviteModal({
               // enviar se deshabilita y se muestra un mensaje de ayuda mientras no haya ninguno.
               <fieldset>
                 <legend className="text-xs font-semibold block mb-1">Roles *</legend>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
                   {roles.map((r) => (
                     <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs">
                       <input

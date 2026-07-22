@@ -148,10 +148,10 @@ export function RbacAdmin() {
 
       {/* ── Pestaña Módulos y Permisos ── */}
       {activeTab === "modules" && <div
-        className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden"
+        className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-x-auto"
       >
         <div
-          className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
+          className="grid min-w-[760px] px-4 py-2.5 text-[10px] font-semibold uppercase"
           style={{
             gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
             background: "#DFE5ED",
@@ -185,7 +185,7 @@ export function RbacAdmin() {
           modules.map((mod) => (
             <div key={mod.id}>
               <div
-                className="grid items-center px-4 py-3 border-b text-xs"
+                className="grid min-w-[760px] items-center px-4 py-3 border-b text-xs"
                 style={{
                   gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
                   }}
@@ -428,9 +428,9 @@ function RolesTabContent() {
               <Icon className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden="true" />
               {title}
             </h3>
-            <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-hidden">
+            <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-x-auto">
               <div
-                className="grid px-4 py-2.5 text-[10px] font-semibold uppercase"
+                className="grid min-w-[640px] px-4 py-2.5 text-[10px] font-semibold uppercase"
                 style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px", background: "#DFE5ED", color: "#162744" }}
               >
                 <div>Nombre</div>
@@ -457,7 +457,7 @@ function RolesTabContent() {
                   return (
                     <div
                       key={r.id}
-                      className="grid items-center px-4 py-3 border-b last:border-b-0 text-xs"
+                      className="grid min-w-[640px] items-center px-4 py-3 border-b last:border-b-0 text-xs"
                       style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px" }}
                     >
                       <div className="min-w-0">
@@ -581,7 +581,7 @@ function ModulePermissionsChecklist({
               </span>
               <span className="text-sm font-semibold">{m.name}</span>
             </button>
-            <div className="ml-6 grid grid-cols-2 gap-x-4 gap-y-1">
+            <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
               {m.actions.map((a) => (
                 <label key={a.id} className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -681,7 +681,7 @@ function CreateRoleModal({
   return (
     <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
             <input id="role-code" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
