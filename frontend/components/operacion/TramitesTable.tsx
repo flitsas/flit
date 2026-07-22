@@ -7,8 +7,9 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
-import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
-import { StatusBadge } from '@/components/atom/StatusBadge';
+import { estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { DataTable, type DataTableColumn } from '@/components/atom/DataTable';
 import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
@@ -25,16 +26,23 @@ import type {
  * Actualizar y cada vez que cambia `refreshKey`.
  */
 
-// N 03 (RF01) — chip de estado con los 6 estados de negocio en español; labels/colores
-// desde la fuente única lib/tramites/estados.ts (fallback titlecase para valores desconocidos).
-const estadoChip = (
-  estado: InstanceStatus,
-): { label: string; bg: string; color: string; border: string } => {
-  const style = estadoChipStyle(estado);
-  return { label: estadoLabel(estado), bg: style.bg, color: style.color, border: style.border };
+type Chip = { label: string; tone: StatusTone };
+
+// N 03 (RF01) — chip de estado con los 6 estados de negocio; el color se resuelve por
+// `tone` semántico desde la paleta unificada (StatusBadge). Mapeo del vocabulario de negocio:
+const ESTADO_TONE: Record<string, StatusTone> = {
+  borrador: 'warning',
+  preparado: 'info',
+  entregado: 'info',
+  aprobado: 'success',
+  rechazado: 'danger',
+  anulado: 'neutral',
 };
 
-type Chip = { label: string; bg: string; color: string; border: string };
+const estadoChip = (estado: InstanceStatus): Chip => ({
+  label: estadoLabel(estado),
+  tone: ESTADO_TONE[estado] ?? 'neutral',
+});
 
 /**
  * HU #10350 (AC3) — chip de estado async para borradores FINALIZADOS (draft + draftFinalizedAt). El
@@ -48,36 +56,21 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
   const idv = item.identityValidationStatus;
 
   if (idv === 'rechazado') {
-    return {
-      chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
-      ready: false,
-    };
+    return { chip: { label: 'Validación rechazada', tone: 'danger' }, ready: false };
   }
 
   if (idv === 'aprobado') {
     if (item.signaturePending) {
-      return {
-        chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
-        ready: false,
-      };
+      return { chip: { label: 'Pendiente firma', tone: 'info' }, ready: false };
     }
     if (item.canSubmit) {
-      return {
-        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
-        ready: true,
-      };
+      return { chip: { label: 'Listo para radicar', tone: 'success' }, ready: true };
     }
-    return {
-      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: '#5B8A1F', border: 'rgba(140,198,63,0.35)' },
-      ready: false,
-    };
+    return { chip: { label: 'Identidad validada', tone: 'success' }, ready: false };
   }
 
   // en_proceso | enviado | null (sin iniciar) → esperando la validación del cliente.
-  return {
-    chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
-    ready: false,
-  };
+  return { chip: { label: 'Pendiente validación', tone: 'warning' }, ready: false };
 }
 
 function shortDate(iso: string): string {
@@ -127,10 +120,6 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
 function stepLabel(item: InstanceSummary): string {
   return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
 }
-
-const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 1.3fr 0.9fr 1fr';
-// #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
-const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -448,7 +437,6 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           filtered={filtered}
           paginated={paginated}
           page={safePage}
-          totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
           showCompania={isAdmin}
@@ -476,7 +464,6 @@ function TableBody({
   filtered,
   paginated,
   page,
-  totalPages,
   onPageChange,
   hasActiveFilters,
   showCompania,
@@ -491,7 +478,6 @@ function TableBody({
   filtered: InstanceSummary[];
   paginated: InstanceSummary[];
   page: number;
-  totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
   showCompania: boolean;
@@ -500,7 +486,6 @@ function TableBody({
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
-  const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
   if (loading) {
     return (
       <div
@@ -574,160 +559,22 @@ function TableBody({
     );
   }
 
-  return (
-    <div className="overflow-x-auto">
-      <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
-        {/* Header */}
-        <div
-          className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
-          style={{
-            background: '#dfe5ed',
-            color: '#162744',
-            gridTemplateColumns: gridCols,
-          }}
-          role="row"
-        >
-          {showCompania && <div>Compañía</div>}
-          <div>Placa</div>
-          <div>Comprador</div>
-          <div>VIN</div>
-          <div>Vehículo</div>
-          <div>Modalidad</div>
-          <div>Paso</div>
-          <div>Estado</div>
-          <div>Organismo</div>
-          <div>Creado</div>
-          <div className="text-right">Acciones</div>
-        </div>
-
-        {/* Rows */}
-        <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
-          {paginated.map((item) => (
-            <TramiteRow
-              key={item.id}
-              item={item}
-              showCompania={showCompania}
-              gridCols={gridCols}
-              onTogglePriority={onTogglePriority}
-              onOpen={onOpen}
-            />
-          ))}
-        </ul>
-
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={filtered.length}
-          shown={paginated.length}
-          onPageChange={onPageChange}
-        />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Control de paginación client-side. Se oculta cuando todo cabe en una sola
- * página (totalPages <= 1). Estilo FLIT: borde #DFE5ED, acento #557EFF.
- */
-function Pagination({
-  page,
-  totalPages,
-  total,
-  shown,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  shown: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-
-  const from = (page - 1) * PAGE_SIZE + 1;
-  const to = from + shown - 1;
-
-  return (
-    <nav
-      className="mt-3 flex items-center justify-between gap-3 border-t pt-3"
-      aria-label="Paginación de trámites"
-    >
-      <p className="text-[11px] opacity-60" role="status" aria-live="polite">
-        {from}–{to} de {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ color: '#162744' }}
-          aria-label="Página anterior"
-        >
-          Anterior
-        </button>
-        <span className="text-[11px] font-semibold tabular-nums opacity-70">
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Página siguiente"
-        >
-          Siguiente
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-/** Fila de trámite: clickable (abre el wizard) + acción explícita Continuar/Ver. */
-function TramiteRow({
-  item,
-  showCompania,
-  gridCols,
-  onTogglePriority,
-  onOpen,
-}: {
-  item: InstanceSummary;
-  showCompania: boolean;
-  gridCols: string;
-  onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
-  onOpen: (id: string, tenantId: string) => void;
-}) {
-  // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
-  // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
-  // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
-  const async = asyncStatus(item);
-  const chip = async?.chip ?? estadoChip(item.estado);
-  const isDraft = item.estado === 'borrador';
-  const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
-
-  return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpen(item.id, item.tenantId)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpen(item.id, item.tenantId);
-          }
-        }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: gridCols }}
-        aria-label={`Abrir trámite ${item.referenceNumber}`}
-      >
-        {showCompania && (
-          <span className="block text-xs font-semibold text-[#162744]/90 dark:text-white/80 truncate">
-            {item.companiaNombre ?? '—'}
-          </span>
-        )}
+  const columns: DataTableColumn<InstanceSummary>[] = [
+    ...(showCompania
+      ? ([
+          {
+            key: 'compania',
+            header: 'Compañía',
+            render: (item) => (
+              <span className="block truncate text-xs font-semibold">{item.companiaNombre ?? '—'}</span>
+            ),
+          },
+        ] as DataTableColumn<InstanceSummary>[])
+      : []),
+    {
+      key: 'placa',
+      header: 'Placa',
+      render: (item) => (
         <span className="flex min-w-0 items-center gap-2">
           {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
           <button
@@ -756,60 +603,93 @@ function TramiteRow({
             />
           </button>
           <span className="min-w-0">
-            <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-              {item.placa ?? '—'}
-            </span>
-            <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-              {item.referenceNumber}
-            </span>
+            <span className="block truncate font-mono font-semibold">{item.placa ?? '—'}</span>
+            <span className="block truncate font-mono text-[10px] opacity-50">{item.referenceNumber}</span>
           </span>
         </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.compradorNombre ?? '—'}
+      ),
+    },
+    {
+      key: 'comprador',
+      header: 'Comprador',
+      render: (item) => <span className="block truncate">{item.compradorNombre ?? '—'}</span>,
+    },
+    {
+      key: 'vin',
+      header: 'VIN',
+      render: (item) => (
+        <span className="block truncate font-mono text-xs opacity-80">{item.vin ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'vehiculo',
+      header: 'Vehículo',
+      render: (item) => <span className="block truncate opacity-90">{vehiculo(item)}</span>,
+    },
+    {
+      key: 'modalidad',
+      header: 'Modalidad',
+      render: (item) => (
+        <span
+          className="whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+          style={{ background: 'rgba(85,126,255,0.08)', color: '#557eff', borderColor: 'rgba(85,126,255,0.25)' }}
+        >
+          {MODALIDAD_SHORT[item.modalidad]}
         </span>
-        <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
-          {item.vin ?? '—'}
-        </span>
-        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
-          {vehiculo(item)}
-        </span>
-        <span className="block">
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-            style={{
-              background: 'rgba(85,126,255,0.08)',
-              color: '#557eff',
-              borderColor: 'rgba(85,126,255,0.25)',
-            }}
-          >
-            {MODALIDAD_SHORT[item.modalidad]}
-          </span>
-        </span>
+      ),
+    },
+    {
+      key: 'paso',
+      header: 'Paso',
+      render: (item) => (
         <span className="block min-w-0">
-          <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          <span className="block font-mono text-xs opacity-70">
             {item.pasoActual}/{item.totalPasos}
           </span>
-          <span className="block text-[10px] text-[#162744]/60 dark:text-white/50 truncate">
-            {stepLabel(item)}
-          </span>
+          <span className="block truncate text-[10px] opacity-60">{stepLabel(item)}</span>
         </span>
-        <span className="block">
-          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {item.organismoTransito ?? '—'}
-        </span>
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-          {shortDate(item.createdAt)}
-        </span>
-        <span className="flex justify-end">
+      ),
+    },
+    {
+      key: 'estado',
+      header: 'Estado',
+      render: (item) => {
+        // Chip async para borradores finalizados; si no, el chip base del estado.
+        const asyncSt = asyncStatus(item);
+        const chip = asyncSt?.chip ?? estadoChip(item.estado);
+        return <StatusBadge tone={chip.tone} label={chip.label} />;
+      },
+    },
+    {
+      key: 'organismo',
+      header: 'Organismo',
+      render: (item) => (
+        <span className="block truncate text-xs opacity-90">{item.organismoTransito ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'creado',
+      header: 'Creado',
+      render: (item) => (
+        <span className="block font-mono text-xs opacity-70">{shortDate(item.createdAt)}</span>
+      ),
+    },
+    {
+      key: 'acciones',
+      header: 'Acciones',
+      align: 'right',
+      render: (item) => {
+        const asyncSt = asyncStatus(item);
+        const isDraft = item.estado === 'borrador';
+        const actionLabel = asyncSt?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
+        return (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onOpen(item.id, item.tenantId);
             }}
-            className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
+            className="whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold transition"
             style={
               isDraft
                 ? { background: 'linear-gradient(135deg,#557EFF,#00DBD5)', color: '#fff' }
@@ -819,8 +699,21 @@ function TramiteRow({
           >
             {actionLabel}
           </button>
-        </span>
-      </div>
-    </li>
+        );
+      },
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      rows={paginated}
+      getRowKey={(item) => item.id}
+      onRowClick={(item) => onOpen(item.id, item.tenantId)}
+      minWidth={showCompania ? 1340 : 1180}
+      ariaLabel="Trámites en curso"
+      pagination={{ page, pageSize: PAGE_SIZE, totalCount: filtered.length, onPageChange }}
+    />
   );
 }
+
