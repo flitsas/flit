@@ -126,6 +126,11 @@
   "dependencies": {
     "next": "16.2.9"
   },
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.3"
+    }
+  },
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=11.0.0"
