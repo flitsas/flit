@@ -13,6 +13,8 @@ import {
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
 
@@ -99,6 +101,106 @@ export function RbacAdmin() {
     }
   }
 
+  const moduleColumns: DataTableColumn<RbacModule>[] = [
+    {
+      key: "expand",
+      header: "",
+      render: (mod) => (
+        <button
+          onClick={() => toggleExpand(mod)}
+          aria-label={expanded[mod.id] ? "Colapsar permisos" : "Expandir permisos"}
+          className="opacity-60 hover:opacity-100"
+        >
+          {expanded[mod.id] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+      ),
+    },
+    { key: "code", header: "Código", render: (mod) => <span className="font-mono">{mod.code}</span> },
+    { key: "name", header: "Nombre", render: (mod) => <span className="font-semibold">{mod.name}</span> },
+    { key: "desc", header: "Descripción", render: (mod) => <span className="opacity-70">{mod.description ?? "—"}</span> },
+    {
+      key: "perms",
+      header: "Permisos",
+      align: "center",
+      render: (mod) => (
+        <span className="font-bold" style={{ color: "#557EFF" }}>{mod.permissionCount}</span>
+      ),
+    },
+    {
+      key: "active",
+      header: "Activo",
+      align: "center",
+      render: (mod) => <StatusBadge tone={activeTone(mod.isActive)} label={mod.isActive ? "Activo" : "Inactivo"} />,
+    },
+    {
+      key: "actions",
+      header: "Acciones",
+      align: "right",
+      render: (mod) => (
+        <div className="flex justify-end gap-1">
+          {mod.isActive ? (
+            <button
+              onClick={() => handleDeactivateModule(mod.id)}
+              aria-label="Desactivar módulo"
+              className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
+            >
+              <PowerOff className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={() => handleActivateModule(mod.id)}
+              aria-label="Activar módulo"
+              className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
+              style={{ color: "#00DBD5" }}
+            >
+              <Power className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => handleDeleteModule(mod.id)}
+            aria-label="Eliminar módulo"
+            className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
+            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setCreatePermissionForModule(mod)}
+            className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white"
+            style={{ background: "#557EFF" }}
+          >
+            + Permiso
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const renderModulePermissions = (mod: RbacModule) => {
+    if (!expanded[mod.id]) return null;
+    const perms = permissions[mod.id] ?? [];
+    return (
+      <div className="rounded-xl px-4 py-3 bg-[#F8FAFF] dark:bg-white/5">
+        {perms.length === 0 ? (
+          <p className="text-xs opacity-60">Sin permisos. Haz click en &quot;+ Permiso&quot; para agregar.</p>
+        ) : (
+          <div className="space-y-1">
+            {perms.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 text-xs">
+                <span className="font-mono text-[11px] px-2 py-0.5 rounded-md" style={{ background: "#DFE5ED" }}>
+                  {p.slug}
+                </span>
+                <span className="font-medium">{p.name}</span>
+                <span className="opacity-60">{p.action}</span>
+                <StatusBadge tone={activeTone(p.isActive)} label={p.isActive ? "Activo" : "Inactivo"} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white"
@@ -147,144 +249,18 @@ export function RbacAdmin() {
       </div>
 
       {/* ── Pestaña Módulos y Permisos ── */}
-      {activeTab === "modules" && <div
-        className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-x-auto"
-      >
-        <div
-          className="grid min-w-[760px] px-4 py-2.5 text-[10px] font-semibold uppercase"
-          style={{
-            gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
-            background: "#DFE5ED",
-            color: "#162744",
-          }}
-        >
-          <div />
-          <div>Código</div>
-          <div>Nombre</div>
-          <div>Descripción</div>
-          <div className="text-center">Permisos</div>
-          <div className="text-center">Activo</div>
-          <div className="text-right">Acciones</div>
-        </div>
-
-        {loading && (
-          <div className="py-12 text-center text-sm opacity-60">Cargando módulos…</div>
-        )}
-        {!loading && error && (
-          <div className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>
-            {error}
-          </div>
-        )}
-        {!loading && !error && modules.length === 0 && (
-          <div className="py-12 text-center text-sm opacity-60">
-            No hay módulos. Crea el primero.
-          </div>
-        )}
-        {!loading &&
-          !error &&
-          modules.map((mod) => (
-            <div key={mod.id}>
-              <div
-                className="grid min-w-[760px] items-center px-4 py-3 border-b text-xs"
-                style={{
-                  gridTemplateColumns: "40px 120px 1fr 1fr 80px 80px 120px",
-                  }}
-              >
-                <button
-                  onClick={() => toggleExpand(mod)}
-                  aria-label={expanded[mod.id] ? "Colapsar permisos" : "Expandir permisos"}
-                  className="opacity-60 hover:opacity-100"
-                >
-                  {expanded[mod.id] ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
-                <div className="font-mono">{mod.code}</div>
-                <div className="font-semibold">{mod.name}</div>
-                <div className="opacity-70">{mod.description ?? "—"}</div>
-                <div className="text-center font-bold" style={{ color: "#557EFF" }}>
-                  {mod.permissionCount}
-                </div>
-                <div className="text-center">
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
-                    style={{ background: mod.isActive ? "#00DBD5" : "#FF4E00" }}
-                  >
-                    {mod.isActive ? "Activo" : "Inactivo"}
-                  </span>
-                </div>
-                <div className="flex justify-end gap-1">
-                  {mod.isActive ? (
-                    <button
-                      onClick={() => handleDeactivateModule(mod.id)}
-                      aria-label="Desactivar módulo"
-                      className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                    >
-                      <PowerOff className="h-3.5 w-3.5" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleActivateModule(mod.id)}
-                      aria-label="Activar módulo"
-                      className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                      style={{ color: "#00DBD5" }}
-                    >
-                      <Power className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteModule(mod.id)}
-                    aria-label="Eliminar módulo"
-                    className="p-1.5 rounded-lg border opacity-60 hover:opacity-100"
-                    style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setCreatePermissionForModule(mod)}
-                    className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white"
-                    style={{ background: "#557EFF" }}
-                  >
-                    + Permiso
-                  </button>
-                </div>
-              </div>
-              {/* Sublistado de permisos */}
-              {expanded[mod.id] && (
-                <div className="border-b px-8 py-3 bg-[#F8FAFF] dark:bg-white/5">
-                  {(permissions[mod.id] ?? []).length === 0 ? (
-                    <p className="text-xs opacity-60">
-                      Sin permisos. Haz click en &quot;+ Permiso&quot; para agregar.
-                    </p>
-                  ) : (
-                    <div className="space-y-1">
-                      {permissions[mod.id].map((p) => (
-                        <div key={p.id} className="flex items-center gap-3 text-xs">
-                          <span
-                            className="font-mono text-[11px] px-2 py-0.5 rounded-md"
-                            style={{ background: "#DFE5ED" }}
-                          >
-                            {p.slug}
-                          </span>
-                          <span className="font-medium">{p.name}</span>
-                          <span className="opacity-60">{p.action}</span>
-                          <span
-                            className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-white"
-                            style={{ background: p.isActive ? "#00DBD5" : "#FF4E00" }}
-                          >
-                            {p.isActive ? "Activo" : "Inactivo"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-      </div>}
+      {activeTab === "modules" && (
+        <DataTable
+          columns={moduleColumns}
+          rows={modules}
+          getRowKey={(m) => m.id}
+          status={loading ? "loading" : error ? "error" : "ready"}
+          errorMessage={error ?? undefined}
+          emptyMessage="No hay módulos. Crea el primero."
+          minWidth={760}
+          renderExpanded={renderModulePermissions}
+        />
+      )}
 
       {/* ── Pestaña Roles del sistema (HU #10509) ── */}
       {activeTab === "roles" && <RolesTab />}
@@ -422,94 +398,82 @@ function RolesTabContent() {
       {ENTITY_TABLES.map(({ type, title, icon: Icon }) => {
         const roles = type === "COMPANY" ? companyRoles : otRoles;
         const status = type === "COMPANY" ? companyStatus : otStatus;
+        const columns: DataTableColumn<RbacRole>[] = [
+          {
+            key: "name",
+            header: "Nombre",
+            render: (r) => (
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{r.name}</p>
+                <p className="font-mono text-[10px] opacity-60">{r.code}</p>
+              </div>
+            ),
+          },
+          { key: "desc", header: "Descripción", render: (r) => <span className="opacity-70">{r.description ?? "—"}</span> },
+          {
+            key: "perms",
+            header: "Permisos",
+            align: "center",
+            render: (r) => <span className="font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</span>,
+          },
+          {
+            key: "estado",
+            header: "Estado",
+            align: "center",
+            render: (r) => <StatusBadge tone={activeTone(r.isActive)} label={r.isActive ? "Activo" : "Inactivo"} />,
+          },
+          {
+            key: "actions",
+            header: "Acciones",
+            align: "right",
+            render: (r) => (
+              <div className="flex justify-end gap-1">
+                <button
+                  onClick={() => setEditTarget({ role: r, targetEntityType: type })}
+                  aria-label={`Editar permisos de ${r.name}`}
+                  disabled={busyIds[r.id]}
+                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                  style={{ color: "#557EFF" }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => handleToggleActive(r, type)}
+                  aria-label={r.isActive ? `Desactivar rol ${r.name}` : `Activar rol ${r.name}`}
+                  disabled={busyIds[r.id]}
+                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                  style={{ color: r.isActive ? undefined : "#00DBD5" }}
+                >
+                  {r.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  onClick={() => handleDelete(r, type)}
+                  aria-label={`Eliminar rol ${r.name}`}
+                  disabled={busyIds[r.id] || r.isSystem}
+                  title={r.isSystem ? "No se puede eliminar: es un rol de sistema" : undefined}
+                  className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
+                  style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ),
+          },
+        ];
         return (
           <section key={type} className="flex flex-col gap-2">
             <h3 className="flex items-center gap-2 text-sm font-bold">
               <Icon className="h-4 w-4" style={{ color: "#557EFF" }} aria-hidden="true" />
               {title}
             </h3>
-            <div className="rounded-2xl bg-white dark:bg-[#0B0F14] border overflow-x-auto">
-              <div
-                className="grid min-w-[640px] px-4 py-2.5 text-[10px] font-semibold uppercase"
-                style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px", background: "#DFE5ED", color: "#162744" }}
-              >
-                <div>Nombre</div>
-                <div>Descripción</div>
-                <div className="text-center">Permisos</div>
-                <div className="text-center">Estado</div>
-                <div className="text-right">Acciones</div>
-              </div>
-              {status === "loading" && (
-                <div className="py-10 text-center text-sm opacity-60">Cargando roles…</div>
-              )}
-              {status === "error" && (
-                <div role="alert" className="py-10 text-center text-sm" style={{ color: "#FF4E00" }}>
-                  Error al cargar roles.
-                </div>
-              )}
-              {status === "ready" && roles.length === 0 && (
-                <div className="py-10 text-center text-sm opacity-60">
-                  No hay roles {type === "COMPANY" ? "de compañía" : "de organismo de tránsito"}. Crea el primero.
-                </div>
-              )}
-              {status === "ready" &&
-                roles.map((r) => {
-                  return (
-                    <div
-                      key={r.id}
-                      className="grid min-w-[640px] items-center px-4 py-3 border-b last:border-b-0 text-xs"
-                      style={{ gridTemplateColumns: "1fr 1fr 90px 90px 110px" }}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold truncate">{r.name}</p>
-                        <p className="font-mono text-[10px] opacity-60">{r.code}</p>
-                      </div>
-                      <div className="opacity-70 truncate">{r.description ?? "—"}</div>
-                      <div className="text-center font-bold" style={{ color: "#557EFF" }}>
-                        {r.permissionCount}
-                      </div>
-                      <div className="flex justify-center">
-                        <StatusBadge
-                          label={r.isActive ? "Activo" : "Inactivo"}
-                          bg={r.isActive ? "rgba(0,219,213,0.15)" : "rgba(255,78,0,0.10)"}
-                          color={r.isActive ? "#0f766e" : "#c2410c"}
-                          border={r.isActive ? "rgba(0,219,213,0.35)" : "rgba(255,78,0,0.3)"}
-                        />
-                      </div>
-                      <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => setEditTarget({ role: r, targetEntityType: type })}
-                          aria-label={`Editar permisos de ${r.name}`}
-                          disabled={busyIds[r.id]}
-                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                          style={{ color: "#557EFF" }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(r, type)}
-                          aria-label={r.isActive ? `Desactivar rol ${r.name}` : `Activar rol ${r.name}`}
-                          disabled={busyIds[r.id]}
-                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                          style={{ color: r.isActive ? undefined : "#00DBD5" }}
-                        >
-                          {r.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(r, type)}
-                          aria-label={`Eliminar rol ${r.name}`}
-                          disabled={busyIds[r.id] || r.isSystem}
-                          title={r.isSystem ? "No se puede eliminar: es un rol de sistema" : undefined}
-                          className="p-1.5 rounded-lg border opacity-60 hover:opacity-100 disabled:opacity-30"
-                          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+            <DataTable
+              columns={columns}
+              rows={roles}
+              getRowKey={(r) => r.id}
+              status={status}
+              emptyMessage={`No hay roles ${type === "COMPANY" ? "de compañía" : "de organismo de tránsito"}. Crea el primero.`}
+              minWidth={640}
+            />
           </section>
         );
       })}
