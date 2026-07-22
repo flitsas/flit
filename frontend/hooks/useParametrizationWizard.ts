@@ -98,6 +98,22 @@ export function useParametrizationWizard(editingId?: string | null) {
     }));
   }, []);
 
+  // FEATURE-08 / CFD-05 — banderas por-actor del validation_profile de la regla (PN/PJ, multiplicidad,
+  // RUNT). Se persisten con updateConformationRules (ya envía validationProfile en cada regla).
+  const setRuleProfile = useCallback(
+    (code: ProcedureEntityCode, patch: Record<string, boolean>) => {
+      setState((s) => ({
+        ...s,
+        conformationRules: s.conformationRules.map((r) =>
+          r.procedureEntityCode === code
+            ? { ...r, validationProfile: { ...(r.validationProfile ?? {}), ...patch } }
+            : r,
+        ),
+      }));
+    },
+    [],
+  );
+
   const moveStep = useCallback((index: number, direction: 'up' | 'down') => {
     setState((s) => {
       const arr = [...s.steps];
@@ -272,6 +288,7 @@ export function useParametrizationWizard(editingId?: string | null) {
     setStep,
     setIdentity,
     toggleRule,
+    setRuleProfile,
     moveStep,
     addStep,
     removeStep,

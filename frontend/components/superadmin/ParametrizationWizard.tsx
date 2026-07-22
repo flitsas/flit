@@ -42,6 +42,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
     setStep,
     setIdentity,
     toggleRule,
+    setRuleProfile,
     moveStep,
     addStep,
     removeStep,
@@ -173,7 +174,11 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
           )}
           {step === 1 && <Step2Tipologia />}
           {step === 2 && (
-            <Step3Aristas rules={conformationRules} onToggle={toggleRule} />
+            <Step3Aristas
+              rules={conformationRules}
+              onToggle={toggleRule}
+              onProfileChange={setRuleProfile}
+            />
           )}
           {/* FEATURE-08: Entrada / Fuentes / Documentos del configurador dinámico. */}
           {step === 3 &&
