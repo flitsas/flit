@@ -86,7 +86,8 @@ export function RulesSection() {
         onRetry={() => void loadRules()}
         skeletonRows={4}
       >
-        <table className="w-full border-separate border-spacing-y-2 text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
           <thead>
             <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
               <th className="rounded-l-xl px-4 py-2.5 bg-muted">
@@ -145,6 +146,7 @@ export function RulesSection() {
             ))}
           </tbody>
         </table>
+        </div>
       </UiStateBoundary>
 
       <RuleFormPanel

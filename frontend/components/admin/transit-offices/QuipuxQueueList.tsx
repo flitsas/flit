@@ -247,7 +247,7 @@ export function QuipuxQueueList({ transitOfficeId }: QuipuxQueueListProps) {
           aria-modal="true"
           aria-label={confirmTarget.action === "retry" ? "Confirmar re-encolado" : "Confirmar cancelación"}
         >
-          <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-2xl">
             <h2 className="text-lg font-semibold text-foreground">
               {confirmTarget.action === "retry"
                 ? "¿Re-encolar esta radicación?"

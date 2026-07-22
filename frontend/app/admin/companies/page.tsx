@@ -111,7 +111,7 @@ function CompaniesList() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+    <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}

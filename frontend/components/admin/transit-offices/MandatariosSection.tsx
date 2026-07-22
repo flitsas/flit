@@ -138,6 +138,7 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
         onRetry={() => void load()}
         skeletonRows={4}
       >
+        <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-y-2 text-xs">
           <thead>
             <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
@@ -227,6 +228,7 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
             ))}
           </tbody>
         </table>
+        </div>
       </UiStateBoundary>
 
       <MandatarioFormPanel

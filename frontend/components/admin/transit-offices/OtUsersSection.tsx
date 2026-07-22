@@ -231,6 +231,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onRetry={() => void loadDeleted()}
         >
           <div className="rounded-xl border overflow-hidden bg-card">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted">
@@ -274,6 +275,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </UiStateBoundary>
       )}
@@ -298,6 +300,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         <div
           className="rounded-xl border overflow-hidden bg-card"
         >
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted">
@@ -433,6 +436,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </UiStateBoundary>
       )}
@@ -588,7 +592,7 @@ function OtInviteUserDialog({
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
+      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-6 shadow-2xl bg-card">
         <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
           Invitar usuario
         </h2>

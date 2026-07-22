@@ -432,7 +432,7 @@ export function QuipuxSettingsForm() {
         <p className="text-[11px] opacity-60">
           Cambian en caliente: los workers releen estos valores en cada ciclo, sin desplegar.
         </p>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:grid-cols-3">
           <NumberField
             id="qx-register-interval"
             label="Intervalo de registro (min)"

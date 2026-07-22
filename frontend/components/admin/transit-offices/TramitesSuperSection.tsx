@@ -390,7 +390,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-label="Confirmar aprobación"
         >
           <div
-            className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-2xl"
           >
             <h2 className="text-lg font-semibold text-foreground">
               ¿Aprobar este trámite?
@@ -427,7 +427,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
           aria-label="Rechazar trámite"
         >
           <div
-            className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-2xl"
           >
             <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
