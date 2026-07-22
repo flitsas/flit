@@ -114,6 +114,14 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
+        // Importación masiva de trámites: lector .xlsx + generador de plantilla (OpenXML, sin
+        // dependencias nuevas). Ambos stateless.
+        services.AddSingleton<
+            Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport.IProcedureImportFileReader,
+            Documents.XlsxProcedureImportReader>();
+        services.AddSingleton<
+            Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport.IProcedureImportTemplateProvider,
+            Documents.XlsxProcedureImportTemplateProvider>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
 
         // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).

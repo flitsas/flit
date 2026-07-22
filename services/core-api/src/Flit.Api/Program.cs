@@ -34,6 +34,15 @@ builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, b
 // Runtime de trámites (rework #10128): casos de uso de instancias/wizard/consultas.
 builder.Services.AddTramitesApplication();
 
+// Importación masiva de trámites (Excel/CSV): adaptadores de los puertos de la capa Application
+// hacia el módulo Admin (toggle de matrícula inicial y catálogo de organismos de tránsito).
+builder.Services.AddScoped<
+    Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport.IMatriculaInicialGate,
+    Flit.Api.Endpoints.Tramites.MatriculaInicialGate>();
+builder.Services.AddScoped<
+    Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport.ITransitOfficeCodeResolver,
+    Flit.Api.Endpoints.Tramites.TransitOfficeCodeResolver>();
+
 // Dashboard analítico (Feature #10139, HU #10243): handlers de lectura de agregados.
 builder.Services.AddAnalyticsApplication();
 Flit.Analytics.Application.Scheduling.AnalyticsSchedulingServiceCollectionExtensions.AddAnalyticsScheduling(builder.Services); // Reportes2 HU-D — CRUD de informes programados y alertas

@@ -4917,6 +4917,64 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
+  /api/v1/tramites/instances/bulk-import/template:
+    get:
+      tags: [Trámites · Instancias]
+      summary: Descargar la plantilla Excel de importación
+      operationId: downloadBulkImportTemplate
+      security:
+        - bearerAuth: []
+      description: >
+        Devuelve la plantilla .xlsx (hoja "Tramites" con encabezado y filas de ejemplo) para la
+        importación masiva. El modal del frontend la ofrece como descarga.
+      responses:
+        "200":
+          description: Archivo .xlsx.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+  /api/v1/tramites/instances/bulk-import:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+    post:
+      tags: [Trámites · Instancias]
+      summary: Importar trámites en lote (Excel/CSV)
+      operationId: bulkImportProcedureInstances
+      security:
+        - bearerAuth: []
+      description: >
+        Crea trámites en estado BORRADOR en lote desde un archivo Excel (.xlsx) o CSV (un Excel
+        exportado como CSV UTF-8 también encaja). El formato se detecta por extensión/Content-Type.
+        La compañía y el usuario salen del JWT: un usuario de compañía importa en su compañía; el
+        superadmin debe indicar la compañía destino con X-Tenant-Id. Columnas reconocidas (encabezado
+        en cualquier orden, case-insensitive): modalidad (matricula_inicial | traspaso), tipo_codigo
+        (alternativa con precedencia, p.ej. TRASPASO_STANDARD), oficina_transito_codigo, vin, placa.
+        Cada fila debe traer modalidad o tipo_codigo; vin/placa se siembran como field_values. Máximo
+        500 filas de datos por archivo (se rechaza con 400 si se supera). Las filas son independientes
+        (partial success). Documentos, biometría y firma NO se importan (se completan luego en el wizard).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo .xlsx o CSV con encabezado en la primera línea.
+      responses:
+        "200":
+          description: Reporte de la importación (por fila).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcedureImportReport" }
+        "400": { description: "Archivo faltante o formato inválido (encabezado/sin filas)." }
+        "401": { description: "Usuario no identificable en el token." }
+        "403": { description: "El usuario autenticado no tiene compañía asignada." }
+
   /api/v1/tramites/instances/{id}/attachments:
     parameters:
       - $ref: "#/components/parameters/TenantIdHeader"
@@ -7049,6 +7107,39 @@ components:
             HU #10349 — fecha en que el borrador se finalizó (datos completos a la espera de la
             validación de identidad async). Null si el borrador no se ha finalizado.
       required: [id, referenceNumber, status, procedureTypeId, tenantId, createdAt]
+
+    ProcedureImportRowResult:
+      type: object
+      description: Resultado de importar una fila del archivo (bulk-import).
+      properties:
+        row: { type: integer, description: "Número de fila de datos (1-based, sin contar el encabezado)." }
+        input: { type: string, description: "Etiqueta identificable de la fila (modalidad o código del tipo)." }
+        status: { type: string, enum: [created, failed] }
+        referenceNumber:
+          type: string
+          nullable: true
+          description: "Referencia del trámite creado (TRM-YYYY-NNNNNN), si status=created."
+        instanceId: { type: string, format: uuid, nullable: true }
+        error:
+          type: string
+          nullable: true
+          description: >
+            Código de error de la fila cuando status=failed (p.ej. oficina_no_encontrada,
+            matricula_inicial_no_habilitada, invalid_request, modalidad_not_available), o
+            'seed_warning:<código>' si el borrador se creó pero la seed vin/placa falló.
+      required: [row, input, status]
+
+    ProcedureImportReport:
+      type: object
+      description: Reporte agregado de una importación masiva de trámites.
+      properties:
+        total: { type: integer }
+        created: { type: integer }
+        failed: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ProcedureImportRowResult" }
+      required: [total, created, failed, results]
 
     ProcedureDocumentRequirementSnapshotRow:
       type: object

@@ -5,6 +5,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Middleware;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -88,6 +89,66 @@ internal static class ProcedureInstanceEndpoints
                 _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
             };
         }).WithName("CreateProcedureInstance");
+
+        // Importación masiva de trámites en estado BORRADOR desde un Excel/CSV (multipart: file).
+        // El tenant y el usuario salen del JWT (igual que el alta individual): un usuario de compañía
+        // importa en SU compañía; el superadmin debe indicar la compañía destino (X-Tenant-Id).
+        // Cada fila crea un borrador mínimo (modalidad o tipo_codigo + oficina opcional) y, si trae
+        // vin/placa, los siembra como field_values. Las filas son independientes (partial success);
+        // se devuelve un reporte por fila. Documentos, biometría y firma NO se importan (se completan
+        // luego en el wizard).
+        // Plantilla Excel (.xlsx) de la importación masiva: encabezado + filas de ejemplo. Se descarga
+        // desde el modal del frontend para que el usuario no arme el archivo a mano.
+        group.MapGet("/instances/bulk-import/template", (
+            IProcedureImportTemplateProvider template) =>
+            Results.File(
+                template.BuildXlsx(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "plantilla-tramites.xlsx"))
+            .WithName("DownloadBulkImportTemplate");
+
+        group.MapPost("/instances/bulk-import", async (
+            HttpContext http,
+            IFormFile? file,
+            BulkImportProcedureInstancesHandler handler,
+            IProcedureImportFileReader xlsxReader,
+            CancellationToken ct) =>
+        {
+            var (effectiveTenant, tenantError) = ResolveEffectiveTenant(http);
+            if (tenantError is not null)
+                return tenantError;
+
+            var userId = ResolveUserId(http.User);
+            if (userId is null || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario autenticado.");
+
+            if (file is null || file.Length == 0)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el archivo (file).");
+
+            // .xlsx binario → lector OpenXML; cualquier otro (CSV, un Excel guardado como CSV) → parser de texto.
+            ProcedureImportParseOutcome parsed;
+            if (IsXlsx(file))
+            {
+                using var buffer = new MemoryStream();
+                await file.CopyToAsync(buffer, ct);
+                buffer.Position = 0;
+                parsed = xlsxReader.Read(buffer);
+            }
+            else
+            {
+                using var reader = new StreamReader(file.OpenReadStream());
+                parsed = ProcedureImportCsvParser.Parse(await reader.ReadToEndAsync(ct));
+            }
+
+            if (parsed.FatalError is not null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: parsed.FatalError);
+
+            var report = await handler.HandleAsync(effectiveTenant, userId.Value, parsed.Rows, ct);
+            return Results.Ok(report);
+        })
+        .WithName("BulkImportProcedureInstances")
+        .DisableAntiforgery();
 
         // Listado para la tabla de operación (Slice M6). Ruta literal /instances → NO colisiona con
         // /instances/{id:guid} (la constraint :guid solo casa GUIDs; el listado no lleva segmento).
@@ -392,12 +453,43 @@ internal static class ProcedureInstanceEndpoints
         return (tenantId, isSuperAdmin);
     }
 
+    /// <summary>
+    /// Resuelve la compañía destino efectiva a partir del JWT (idéntico criterio que el alta
+    /// individual): usuario de compañía → su compañía; superadmin → la de <c>X-Tenant-Id</c>
+    /// (obligatoria). Devuelve el <see cref="IResult"/> de error listo para retornar, o null si OK.
+    /// </summary>
+    private static (Guid Tenant, IResult? Error) ResolveEffectiveTenant(HttpContext http)
+    {
+        var (resolvedTenant, isSuperAdmin) = ResolveTenantContext(http);
+        if (isSuperAdmin)
+        {
+            var tenant = resolvedTenant ?? Guid.Empty;
+            return tenant == Guid.Empty
+                ? (Guid.Empty, Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "Indique la compañía destino (X-Tenant-Id) para importar trámites."))
+                : (tenant, null);
+        }
+
+        return resolvedTenant is { } companyTenant
+            ? (companyTenant, null)
+            : (Guid.Empty, Results.Problem(statusCode: 403, title: "Forbidden",
+                detail: "El usuario autenticado no tiene una compañía asignada."));
+    }
+
     /// <summary>Id del usuario autenticado (claim <c>sub</c>/NameIdentifier), o null si no resuelve.</summary>
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {
         var raw = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(raw, out var id) ? id : null;
     }
+
+    /// <summary>¿El archivo subido es un Excel binario (.xlsx / OpenXML)? Si no, se trata como CSV.</summary>
+    private static bool IsXlsx(IFormFile file) =>
+        file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(
+            file.ContentType,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
     private static bool EsMatriculaInicial(string? modalidad) =>

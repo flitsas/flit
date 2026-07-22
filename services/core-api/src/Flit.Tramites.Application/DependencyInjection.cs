@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.BulkImport;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Services;
@@ -38,6 +39,9 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
+        // Importación masiva de borradores desde Excel/CSV. Los puertos (IMatriculaInicialGate,
+        // ITransitOfficeCodeResolver) los implementa la capa API (adaptadores sobre Admin).
+        services.AddScoped<BulkImportProcedureInstancesHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
