@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/admin-ot";
 import type { OtApiCallLog, OtWebhook } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTabBar } from "./OtTabBar";
 import { OtTablePagination } from "./OtTablePagination";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
@@ -177,7 +177,7 @@ export function WebhooksSection() {
                       {maskTargetUrl(w.targetUrl)}
                     </td>
                     <td className="border-y px-4 py-3">
-                      <OtStatusBadge
+                      <StatusBadge
                         label={w.isActive ? "Activo" : "Inactivo"}
                         tone={w.isActive ? "success" : "danger"}
                       />

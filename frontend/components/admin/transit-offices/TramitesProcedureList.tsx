@@ -2,7 +2,7 @@
 
 import { Building2, CalendarDays, Check, FileText, X } from "lucide-react";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 
 export interface TramitesProcedureListProps {
@@ -51,7 +51,7 @@ export function TramitesProcedureList({
                 <p className="truncate text-sm font-semibold text-foreground">
                   {procedure.procedureTypeName ?? procedure.procedureTypeId}
                 </p>
-                <OtStatusBadge
+                <StatusBadge
                   label={formatOtProcedureStatus(procedure.status)}
                   tone={procedureStatusTone(procedure.status)}
                 />

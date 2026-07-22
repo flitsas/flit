@@ -72,9 +72,9 @@ export function CompanyListTable({
               </td>
               <td className="border-y px-4 py-3">
                 {c.estadoActivo ? (
-                  <StatusBadge label="Activa" bg="rgba(0,219,213,0.15)" color="#0f766e" border="rgba(0,219,213,0.35)" />
+                  <StatusBadge label="Activa" tone="success" />
                 ) : (
-                  <StatusBadge label="Inactiva" bg="rgba(255,78,0,0.10)" color="#c2410c" border="rgba(255,78,0,0.3)" />
+                  <StatusBadge label="Inactiva" tone="danger" />
                 )}
               </td>
               <td className="border-y px-4 py-3 opacity-70">

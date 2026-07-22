@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, FolderOpen, Star, X } from "lucide-react";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
@@ -107,7 +107,7 @@ export function ClientProceduresTable({
               </td>
               <td className="border-y px-4 py-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <OtStatusBadge
+                  <StatusBadge
                     label={formatOtProcedureStatus(row.status)}
                     tone={procedureStatusTone(row.status)}
                   />

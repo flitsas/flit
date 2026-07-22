@@ -5,7 +5,7 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { createOtRule, fetchOtRules, updateOtRule } from "@/lib/api/admin-ot";
 import type { OtRule } from "@/lib/api/types-ot";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
 import { formatOtRuleAction } from "./ot-utils";
 
@@ -121,7 +121,7 @@ export function RulesSection() {
                   {rule.action.queue_name ? ` (${rule.action.queue_name})` : ""}
                 </td>
                 <td className="border-y px-4 py-3">
-                  <OtStatusBadge
+                  <StatusBadge
                     label={rule.isEnabled ? "Activa" : "Inactiva"}
                     tone={rule.isEnabled ? "success" : "neutral"}
                   />

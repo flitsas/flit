@@ -11,7 +11,7 @@ import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { ModuleTitle } from "./ModuleTitle";
-import { StatusBadge } from "@/components/atom/StatusBadge";
+import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
@@ -31,21 +31,21 @@ const ALL_TABS = [
 
 type TabId = (typeof ALL_TABS)[number]["id"];
 
-// Chips tintados (HU #10494 · decisión D1). Mismo vocabulario (Activo/Inactivo/Pendiente),
-// convención tintada: fondo translúcido + texto de color legible + borde.
+// Chips tintados (HU #10494 · decisión D1, tones HU #10844). Mismo vocabulario
+// (Activo/Inactivo/Pendiente); el color lo resuelve el `tone` semántico desde globals.css.
 const STATUS_BADGE: Record<
   TenantUser["status"],
-  { label: string; bg: string; color: string; border: string }
+  { label: string; tone: StatusTone }
 > = {
-  active: { label: "Activo", bg: "rgba(0,219,213,0.15)", color: "#0f766e", border: "rgba(0,219,213,0.35)" },
-  inactive: { label: "Inactivo", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" },
-  pending: { label: "Pendiente", bg: "rgba(245,158,11,0.14)", color: "#b45309", border: "rgba(245,158,11,0.35)" },
+  active: { label: "Activo", tone: "success" },
+  inactive: { label: "Inactivo", tone: "danger" },
+  pending: { label: "Pendiente", tone: "warning" },
 };
 
 // Ajuste QA (flujo completo HU #10619-#10628): un usuario suspendido/desactivado seguía
 // mostrando el chip "Activo" — solo cambiaba el ícono de acción (Ban → ShieldOff), sin
 // ninguna señal visible al escanear la tabla. Prevalece sobre STATUS_BADGE[status].
-const SUSPENDED_BADGE = { label: "Bloqueado", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" };
+const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
 
 function userBadge(u: TenantUser) {
   return u.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[u.status];
@@ -280,7 +280,7 @@ export function Usuarios() {
                       )}
                     </div>
                     <div>
-                      <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
+                      <StatusBadge label={badge.label} tone={badge.tone} />
                     </div>
                     <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
                     <div className="flex items-center justify-end gap-1">

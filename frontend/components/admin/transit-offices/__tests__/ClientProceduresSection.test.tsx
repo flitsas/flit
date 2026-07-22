@@ -112,7 +112,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Matrícula inicial" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Flota Andina S.A.S." })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Pendiente OT" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Estado: Pendiente OT" })).toBeInTheDocument();
   });
 
   it("AC2 aprobar con confirmación actualiza fila optimistamente", async () => {
@@ -122,7 +122,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(screen.getByRole("button", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
     await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1"));
-    expect(screen.getByRole("cell", { name: "Aprobado OT" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
   });
 
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {

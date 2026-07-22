@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Copy, Check, Search, Clock, Cpu, FileText } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
-import { StatusBadge } from "@/components/atom/StatusBadge";
+import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { Pagination } from "@/components/atom/Pagination";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { fetchLogQx, type LogQxEntry, type LogQxEvent, type LogQxStatus } from "@/lib/api/admin-log-qx";
@@ -39,13 +39,13 @@ const AXIS_META: Record<SearchAxis, { label: string; placeholder: string }> = {
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Estilo del chip de estado por estado final de la radicación (convención tintada HU #10494). */
-const STATUS_STYLE: Record<LogQxStatus, { label: string; bg: string; color: string; border: string }> = {
-  pendiente: { label: "Pendiente", bg: "rgba(85,126,255,0.12)", color: "#557EFF", border: "rgba(85,126,255,0.4)" },
-  registrado: { label: "Registrado", bg: "rgba(0,219,213,0.16)", color: "#0E7C86", border: "rgba(0,219,213,0.4)" },
-  aprobado: { label: "Aprobado", bg: "rgba(140,198,63,0.16)", color: "#5B8A1F", border: "rgba(140,198,63,0.4)" },
-  rechazado: { label: "Rechazado", bg: "rgba(255,78,0,0.12)", color: "#FF4E00", border: "rgba(255,78,0,0.3)" },
-  fallido: { label: "Fallido", bg: "rgba(255,78,0,0.12)", color: "#FF4E00", border: "rgba(255,78,0,0.3)" },
+/** Tono del chip de estado por estado final de la radicación (tones HU #10844). */
+const STATUS_STYLE: Record<LogQxStatus, { label: string; tone: StatusTone }> = {
+  pendiente: { label: "Pendiente", tone: "info" },
+  registrado: { label: "Registrado", tone: "success" },
+  aprobado: { label: "Aprobado", tone: "success" },
+  rechazado: { label: "Rechazado", tone: "danger" },
+  fallido: { label: "Fallido", tone: "danger" },
 };
 
 /** Etiquetas legibles de las etapas conocidas; las desconocidas se muestran tal cual. */
@@ -290,9 +290,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 function LogQxEntryCard({ entry }: { entry: LogQxEntry }) {
   const st = STATUS_STYLE[entry.status] ?? {
     label: entry.status,
-    bg: "rgba(138,148,166,0.15)",
-    color: "#8A94A6",
-    border: "rgba(138,148,166,0.4)",
+    tone: "neutral" as StatusTone,
   };
 
   return (
@@ -301,7 +299,7 @@ function LogQxEntryCard({ entry }: { entry: LogQxEntry }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{entry.referenceNumber}</span>
-            <StatusBadge label={st.label} bg={st.bg} color={st.color} border={st.border} />
+            <StatusBadge label={st.label} tone={st.tone} />
           </div>
           <p className="text-[11px] opacity-70 mt-0.5 truncate">
             {entry.procedureTypeName} · {entry.clientTenantName}

@@ -353,9 +353,7 @@ function AuditoriaRow({ row: r }: { row: AdminAuditLogEntry }) {
           {r.result ? (
             <StatusBadge
               label={resultLabel}
-              bg={isSuccess ? 'rgba(140,198,63,0.16)' : 'rgba(255,78,0,0.12)'}
-              color={isSuccess ? '#5B8A1F' : '#FF4E00'}
-              border={isSuccess ? 'rgba(140,198,63,0.4)' : 'rgba(255,78,0,0.3)'}
+              tone={isSuccess ? 'success' : 'danger'}
               ariaLabel={`Resultado: ${resultLabel}`}
             />
           ) : (
