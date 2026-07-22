@@ -169,10 +169,7 @@ function FragmentRow<T>({
             } ${i === last ? "rounded-r-xl border-r" : ""} ${
               onRowClick ? "group-hover:bg-[color:var(--table-row-hover)]" : ""
             } ${col.cellClassName ?? ""}`}
-            style={{
-              borderColor: "var(--table-row-border)",
-              boxShadow: "var(--table-row-shadow)",
-            }}
+            style={{ borderColor: "var(--table-row-border)" }}
           >
             {col.render(row)}
           </td>

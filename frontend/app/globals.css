@@ -119,7 +119,6 @@
   --table-header-bg: #dfe5ed;
   --table-header-fg: #162744;
   --table-row-border: #dfe5ed;
-  --table-row-shadow: 0 1px 3px 0 rgba(22, 39, 68, 0.08), 0 1px 2px -1px rgba(22, 39, 68, 0.06);
   --table-row-hover: #f4f8ff;
 }
 
@@ -178,7 +177,6 @@
   --table-header-bg: rgba(255, 255, 255, 0.06);
   --table-header-fg: rgba(255, 255, 255, 0.72);
   --table-row-border: rgba(255, 255, 255, 0.1);
-  --table-row-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
   --table-row-hover: rgba(255, 255, 255, 0.04);
 }
 
