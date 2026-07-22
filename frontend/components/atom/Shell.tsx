@@ -30,6 +30,7 @@ import {
   Send,
   ScrollText,
   Radar,
+  X,
 } from "lucide-react";
 
 export type ModuleId =
@@ -136,6 +137,9 @@ export function Shell({
   const currentUser = useCurrentUser();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // HU #10844 — En <lg el dock horizontal (hasta ~14 entradas para SuperAdmin) no cabe;
+  // se colapsa a un lanzador que abre una grilla de apps controlada por este estado.
+  const [dockOpen, setDockOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -279,7 +283,7 @@ export function Shell({
     >
       {/* Header */}
       <header
-        className="shrink-0 flex items-center justify-between px-6 py-3 border-b"
+        className="shrink-0 flex items-center justify-between px-4 md:px-6 py-3 border-b"
         style={{ borderColor: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }}
       >
         <div className="flex items-center gap-3">
@@ -376,8 +380,8 @@ export function Shell({
             padding inferior libera el dock flotante para que nada quede oculto tras él. */}
         <div className="absolute inset-0 overflow-y-auto pb-28">{children}</div>
 
-        {/* Bottom dock */}
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40">
+        {/* Bottom dock — escritorio (lg+): pill horizontal balanceado alrededor del FAB */}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40 hidden lg:block">
           <div
             className="flex items-center gap-1 px-3 py-2 rounded-full"
             style={{
@@ -425,11 +429,91 @@ export function Shell({
             ))}
           </div>
         </div>
+
+        {/* Bottom dock — móvil/tablet (<lg): lanzador flotante que abre una grilla de apps.
+            En pantallas angostas el pill horizontal (hasta ~14 entradas para SuperAdmin) se
+            saldría del viewport, por lo que se colapsa a un único botón + hoja "grid de apps". */}
+        <div className="lg:hidden">
+          <button
+            onClick={() => setDockOpen(true)}
+            className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 rounded-full grid place-items-center transition-transform hover:scale-105"
+            style={{
+              background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)",
+              boxShadow: "0 10px 24px -6px rgba(85,126,255,0.55)",
+            }}
+            aria-label="Abrir menú de navegación"
+            aria-expanded={dockOpen}
+          >
+            <img src={iso} alt="FLIT" className="h-7 w-7 brightness-0 invert" />
+          </button>
+
+          {dockOpen && (
+            <div
+              className="absolute inset-0 z-50 flex items-end justify-center p-4"
+              style={{ background: "rgba(5,6,10,0.45)", backdropFilter: "blur(4px)" }}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setDockOpen(false);
+              }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Navegación"
+            >
+              <div
+                className="w-full max-w-sm max-h-[70vh] overflow-y-auto rounded-2xl p-4"
+                style={{
+                  background: dark ? "rgba(11,15,20,0.98)" : "rgba(255,255,255,0.98)",
+                  border: `1px solid ${dark ? "#1A1F2B" : "#DFE5ED"}`,
+                  boxShadow: "0 10px 40px -10px rgba(22,39,68,0.35)",
+                }}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold opacity-70">Navegación</span>
+                  <button
+                    onClick={() => setDockOpen(false)}
+                    className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                    aria-label="Cerrar menú"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                  {entries.map((it) => {
+                    const Icon = it.icon;
+                    return (
+                      <button
+                        key={it.key}
+                        onClick={() => {
+                          setDockOpen(false);
+                          it.onClick();
+                        }}
+                        className="flex flex-col items-center gap-1 rounded-xl p-2 text-center transition"
+                        style={{
+                          background: it.active
+                            ? dark
+                              ? "rgba(0,219,213,0.18)"
+                              : "rgba(85,126,255,0.12)"
+                            : "transparent",
+                          color: it.active ? "#557EFF" : dark ? "#FFFFFF" : "#162744",
+                        }}
+                        aria-current={it.active ? "page" : undefined}
+                      >
+                        <Icon className="h-5 w-5" strokeWidth={it.active ? 2.4 : 1.8} />
+                        <span className="text-[10px] font-medium leading-tight line-clamp-2">
+                          {it.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Footer */}
       <footer
-        className="shrink-0 px-6 py-2 border-t text-[10px] text-center"
+        className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
         style={{
           borderColor: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED",
           color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
