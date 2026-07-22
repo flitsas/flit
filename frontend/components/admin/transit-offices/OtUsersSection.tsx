@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, MailX, Pencil, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, Clock, MailX, Pencil, RotateCcw, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { useToast } from "@/components/admin/Toast";
 import {
   fetchOtUsers,
@@ -186,176 +184,6 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return cancelOtInvitation(invitationId, { transitOfficeId });
   }
 
-  const otUserTone = (u: OtUserItem): { tone: StatusTone; label: string } => {
-    if (u.status === "pending") return { tone: "info", label: "Pendiente" };
-    if (u.isSuspended || u.status === "inactive") return { tone: "danger", label: "Suspendido" };
-    return { tone: "success", label: "Activo" };
-  };
-
-  const deletedColumns: DataTableColumn<OtUserItem>[] = [
-    {
-      key: "usuario",
-      header: "Usuario",
-      render: (u) => (
-        <div>
-          <div className="font-medium">{u.fullName}</div>
-          <div className="text-xs text-muted-foreground">{u.email}</div>
-        </div>
-      ),
-    },
-    {
-      key: "eliminado",
-      header: "Eliminado el",
-      cellClassName: "opacity-70",
-      render: (u) => (u.deletedAt ? formatOtDate(u.deletedAt) : "—"),
-    },
-    {
-      key: "acciones",
-      header: "Acciones",
-      align: "right",
-      render: (u) => (
-        <button
-          type="button"
-          title="Restaurar usuario"
-          aria-label={`Restaurar usuario ${u.fullName}`}
-          onClick={() => setRestoreTarget(u)}
-          className="p-1.5 rounded-lg transition hover:bg-blue-50"
-          style={{ color: "#557EFF" }}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </button>
-      ),
-    },
-  ];
-
-  const activeColumns: DataTableColumn<OtUserItem>[] = [
-    {
-      key: "usuario",
-      header: "Usuario",
-      render: (u) => (
-        <div>
-          <div className="font-medium">{u.fullName}</div>
-          <div className="text-xs text-muted-foreground">{u.email}</div>
-        </div>
-      ),
-    },
-    {
-      key: "estado",
-      header: "Estado",
-      render: (u) => {
-        const t = otUserTone(u);
-        return <StatusBadge tone={t.tone} label={t.label} />;
-      },
-    },
-    {
-      key: "acciones",
-      header: "Acciones",
-      align: "right",
-      render: (u) => (
-        <div className="flex items-center justify-end gap-1">
-          {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
-              no hay una cuenta real que editar. */}
-          {u.status !== "pending" && (
-            <button
-              type="button"
-              title="Editar usuario"
-              aria-label={`Editar usuario ${u.fullName}`}
-              onClick={() => setEditTarget(u)}
-              className="p-1.5 rounded-lg transition hover:bg-blue-50"
-              style={{ color: "#557EFF" }}
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          )}
-          {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-              El ot_admin no puede suspender ni reactivar usuarios de su OT. */}
-          {u.status !== "pending" && isSuperAdmin &&
-            (u.isSuspended ? (
-              <button
-                type="button"
-                title="Reactivar usuario"
-                aria-label={`Reactivar usuario ${u.fullName}`}
-                onClick={() => void handleUnsuspend(u.id)}
-                className="p-1.5 rounded-lg transition hover:bg-green-50"
-                style={{ color: "#00DBD5" }}
-              >
-                <ShieldOff className="h-4 w-4" />
-              </button>
-            ) : (
-              <div className="flex items-center justify-end gap-1">
-                <button
-                  type="button"
-                  title="Suspender temporalmente"
-                  aria-label={`Suspender temporalmente a ${u.fullName}`}
-                  onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
-                  className="p-1.5 rounded-lg transition hover:bg-orange-50"
-                  style={{ color: "#FF4E00" }}
-                >
-                  <Clock className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  title="Desactivar indefinidamente"
-                  aria-label={`Desactivar indefinidamente a ${u.fullName}`}
-                  onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
-                  className="p-1.5 rounded-lg transition hover:bg-red-50"
-                  style={{ color: "#557EFF" }}
-                >
-                  <Ban className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          {/* Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin no puede).
-              AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
-              puede auto-eliminarse. */}
-          {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
-            <button
-              type="button"
-              title="Eliminar usuario"
-              aria-label={`Eliminar usuario ${u.fullName}`}
-              onClick={() => setDeleteTarget(u)}
-              className="p-1.5 rounded-lg transition hover:bg-red-50"
-              style={{ color: "#FF4E00" }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-          {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
-              invitationId. */}
-          {u.status === "pending" && (
-            <ResendInvitationButton
-              invitationId={u.id}
-              fullName={u.fullName}
-              resend={handleResendInvitation}
-              onResent={(outcome) =>
-                show(
-                  outcome.emailSent
-                    ? `Invitación reenviada a ${outcome.email}.`
-                    : "Invitación reenviada, pero el correo no pudo entregarse.",
-                  "success",
-                )
-              }
-            />
-          )}
-          {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
-              mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
-          {u.status === "pending" && (
-            <button
-              type="button"
-              title="Cancelar invitación"
-              aria-label={`Cancelar invitación a ${u.fullName}`}
-              onClick={() => setCancelTarget(u)}
-              className="p-1.5 rounded-lg transition hover:bg-red-50"
-              style={{ color: "#FF4E00" }}
-            >
-              <MailX className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -396,16 +224,58 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         // HU #10624 (AC3) — GET /api/v1/admin/ot/users?onlyDeleted=true: usuarios eliminados
         // del tenant OT resuelto. Restaurar (1 clic de confirmación en RestoreUserDialog) deshace
         // el soft-delete vía el endpoint genérico restoreUser() (SOLO SuperAdmin).
-        <DataTable
-          columns={deletedColumns}
-          rows={deletedUsers}
-          getRowKey={(u) => u.id}
+        <UiStateBoundary
           status={deletedStatus}
           emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
           errorMessage="No se pudo cargar el listado de usuarios eliminados."
           onRetry={() => void loadDeleted()}
-          ariaLabel="Usuarios eliminados"
-        />
+        >
+          <div className="rounded-xl border overflow-hidden bg-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted">
+                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Usuario
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Eliminado el
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedUsers.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-sm">{u.fullName}</div>
+                      <div className="text-xs" style={{ color: "#557EFF" }}>
+                        {u.email}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        title="Restaurar usuario"
+                        aria-label={`Restaurar usuario ${u.fullName}`}
+                        onClick={() => setRestoreTarget(u)}
+                        className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                        style={{ color: "#557EFF" }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </UiStateBoundary>
       )}
 
       {!showDeleted && (
@@ -425,13 +295,145 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         errorMessage="No se pudo cargar el listado de usuarios."
         onRetry={() => void load()}
       >
-        <DataTable
-          columns={activeColumns}
-          rows={users}
-          getRowKey={(u) => u.id}
-          status="ready"
-          ariaLabel="Usuarios del organismo de tránsito"
-        />
+        <div
+          className="rounded-xl border overflow-hidden bg-card"
+        >
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted">
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                  Usuario
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
+                  Estado
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr
+                  key={u.id}
+                  className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-sm">{u.fullName}</div>
+                    <div className="text-xs" style={{ color: "#557EFF" }}>
+                      {u.email}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <OtUserStatusBadge status={u.status} isSuspended={u.isSuspended} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
+                          no hay una cuenta real que editar. */}
+                      {u.status !== "pending" && (
+                        <button
+                          type="button"
+                          title="Editar usuario"
+                          aria-label={`Editar usuario ${u.fullName}`}
+                          onClick={() => setEditTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          style={{ color: "#557EFF" }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
+                          El ot_admin no puede suspender ni reactivar usuarios de su OT. */}
+                      {u.status !== "pending" && isSuperAdmin &&
+                        (u.isSuspended ? (
+                          <button
+                            type="button"
+                            title="Reactivar usuario"
+                            aria-label={`Reactivar usuario ${u.fullName}`}
+                            onClick={() => void handleUnsuspend(u.id)}
+                            className="p-1.5 rounded-lg transition hover:bg-green-50"
+                            style={{ color: "#00DBD5" }}
+                          >
+                            <ShieldOff className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              title="Suspender temporalmente"
+                              aria-label={`Suspender temporalmente a ${u.fullName}`}
+                              onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
+                              className="p-1.5 rounded-lg transition hover:bg-orange-50"
+                              style={{ color: "#FF4E00" }}
+                            >
+                              <Clock className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Desactivar indefinidamente"
+                              aria-label={`Desactivar indefinidamente a ${u.fullName}`}
+                              onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
+                              className="p-1.5 rounded-lg transition hover:bg-red-50"
+                              style={{ color: "#557EFF" }}
+                            >
+                              <Ban className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      {/* Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin no puede).
+                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
+                          puede auto-eliminarse. */}
+                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
+                        <button
+                          type="button"
+                          title="Eliminar usuario"
+                          aria-label={`Eliminar usuario ${u.fullName}`}
+                          onClick={() => setDeleteTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
+                          invitationId. */}
+                      {u.status === "pending" && (
+                        <ResendInvitationButton
+                          invitationId={u.id}
+                          fullName={u.fullName}
+                          resend={handleResendInvitation}
+                          onResent={(outcome) =>
+                            show(
+                              outcome.emailSent
+                                ? `Invitación reenviada a ${outcome.email}.`
+                                : "Invitación reenviada, pero el correo no pudo entregarse.",
+                              "success",
+                            )
+                          }
+                        />
+                      )}
+                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
+                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
+                      {u.status === "pending" && (
+                        <button
+                          type="button"
+                          title="Cancelar invitación"
+                          aria-label={`Cancelar invitación a ${u.fullName}`}
+                          onClick={() => setCancelTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          style={{ color: "#FF4E00" }}
+                        >
+                          <MailX className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </UiStateBoundary>
       )}
 
@@ -520,6 +522,46 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   );
 }
 
+function OtUserStatusBadge({
+  status,
+  isSuspended,
+}: {
+  status: OtUserItem["status"];
+  isSuspended: boolean;
+}) {
+  if (status === "pending") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+        style={{ background: "rgba(85,126,255,0.12)", color: "#557EFF" }}
+      >
+        <Clock className="h-3 w-3" aria-hidden="true" />
+        Pendiente
+      </span>
+    );
+  }
+  if (isSuspended || status === "inactive") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+        style={{ background: "rgba(255,78,0,0.10)", color: "#FF4E00" }}
+      >
+        <UserX className="h-3 w-3" aria-hidden="true" />
+        Suspendido
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: "rgba(0,219,213,0.12)", color: "#00948F" }}
+    >
+      <UserCheck className="h-3 w-3" aria-hidden="true" />
+      Activo
+    </span>
+  );
+}
+
 function OtInviteUserDialog({
   onConfirm,
   onClose,
@@ -546,7 +588,7 @@ function OtInviteUserDialog({
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-6 shadow-2xl bg-card">
+      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
         <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
           Invitar usuario
         </h2>
