@@ -59,6 +59,7 @@ public static class DevelopmentAuthSeeder
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
+        await SeedDetailedReportPermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
@@ -775,6 +776,88 @@ public static class DevelopmentAuthSeeder
         await db.SaveChangesAsync(ct);
 
         // Grants: SuperAdmin y AdminCompany reciben todos los permisos nuevos de reportes.
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                db.RoleGrants.AddRange(newActions
+                    .Where(a => !existing.Contains(a.Id))
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    }));
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #10813 — módulo dock "Reportes Detallados" + permisos de lectura y export.
+    /// Idempotente sobre BDs ya sembradas.
+    /// </summary>
+    private static async Task SeedDetailedReportPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "reportes-detallados",
+                Name = "Reportes Detallados",
+                SortOrder = 8,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("reportes.detallados.read",   "Ver reportes detallados",   "/api/v1/detailed-report/procedures",        "GET"),
+            ("reportes.detallados.export", "Exportar reportes detallados", "/api/v1/detailed-report/procedures/export", "GET"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length == 0)
+            return;
+
+        db.RbacActions.AddRange(newActions);
+        await db.SaveChangesAsync(ct);
+
         foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
