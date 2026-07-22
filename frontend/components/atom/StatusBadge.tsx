@@ -1,36 +1,51 @@
 import type { CSSProperties, ReactNode } from "react";
 
+/** Tones semánticos del estado (HU #10844). Fuente única de color en globals.css. */
+export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
+
 export interface StatusBadgeStyle {
-  /** Fondo tintado (rgba translúcido). */
-  bg: string;
-  /** Color del texto (tono legible del estado). */
-  color: string;
-  /** Color del borde (rgba). Si se omite, se usa el color del texto. */
+  /** @deprecated Usa `tone`. Fondo tintado crudo (rgba translúcido). */
+  bg?: string;
+  /** @deprecated Usa `tone`. Color del texto crudo. */
+  color?: string;
+  /** @deprecated Usa `tone`. Color del borde crudo. */
   border?: string;
 }
 
 export interface StatusBadgeProps extends StatusBadgeStyle {
   label: ReactNode;
+  /** Tone semántico: aplica la paleta unificada (globals.css), theme-aware. */
+  tone?: StatusTone;
   /** Nombre accesible; por defecto usa `label` si es texto. */
   ariaLabel?: string;
   className?: string;
 }
 
 /**
- * Chip de estado unificado (HU #10494). Convención TINTADA (decisión D1 del plan de
- * ajustes UX/UI): fondo translúcido + texto de color + borde. La forma, el tamaño y la
- * tipografía son idénticos en TODAS las tablas; cada dominio conserva su propio
- * vocabulario y sus colores (trámites ADR-0022, validaciones, usuarios, compañías…).
+ * Chip de estado unificado (HU #10494, tones HU #10844). Convención TINTADA: fondo
+ * translúcido + texto de color + borde. La forma, el tamaño y la tipografía son idénticos
+ * en TODAS las tablas. El COLOR se resuelve por `tone` semántico (success/warning/danger/
+ * info/neutral) desde la paleta única de `globals.css`, consistente en claro y oscuro.
+ *
+ * La API cruda (`bg`/`color`/`border`) queda `@deprecated` solo para la migración; los
+ * nuevos usos deben pasar `tone`.
  */
 export function StatusBadge({
   label,
+  tone,
   bg,
   color,
   border,
   ariaLabel,
   className = "",
 }: StatusBadgeProps) {
-  const style: CSSProperties = { background: bg, color, borderColor: border ?? color };
+  const style: CSSProperties = tone
+    ? {
+        background: `var(--badge-${tone}-bg)`,
+        color: `var(--badge-${tone}-fg)`,
+        borderColor: `var(--badge-${tone}-border)`,
+      }
+    : { background: bg, color, borderColor: border ?? color };
   const aria = ariaLabel ?? (typeof label === "string" ? `Estado: ${label}` : undefined);
   return (
     <span
