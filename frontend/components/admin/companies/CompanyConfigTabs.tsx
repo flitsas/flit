@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
+import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, SlidersHorizontal, Stamp } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,7 +16,7 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial" | "baul";
+type TabId = "matricula" | "traspasos" | "config" | "tramites" | "documentos" | "placas" | "historial" | "baul";
 
 interface TabDef {
   id: TabId;
@@ -29,6 +29,8 @@ const TABS: TabDef[] = [
   { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
   { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
+  // FEATURE-08 — tipos de trámite habilitados por compañía (endpoint propio, fuera del PUT de settings).
+  { id: "tramites", label: "Trámites habilitados", icon: SlidersHorizontal, isConfig: false },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
@@ -50,6 +52,8 @@ export interface CompanyConfigTabsProps {
   /** FEATURE 05 — criterios de bloqueo del preflight por OT (endpoint propio). */
   otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
+  /** FEATURE-08 — panel de tipos de trámite habilitados por compañía (endpoint propio). */
+  tramitesSlot?: ReactNode;
   documentosSlot?: ReactNode;
   /** Panel del Baúl de Firmas (HU #10644). Solo se muestra si `baulFirmasActivo` está activo. */
   baulFirmasSlot?: ReactNode;
@@ -65,6 +69,7 @@ export function CompanyConfigTabs({
   otRestrictionsSlot,
   otBlockingSlot,
   auditSlot,
+  tramitesSlot,
   documentosSlot,
   baulFirmasSlot,
   platesSlot,
@@ -173,6 +178,7 @@ export function CompanyConfigTabs({
             fieldErrors={fieldErrors}
           />
         )}
+        {activeTabId === "tramites" && tramitesSlot}
         {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "placas" && platesSlot}
         {activeTabId === "historial" && auditSlot}

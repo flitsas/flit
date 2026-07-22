@@ -127,6 +127,31 @@ export function removeTransitGrant(tenantId: string, transitOfficeId: string): P
   });
 }
 
+/** Respuesta del listado de tipos de trámite habilitados de una compañía (FEATURE-08). */
+export interface ProcedureGrantsResponse {
+  procedureTypeIds: string[];
+}
+
+/** GET /{tenantId}/procedure-grants — ids de tipos de trámite habilitados de la compañía (FEATURE-08). */
+export function fetchProcedureGrants(tenantId: string, signal?: AbortSignal): Promise<ProcedureGrantsResponse> {
+  return apiFetch<ProcedureGrantsResponse>(`${base}/${tenantId}/procedure-grants`, { signal });
+}
+
+/** POST /{tenantId}/procedure-grants — habilita un tipo de trámite (idempotente). */
+export function addProcedureGrant(tenantId: string, procedureTypeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/procedure-grants`, {
+    method: "POST",
+    body: { procedureTypeId },
+  });
+}
+
+/** DELETE /{tenantId}/procedure-grants/{procedureTypeId} — deshabilita un tipo de trámite. */
+export function removeProcedureGrant(tenantId: string, procedureTypeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/procedure-grants/${procedureTypeId}`, {
+    method: "DELETE",
+  });
+}
+
 /**
  * GET /{tenantId}/ot-consultation-restrictions — restricciones de consulta por OT
  * (HU #10759 AC1/AC5). Tabla dispersa: solo vuelven los pares configurados

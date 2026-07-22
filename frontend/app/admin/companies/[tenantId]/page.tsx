@@ -9,6 +9,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
+import { EnabledProceduresPanel } from "@/components/admin/companies/panels/EnabledProceduresPanel";
 import { OTConsultationRestrictionsPanel } from "@/components/admin/companies/panels/OTConsultationRestrictionsPanel";
 import { OTBlockingPoliciesPanel } from "@/components/admin/companies/panels/OTBlockingPoliciesPanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
@@ -117,6 +118,7 @@ function CompanyDetail() {
                 otRestrictionsSlot={<OTConsultationRestrictionsPanel tenantId={tenantId} />}
                 otBlockingSlot={<OTBlockingPoliciesPanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
+                tramitesSlot={<EnabledProceduresPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
                 baulFirmasSlot={<SignatureVaultTab tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
