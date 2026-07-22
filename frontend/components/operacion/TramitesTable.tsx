@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
+import { ArrowLeftRight, Car, Search, Star, Upload, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import { BulkImportModal } from './BulkImportModal';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { EstadoFunnel } from './EstadoFunnel';
@@ -164,6 +165,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [compania, setCompania] = useState('');
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
+  // Importación masiva de trámites (Excel/CSV): apertura del modal.
+  const [importOpen, setImportOpen] = useState(false);
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
   // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
@@ -403,6 +406,18 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
               Buscar
             </button>
           )}
+          {/* Importación masiva por Excel/CSV (crea borradores en lote). Estilo secundario (outline)
+              para distinguirlo de las acciones primarias de registro. */}
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            aria-label="Importar trámites masivos desde Excel o CSV"
+            className="inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-xs font-semibold transition hover:opacity-95"
+            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Importar Excel
+          </button>
         </div>
 
         <TramitesListToolbar
@@ -464,6 +479,12 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           }
         />
       </div>
+
+      <BulkImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => void load()}
+      />
     </section>
   );
 }

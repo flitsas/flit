@@ -39,6 +39,7 @@ import type {
   FineDetail,
   PreflightSnapshot,
   PresignAttachmentResponse,
+  ProcedureImportReport,
   ProcedureActor,
   ProcedureAttachment,
   ProcedureConfiguration,
@@ -281,6 +282,40 @@ export const tramitesClient = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Importación masiva de trámites en estado borrador desde un Excel (.xlsx) o CSV. Multipart POST:
+  // el navegador fija el boundary (sin Content-Type manual); tenantHeader añade Bearer + X-Tenant-Id.
+  // La compañía y el usuario los deriva el backend del JWT. Devuelve el reporte por fila.
+  bulkImportInstances: async (
+    file: File,
+    tenantId?: string,
+  ): Promise<ProcedureImportReport> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(apiUrl('/api/v1/tramites/instances/bulk-import'), {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as ProcedureImportReport;
+  },
+
+  // Descarga la plantilla Excel (.xlsx) de la importación masiva. Devuelve el binario para guardarlo.
+  downloadImportTemplate: async (tenantId?: string): Promise<Blob> => {
+    const res = await fetch(
+      apiUrl('/api/v1/tramites/instances/bulk-import/template'),
+      { headers: tenantHeader(tenantId) },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return res.blob();
+  },
 
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   // GET devuelve { items }; se desempaqueta al arreglo para el consumidor.

@@ -65,6 +65,28 @@ export interface ProcedureInstanceSummary {
   draftFinalizedAt?: string | null;
 }
 
+// ── Importación masiva de trámites (Excel/CSV) ─────────────────────
+// Reporte por fila que devuelve POST /api/v1/tramites/instances/bulk-import.
+export interface ProcedureImportRowResult {
+  /** Número de fila de datos (1-based, sin contar el encabezado). */
+  row: number;
+  /** Etiqueta identificable de la fila (modalidad o código del tipo). */
+  input: string;
+  status: 'created' | 'failed';
+  /** Referencia del trámite creado (TRM-YYYY-NNNNNN), si status=created. */
+  referenceNumber: string | null;
+  instanceId: string | null;
+  /** Código de error de la fila cuando status=failed (o 'seed_warning:<código>'). */
+  error: string | null;
+}
+
+export interface ProcedureImportReport {
+  total: number;
+  created: number;
+  failed: number;
+  results: ProcedureImportRowResult[];
+}
+
 // ── Listado de instancias (Slice M6) ───────────────────────────────
 // Contrato FIJO acordado con backend:
 //   GET /api/v1/tramites/instances  (X-Tenant-Id)  -> { items: InstanceSummary[] }
