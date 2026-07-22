@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, FolderOpen, Star, X } from "lucide-react";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
@@ -59,7 +59,8 @@ export function ClientProceduresTable({
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
-      <table className="w-full border-separate border-spacing-y-2 text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
             <th className="rounded-l-xl px-4 py-2.5 bg-muted">
@@ -106,7 +107,7 @@ export function ClientProceduresTable({
               </td>
               <td className="border-y px-4 py-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <OtStatusBadge
+                  <StatusBadge
                     label={formatOtProcedureStatus(row.status)}
                     tone={procedureStatusTone(row.status)}
                   />
@@ -228,6 +229,7 @@ export function ClientProceduresTable({
           ))}
         </tbody>
       </table>
+      </div>
       <OtTablePagination
         totalCount={totalCount}
         page={page}

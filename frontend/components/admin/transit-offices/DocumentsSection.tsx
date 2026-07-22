@@ -245,7 +245,7 @@ export function DocumentsSection() {
             role="alertdialog"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
-            className="relative w-full max-w-md rounded-2xl border bg-card p-6 shadow-xl"
+            className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-xl"
           >
             <h3 id="delete-tag-title" className="text-sm font-bold text-foreground">
               Eliminar etiqueta

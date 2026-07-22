@@ -710,7 +710,7 @@ export function TramiteWizard(props: Props) {
           )}
 
           <div
-            className="flex items-center justify-between mt-6 pt-4 border-t"
+            className="flex flex-wrap gap-2 items-center justify-between mt-6 pt-4 border-t"
           >
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}

@@ -108,7 +108,7 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
             onChange={(e) => setCompanyTenantId(e.target.value)}
             disabled={companies.length === 0}
             aria-label="Compañía con preasignación de placa activa"
-            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60"
+            className="w-full sm:w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60"
           >
             <option value="">
               {companies.length === 0

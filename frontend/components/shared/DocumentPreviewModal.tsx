@@ -63,13 +63,13 @@ export function DocumentPreviewModal({
       zClassName="z-[110]"
     >
       <div
-        className="min-h-[400px] flex flex-col"
+        className="min-h-[50vh] flex flex-col"
         data-testid="preview-modal-body"
       >
         {/* Estado: cargando */}
         {loading && (
           <div
-            className="flex-1 flex items-center justify-center min-h-[400px]"
+            className="flex-1 flex items-center justify-center min-h-[50vh]"
             role="status"
             aria-busy="true"
             aria-label="Cargando previsualización"
@@ -145,8 +145,7 @@ export function DocumentPreviewModal({
               <iframe
                 src={url}
                 title={title}
-                className="w-full flex-1 rounded-xl border border-[#DFE5ED] dark:border-white/10"
-                style={{ minHeight: 480 }}
+                className="w-full flex-1 min-h-[60vh] rounded-xl border border-[#DFE5ED] dark:border-white/10"
                 data-testid="preview-iframe"
               />
             )}
@@ -158,7 +157,7 @@ export function DocumentPreviewModal({
                 <img
                   src={url}
                   alt={title}
-                  className="max-w-full max-h-[520px] rounded-xl border border-[#DFE5ED] dark:border-white/10 object-contain"
+                  className="max-w-full max-h-[70vh] rounded-xl border border-[#DFE5ED] dark:border-white/10 object-contain"
                   data-testid="preview-image"
                 />
               </div>

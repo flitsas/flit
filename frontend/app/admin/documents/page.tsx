@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Layers, Plus } from "lucide-react";
+import { ArrowLeft, FilePlus, Layers } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
@@ -161,14 +162,7 @@ function DocumentsCatalog() {
           >
             <Layers className="h-4 w-4" /> Configurar por trámite
           </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-sm"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            <Plus className="h-4 w-4" /> Crear documento
-          </button>
+          <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
         </div>
       </div>
 
@@ -178,14 +172,7 @@ function DocumentsCatalog() {
           onRetry={() => void load()}
           emptyMessage="No hay tipos de documento en el catálogo."
           emptyCta={
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-            >
-              <Plus className="h-4 w-4" /> Crear documento
-            </button>
+            <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
           }
           errorMessage="No se pudo cargar el catálogo de documentos."
         >

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { History, Pencil, Plus, Trash2 } from "lucide-react";
+import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { cn } from "@/lib/utils";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -107,14 +108,7 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
           </button>
         </div>
         {subView === "rules" && !formOpen && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Nueva alerta
-          </button>
+          <CreateButton size="sm" label="Nueva alerta" icon={BellPlus} onClick={() => setCreating(true)} />
         )}
       </div>
 

@@ -28,7 +28,8 @@ export function ImprontaHistorialTable({
 }: ImprontaHistorialTableProps) {
   return (
     <div className="flex flex-1 flex-col">
-      <table className="w-full border-separate border-spacing-y-2 text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
             <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
@@ -74,6 +75,7 @@ export function ImprontaHistorialTable({
           ))}
         </tbody>
       </table>
+      </div>
 
       <Pagination
         page={page}

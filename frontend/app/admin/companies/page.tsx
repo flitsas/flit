@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Building2 } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
@@ -111,7 +112,7 @@ function CompaniesList() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+    <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -126,14 +127,7 @@ function CompaniesList() {
           title="Administración de compañías"
           subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
         />
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-sm"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          <Plus className="h-4 w-4" /> Crear compañía
-        </button>
+        <CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />
       </div>
 
       <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />

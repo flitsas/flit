@@ -287,7 +287,7 @@ function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
       </div>
 
       {/* Sin fotos por ahora (identidad/biométrica mock hasta acuerdo con proveedor). */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {['Selfie', 'Frente', 'Reverso'].map((slot) => (
           <div key={slot} className="text-center">
             <div

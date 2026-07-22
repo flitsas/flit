@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   createReportSchedule,
@@ -95,14 +96,7 @@ export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
           Recibe por correo un resumen de indicadores del periodo, en la hora de Bogotá que elijas.
         </p>
         {!formOpen && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Nuevo informe
-          </button>
+          <CreateButton size="sm" label="Nuevo informe" icon={CalendarPlus} onClick={() => setCreating(true)} />
         )}
       </div>
 

@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import type { ProcedureTypeSummary, PublicationStatus } from '@/lib/api/types/procedure-parametrization';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { EmptyState } from './states/EmptyState';
 import { LoadingState } from './states/LoadingState';
 import { ErrorState } from './states/ErrorState';
 
-const STATUS_STYLES: Record<PublicationStatus, { bg: string; color: string; label: string }> = {
-  draft: { bg: 'rgba(140,198,63,0.15)', color: '#8CC63F', label: 'Borrador' },
-  published: { bg: 'rgba(0,219,213,0.15)', color: '#00DBD5', label: 'Publicado' },
-  archived: { bg: 'rgba(223,229,237,0.6)', color: '#162744', label: 'Archivado' },
+const STATUS_STYLES: Record<PublicationStatus, { tone: StatusTone; label: string }> = {
+  draft: { tone: 'info', label: 'Borrador' },
+  published: { tone: 'success', label: 'Publicado' },
+  archived: { tone: 'neutral', label: 'Archivado' },
 };
 
 const FAMILY_LABELS: Record<string, string> = {
@@ -137,12 +138,7 @@ export function ProcedureTypeList({
               </div>
               <div className="col-span-3 font-mono font-bold opacity-80">{item.code}</div>
               <div className="col-span-2">
-                <span
-                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                  style={{ background: statusStyle.bg, color: statusStyle.color }}
-                >
-                  {statusStyle.label}
-                </span>
+                <StatusBadge label={statusStyle.label} tone={statusStyle.tone} />
               </div>
               <div className="col-span-4 flex items-center justify-end gap-2">
                 {isDraft && (

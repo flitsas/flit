@@ -14,12 +14,12 @@ import {
   type QuipuxColaItem,
   type QuipuxSubmissionStatus,
 } from "@/lib/api/admin-transit-office-tenants";
-import { OtStatusBadge, type OtStatusBadgeProps } from "./OtStatusBadge";
+import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { formatOtDate } from "./ot-utils";
 
 const PAGE_SIZE = 20;
 
-type Tone = NonNullable<OtStatusBadgeProps["tone"]>;
+type Tone = StatusTone;
 
 // Estado de la radicación → tono del badge y etiqueta legible. `pendiente` en neutro (aún en cola),
 // `registrado` en azul (en vuelo), `aprobado` en verde, `rechazado`/`fallido` en naranja (desenlace
@@ -144,7 +144,7 @@ export function QuipuxQueueList({ transitOfficeId }: QuipuxQueueListProps) {
                     <p className="truncate text-sm font-semibold text-foreground">
                       {item.procedureTypeName}
                     </p>
-                    <OtStatusBadge label={meta.label} tone={meta.tone} />
+                    <StatusBadge label={meta.label} tone={meta.tone} />
                     {item.attempts > 0 && (
                       <span className="text-[10px] font-medium opacity-60">
                         {item.attempts} intento{item.attempts === 1 ? "" : "s"}
@@ -247,7 +247,7 @@ export function QuipuxQueueList({ transitOfficeId }: QuipuxQueueListProps) {
           aria-modal="true"
           aria-label={confirmTarget.action === "retry" ? "Confirmar re-encolado" : "Confirmar cancelación"}
         >
-          <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-2xl">
             <h2 className="text-lg font-semibold text-foreground">
               {confirmTarget.action === "retry"
                 ? "¿Re-encolar esta radicación?"

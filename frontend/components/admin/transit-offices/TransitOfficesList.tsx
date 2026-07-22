@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Power, PowerOff, Plus, Search, Send, SlidersHorizontal } from "lucide-react";
+import { Power, PowerOff, Landmark, Search, Send, SlidersHorizontal } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { useToast } from "@/components/admin/Toast";
@@ -161,7 +161,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       if (!office.hasTenant) {
         return [
           {
-            icon: Plus,
+            icon: Landmark,
             label: `Dar de alta ${office.name}`,
             onClick: () => onCreateTenant?.(office),
             tone: "primary",

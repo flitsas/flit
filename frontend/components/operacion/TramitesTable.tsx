@@ -333,11 +333,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
 
   return (
     <section
-      className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
+      className="rounded-2xl border bg-white p-4 shrink-0 min-w-0 dark:bg-[#0B0F14]"
     >
       {heading}
 
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
         {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
         {!loading && !error && items.length > 0 && (
           <EstadoFunnel
@@ -574,7 +574,7 @@ function TableBody({
     );
   }
 
-  return (
+    return (
     <div className="overflow-x-auto">
       <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
         {/* Header */}
@@ -719,7 +719,7 @@ function TramiteRow({
             onOpen(item.id, item.tenantId);
           }
         }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         style={{ gridTemplateColumns: gridCols }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >

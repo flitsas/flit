@@ -507,7 +507,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Confirmar aprobación"
         >
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
             <h2 className="text-lg font-semibold text-foreground">
               ¿Aprobar este trámite?
             </h2>
@@ -555,7 +555,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Asignar placa"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
             {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede asignar una placa
@@ -640,7 +640,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Revocar preasignación"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Revocar preasignación</h2>
             <p className="mt-2 text-sm opacity-80">{revokeTarget.referenceNumber}</p>
             <textarea
@@ -666,7 +666,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Rechazar trámite"
         >
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
             <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
@@ -706,7 +706,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"
         >
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl border">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
             <h2 className="text-lg font-semibold text-foreground">
               Adjuntar Licencia de Tránsito (LT)
             </h2>

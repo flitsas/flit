@@ -83,3 +83,40 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     expect(read("components/admin/documents/tabs/RequirementsTab.tsx")).toMatch(/Agregar/);
   });
 });
+
+describe("HU #10844 — AC6: botones de crear con icono semántico (sin el '+' genérico) vía CreateButton", () => {
+  // Los 7 usos restantes del icono genérico Plus, migrados a un icono semántico por acción.
+  const migrated = [
+    "app/admin/documents/page.tsx",
+    "app/admin/companies/page.tsx",
+    "app/admin/transit-offices/page.tsx",
+    "components/admin/transit-offices/TransitOfficesList.tsx",
+    "components/atom/modules/_reportes/scheduling/SchedulesSection.tsx",
+    "components/atom/modules/_reportes/scheduling/AlertsSection.tsx",
+  ];
+
+  it("ninguno usa ya el icono genérico <Plus /> ni lo importa (sí variantes como FilePlus/BellPlus)", () => {
+    for (const f of migrated) {
+      const src = read(f);
+      expect(src).not.toMatch(/<Plus[\s/>]/);
+      expect(src).not.toMatch(/\bPlus\b(?=[^"']*from "lucide-react")/);
+    }
+  });
+
+  it("cada CTA de creación usa un icono semántico por acción", () => {
+    expect(read("app/admin/companies/page.tsx")).toMatch(/icon=\{Building2\}/);
+    expect(read("app/admin/documents/page.tsx")).toMatch(/icon=\{FilePlus\}/);
+    expect(read("app/admin/transit-offices/page.tsx")).toMatch(/icon=\{Landmark\}/);
+    expect(read("components/atom/modules/_reportes/scheduling/SchedulesSection.tsx")).toMatch(/icon=\{CalendarPlus\}/);
+    expect(read("components/atom/modules/_reportes/scheduling/AlertsSection.tsx")).toMatch(/icon=\{BellPlus\}/);
+    expect(read("components/admin/transit-offices/TransitOfficesList.tsx")).toMatch(/icon:\s*Landmark/);
+  });
+
+  it("los CTA de creación conservan su etiqueta de texto (nombre accesible intacto)", () => {
+    expect(read("app/admin/companies/page.tsx")).toMatch(/Crear compañía/);
+    expect(read("app/admin/documents/page.tsx")).toMatch(/Crear documento/);
+    expect(read("app/admin/transit-offices/page.tsx")).toMatch(/Dar de alta Organismo de Tránsito/);
+    expect(read("components/atom/modules/_reportes/scheduling/SchedulesSection.tsx")).toMatch(/Nuevo informe/);
+    expect(read("components/atom/modules/_reportes/scheduling/AlertsSection.tsx")).toMatch(/Nueva alerta/);
+  });
+});

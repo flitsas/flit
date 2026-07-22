@@ -31,7 +31,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
           className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">Identidad</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] opacity-50">Familia</p>
               <p className="text-xs font-semibold">{FAMILY_LABELS[identity.family]}</p>
