@@ -333,11 +333,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
 
   return (
     <section
-      className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
+      className="rounded-2xl border bg-white p-4 shrink-0 min-w-0 dark:bg-[#0B0F14]"
     >
       {heading}
 
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
         {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
         {!loading && !error && items.length > 0 && (
           <EstadoFunnel
@@ -574,8 +574,12 @@ function TableBody({
     );
   }
 
-  return (
-    <div className="overflow-x-auto">
+    // -mx-2/px-2/py-3: el scroll horizontal recorta (overflow-y pasa a auto) las
+    // sombras de las filas; el padding les da aire y el margen negativo mantiene la
+    // alineación con el resto de la sección. min-w-0 asegura que este contenedor sea
+    // el límite del scroll y la tabla no se desborde del contenedor padre.
+    return (
+    <div className="-mx-2 min-w-0 overflow-x-auto px-2 py-3">
       <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
         {/* Header */}
         <div

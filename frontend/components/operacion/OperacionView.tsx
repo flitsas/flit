@@ -24,7 +24,7 @@ export function OperacionView({ onStartTramite }: OperacionViewProps) {
   const [showConsolidado, setShowConsolidado] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <TramitesTable onStartTramite={onStartTramite} />
       {canDetailedReport && (
         <section className="rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]">
