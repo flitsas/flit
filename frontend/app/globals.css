@@ -110,6 +110,17 @@
   --badge-neutral-bg: rgba(223, 229, 237, 0.55);
   --badge-neutral-fg: #445569;
   --badge-neutral-border: rgba(223, 229, 237, 0.9);
+
+  /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
+     tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
+     gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
+     blanco que se aplanaba sobre paneles blancos; la fila lleva borde definido + sombra sutil
+     que la hace flotar aunque el contenedor sea blanco. */
+  --table-header-bg: #dfe5ed;
+  --table-header-fg: #162744;
+  --table-row-border: #dfe5ed;
+  --table-row-shadow: 0 1px 3px 0 rgba(22, 39, 68, 0.08), 0 1px 2px -1px rgba(22, 39, 68, 0.06);
+  --table-row-hover: #f4f8ff;
 }
 
 .dark {
@@ -162,6 +173,13 @@
   --badge-neutral-bg: rgba(255, 255, 255, 0.08);
   --badge-neutral-fg: #cbd5e1;
   --badge-neutral-border: rgba(255, 255, 255, 0.15);
+
+  /* Tabla card-list — variantes para modo oscuro (HU #10844). */
+  --table-header-bg: rgba(255, 255, 255, 0.06);
+  --table-header-fg: rgba(255, 255, 255, 0.72);
+  --table-row-border: rgba(255, 255, 255, 0.1);
+  --table-row-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --table-row-hover: rgba(255, 255, 255, 0.04);
 }
 
 @layer base {

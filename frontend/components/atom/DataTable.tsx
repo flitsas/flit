@@ -93,13 +93,17 @@ export function DataTable<T>({
             aria-label={ariaLabel}
           >
             <thead>
-              <tr className="text-[10px] font-semibold uppercase text-foreground">
+              <tr
+                className="text-[10px] font-semibold uppercase"
+                style={{ color: "var(--table-header-fg)" }}
+              >
                 {columns.map((col, i) => (
                   <th
                     key={col.key}
-                    className={`bg-muted px-4 py-2.5 ${ALIGN[col.align ?? "left"]} ${
+                    className={`px-4 py-2.5 ${ALIGN[col.align ?? "left"]} ${
                       i === 0 ? "rounded-l-xl" : ""
                     } ${i === last ? "rounded-r-xl" : ""} ${col.headerClassName ?? ""}`}
+                    style={{ background: "var(--table-header-bg)" }}
                   >
                     {col.header}
                   </th>
@@ -154,15 +158,21 @@ function FragmentRow<T>({
   return (
     <>
       <tr
-        className={`bg-card ${onRowClick ? "cursor-pointer" : ""}`}
+        className={`group bg-card ${onRowClick ? "cursor-pointer" : ""}`}
         onClick={onRowClick ? () => onRowClick(row) : undefined}
       >
         {columns.map((col, i) => (
           <td
             key={col.key}
-            className={`border-y px-4 py-3 ${ALIGN[col.align ?? "left"]} ${
+            className={`border-y px-4 py-3 transition-colors ${ALIGN[col.align ?? "left"]} ${
               i === 0 ? "rounded-l-xl border-l" : ""
-            } ${i === last ? "rounded-r-xl border-r" : ""} ${col.cellClassName ?? ""}`}
+            } ${i === last ? "rounded-r-xl border-r" : ""} ${
+              onRowClick ? "group-hover:bg-[color:var(--table-row-hover)]" : ""
+            } ${col.cellClassName ?? ""}`}
+            style={{
+              borderColor: "var(--table-row-border)",
+              boxShadow: "var(--table-row-shadow)",
+            }}
           >
             {col.render(row)}
           </td>
