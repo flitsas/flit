@@ -182,12 +182,9 @@ COMMENT ON COLUMN tramites.procedure_type_sources.config IS
 Esquema: { "simitMode": "INTERNAL" | "ONLINE", "optimizeDailyCache": bool }
 Nulo efectivo = defaults del provider.';
 
--- A16: audit_log (sin row_version en PK compuesta)
-DROP TRIGGER IF EXISTS tr_procedure_type_sources_audit
-    ON tramites.procedure_type_sources;
-CREATE TRIGGER tr_procedure_type_sources_audit
-    AFTER INSERT OR UPDATE OR DELETE ON tramites.procedure_type_sources
-    FOR EACH ROW EXECUTE FUNCTION public.trg_audit_log();
+-- Sin trigger trg_audit_log: PK compuesta (sin columna id) y
+-- public.trg_audit_log() asigna NEW.id → falla en INSERT/UPDATE/DELETE.
+-- Auditoría de fuentes queda cubierta por RBAC + logs de aplicación.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- B2: tramites.procedure_type_snapshots — snapshot por instancia (CFD-01/AC#5)
