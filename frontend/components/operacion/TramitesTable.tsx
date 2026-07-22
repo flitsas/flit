@@ -574,12 +574,8 @@ function TableBody({
     );
   }
 
-    // -mx-2/px-2/py-3: el scroll horizontal recorta (overflow-y pasa a auto) las
-    // sombras de las filas; el padding les da aire y el margen negativo mantiene la
-    // alineación con el resto de la sección. min-w-0 asegura que este contenedor sea
-    // el límite del scroll y la tabla no se desborde del contenedor padre.
     return (
-    <div className="-mx-2 min-w-0 overflow-x-auto px-2 py-3">
+    <div className="overflow-x-auto">
       <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
         {/* Header */}
         <div
@@ -723,7 +719,7 @@ function TramiteRow({
             onOpen(item.id, item.tenantId);
           }
         }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         style={{ gridTemplateColumns: gridCols }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
