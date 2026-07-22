@@ -66,6 +66,9 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
+        // FEATURE-08 — tipos de trámite habilitados por compañía.
+        services.AddScoped<Flit.Admin.Domain.Companies.ProcedureGrants.ICompanyProcedureGrantRepository,
+            Flit.Infrastructure.Persistence.Repositories.CompanyProcedureGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.

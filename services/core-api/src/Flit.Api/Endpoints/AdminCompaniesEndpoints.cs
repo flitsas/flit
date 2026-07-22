@@ -11,6 +11,7 @@ using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
+using Flit.Admin.Application.Companies.ProcedureGrants;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
@@ -154,6 +155,37 @@ public static class AdminCompaniesEndpoints
             .WithName("AdminCompanyGetTransitGrants")
             .WithSummary("Lista los OT habilitados del tenant")
             .WithDescription("Retorna los Organismos de Tránsito habilitados para la compañía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // FEATURE-08 — habilitación de tipos de trámite por compañía (grant model).
+        // POST /api/v1/admin/companies/{tenantId}/procedure-grants — habilita un tipo (idempotente).
+        group.MapPost("/{tenantId:guid}/procedure-grants", AddProcedureGrantAsync)
+            .WithName("AdminCompanyAddProcedureGrant")
+            .WithSummary("Habilita un tipo de trámite para la compañía")
+            .WithDescription("Concede a la compañía el uso de un tipo de trámite publicado (idempotente: "
+                + "201 tanto en alta nueva como si el grant ya existía). 422 si el id es inválido. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // DELETE /api/v1/admin/companies/{tenantId}/procedure-grants/{procedureTypeId} — deshabilita.
+        group.MapDelete("/{tenantId:guid}/procedure-grants/{procedureTypeId:guid}", RemoveProcedureGrantAsync)
+            .WithName("AdminCompanyRemoveProcedureGrant")
+            .WithSummary("Deshabilita un tipo de trámite de la compañía")
+            .WithDescription("Revoca el uso de un tipo de trámite. 204 si se eliminó, 404 si no existía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // GET /api/v1/admin/companies/{tenantId}/procedure-grants — tipos habilitados del tenant.
+        group.MapGet("/{tenantId:guid}/procedure-grants", GetProcedureGrantsAsync)
+            .WithName("AdminCompanyGetProcedureGrants")
+            .WithSummary("Lista los tipos de trámite habilitados de la compañía")
+            .WithDescription("Retorna los ids de tipos de trámite habilitados para la compañía. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -466,6 +498,66 @@ public static class AdminCompaniesEndpoints
         return Results.Ok(result);
     }
 
+    private static async Task<IResult> AddProcedureGrantAsync(
+        Guid tenantId,
+        AddCompanyProcedureGrantRequest request,
+        HttpContext httpContext,
+        [FromServices] AddCompanyProcedureGrantHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new AddCompanyProcedureGrantCommand
+        {
+            TenantId = tenantId,
+            ProcedureTypeId = request?.ProcedureTypeId ?? Guid.Empty,
+            CreatedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.Created(
+                $"/api/v1/admin/companies/{tenantId}/procedure-grants/{command.ProcedureTypeId}",
+                new ProcedureGrantCreatedResponse(command.ProcedureTypeId, result.Added))
+            : Results.Json(
+                new ProcedureGrantValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> RemoveProcedureGrantAsync(
+        Guid tenantId,
+        Guid procedureTypeId,
+        HttpContext httpContext,
+        [FromServices] RemoveCompanyProcedureGrantHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var removed = await handler
+            .HandleAsync(
+                new RemoveCompanyProcedureGrantCommand
+                {
+                    TenantId = tenantId,
+                    ProcedureTypeId = procedureTypeId,
+                    ChangedBy = ResolveUserId(httpContext.User),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return removed
+            ? Results.NoContent()
+            : Results.NotFound(new { error = $"No existe grant del tipo {procedureTypeId} para el tenant {tenantId}." });
+    }
+
+    private static async Task<IResult> GetProcedureGrantsAsync(
+        Guid tenantId,
+        [FromServices] GetCompanyProcedureGrantsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetCompanyProcedureGrantsQuery { TenantId = tenantId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
     private static async Task<IResult> GetAuditLogAsync(
         Guid tenantId,
         [FromServices] GetTenantAuditLogHandler handler,
@@ -582,6 +674,11 @@ public static class AdminCompaniesEndpoints
     private sealed record WhitelistValidationErrorResponse(IReadOnlyList<WhitelistValidationError> Errors);
 
     /// <summary>Cuerpo 201 del alta de grant: id del OT y si fue alta nueva (o idempotente).</summary>
+    private sealed record ProcedureGrantCreatedResponse(Guid ProcedureTypeId, bool Created);
+
+    private sealed record ProcedureGrantValidationErrorResponse(
+        IReadOnlyList<CompanyProcedureGrantValidationError> Errors);
+
     private sealed record TransitGrantCreatedResponse(Guid TransitOfficeId, bool Created);
 
     /// <summary>Cuerpo de error 422 de grant: <c>{ errors: [{ field, message, value }] }</c>.</summary>

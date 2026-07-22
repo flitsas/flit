@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.ProcedureGrants;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -24,16 +25,23 @@ internal static class PublicProcedureTypeEndpoints
 
         // FEATURE-08 / HU-BE-08 (CFD-12) — selector de operador (botón único). Requiere JWT
         // (RequireAuthorization → 401 sin token) y X-Tenant-Id (400 si falta). Retorna los tipos
-        // publicados con su version. Catálogo global: no se filtra por tenant (AC-04).
+        // publicados HABILITADOS para la compañía: se filtran por los grants del tenant
+        // (admin.company_procedure_type_grants). Sin grants ⇒ lista vacía (solo aparecen los habilitados).
         app.MapGet("/api/v1/procedure-types", async (
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             GetPublishedProcedureTypesHandler handler,
+            GetCompanyProcedureGrantsHandler grantsHandler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var items = await handler.HandleAsync(ct);
+            var published = await handler.HandleAsync(ct);
+            var grants = await grantsHandler.HandleAsync(
+                new GetCompanyProcedureGrantsQuery { TenantId = tenantId.Value }, ct);
+            var enabled = grants.ProcedureTypeIds.ToHashSet();
+
+            var items = published.Where(t => enabled.Contains(t.Id)).ToList();
             return Results.Ok(items);
         })
         .RequireAuthorization()

@@ -125,6 +125,10 @@ public static class DependencyInjection
         services.AddScoped<UpdateTransitOfficeQuipuxSettingsHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
+        // FEATURE-08 — grants de tipos de trámite por compañía.
+        services.AddScoped<Companies.ProcedureGrants.AddCompanyProcedureGrantHandler>();
+        services.AddScoped<Companies.ProcedureGrants.RemoveCompanyProcedureGrantHandler>();
+        services.AddScoped<Companies.ProcedureGrants.GetCompanyProcedureGrantsHandler>();
 
         // Refactor adminOT — alta/listado de tenants OT.
         // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.

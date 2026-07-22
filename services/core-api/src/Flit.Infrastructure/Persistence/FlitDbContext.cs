@@ -53,6 +53,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    // FEATURE-08 — tipos de trámite habilitados por compañía (grant model).
+    public DbSet<CompanyProcedureTypeGrant> CompanyProcedureTypeGrants => Set<CompanyProcedureTypeGrant>();
+
     // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
         Set<TenantTransitOfficeConsultationRestriction>();
