@@ -16,6 +16,7 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetProcedureDetailsHandler>();
         services.AddScoped<ExportExecutivePdfHandler>();
         services.AddScoped<GetMonthlyTrendHandler>();
+        services.AddScoped<GetDetailedProceduresHandler>(); // Feature #10813 HU #10815
 
         // Reportes2 HU-B — handlers de métricas (§4.2–§4.5 del contrato).
         services.AddScoped<GetOtMetricsHandler>();
