@@ -8,7 +8,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Search, UserRound } from 'lucide-react';
+import { AlertTriangle, Search, UserRound } from 'lucide-react';
+import { Modal } from '@/components/atom/Modal';
 import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type { WizardStepFormHandle } from './wizard-step-form';
@@ -25,6 +26,7 @@ import type {
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
+  BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
   RuesPersonLookupResult,
@@ -242,6 +244,45 @@ function isJuridical(actor: ProcedureActor): boolean {
   return actor.personType === 'juridical' || actor.tipoDocumento === 'NIT';
 }
 
+// ── HU #10886 — aviso de reenvío al editar el correo del sujeto de identidad ────────────────────
+// El backend (HU #10880) reenvía la validación de identidad y expira el enlace anterior cuando
+// cambia el correo del SUJETO de identidad de una parte que ya tenía una validación vigente: en
+// persona natural el sujeto es el propio actor; en jurídica es el representante legal (mismo
+// criterio que `IdentitySubjectResolver` del backend). Antes de persistir, el front detecta ese
+// cambio y pide confirmación explícita (AC1); sin confirmación no se envía el PUT.
+
+/** Correo del sujeto de identidad de un actor: RL en jurídica, el propio actor en natural. */
+function subjectEmail(actor: ProcedureActor): string {
+  return (isJuridical(actor) ? actor.representanteLegal?.email : actor.email)?.trim() ?? '';
+}
+
+/** Documento del sujeto de identidad de un actor: RL en jurídica, el propio actor en natural. */
+function subjectDocument(actor: ProcedureActor): { tipo?: string; numero?: string } {
+  return isJuridical(actor)
+    ? { tipo: actor.representanteLegal?.tipoDocumento, numero: actor.representanteLegal?.numeroDocumento }
+    : { tipo: actor.tipoDocumento, numero: actor.numeroDocumento };
+}
+
+/**
+ * Estados en los que una validación de identidad se considera "con envío vigente" a efectos del
+ * aviso: incluye `aprobado` porque el backend igualmente la expira y reenvía si el correo cambia
+ * (espejo de `ResendIdentityOnEmailChangeAsync`). `rechazado`/`expirado` quedan fuera: no hay nada
+ * vigente que invalidar.
+ */
+const ACTIVE_IDENTITY_STATUSES: readonly BiometricEstado[] = [
+  'pendiente_envio',
+  'enviado',
+  'en_proceso',
+  'aprobado',
+];
+
+/** Info mínima para el modal de confirmación: a quién afecta y a qué correo se reenviará. */
+interface EmailChangeConfirmInfo {
+  rol: ActorRol;
+  roleLabel: string;
+  newEmail: string;
+}
+
 /**
  * Formulario reutilizable de captura de actores. Dos presentaciones:
  *  - SPLIT (un solo comprador / `layout='split'`): 2 secciones — Identificación
@@ -348,6 +389,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // aterriza, completa el documento del actor si seguía vacío.
   useEffect(() => {
     if (!ownerSeed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el seed async con los actores ya montados (mismo patrón que el resto del repo)
     setActors((prev) => prev.map(withOwnerSeed));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerSeed]);
@@ -547,11 +589,87 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     runt[0]?.status,
   ]);
 
+  // ── HU #10886 (AC1) — aviso de reenvío al cambiar el correo del sujeto de identidad ────────────
+  // Modal de confirmación pendiente (null = cerrado) + resolver de la promesa que bloquea
+  // submitActors() hasta que el operador confirme/cancele.
+  const [emailChangeConfirm, setEmailChangeConfirm] = useState<EmailChangeConfirmInfo[] | null>(null);
+  const emailChangeResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const requestEmailChangeConfirm = (changes: EmailChangeConfirmInfo[]): Promise<boolean> =>
+    new Promise((resolve) => {
+      emailChangeResolverRef.current = resolve;
+      setEmailChangeConfirm(changes);
+    });
+
+  const resolveEmailChangeConfirm = (confirmed: boolean) => {
+    setEmailChangeConfirm(null);
+    emailChangeResolverRef.current?.(confirmed);
+    emailChangeResolverRef.current = null;
+  };
+
+  /**
+   * ¿La validación biométrica corresponde al rol dado? Espejo del filtro de `BiometricStep`: en
+   * matrícula (única parte) el backend puede dejar `partyRole` en null.
+   */
+  const matchesRol = (partyRole: string | null, rol: ActorRol) =>
+    modalidad === 'traspaso' ? partyRole === rol : partyRole === null || partyRole === 'comprador';
+
+  /**
+   * Detecta, ANTES de persistir, qué partes cambiaron el correo de su sujeto de identidad
+   * respecto al último valor guardado (`state.actors`) Y tienen una validación de identidad
+   * vigente (no rechazada/expirada) para el documento previamente persistido. Solo esas partes
+   * disparan el aviso de confirmación (AC1); correo igual → lista vacía, sin llamada de red.
+   */
+  const detectEmailChangesWithActiveValidation = async (
+    updated: ProcedureActor[],
+  ): Promise<EmailChangeConfirmInfo[]> => {
+    const persisted = state.actors ?? [];
+    const candidates = updated.flatMap((a) => {
+      const prev = persisted.find((p) => p.rol === a.rol);
+      if (!prev) return [];
+      const prevEmail = subjectEmail(prev).toLowerCase();
+      const newEmail = subjectEmail(a).toLowerCase();
+      if (!prevEmail || !newEmail || prevEmail === newEmail) return [];
+      return [{ rol: a.rol, newEmail: subjectEmail(a), prevDoc: subjectDocument(prev) }];
+    });
+    if (candidates.length === 0 || !instanceId) return [];
+
+    try {
+      const { validations } = await tramitesClient.getBiometricState(instanceId);
+      return candidates
+        .filter(({ rol, prevDoc }) =>
+          validations.some(
+            (v) =>
+              matchesRol(v.partyRole, rol) &&
+              ACTIVE_IDENTITY_STATUSES.includes(v.status) &&
+              !!prevDoc.tipo &&
+              !!prevDoc.numero &&
+              v.documentType === prevDoc.tipo &&
+              v.documentNumber === prevDoc.numero?.trim(),
+          ),
+        )
+        .map(({ rol, newEmail }) => ({ rol, roleLabel: ROL_LABEL[rol], newEmail }));
+    } catch {
+      // Best-effort: si no se puede consultar el estado biométrico, no se bloquea el guardado (el
+      // aviso previo es una ayuda informativa, no un gate duro — el backend reenvía igual si aplica).
+      return [];
+    }
+  };
+
   // Valida + guarda. Núcleo compartido por el submit propio y el save() del ref.
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
     if (!validateActors(actors, modalidad).valid) return false;
     const normalized = normalizeActors(actors);
+
+    // AC1 — correo cambiado con validación en curso: pide confirmación antes de persistir. Sin
+    // confirmación explícita, NO se envía el PUT.
+    const changes = await detectEmailChangesWithActiveValidation(normalized);
+    if (changes.length > 0) {
+      const confirmed = await requestEmailChangeConfirm(changes);
+      if (!confirmed) return false;
+    }
+
     const ok = await save(normalized);
     if (ok) {
       // Fecha de expedición (RNMC) — persistencia best-effort tras guardar los actores.
@@ -1003,6 +1121,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
     const sectionHeader = 'border-b px-4 py-3 flex items-center gap-2';
     return (
+      <>
       <form
         onSubmit={handleSubmit}
         aria-label="Captura de actores del trámite"
@@ -1216,11 +1335,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         {footer}
        </fieldset>
       </form>
+      {emailChangeConfirm && (
+        <EmailReenvioConfirmModal
+          changes={emailChangeConfirm}
+          onCancel={() => resolveEmailChangeConfirm(false)}
+          onConfirm={() => resolveEmailChangeConfirm(true)}
+        />
+      )}
+      </>
     );
   }
 
   // ── Layout MULTI (traspaso): un fieldset por actor ────────────────────────
   return (
+    <>
     <form
       onSubmit={handleSubmit}
       className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
@@ -1388,5 +1516,95 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       {footer}
      </fieldset>
     </form>
+    {emailChangeConfirm && (
+      <EmailReenvioConfirmModal
+        changes={emailChangeConfirm}
+        onCancel={() => resolveEmailChangeConfirm(false)}
+        onConfirm={() => resolveEmailChangeConfirm(true)}
+      />
+    )}
+    </>
   );
 });
+
+/**
+ * HU #10886 (AC1) — modal de confirmación del reenvío de validación de identidad al editar el
+ * correo del sujeto de identidad de una o más partes. Sin confirmación explícita el PUT de actores
+ * NO se envía. Foco atrapado dentro del panel (Tab/Shift+Tab cicla entre Cancelar/Continuar);
+ * Escape/backdrop del `Modal` compartido equivalen a "Cancelar".
+ */
+function EmailReenvioConfirmModal({
+  changes,
+  onCancel,
+  onConfirm,
+}: {
+  changes: EmailChangeConfirmInfo[];
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab' || !containerRef.current) return;
+    const focusables = containerRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      title="Reenviar validación de identidad"
+      icon={AlertTriangle}
+      iconBg="#B26A00"
+      size="sm"
+    >
+      <div ref={containerRef} onKeyDown={handleKeyDown} className="space-y-4">
+        <div className="space-y-2 text-xs" role="alert">
+          {changes.map((c) => (
+            <p key={c.rol}>
+              Este cambio reenviará el correo de validación de identidad de{' '}
+              <span className="font-semibold">{c.roleLabel}</span> a{' '}
+              <span className="font-semibold">{c.newEmail}</span> e invalidará el enlace anterior.
+            </p>
+          ))}
+          <p className="opacity-70">¿Continuar?</p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-xl text-xs font-semibold border border-[#DFE5ED] dark:border-white/10"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-white"
+            style={{ background: GRADIENT }}
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

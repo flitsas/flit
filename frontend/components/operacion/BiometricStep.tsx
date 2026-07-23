@@ -16,8 +16,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
+  BiometricEstado,
   BiometricParte,
   BiometricValidation,
   IdentityAuditEvent,
@@ -56,6 +58,22 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
 };
 
 const KYVERUM = 'kyverum';
+
+/**
+ * Etiqueta + tone del badge de estado de una validación biométrica (HU #10886 AC2). Mismo
+ * vocabulario/tones que el submódulo transversal "Validaciones de Identidad"
+ * (`components/atom/modules/Validaciones.tsx`), reutilizando el componente `StatusBadge` unificado
+ * (HU #10494/#10844) para que el chip sea idéntico en ambas vistas.
+ */
+const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> = {
+  enviado: { label: 'Enviado', tone: 'info' },
+  en_proceso: { label: 'En proceso', tone: 'warning' },
+  aprobado: { label: 'Aprobado', tone: 'success' },
+  rechazado: { label: 'Rechazado', tone: 'danger' },
+  expirado: { label: 'Expirado', tone: 'neutral' },
+  pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
+  error_envio: { label: 'Error de envío', tone: 'danger' },
+};
 
 /** Formatea una fecha ISO a un texto legible (es-CO). Devuelve el ISO crudo si no parsea. */
 function formatFecha(iso: string | null | undefined): string {
@@ -402,13 +420,17 @@ function KyverumPendingView({
     }
   };
 
+  // HU #10886 (AC2) — estado + expiración de la validación vigente, junto al enlace/QR/Copiar.
+  const meta = ESTADO_META[v.status] ?? ESTADO_META.en_proceso;
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: '#557EFF' }} aria-hidden />
         <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
           Esperando validación de {v.name}
         </p>
+        <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado de la validación: ${meta.label}`} />
       </div>
 
       {/* Un intento no pasó pero la validación SIGUE abierta (Kyverum permite reintentar): se informa el motivo
@@ -461,7 +483,14 @@ function KyverumPendingView({
               <Copy className="h-3 w-3" aria-hidden />
               {copied ? 'Copiado' : 'Copiar enlace'}
             </button>
+            {/* Feedback accesible del copiado: región viva separada del botón, para que lectores de
+                pantalla lo anuncien aunque el foco permanezca en el botón (WCAG 2.1 AA). */}
+            <span className="sr-only" role="status" aria-live="polite">
+              {copied ? 'Enlace copiado al portapapeles.' : ''}
+            </span>
           </div>
+          {/* AC2 — expiración del enlace vigente. */}
+          <p className="text-[11px] opacity-70">Vigente hasta {formatFecha(v.expiresAt)}.</p>
           {/* El enlace literal queda como referencia (también se envió al correo del cliente). */}
           <a
             href={captureUrl}
