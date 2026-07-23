@@ -71,7 +71,7 @@ public sealed class LoginIntegrationClientHandler(
         await clients.SaveAsync(client, ct);
 
         var scopes = ParseScopes(client.Scopes);
-        var issued = issuer.Issue(client.Id, tenant.Id, tenant.LegalName, scopes);
+        var issued = issuer.Issue(client.Id, tenant.Id, tenant.LegalName, tenant.TaxId, scopes);
         return (new LoginIntegrationClientResult(issued.Token, issued.ExpiresInSeconds, MustRotate: false), null);
     }
 

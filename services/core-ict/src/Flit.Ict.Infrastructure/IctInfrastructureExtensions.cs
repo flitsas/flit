@@ -1,3 +1,4 @@
+using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Ict.Infrastructure.Persistence;
@@ -26,6 +27,16 @@ public static class IctInfrastructureExtensions
 
         services.Configure<IctDatabaseOptions>(configuration.GetSection(IctDatabaseOptions.SectionName));
         services.Configure<IctJwtSettings>(configuration.GetSection(IctJwtSettings.SectionName));
+        services.Configure<IctIngestOptions>(configuration.GetSection(IctIngestOptions.SectionName));
+
+        services.Configure<Storage.FileManagerOptions>(configuration.GetSection(Storage.FileManagerOptions.SectionName));
+
+        // Tenant/compañía del token ICT (impone RLS; el cliente nunca elige tenant).
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentTenant, HttpCurrentTenant>();
+        services.AddScoped<IPreTramiteRepository, PreTramiteRepository>();
+        services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+        services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>();
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));

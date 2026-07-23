@@ -8,5 +8,10 @@ public sealed record IssuedIctToken(string Token, int ExpiresInSeconds);
 /// </summary>
 public interface IIctJwtTokenIssuer
 {
-    IssuedIctToken Issue(Guid integrationClientId, Guid tenantId, string tenantName, IReadOnlyList<string> scopes);
+    IssuedIctToken Issue(
+        Guid integrationClientId,
+        Guid tenantId,
+        string tenantName,
+        string companyNit,
+        IReadOnlyList<string> scopes);
 }

@@ -18,6 +18,12 @@ public sealed class IctDbContext(DbContextOptions<IctDbContext> options) : DbCon
 
     public DbSet<ExternalIntegrationActor> Actors => Set<ExternalIntegrationActor>();
 
+    public DbSet<TransactionAttachment> Attachments => Set<TransactionAttachment>();
+
+    public DbSet<AllowedDocument> AllowedDocuments => Set<AllowedDocument>();
+
+    public DbSet<ConfigurationDocument> ConfigurationDocuments => Set<ConfigurationDocument>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

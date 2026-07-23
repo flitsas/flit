@@ -25,6 +25,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapIctAuthEndpoints();
+app.MapIctRegisterEndpoints();
+app.MapIctPreTramiteEndpoints();
+app.MapIctAttachmentEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 app.MapGrpcService<IctStateCallbackService>();

@@ -16,7 +16,12 @@ public sealed class IctRsaJwtTokenIssuer(IctJwtKeyMaterial keyMaterial, IOptions
 {
     private readonly IctJwtSettings _settings = options.Value;
 
-    public IssuedIctToken Issue(Guid integrationClientId, Guid tenantId, string tenantName, IReadOnlyList<string> scopes)
+    public IssuedIctToken Issue(
+        Guid integrationClientId,
+        Guid tenantId,
+        string tenantName,
+        string companyNit,
+        IReadOnlyList<string> scopes)
     {
         var credentials = new SigningCredentials(keyMaterial.SigningKey, SecurityAlgorithms.RsaSha256);
         var expires = DateTime.UtcNow.AddHours(_settings.TokenLifetimeHours);
@@ -27,6 +32,7 @@ public sealed class IctRsaJwtTokenIssuer(IctJwtKeyMaterial keyMaterial, IOptions
             new(JwtRegisteredClaimNames.Sub, integrationClientId.ToString()),
             new("tenant_id", tenantId.ToString()),
             new("tenant_name", tenantName),
+            new("company_nit", companyNit),
         };
 
         // Un claim "scope" por cada scope (para RequireClaim) + array explícito "scopes".

@@ -36,7 +36,7 @@ public sealed class LoginIntegrationClientHandlerTests
         _hasher.Verify("secret", client.PasswordHash).Returns(true);
         _tenants.GetAsync(client.TenantId, Arg.Any<CancellationToken>())
             .Returns(new TenantInfo(client.TenantId, "T1", "Compañía SAS", "901698038", IsActive: true));
-        _issuer.Issue(client.Id, client.TenantId, "Compañía SAS", Arg.Any<IReadOnlyList<string>>())
+        _issuer.Issue(client.Id, client.TenantId, "Compañía SAS", "901698038", Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedIctToken("jwt-token", 7200));
 
         var (result, error) = await CreateHandler().HandleAsync(
