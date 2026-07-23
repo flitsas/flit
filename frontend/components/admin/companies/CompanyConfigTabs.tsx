@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,7 +16,32 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial" | "baul";
+type TabId =
+  | "matricula"
+  | "traspasos"
+  | "config"
+  | "documentos"
+  | "placas"
+  | "representantes"
+  | "historial"
+  | "baul";
+
+/**
+ * Navegación entre pestañas expuesta a los slots (HU #10904). Permite, p. ej., que la pestaña de
+ * representantes legales salte al Baúl de Firmas para vincular una firma. `baulVisible` indica si la
+ * pestaña del baúl está disponible (depende de `baulFirmasActivo`).
+ */
+export interface CompanyTabsNav {
+  goToBaul: () => void;
+  baulVisible: boolean;
+}
+
+const CompanyTabsNavContext = createContext<CompanyTabsNav | null>(null);
+
+/** Hook para que los slots naveguen entre pestañas. Fuera del proveedor devuelve no-ops seguros. */
+export function useCompanyTabsNav(): CompanyTabsNav {
+  return useContext(CompanyTabsNavContext) ?? { goToBaul: () => {}, baulVisible: false };
+}
 
 interface TabDef {
   id: TabId;
@@ -33,6 +58,8 @@ const TABS: TabDef[] = [
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
+  // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
+  { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -55,6 +82,8 @@ export interface CompanyConfigTabsProps {
   baulFirmasSlot?: ReactNode;
   /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
   platesSlot?: ReactNode;
+  /** HU #10904 — directorio de representantes legales de la compañía. */
+  legalRepresentativesSlot?: ReactNode;
 }
 
 export function CompanyConfigTabs({
@@ -68,6 +97,7 @@ export function CompanyConfigTabs({
   documentosSlot,
   baulFirmasSlot,
   platesSlot,
+  legalRepresentativesSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   // La pestaña de placas solo aparece si la preasignación está activa; la del Baúl solo si el toggle
@@ -131,6 +161,15 @@ export function CompanyConfigTabs({
   const currentTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
   const activeTabId = currentTab.id;
 
+  // Navegación entre pestañas expuesta a los slots (p. ej. representantes → Baúl de Firmas).
+  const tabsNav = useMemo<CompanyTabsNav>(
+    () => ({
+      goToBaul: () => setTab("baul"),
+      baulVisible: visibleTabs.some((t) => t.id === "baul"),
+    }),
+    [visibleTabs],
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
@@ -156,6 +195,7 @@ export function CompanyConfigTabs({
         })}
       </div>
 
+      <CompanyTabsNavContext.Provider value={tabsNav}>
       <div role="tabpanel" className="flex-1">
         {activeTabId === "matricula" && (
           <MatriculaInicialTab form={form} onChange={patch} fieldErrors={fieldErrors} />
@@ -175,9 +215,11 @@ export function CompanyConfigTabs({
         )}
         {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "placas" && platesSlot}
+        {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "historial" && auditSlot}
         {activeTabId === "baul" && baulFirmasSlot}
       </div>
+      </CompanyTabsNavContext.Provider>
 
       {errorBanner && (
         <div

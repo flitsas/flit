@@ -15,6 +15,7 @@ import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel
 import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { SignatureVaultTab } from "@/components/admin/companies/signature-vault/SignatureVaultTab";
+import { LegalRepresentativesTab } from "@/components/admin/companies/legal-representatives/LegalRepresentativesTab";
 import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
@@ -120,6 +121,7 @@ function CompanyDetail() {
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
                 baulFirmasSlot={<SignatureVaultTab tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
+                legalRepresentativesSlot={<LegalRepresentativesTab tenantId={tenantId} />}
               />
             </>
           )}
