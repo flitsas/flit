@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Flit.Ict.Infrastructure.Persistence;
@@ -13,6 +15,11 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// los pre-trámites validados. Mapea transaction_type -> ProcedureType code; si el tipo no está
 /// publicado en v2, queda con novedades. Si el gRPC no está disponible, deja el pre-trámite para el
 /// siguiente ciclo (no marca novedad).
+///
+/// GATING: solo materializa cuando el orquestador (Job 3) YA consultó todas las fuentes del master (no
+/// quedan source_query con is_data_queried=false). Así el borrador nunca se crea antes de validar las
+/// fuentes externas. Una novedad del orquestador deja process_status_id=4 (excluido por el filtro), de
+/// modo que aquí solo entran masters con negocio validado Y todas las fuentes consultadas y válidas.
 /// </summary>
 public sealed class SendToCoreApiJob(
     IServiceScopeFactory scopeFactory,
@@ -31,11 +38,16 @@ public sealed class SendToCoreApiJob(
         var mappings = await db.ProcedureTypeMappings
             .ToDictionaryAsync(m => m.ExternalTransactionType, m => m, ct);
 
+        // Solo masters cuyas fuentes externas ya fueron TODAS consultadas por el orquestador.
+        var readyIds = await ReadReadyMasterIdsAsync(db, ct);
+        if (readyIds.Count == 0)
+        {
+            return;
+        }
+
         var ready = await db.Masters
             .Include(m => m.Actors)
-            .Where(m => m.ExternalValidation == 2 && m.BusinessValidation == 2
-                        && m.ProcessStatusId == 2 && m.ProcedureInstanceId == null && m.DeletedAt == null)
-            .Take(50)
+            .Where(m => readyIds.Contains(m.Id))
             .ToListAsync(ct);
 
         foreach (var master in ready)
@@ -67,6 +79,53 @@ public sealed class SendToCoreApiJob(
             else
             {
                 await FlagNoveltyAsync(db, master, result.ErrorCode ?? "error al crear el borrador", ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ids de masters listos para materializar: negocio+externo validados, sin materializar, y con el
+    /// orquestador terminado (ninguna source_query pendiente). El NOT EXISTS es el gate que impide crear
+    /// el borrador antes de consultar las fuentes. Un master sin fuentes (ninguna source_query) también
+    /// pasa (no hay nada que consultar). RLS la saltan los jobs (superusuario dev / BYPASSRLS prod).
+    /// </summary>
+    private static async Task<List<Guid>> ReadReadyMasterIdsAsync(IctDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var wasClosed = connection.State != ConnectionState.Open;
+        if (wasClosed)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                SELECT m.id
+                FROM ict.external_integration_master m
+                WHERE m.external_validation = 2 AND m.business_validation = 2
+                  AND m.process_status_id = 2 AND m.procedure_instance_id IS NULL AND m.deleted_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ict.external_integration_source_query sq
+                      WHERE sq.eim_id = m.id AND sq.is_data_queried = false)
+                ORDER BY m.created_at
+                LIMIT 50
+                """;
+            var ids = new List<Guid>();
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                ids.Add(reader.GetGuid(0));
+            }
+
+            return ids;
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
             }
         }
     }
