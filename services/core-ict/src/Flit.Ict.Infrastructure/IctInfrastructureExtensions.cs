@@ -1,6 +1,8 @@
 using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Grpc.Contracts;
+using Flit.Ict.Infrastructure.ExternalClients;
+using Flit.Ict.Infrastructure.Jobs;
 using Flit.Ict.Infrastructure.Persistence;
 using Flit.Ict.Infrastructure.Persistence.Repositories;
 using Flit.Ict.Infrastructure.Security;
@@ -49,6 +51,17 @@ public static class IctInfrastructureExtensions
 
         // Bootstrap del schema ICT (DDL embebido idempotente al arrancar).
         services.AddHostedService<IctSchemaBootstrapper>();
+
+        // Pipeline de validación: clientes externos (stubs en dev) + 5 jobs programados.
+        services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
+        services.AddScoped<IConsultationClient, StubConsultationClient>();
+        services.AddScoped<IProcedureDraftClient, PendingProcedureDraftClient>();
+        services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHostedService<BusinessValidationJob>();
+        services.AddHostedService<ExternalValidationJob>();
+        services.AddHostedService<OrchestratorJob>();
+        services.AddHostedService<SendToCoreApiJob>();
+        services.AddHostedService<WebhookNotificationJob>();
 
         // Cliente gRPC hacia core-api (orquestación de creación del borrador). Usado en HU4.
         // TODO(ICT-GRPC-AUTH): adjuntar el service-token (client-credentials) vía interceptor/CallCredentials.
