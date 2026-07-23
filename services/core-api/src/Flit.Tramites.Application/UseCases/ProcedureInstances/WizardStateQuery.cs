@@ -91,7 +91,8 @@ public sealed class GetWizardStateHandler(
     IRnmcRequirementPolicy? rnmcPolicy = null,
     IConsultationRestrictionPolicy? restrictionPolicy = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
-    IProcedureTypeSnapshotRepository? snapshotRepo = null)
+    IProcedureTypeSnapshotRepository? snapshotRepo = null,
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -120,6 +121,11 @@ public sealed class GetWizardStateHandler(
         rnmcPolicy ?? NullRnmcRequirementPolicy.Instance;
     private readonly IConsultationRestrictionPolicy _restrictionPolicy =
         restrictionPolicy ?? NullConsultationRestrictionPolicy.Instance;
+
+    // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de
+    // gravámenes). Default permisivo (nunca exige) cuando no hay política cableada (tests).
+    private readonly IPrendaDocumentRequirementPolicy _prendaDocumentRequirementPolicy =
+        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -177,7 +183,14 @@ public sealed class GetWizardStateHandler(
         var rnmcRestrictions = await _restrictionPolicy.GetAsync(instance.TenantId, otId, ct);
         var rnmcEnabled = rnmcRestrictions.SettingOf(ConsultationRestrictionKinds.Rnmc) ?? rnmcRequired;
 
-        var state = ComputeState(instance, partesEfectivas, docsCompletos, comparendosBloquean) with
+        // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): si aplica
+        // y falta el documento de prenda, canSubmit debe reflejarlo con el mismo código de bloqueo
+        // que el gate de preparación (TramiteLifecycleService), para que el wizard y el submit
+        // coincidan. Solo aplica a traspaso (única modalidad con concepto de prenda/gravamen).
+        var prendaDocumentoOtRequerido = await PrendaDocumentoOtBlockeaAsync(instance, ct);
+
+        var state = ComputeState(
+            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido) with
         {
             IdentityValidationEnabled = identityRequired,
             RnmcEnabled = rnmcEnabled,
@@ -302,6 +315,29 @@ public sealed class GetWizardStateHandler(
     }
 
     /// <summary>
+    /// CF-06 (HU #10881) — ¿el override del OT exige el documento de prenda y el trámite (traspaso)
+    /// no lo tiene adjunto? Usa <c>instance.TransitOfficeId</c> (mismo OT que consume
+    /// <see cref="ChecklistMatrixCompleteness"/> para la matriz documental por OT, HU #10522) y la
+    /// fecha de creación de la instancia para el comportamiento SNAPSHOT (AC2). Solo aplica a
+    /// traspaso; matrícula inicial no tiene concepto de prenda/gravamen.
+    /// </summary>
+    private async Task<bool> PrendaDocumentoOtBlockeaAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
+        if (!esTraspaso)
+            return false;
+
+        var otRequiere = await _prendaDocumentRequirementPolicy
+            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .ConfigureAwait(false);
+        if (!otRequiere)
+            return false;
+
+        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
+        return PrendaGate.EvaluateOtOverride(otRequiere, docTipos) is not null;
+    }
+
+    /// <summary>
     /// Computa el estado server-driven del wizard a partir de una instancia con el grafo del wizard
     /// ya cargado (FieldValues, Actors, Attachments, Commercial, PreflightSnapshots, BiometricValidations,
     /// Signatures). Expuesto para reusar la MISMA lógica de gates por paso desde otros handlers (p.ej. el
@@ -317,11 +353,17 @@ public sealed class GetWizardStateHandler(
     /// compañía + OT). Default <c>true</c> ⇒ comportamiento previo; los llamadores que no resuelven la
     /// política (p. ej. el listado de trámites) lo dejan en el default sin regresión.
     /// </param>
+    /// <param name="prendaDocumentoOtRequerido">
+    /// CF-06 (HU #10881): <c>true</c> cuando el override del OT exige el documento de prenda y el
+    /// trámite no lo tiene adjunto. Default <c>false</c> ⇒ comportamiento previo (sin override, o
+    /// llamadores que no lo resuelven, p. ej. el listado de trámites), sin regresión.
+    /// </param>
     public static WizardStateDto ComputeState(
         ProcedureInstance instance,
         IReadOnlySet<string> identidadAprobadaPartes,
         bool? documentosCompletosOverride = null,
-        bool comparendosBloquean = true)
+        bool comparendosBloquean = true,
+        bool prendaDocumentoOtRequerido = false)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -330,7 +372,7 @@ public sealed class GetWizardStateHandler(
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean)
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido)
             : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
     }
 
@@ -458,7 +500,8 @@ public sealed class GetWizardStateHandler(
 
     private static WizardStateDto BuildTraspaso(
         ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
-        bool? docsCompletosOverride = null, bool comparendosBloquean = true)
+        bool? docsCompletosOverride = null, bool comparendosBloquean = true,
+        bool prendaDocumentoOtRequerido = false)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -555,7 +598,9 @@ public sealed class GetWizardStateHandler(
 
         // N 03 (RF03): mismo gate de preparación que matrícula — la identidad exigida es la del
         // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
-        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador);
+        // CF-06 (HU #10881): + override OT del documento de prenda (independiente del gravamen).
+        var blockers = BlockersFrom(
+            preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaDocumentoOtRequerido);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
 
         return new WizardStateDto(
@@ -608,9 +653,10 @@ public sealed class GetWizardStateHandler(
         PreflightSnapshot? preflight,
         bool documentosCompletos,
         bool riesgoAceptado,
-        bool identidadAprobada)
+        bool identidadAprobada,
+        bool prendaDocumentoOtRequerido = false)
     {
-        var blockers = new List<string>(4);
+        var blockers = new List<string>(5);
         if (preflight?.ProviderError == true)
             blockers.Add("preflight_provider_error");
         else if (preflight?.Overall == "red" && !riesgoAceptado)
@@ -619,6 +665,10 @@ public sealed class GetWizardStateHandler(
             blockers.Add(TramiteEstadoErrores.DocumentosIncompletos);
         if (!identidadAprobada)
             blockers.Add(TramiteEstadoErrores.IdentidadNoAprobada);
+        // CF-06 (HU #10881) — override del OT: exige el documento de prenda con independencia del
+        // semáforo de gravámenes/decisión.
+        if (prendaDocumentoOtRequerido)
+            blockers.Add(TramiteEstadoErrores.PrendaDocumentoRequerido);
         return blockers;
     }
 

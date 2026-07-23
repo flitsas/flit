@@ -34,7 +34,8 @@ public sealed class TramiteLifecycleService(
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
-    ISignatureVaultPolicy? vaultPolicy = null) : ITramiteLifecycleService
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
@@ -52,6 +53,11 @@ public sealed class TramiteLifecycleService(
     // R10 (HU #10597) — repo de prenda para el gate de traspaso. Null en tests que no lo ejercitan
     // (el gate se omite de forma segura); en producción lo inyecta el contenedor.
     private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
+
+    // CF-06 (HU #10881) — override OT del documento de prenda, independiente del semáforo de
+    // gravámenes. Default permisivo (nunca exige) cuando no hay política cableada (tests).
+    private readonly IPrendaDocumentRequirementPolicy _prendaDocumentRequirementPolicy =
+        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
@@ -372,15 +378,28 @@ public sealed class TramiteLifecycleService(
         ProcedureInstance instance,
         CancellationToken ct)
     {
-        if (_prendaRepo is null)
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
+        if (!esTraspaso)
             return (null, null);
 
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso || !HasGravamenWarn(instance))
+        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
+
+        // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): exige el
+        // documento de prenda. SNAPSHOT (AC2): solo overrides ya activos AL CREAR el trámite aplican.
+        var otRequiereDocumento = await _prendaDocumentRequirementPolicy
+            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .ConfigureAwait(false);
+        var otError = PrendaGate.EvaluateOtOverride(otRequiereDocumento, docTipos);
+        if (otError is not null)
+            return (otError,
+                "El organismo de tránsito exige el documento de prenda para este tipo de trámite.");
+
+        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda vigente), solo con
+        // el repo de prenda cableado.
+        if (_prendaRepo is null || !HasGravamenWarn(instance))
             return (null, null);
 
         var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
-        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
         return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
         {

@@ -99,6 +99,9 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
+        // SNAPSHOT: solo overrides activos antes de crear el trámite.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();
         // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
         services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
             configuration.GetSection(
