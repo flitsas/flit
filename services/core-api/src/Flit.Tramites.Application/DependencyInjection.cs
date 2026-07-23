@@ -159,6 +159,9 @@ public static class DependencyInjection
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
 
+        // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
+        // consultas externas, consumido por los 3 handlers de consulta de abajo.
+        services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();

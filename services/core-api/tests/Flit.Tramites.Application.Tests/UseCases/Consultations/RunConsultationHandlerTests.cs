@@ -14,11 +14,19 @@ public sealed class RunConsultationHandlerTests
     private readonly IProcedureInstanceRepository _instanceRepo = Substitute.For<IProcedureInstanceRepository>();
     private readonly ICatalogRepository _catalogRepo = Substitute.For<ICatalogRepository>();
     private readonly IConsultationProviderRegistry _registry = Substitute.For<IConsultationProviderRegistry>();
+    // HU #10878: dependencia nueva (cache-aside). Los repos internos de la caché quedan sin stub
+    // (NSubstitute auto-completa Task<T> con default => null): sin ExternalDataSource en el template
+    // de estos tests (Template() no lo setea), el handler nunca la toca — el resto de la suite queda
+    // exactamente igual (ver RunConsultationHandlerCacheTests para la cobertura del cache-aside).
+    private readonly IExternalQueryCacheRepository _cacheRepo = Substitute.For<IExternalQueryCacheRepository>();
+    private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
+    private readonly ExternalQueryCacheService _cacheService;
     private readonly RunConsultationHandler _sut;
 
     public RunConsultationHandlerTests()
     {
-        _sut = new RunConsultationHandler(_instanceRepo, _catalogRepo, _registry);
+        _cacheService = new ExternalQueryCacheService(_cacheRepo, _consentRepo, _catalogRepo);
+        _sut = new RunConsultationHandler(_instanceRepo, _catalogRepo, _registry, _cacheService);
     }
 
     private sealed class FakeProvider(string key, ConsultationResult result) : IConsultationProvider

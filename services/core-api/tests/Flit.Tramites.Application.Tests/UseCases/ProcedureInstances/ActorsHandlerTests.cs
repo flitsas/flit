@@ -20,6 +20,9 @@ public sealed class ActorsHandlerTests
     private readonly BiometricsProviderOptions _providerOptions = new() { Provider = BiometricProviders.Mock };
     private readonly IKyverumVerifyClient _kyverumClient = Substitute.For<IKyverumVerifyClient>();
     private readonly IniciarKyverumVerifyHandler _kyverumHandler;
+    // HU #10878: gate de consentimiento Habeas Data (ADR-0031). Sin stub, NSubstitute lo trata como
+    // "sin fila previa" — el upsert crea una nueva cuando el test manda AutorizaReutilizacionDatos=true.
+    private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
     private readonly PutActorsHandler _put;
     private readonly GetActorsHandler _get;
 
@@ -34,7 +37,7 @@ public sealed class ActorsHandlerTests
             new FakeWebhookSecretProtector(),
             Substitute.For<IIdentityValidationEventPublisher>(),
             Substitute.For<IIdentityValidationAuditLog>());
-        _put = new PutActorsHandler(_repo, _catalogRepo, _providerOptions, _kyverumHandler);
+        _put = new PutActorsHandler(_repo, _catalogRepo, _providerOptions, _kyverumHandler, _consentRepo);
         _get = new GetActorsHandler(_repo);
 
         _catalogRepo.GetProcedureEntityByCodeAsync("BUYER", Arg.Any<CancellationToken>())

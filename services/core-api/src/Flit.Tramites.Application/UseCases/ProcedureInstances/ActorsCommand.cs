@@ -19,6 +19,14 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <c>representanteLegal</c>: solo aplica a persona jurídica (NIT); es una persona natural
 /// capturada/consultada en el RUNT y se persiste embebida en <c>actor.metadata</c> (sin DDL).
 /// </summary>
+/// <remarks>
+/// HU #10878 (Feature #10862, CF-04, ADR-0031): <see cref="AutorizaReutilizacionDatos"/> es la
+/// captura ampliada (aditiva) del consentimiento Habeas Data para reúso cross-trámite de los datos
+/// de ESTA parte. Default <c>false</c> — no-op (no crea ni degrada ningún consentimiento previo);
+/// solo <c>true</c> hace upsert a <c>granted</c> en <see cref="Flit.Tramites.Domain.Entities.PersonDataConsent"/>
+/// (fail-safe, ver <see cref="PutActorsHandler"/>). La captura UI (checkbox) llega en la HU de
+/// frontend #10885 — este campo ya queda disponible en el contrato para quien la implemente.
+/// </remarks>
 public sealed record ActorInput(
     string Rol,
     string TipoDocumento,
@@ -30,7 +38,8 @@ public sealed record ActorInput(
     string? Direccion = null,
     string? PersonType = null,
     bool EsRepresentanteLegal = false,
-    ActorRepresentanteLegal? RepresentanteLegal = null);
+    ActorRepresentanteLegal? RepresentanteLegal = null,
+    bool AutorizaReutilizacionDatos = false);
 
 public sealed record ActorDto(
     string Rol,
@@ -82,7 +91,8 @@ public sealed class PutActorsHandler(
     IProcedureInstanceRepository repo,
     ICatalogRepository catalogRepo,
     BiometricsProviderOptions providerOptions,
-    IniciarKyverumVerifyHandler kyverumHandler)
+    IniciarKyverumVerifyHandler kyverumHandler,
+    IPersonDataConsentRepository consentRepo)
 {
     // Documentos válidos del contrato congelado (front consume el mismo set).
     private static readonly HashSet<string> ValidDocumentTypes =
@@ -248,12 +258,69 @@ public sealed class PutActorsHandler(
 
         await repo.SaveChangesAsync(ct);
 
+        // HU #10878 (ADR-0031): captura fail-safe del consentimiento Habeas Data de reúso cross-trámite.
+        // Solo actores que vinieron con AutorizaReutilizacionDatos=true generan/actualizan su fila; el
+        // resto (false o ausente) queda intacto — nunca degrada un `granted` previo por accidente.
+        await UpsertConsentsAsync(tenantId, inputs, instance.Id, ct);
+
         // HU #10880 (AC1/AC2): reenvío de la validación de identidad cuando cambia el correo del sujeto.
         // Corre DESPUÉS del SaveChanges de los actores para que el correo nuevo ya esté persistido cuando
         // IniciarKyverumVerifyHandler recargue la instancia.
         await ResendIdentityOnEmailChangeAsync(instance, tenantId, previousSubjectsByRol, newActorsByRol, ct);
 
         return (ToResponse(instance), null);
+    }
+
+    /// <summary>
+    /// HU #10878 (ADR-0031): upsert fail-safe del consentimiento de reúso cross-trámite para las
+    /// partes que vinieron con <see cref="ActorInput.AutorizaReutilizacionDatos"/> = true. La llave
+    /// (tenant, tipoDoc, documento) es la MISMA normalización (trim + mayúsculas) que usa
+    /// <see cref="ExternalQueryCacheService"/> para el gate de reúso, así ambas coinciden. Los
+    /// actores que NO autorizan (false o campo ausente) no tocan ninguna fila existente.
+    /// </summary>
+    private async Task UpsertConsentsAsync(
+        Guid tenantId, IReadOnlyList<ActorInput> inputs, Guid procedureInstanceId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var a in inputs)
+        {
+            if (!a.AutorizaReutilizacionDatos)
+                continue;
+
+            var docType = a.TipoDocumento.Trim().ToUpperInvariant();
+            var docNumber = a.NumeroDocumento.Trim();
+
+            var existing = await consentRepo.GetAsync(tenantId, docType, docNumber, ct);
+            if (existing is not null)
+            {
+                existing.Status = PersonDataConsentStatus.Granted;
+                existing.ConsentVersion = PersonDataConsentRules.ConsentVersion;
+                existing.ConsentSource = PersonDataConsentRules.ConsentSourceActorCapture;
+                existing.GrantedAt = now;
+                existing.RevokedAt = null;
+                existing.SourceProcedureInstanceId = procedureInstanceId;
+                existing.UpdatedAt = now;
+            }
+            else
+            {
+                await consentRepo.AddAsync(new PersonDataConsent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    DocumentType = docType,
+                    DocumentNumber = docNumber,
+                    Status = PersonDataConsentStatus.Granted,
+                    ConsentVersion = PersonDataConsentRules.ConsentVersion,
+                    ConsentSource = PersonDataConsentRules.ConsentSourceActorCapture,
+                    GrantedAt = now,
+                    SourceProcedureInstanceId = procedureInstanceId,
+                    CreatedAt = now,
+                }, ct);
+            }
+
+            await consentRepo.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>
