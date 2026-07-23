@@ -15,6 +15,7 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -109,8 +110,39 @@ builder.Services.AddCors(options => options.AddPolicy(
         .AllowCredentials()));
 
 // gRPC server para la orquestación desde core-ict (ICT): crear el borrador reutilizando los casos
-// de uso de trámites. Se sirve sobre el mismo puerto (Http1AndHttp2 / h2c) que la API REST.
+// de uso de trámites.
 builder.Services.AddGrpc();
+
+// El gRPC (h2c) necesita un endpoint dedicado SOLO HTTP/2: Kestrel no multiplexa HTTP/1.1 y HTTP/2
+// en el mismo puerto en texto plano (el REST lo rechazaría con HTTP_1_1_REQUIRED). Es opt-in por
+// Ict:GrpcPort — si no está configurado, el binding de la API REST queda EXACTAMENTE como estaba.
+// Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS/launchSettings, así que se
+// re-declara el endpoint REST desde esas mismas URLs (mismo puerto/host que hoy) y se añade el gRPC.
+var ictGrpcPort = builder.Configuration.GetValue<int?>("Ict:GrpcPort");
+if (ictGrpcPort is { } grpcPort)
+{
+    builder.WebHost.ConfigureKestrel((context, options) =>
+    {
+        var restUrls = (context.Configuration[WebHostDefaults.ServerUrlsKey] ?? "http://localhost:4003")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var raw in restUrls)
+        {
+            var uri = new Uri(raw
+                .Replace("://+", "://0.0.0.0", StringComparison.Ordinal)
+                .Replace("://*", "://0.0.0.0", StringComparison.Ordinal));
+            if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                options.ListenLocalhost(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+            else
+            {
+                options.ListenAnyIP(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+        }
+
+        options.ListenAnyIP(grpcPort, lo => lo.Protocols = HttpProtocols.Http2);
+    });
+}
 
 var app = builder.Build();
 

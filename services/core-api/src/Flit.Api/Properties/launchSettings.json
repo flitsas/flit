@@ -4,7 +4,8 @@
       "commandName": "Project",
       "applicationUrl": "http://localhost:4003",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Ict__GrpcPort": "4021"
       }
     }
   }
