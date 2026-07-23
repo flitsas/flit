@@ -58,6 +58,8 @@ public static class IctInfrastructureExtensions
 
         // Bootstrap del schema ICT (DDL embebido idempotente al arrancar).
         services.AddHostedService<IctSchemaBootstrapper>();
+        // Seed de desarrollo: cliente de integración de prueba para el login local (solo Development).
+        services.AddHostedService<DevIntegrationClientSeeder>();
 
         // Pipeline de validación: clientes externos (stubs en dev) + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
