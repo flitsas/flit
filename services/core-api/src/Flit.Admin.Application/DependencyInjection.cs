@@ -194,6 +194,13 @@ public static class DependencyInjection
         services.AddScoped<Companies.Deeds.GetDeed.GetDeedByIdHandler>();
         services.AddScoped<Companies.Deeds.DeleteDeed.DeleteDeedHandler>();
 
+        // HU #10903 (ADR-0033 §5.4) — endpoints de CONSUMO del wizard (tenant-scoped por el JWT del
+        // operador): escrituras activas y vigentes del tenant + lookup de representante por NIT con
+        // banderas de firma/identidad vigentes (recalculadas). Readers/lookups se registran en
+        // AddAdminInfrastructure; el reloj se ancla a TimeProvider.System (hoy en Colombia).
+        services.AddScoped<Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.FindByNit.FindRepresentativeByNitHandler>();
+
         // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
         // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
         // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).

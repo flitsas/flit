@@ -122,6 +122,43 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             cancellationToken);
     }
 
+    public Task<LegalRepresentativeItem?> FindActiveByCompanyNitAsync(
+        Guid tenantId,
+        string companyNit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(companyNit);
+        var nit = companyNit.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var row = await (
+                    from r in _context.CompanyLegalRepresentatives.AsNoTracking()
+                    join c in _context.RepresentedCompanies.AsNoTracking()
+                        on r.RepresentedCompanyId equals c.Id
+                    where r.TenantId == tenantId
+                        && r.IsActive
+                        && c.DocumentNumber == nit
+                    select r)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .ThenByDescending(r => r.Id)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (row is null)
+                {
+                    return null;
+                }
+
+                var items = await ProjectAsync([row], cancellationToken).ConfigureAwait(false);
+                return items.Count == 0 ? null : items[0];
+            },
+            cancellationToken);
+    }
+
     public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default) =>

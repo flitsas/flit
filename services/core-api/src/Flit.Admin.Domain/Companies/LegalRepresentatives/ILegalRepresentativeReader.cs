@@ -33,6 +33,17 @@ public interface ILegalRepresentativeReader
         string documentNumber,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Representante ACTIVO más reciente del tenant por NIT de la compañía (HU #10903). Base del
+    /// lookup por NIT del wizard cuando solo se conoce el NIT ingresado: si hay match, el FE precarga
+    /// comprador/vendedor y NO consulta RUNT/RUES. <c>null</c> si el tenant no tiene un representante
+    /// activo para ese NIT.
+    /// </summary>
+    Task<LegalRepresentativeItem?> FindActiveByCompanyNitAsync(
+        Guid tenantId,
+        string companyNit,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Compañías representadas del tenant (alimenta el multi-select de escrituras).</summary>
     Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(
         Guid tenantId,
