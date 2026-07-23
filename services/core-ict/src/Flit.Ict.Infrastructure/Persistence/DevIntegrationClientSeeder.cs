@@ -71,7 +71,7 @@ public sealed partial class DevIntegrationClientSeeder(
     private static async Task<Guid?> FirstTenantIdAsync(DbConnection connection, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT id FROM identity.tenants WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1";
+        cmd.CommandText = "SELECT id FROM identity.tenants ORDER BY created_at LIMIT 1";
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }

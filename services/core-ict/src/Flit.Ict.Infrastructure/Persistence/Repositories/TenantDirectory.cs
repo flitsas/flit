@@ -22,8 +22,9 @@ public sealed class TenantDirectory(IctDbContext db) : ITenantDirectory
         try
         {
             await using var command = connection.CreateCommand();
+            // identity.tenants usa auditoría ligera (sin deleted_at) en la BD de dev/actual.
             command.CommandText =
-                "SELECT id, code, legal_name, tax_id, is_active FROM identity.tenants WHERE id = @id AND deleted_at IS NULL";
+                "SELECT id, code, legal_name, tax_id, is_active FROM identity.tenants WHERE id = @id";
             var parameter = command.CreateParameter();
             parameter.ParameterName = "id";
             parameter.Value = tenantId;

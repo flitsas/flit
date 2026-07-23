@@ -49,11 +49,12 @@ services:
     container_name: flit-core-ict-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:4020
       ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
       # gRPC hacia core-api (orquestación de creación del borrador). core-api expone el server en HU4.
       CoreApiGrpc__Address: http://backend:8081
     ports:
-      - "4014:8081"
+      - "4020:4020"
     depends_on:
       postgres:
         condition: service_healthy

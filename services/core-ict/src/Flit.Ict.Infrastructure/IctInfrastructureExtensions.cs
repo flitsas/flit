@@ -60,6 +60,8 @@ public static class IctInfrastructureExtensions
         services.AddHostedService<IctSchemaBootstrapper>();
         // Seed de desarrollo: cliente de integración de prueba para el login local (solo Development).
         services.AddHostedService<DevIntegrationClientSeeder>();
+        // Datos mock para que el submódulo frontend (logs/alertas) muestre contenido (solo Development).
+        services.AddHostedService<DevMockDataSeeder>();
 
         // Pipeline de validación: clientes externos (stubs en dev) + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));

@@ -1,3 +1,4 @@
+using System.Data;
 using Flit.Ict.Infrastructure.Persistence.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,11 +38,32 @@ public sealed partial class IctSchemaBootstrapper(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
 
-        foreach (var script in EmbeddedDdl.AllScriptsInOrder())
+        var connection = db.Database.GetDbConnection();
+        var wasClosed = connection.State != ConnectionState.Open;
+        if (wasClosed)
         {
-            var sql = EmbeddedDdl.LoadUp(script);
-            await db.Database.ExecuteSqlRawAsync(sql, cancellationToken);
-            Log.ScriptApplied(logger, script);
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            foreach (var script in EmbeddedDdl.AllScriptsInOrder())
+            {
+                var sql = EmbeddedDdl.LoadUp(script);
+                // Ejecutar con un DbCommand crudo (NO ExecuteSqlRaw): el DDL contiene llaves de
+                // regex ({6,11}, {3}) que EF interpretaría como placeholders de formato ({0}, {1}).
+                await using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                Log.ScriptApplied(logger, script);
+            }
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
+            }
         }
     }
 
