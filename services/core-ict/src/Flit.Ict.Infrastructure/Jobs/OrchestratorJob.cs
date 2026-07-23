@@ -130,11 +130,15 @@ public sealed class OrchestratorJob(
             SET process_status_id = 4,
                 external_comments_validation = external_comments_validation || @msg
             WHERE id = @id;
+            SELECT ict.record_process_status(m.id, m.tenant_id, 4,
+                       'CON NOVEDADES EN FUENTES EXTERNAS:' || @msg,
+                       m.manager_user, m.manager_mail, m.company_manager_document)
+            FROM ict.external_integration_master m WHERE m.id = @id;
             INSERT INTO ict.external_integration_webhook_master
                 (id_transaction, tenant_id, manager_id_transaction, transaction_type, status_validation,
                  message_validation, ict_estado, target_url)
             SELECT m.id, m.tenant_id, m.manager_id_transaction, m.transaction_type, 4,
-                   'CON NOVEDADES EN FUENTES EXTERNAS: ' || @msg, 'con_novedades', m.url_web_hook
+                   'CON NOVEDADES EN FUENTES EXTERNAS:' || @msg, 'con_novedades', m.url_web_hook
             FROM ict.external_integration_master m WHERE m.id = @id
             """;
         AddParam(cmd, "id", masterId);
