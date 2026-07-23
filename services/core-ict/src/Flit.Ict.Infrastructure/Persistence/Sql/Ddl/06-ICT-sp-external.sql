@@ -25,11 +25,8 @@ BEGIN
         SET external_validation = 1, external_date_validation = now()
         WHERE id = rec.id_master;
 
-        INSERT INTO ict.external_integration_process_status
-            (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
-             status_process_mail_userregistered, status_process_company_registered)
-        VALUES (rec.id_master, rec.tenant_id, 2, 'IDENTIFICANDO FUENTES',
-             rec.manager_user, rec.manager_mail, rec.company_manager_document);
+        PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2, 'IDENTIFICANDO FUENTES',
+            rec.manager_user, rec.manager_mail, rec.company_manager_document);
 
         -- Consulta de vehículo por placa (traspasos) o por VIN (matrículas).
         IF rec.transaction_type IN (3, 4) AND rec.plate <> '' THEN
@@ -56,11 +53,8 @@ BEGIN
         SET external_validation = 2, external_date_validation = now()
         WHERE id = rec.id_master;
 
-        INSERT INTO ict.external_integration_process_status
-            (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
-             status_process_mail_userregistered, status_process_company_registered)
-        VALUES (rec.id_master, rec.tenant_id, 2, 'IDENTIFICADAS FUENTES',
-             rec.manager_user, rec.manager_mail, rec.company_manager_document);
+        PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2, 'IDENTIFICADAS FUENTES',
+            rec.manager_user, rec.manager_mail, rec.company_manager_document);
     END LOOP;
 END;
 $BODY$;

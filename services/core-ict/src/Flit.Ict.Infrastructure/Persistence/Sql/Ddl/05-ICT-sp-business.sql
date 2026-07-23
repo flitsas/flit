@@ -29,11 +29,8 @@ BEGIN
         SET process_status_id = 2, business_validation = 1, business_date_validation = now()
         WHERE id = rec.id_master;
 
-        INSERT INTO ict.external_integration_process_status
-            (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
-             status_process_mail_userregistered, status_process_company_registered)
-        VALUES (rec.id_master, rec.tenant_id, 2, 'VALIDANDO REGLAS DE NEGOCIO',
-             rec.manager_user, rec.manager_mail, rec.company_manager_document);
+        PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2, 'VALIDANDO REGLAS DE NEGOCIO',
+            rec.manager_user, rec.manager_mail, rec.company_manager_document);
 
         -- ===== Sección Vehículo =====
         IF rec.transaction_type IN (3, 4) THEN
@@ -223,11 +220,9 @@ BEGIN
             VALUES (rec.id_master, rec.tenant_id, rec.manager_id_transaction, rec.transaction_type, 2,
                  'REGLAS DE NEGOCIO VALIDADAS SATISFACTORIAMENTE', 'en_validacion_externa', rec.url_web_hook);
 
-            INSERT INTO ict.external_integration_process_status
-                (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
-                 status_process_mail_userregistered, status_process_company_registered)
-            VALUES (rec.id_master, rec.tenant_id, 2, 'REGLAS DE NEGOCIO VALIDADAS SATISFACTORIAMENTE',
-                 rec.manager_user, rec.manager_mail, rec.company_manager_document);
+            PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2,
+                'REGLAS DE NEGOCIO VALIDADAS SATISFACTORIAMENTE',
+                rec.manager_user, rec.manager_mail, rec.company_manager_document);
         ELSE
             UPDATE ict.external_integration_master
             SET business_validation = 2, business_date_validation = now(), process_status_id = 4
@@ -239,11 +234,9 @@ BEGIN
             VALUES (rec.id_master, rec.tenant_id, rec.manager_id_transaction, rec.transaction_type, 4,
                  'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: ' || resultcomments, 'con_novedades', rec.url_web_hook);
 
-            INSERT INTO ict.external_integration_process_status
-                (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
-                 status_process_mail_userregistered, status_process_company_registered)
-            VALUES (rec.id_master, rec.tenant_id, 4, 'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: ' || resultcomments,
-                 rec.manager_user, rec.manager_mail, rec.company_manager_document);
+            PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 4,
+                'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: ' || resultcomments,
+                rec.manager_user, rec.manager_mail, rec.company_manager_document);
         END IF;
     END LOOP;
 END;

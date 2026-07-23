@@ -57,9 +57,12 @@ public sealed class SendToCoreApiJob(
             if (result.ProcedureInstanceId is { } instanceId)
             {
                 master.ProcedureInstanceId = instanceId;
-                master.ProcessStatusId = 3; // PROCESADO
+                master.ProcessStatusId = 5; // BORRADOR (terminal en ICT tras materializar)
                 await db.SaveChangesAsync(ct);
-                await EnqueueWebhookAsync(db, master, 3, "borrador_creado", "PROCESADO", ct);
+                // Histórico v1: el trámite pasa por Procesado (3) y luego Borrador (5).
+                await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
+                await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);
+                await EnqueueWebhookAsync(db, master, 5, "borrador_creado", "BORRADOR CREADO", ct);
             }
             else
             {
@@ -73,8 +76,21 @@ public sealed class SendToCoreApiJob(
         master.ProcessStatusId = 4;
         master.ExternalCommentsValidation = (master.ExternalCommentsValidation + " " + message + ";").Trim();
         await db.SaveChangesAsync(ct);
+        await RecordStatusAsync(db, master, 4, "CON NOVEDADES: " + message, ct);
         await EnqueueWebhookAsync(db, master, 4, "con_novedades", "CON NOVEDADES: " + message, ct);
     }
+
+    /// <summary>Registra una transición de estado en el histórico v1 (colapsa sub-pasos por estado).</summary>
+    private static Task<int> RecordStatusAsync(
+        IctDbContext db,
+        ExternalIntegrationMaster master,
+        int code,
+        string message,
+        CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT ict.record_process_status({master.Id}, {master.TenantId}, {code}, {message},
+                {master.ManagerUser}, {master.ManagerMail}, {master.CompanyManagerDocument})
+            """, ct);
 
     private static Task<int> EnqueueWebhookAsync(
         IctDbContext db,

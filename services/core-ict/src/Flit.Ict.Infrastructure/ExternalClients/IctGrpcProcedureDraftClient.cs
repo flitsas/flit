@@ -3,6 +3,7 @@ using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Flit.Ict.Grpc.Contracts;
 using Grpc.Core;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Ict.Infrastructure.ExternalClients;
 
@@ -11,7 +12,9 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// los casos de uso de core-api. Mapea el pre-trámite (field_values vin/plate, actores, comercial).
 /// Ante indisponibilidad del canal devuelve grpc_unavailable para que el job reintente.
 /// </summary>
-public sealed class IctGrpcProcedureDraftClient(IctOrchestration.IctOrchestrationClient client)
+public sealed partial class IctGrpcProcedureDraftClient(
+    IctOrchestration.IctOrchestrationClient client,
+    ILogger<IctGrpcProcedureDraftClient> logger)
     : IProcedureDraftClient
 {
     public async Task<CreateDraftResult> CreateDraftAsync(
@@ -77,9 +80,17 @@ public sealed class IctGrpcProcedureDraftClient(IctOrchestration.IctOrchestratio
                 reply.Status,
                 null);
         }
-        catch (RpcException)
+        catch (RpcException ex)
         {
+            Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, master.Id, ex);
             return new CreateDraftResult(null, null, null, "grpc_unavailable");
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(Level = LogLevel.Warning,
+            Message = "ICT gRPC CreateDraftFromIct falló (status={GrpcStatus}, detail={Detail}) para master {MasterId}; se reintentará.")]
+        public static partial void GrpcFailed(ILogger logger, string grpcStatus, string detail, Guid masterId, Exception ex);
     }
 }
