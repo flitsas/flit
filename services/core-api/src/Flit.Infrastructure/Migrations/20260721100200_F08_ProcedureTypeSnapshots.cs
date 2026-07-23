@@ -1,4 +1,7 @@
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Sql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,6 +17,10 @@ namespace Flit.Infrastructure.Migrations
     /// DDL embebido: 37-F08-procedure-type-snapshots.sql. Down reversible.
     /// ⚠️ Designer.cs omitido — regenerar con <c>dotnet ef migrations add</c> antes del merge.
     /// </remarks>
+    // Atributos inline (patrón HU10774): sin ellos EF no descubre la migración y el CREATE TABLE
+    // nunca corre en DEV. Ver F08_ConformationProfile para el detalle.
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260721100200_F08_ProcedureTypeSnapshots")]
     public partial class F08_ProcedureTypeSnapshots : Migration
     {
         /// <inheritdoc />
