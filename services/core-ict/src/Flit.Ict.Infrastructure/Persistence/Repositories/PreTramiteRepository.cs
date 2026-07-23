@@ -19,6 +19,15 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
         {
             db.Masters.Add(master);
             await db.SaveChangesAsync(ct);
+
+            // Primer estado del histórico = Registrado (1), como en v1 (statusProcess[]).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO ict.external_integration_process_status
+                    (id_eimas, tenant_id, id_parprosta, message_validation, status_process_userregistered,
+                     status_process_mail_userregistered, status_process_company_registered, status_process_role_userregistered)
+                VALUES ({master.Id}, {tenantId}, 1, 'REGISTRADO', {master.ManagerUser}, {master.ManagerMail},
+                        {master.CompanyManagerDocument}, 'integration')
+                """, ct);
             return master.Id;
         }, ct);
     }

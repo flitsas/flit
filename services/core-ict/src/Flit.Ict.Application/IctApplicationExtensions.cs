@@ -18,7 +18,6 @@ public static class IctApplicationExtensions
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
-        services.AddScoped<StatusQueryHandler>();
         services.AddScoped<ReprocessHandler>();
         return services;
     }

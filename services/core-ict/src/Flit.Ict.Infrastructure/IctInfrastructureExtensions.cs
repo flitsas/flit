@@ -38,6 +38,7 @@ public static class IctInfrastructureExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentTenant, HttpCurrentTenant>();
         services.AddScoped<IPreTramiteRepository, PreTramiteRepository>();
+        services.AddScoped<IStatusProcessV1Query, StatusProcessV1Query>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>();
 

@@ -23,7 +23,7 @@ public sealed class WebhookNotificationJob(
 
     private sealed record PendingWebhook(
         Guid Id, string TargetUrl, string ManagerIdTransaction, string IctEstado,
-        string Message, int TransactionType, short Attempts);
+        string Message, int TransactionType, short Attempts, short StatusValidation);
 
     protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.WebhookPollSeconds);
 
@@ -75,13 +75,18 @@ public sealed class WebhookNotificationJob(
     {
         try
         {
+            // Forma de payload v1 (clientes existentes): no cambiar los nombres de campo.
+            var description = DescribeStatus(wh.StatusValidation);
             var payload = new
             {
+                transactionFlit = wh.ManagerIdTransaction,
                 managerIdTransaction = wh.ManagerIdTransaction,
-                ictEstado = wh.IctEstado,
-                transactionType = wh.TransactionType,
+                status = wh.StatusValidation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                statusDescription = description,
+                statusMessage = wh.Message,
+                statusObservation = string.Empty,
+                statusText = description,
                 message = wh.Message,
-                timestamp = DateTime.UtcNow,
             };
             using var response = await http.PostAsJsonAsync(new Uri(wh.TargetUrl), payload, ct);
             return response.IsSuccessStatusCode;
@@ -99,7 +104,8 @@ public sealed class WebhookNotificationJob(
     {
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            SELECT id, target_url, manager_id_transaction, ict_estado, message_validation, transaction_type, attempts
+            SELECT id, target_url, manager_id_transaction, ict_estado, message_validation, transaction_type,
+                   attempts, status_validation
             FROM ict.external_integration_webhook_master
             WHERE is_notified = false AND next_attempt_at <= now()
             ORDER BY created_at
@@ -111,7 +117,7 @@ public sealed class WebhookNotificationJob(
         {
             list.Add(new PendingWebhook(
                 reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                reader.GetString(4), reader.GetInt32(5), reader.GetInt16(6)));
+                reader.GetString(4), reader.GetInt32(5), reader.GetInt16(6), reader.GetInt16(7)));
         }
 
         return list;
@@ -162,4 +168,16 @@ public sealed class WebhookNotificationJob(
         p.Value = value;
         cmd.Parameters.Add(p);
     }
+
+    /// <summary>Descripción v1 por código de estado (para el payload del webhook).</summary>
+    private static string DescribeStatus(short code) => code switch
+    {
+        1 => "Registrado",
+        2 => "En Validacion",
+        3 => "Procesado",
+        4 => "Con Novedades",
+        5 => "Borrador",
+        6 => "Anulado",
+        _ => string.Empty,
+    };
 }
