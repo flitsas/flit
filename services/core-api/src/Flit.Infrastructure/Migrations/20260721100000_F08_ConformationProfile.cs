@@ -1,4 +1,7 @@
+using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Sql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,6 +18,11 @@ namespace Flit.Infrastructure.Migrations
     /// DDL embebido: 35-F08-conformation-profile.sql. Down reversible.
     /// ⚠️ Designer.cs omitido — regenerar con <c>dotnet ef migrations add</c> antes del merge.
     /// </remarks>
+    // Atributos inline (patrón HU10774): sin .Designer.cs, EF NO descubre la migración y el DDL
+    // nunca corre (columna gate_profile ausente en DEV → falla la radicación). Con [DbContext]+
+    // [Migration] EF la registra en __EFMigrationsHistory y aplica el ALTER automáticamente.
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260721100000_F08_ConformationProfile")]
     public partial class F08_ConformationProfile : Migration
     {
         /// <inheritdoc />
