@@ -50,6 +50,8 @@ import type {
   ValidateSoatResult,
   RuesPersonLookupInput,
   RuesPersonLookupResult,
+  ActiveDeed,
+  LegalRepresentativeLookupResult,
   Signature,
   SignaturesResponse,
   SimularFirmaResult,
@@ -433,6 +435,40 @@ export const tramitesClient = {
         body: JSON.stringify(input),
       },
     ),
+
+  // HU #10903/#10906 — escrituras activas y VIGENTES del tenant, para el collapse del primer paso del
+  // wizard. Tenant-scoped por el header X-Tenant-Id (el backend lo impone desde el JWT; un SuperAdmin
+  // acota con el tenant activo). GET devuelve { items }; se desempaqueta al arreglo (default seguro).
+  fetchActiveDeeds: async (tenantId?: string): Promise<ActiveDeed[]> => {
+    const res = await request<{ items: ActiveDeed[] }>(
+      '/api/v1/tramites/deeds/active',
+      { headers: tenantHeader(tenantId) },
+    );
+    return res?.items ?? [];
+  },
+
+  // HU #10903/#10906 — precarga comprador/vendedor por NIT desde el directorio del tenant. 200 con el
+  // match (compañía + representante + firma/identidad vigentes) o 404 → null (el FE cae a RUES/RUNT).
+  // Fetch crudo para distinguir el 404 "sin match" (esperado) de un error real; NO usa request()
+  // porque su mensaje de error no expone el status para diferenciar el 404.
+  lookupLegalRepresentativeByNit: async (
+    nit: string,
+    tenantId?: string,
+  ): Promise<LegalRepresentativeLookupResult | null> => {
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/legal-representatives/lookup?nit=${encodeURIComponent(nit)}`),
+      { headers: tenantHeader(tenantId) },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    const text = await res.text();
+    return text.trim()
+      ? (JSON.parse(text) as LegalRepresentativeLookupResult)
+      : null;
+  },
 
   // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
   // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
