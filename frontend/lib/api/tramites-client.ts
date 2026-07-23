@@ -529,13 +529,18 @@ export const tramitesClient = {
 
   // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea
   // ConsultationResult del backend al shape PreflightSnapshot del panel.
+  // HU #10885 (Feature #10862, CF-04): `forceRefresh` (AC2, botón "Actualizar") viaja como query
+  // param opcional — default false (cero regresión) — y salta el reúso de caché en el backend
+  // (ADR-0030). `fromCache`/`queriedAt` (AC1) viajan tal cual del DTO al PreflightSnapshot.
   runConsultation: async (
     instanceId: string,
     templateCode: string,
     tenantId?: string,
+    forceRefresh = false,
   ): Promise<PreflightSnapshot> => {
+    const query = forceRefresh ? '?forceRefresh=true' : '';
     const result = await request<ConsultationResult>(
-      `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}`,
+      `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}${query}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -551,6 +556,8 @@ export const tramitesClient = {
         message: c.message ?? '',
       })),
       createdAt: new Date().toISOString(),
+      fromCache: result.fromCache ?? false,
+      queriedAt: result.queriedAt ?? null,
     };
   },
 

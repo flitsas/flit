@@ -771,6 +771,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
   };
 
+  // ── AC1 (HU #10885, Feature #10862, CF-04) — badge de origen cuando el lookup de persona se
+  // sirvió desde la caché de reúso cross-trámite (ADR-0030) en vez de llamar al proveedor externo.
+  // El backend (RuntPersonLookupHandler/RuesPersonLookupHandler) señaliza el reúso con
+  // `mode: 'cache'`; NO expone fecha de la consulta origen para este lookup (gap de contrato
+  // documentado — a diferencia de `ConsultationResult.fromCache/queriedAt` del flujo de vehículo).
+  const originBadge = (mode: string, source: string) =>
+    mode === 'cache' && (
+      <span
+        className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+        style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
+      >
+        Dato reutilizado · {source}
+      </span>
+    );
+
   // ── Bloque de resultado de la consulta (RUNT o RUES, compartido entre layouts) ─────────────
   const runtResult = (index: number) => {
     const runtState: LookupState = runt[index] ?? { status: 'idle' };
@@ -790,9 +805,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             className="rounded-xl p-3 text-xs border"
             style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
           >
-            <p className="font-semibold mb-2 flex items-center gap-1.5" style={{ color: '#5a8a1f' }}>
+            <p className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap" style={{ color: '#5a8a1f' }}>
               <span aria-hidden="true">✓</span>
               Empresa encontrada en RUES
+              {originBadge(r.mode, 'RUES')}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="col-span-2">
@@ -839,9 +855,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             className="rounded-xl p-3 text-xs border"
             style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
           >
-            <p className="font-semibold mb-2 flex items-center gap-1.5" style={{ color: '#5a8a1f' }}>
+            <p className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap" style={{ color: '#5a8a1f' }}>
               <span aria-hidden="true">✓</span>
               Persona encontrada en RUNT
+              {originBadge(r.mode, 'RUNT')}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
               <div>
@@ -1111,6 +1128,44 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
   };
 
+  // ── Consentimiento Habeas Data — reúso de datos de persona (HU #10885, Feature #10862, CF-04) ──
+  // Checkbox de autorización explícita para que los datos de ESTA persona (comprador/vendedor,
+  // natural o jurídica) se reutilicen en futuros trámites del mismo tenant (ADR-0031). Se envía en
+  // el PUT de actores (`autorizaReutilizacionDatos`); el backend NUNCA reutiliza datos de persona
+  // sin este consentimiento explícito (fail-safe) — el vehículo no lo requiere (no es dato personal).
+  const habeasDataConsent = (index: number) => {
+    const actor = actors[index];
+    const checked = !!actor.autorizaReutilizacionDatos;
+    const id = `${actor.rol}-autoriza-reuso`;
+    return (
+      <div
+        className="md:col-span-2 flex items-start gap-2.5 rounded-xl border p-3"
+        style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.03)' }}
+      >
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={(e) =>
+            updateActor(index, {
+              autorizaReutilizacionDatos: e.target.checked || undefined,
+            })
+          }
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
+        />
+        <label htmlFor={id} className="text-[11px]">
+          <span className="block font-semibold" style={{ color: '#162744' }}>
+            Autorizo la reutilización de estos datos en futuros trámites (Habeas Data)
+          </span>
+          <span className="opacity-60">
+            Sin esta autorización, los datos de {ROL_LABEL[actor.rol].toLowerCase()} no se
+            precargarán automáticamente en otros trámites de esta compañía.
+          </span>
+        </label>
+      </div>
+    );
+  };
+
   // ── Layout SPLIT (un comprador): 2 secciones ──────────────────────────────
   if (isSplit && actors.length === 1) {
     const actor = actors[0];
@@ -1188,6 +1243,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {runtResult(0)}
             {rlSection(0)}
+            {habeasDataConsent(0)}
           </div>
         </section>
 
@@ -1446,6 +1502,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Representante legal (solo persona jurídica). */}
                 {rlSection(index)}
+
+                {/* Consentimiento Habeas Data — reúso de datos de persona (HU #10885). */}
+                {habeasDataConsent(index)}
 
                 {/* Nombre completo */}
                 <div className="md:col-span-2">

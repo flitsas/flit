@@ -236,6 +236,14 @@ export interface ProcedureActor {
   personType?: ActorPersonType;
   /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
   representanteLegal?: RepresentanteLegal;
+  /**
+   * HU #10885 (Feature #10862, CF-04, Habeas Data) — autorización explícita de esta persona para
+   * que sus datos se reutilicen en futuros trámites del mismo tenant (gate de
+   * `tramites.person_data_consents`, ver ADR-0031). Se envía en el PUT de actores; `true` → el
+   * backend registra el consentimiento (`AutorizaReutilizacionDatos`). Ausente/`false` ⇒ no se
+   * toca ningún consentimiento previo (fail-safe: nunca degrada un `granted` existente).
+   */
+  autorizaReutilizacionDatos?: boolean;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -261,7 +269,10 @@ export interface RuntPersonLookupResult {
   documentNumber: string;
   licenseStatus: string | null;    // driverStatus del conductor
   source: 'RUNT';
-  mode: 'real' | 'mock';
+  // HU #10885 (Feature #10862, CF-04) — 'cache' cuando el dato se reutilizó de una consulta previa
+  // vigente del mismo tenant (AC1, ADR-0030/ADR-0031), sin llamar al proveedor externo. El backend
+  // NO expone `queriedAt` para este lookup (gap de contrato documentado, HU #10885): solo el origen.
+  mode: 'real' | 'mock' | 'cache';
   // Campos enriquecidos (presentes cuando found=true)
   citizenStatus?: string | null;    // Estado del ciudadano (ACTIVA/INACTIVA)
   hasPendingFines?: boolean;        // true si tieneMultas == "SI"
@@ -301,7 +312,9 @@ export interface RuesPersonLookupResult {
   camaraComercio: string | null;
   documentType: 'NIT';
   source: 'RUES';
-  mode: 'real' | 'mock';
+  // HU #10885 — igual que RuntPersonLookupResult.mode: 'cache' = dato reutilizado (AC1), sin
+  // `queriedAt` disponible en el backend para este lookup.
+  mode: 'real' | 'mock' | 'cache';
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -346,6 +359,14 @@ export interface PreflightSnapshot {
   overall: PreflightOverall;
   checks: PreflightCheck[];
   createdAt: string;
+  /**
+   * HU #10885 (Feature #10862, CF-04, AC1) — presentes solo cuando el snapshot viene de
+   * `tramitesClient.runConsultation` (espejo de `ConsultationResult.fromCache/queriedAt`, ADR-0030).
+   * `runPreflight`/`getPreflight` (semáforo multi-proveedor) no los completan hoy: quedan
+   * `undefined` y el panel simplemente no muestra el badge de origen/fecha.
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Consulta real #10201: POST /instances/{id}/consultations/{templateCode} ──
@@ -370,6 +391,13 @@ export interface ConsultationResult {
   overall: PreflightOverall;
   checks: ConsultationCheck[];
   hydratedFields: ConsultationHydratedField[];
+  /**
+   * HU #10878/#10885 (ADR-0030, CF-04) — `true` cuando el resultado se sirvió desde
+   * `tramites.external_query_cache` (AC1), sin llamar al proveedor externo. `queriedAt` es la
+   * fecha de la consulta ORIGEN (la que generó el dato cacheado, no necesariamente "ahora").
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Documentos / checklist del trámite (Slice 3) ───────────────────
