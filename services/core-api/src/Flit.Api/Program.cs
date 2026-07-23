@@ -182,6 +182,7 @@ app.MapAdminMandateSignersEndpoints();
 app.MapAdminSignatureVaultEndpoints();
 app.MapAdminLegalRepresentativesEndpoints();
 app.MapAdminDeedsEndpoints();
+app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();

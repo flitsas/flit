@@ -114,6 +114,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
             RepresentativeIdentityLookup>();
 
+        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
+        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
+        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
+        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
+            AdminIdentityValidationRepository>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
+            AdminIdentitySubjectLinker>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
+            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 

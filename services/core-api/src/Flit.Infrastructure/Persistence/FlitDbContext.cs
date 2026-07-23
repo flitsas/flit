@@ -82,6 +82,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
 
+    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
+    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
+        Set<AdminIdentityValidationEntity>();
+
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
