@@ -1,0 +1,59 @@
+using Flit.Admin.Application.Companies.LegalRepresentatives;
+using Flit.Tramites.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace Flit.Infrastructure.Persistence.Repositories;
+
+/// <summary>
+/// Adaptador del puerto <see cref="IRepresentativeIdentityLookup"/> (HU #10900, ADR-0033): resuelve,
+/// para el resolutor de firma/identidad del módulo Admin, la validación biométrica APROBADA y
+/// VIGENTE de una persona por documento. Consulta directamente
+/// <c>tramites.procedure_instance_biometric_validations</c> con el MISMO criterio de vigencia que
+/// <c>ProcedureInstanceRepository.FindVigenteApprovedByDocumentAsync</c> (reuso HU #10350): filtro
+/// grueso por timestamp en SQL + corte fino por día calendario con
+/// <see cref="BiometricRules.EsAprobadaVigente"/> en memoria. Así Admin no depende de
+/// <c>Tramites.Domain</c> ni de <c>IProcedureInstanceRepository</c> (evita la ambigüedad de DI entre
+/// las dos implementaciones registradas). <c>DocumentNumber</c> es PII (Ley 1581): no loguear.
+/// </summary>
+internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLookup
+{
+    private readonly FlitDbContext _context;
+
+    public RepresentativeIdentityLookup(FlitDbContext context)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+    }
+
+    public async Task<Guid?> FindVigenteIdentityRefAsync(
+        Guid tenantId,
+        string tipoDocumento,
+        string documento,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tipoDocumento);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documento);
+
+        var tipoDoc = tipoDocumento.Trim();
+        var doc = documento.Trim();
+        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+
+        var candidates = await _context.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.Status == BiometricEstados.Aprobado
+                && v.DocumentType == tipoDoc
+                && v.DocumentNumber == doc
+                && ((v.ValidUntil != null && v.ValidUntil > now)
+                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null)
+            .OrderByDescending(v => v.ValidatedAt)
+            .Take(10)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var vigente = candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
+        return vigente?.Id;
+    }
+}

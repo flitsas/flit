@@ -2,6 +2,7 @@ using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -97,6 +98,16 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.SignatureVault.ISignatureVaultArtifactStorage,
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
+
+        // HU #10900 (ADR-0033) — directorio de representantes legales por compañía + escrituras.
+        // Readers/repos tenant-scoped (RLS) + adaptador del puerto de identidad biométrica que
+        // consume el resolutor de firma/identidad (registrado en AddAdminApplication).
+        services.AddScoped<ILegalRepresentativeReader, DbLegalRepresentativeReader>();
+        services.AddScoped<ILegalRepresentativeRepository, LegalRepresentativeRepository>();
+        services.AddScoped<IDeedReader, DbDeedReader>();
+        services.AddScoped<IDeedRepository, DeedRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
+            RepresentativeIdentityLookup>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();

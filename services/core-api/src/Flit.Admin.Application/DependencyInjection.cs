@@ -166,6 +166,12 @@ public static class DependencyInjection
         services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
         services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
 
+        // HU #10900 (ADR-0033) — resolutor de firma/identidad al guardar un representante legal
+        // (precedencia baúl > identidad). ISignatureVaultReader e IRepresentativeIdentityLookup se
+        // registran en AddAdminInfrastructure.
+        services.AddScoped<Companies.LegalRepresentatives.ILegalRepresentativeSignatureResolver,
+            Companies.LegalRepresentatives.LegalRepresentativeSignatureResolver>();
+
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
         services.AddScoped<ListImprontasHandler>();
