@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp, Users } from "lucide-react";
+import { Building2, FileClock, FileSignature, FileText, Hash, Save, ScrollText, Shuffle, Stamp, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -23,6 +23,7 @@ type TabId =
   | "documentos"
   | "placas"
   | "representantes"
+  | "escrituras"
   | "historial"
   | "baul";
 
@@ -60,6 +61,8 @@ const TABS: TabDef[] = [
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
+  // HU #10905 (Feature #10852) — escrituras (PDF) por compañía con vigencia y multi-selección.
+  { id: "escrituras", label: "Escrituras", icon: ScrollText, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -84,6 +87,8 @@ export interface CompanyConfigTabsProps {
   platesSlot?: ReactNode;
   /** HU #10904 — directorio de representantes legales de la compañía. */
   legalRepresentativesSlot?: ReactNode;
+  /** HU #10905 — escrituras (PDF) por compañía con vigencia y multi-selección. */
+  deedsSlot?: ReactNode;
 }
 
 export function CompanyConfigTabs({
@@ -98,6 +103,7 @@ export function CompanyConfigTabs({
   baulFirmasSlot,
   platesSlot,
   legalRepresentativesSlot,
+  deedsSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   // La pestaña de placas solo aparece si la preasignación está activa; la del Baúl solo si el toggle
@@ -216,6 +222,7 @@ export function CompanyConfigTabs({
         {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "placas" && platesSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
+        {activeTabId === "escrituras" && deedsSlot}
         {activeTabId === "historial" && auditSlot}
         {activeTabId === "baul" && baulFirmasSlot}
       </div>
