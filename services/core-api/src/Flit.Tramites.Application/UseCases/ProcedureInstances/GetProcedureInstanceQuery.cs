@@ -42,7 +42,10 @@ public sealed record ProcedureInstanceDetailDto(
     // Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al Status global
     // (que permanece en 'entregado'): null (sin ruta de placa) | 'preasignado' | 'asignado'. El frontend
     // lo usa para el badge secundario, el panel de SOAT y las acciones del OT. Opcional (default null).
-    string? PlateFlowStatus = null);
+    string? PlateFlowStatus = null,
+    // HU #10879 — paso actual persistido del wizard (Key del paso). Prima como punto de retoma al
+    // reabrir el borrador (AC2); null = el frontend cae al paso derivado de los gates. Opcional (default null).
+    string? CurrentStep = null);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -83,5 +86,6 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName))
                 .ToList(),
             e.DraftFinalizedAt,
-            e.PlateFlowStatus);
+            e.PlateFlowStatus,
+            e.CurrentStep);
 }

@@ -249,6 +249,30 @@ internal static class ProcedureInstanceEndpoints
                 : Results.Ok(result);
         }).WithName("SetProcedureInstancePriority");
 
+        // HU #10879 — persiste el avance del borrador por pasos (autosave del paso actual del wizard):
+        // guarda la Key del paso donde quedó el operador para retomar ahí al reabrir (AC2). Solo en
+        // borrador y una vez que la consulta del vehículo está completa (AC1).
+        group.MapPatch("/instances/{id:guid}/current-step", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            SetCurrentStepRequest request,
+            SetCurrentStepProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request.Step, ct);
+            return error switch
+            {
+                SetCurrentStepProcedureInstanceHandler.NotFound => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                SetCurrentStepProcedureInstanceHandler.NotDraft => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede persistir el avance de un trámite en estado borrador."),
+                SetCurrentStepProcedureInstanceHandler.VehiculoNoConsultado => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe completar la consulta del vehículo antes de avanzar de paso."),
+                SetCurrentStepProcedureInstanceHandler.StepInvalid => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El paso indicado no corresponde a un paso del wizard de este trámite."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("SetProcedureInstanceCurrentStep");
+
         group.MapPost("/instances/{id:guid}/submit", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -418,3 +442,6 @@ internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, stri
 
 /// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
 internal sealed record SetPriorityRequest(bool Prioritario);
+
+/// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
+internal sealed record SetCurrentStepRequest(string? Step);

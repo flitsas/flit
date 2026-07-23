@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
         services.AddScoped<SetPriorityProcedureInstanceHandler>();
+        // HU #10879 — persistir el avance del borrador por pasos (autosave del paso actual del wizard).
+        services.AddScoped<SetCurrentStepProcedureInstanceHandler>();
 
         // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
         // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher

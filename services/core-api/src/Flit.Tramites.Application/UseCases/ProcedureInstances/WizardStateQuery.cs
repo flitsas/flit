@@ -59,6 +59,13 @@ public sealed record WizardStateDto(
     /// fecha de expedición se oculta (no se pide un dato que no se va a usar).
     /// </summary>
     public bool RnmcEnabled { get; init; }
+
+    /// <summary>
+    /// HU #10879 — paso actual PERSISTIDO (autosave del avance del wizard). Si NO es null, PRIMA como
+    /// punto de retoma al reabrir el borrador (AC2): el frontend abre en esta <c>Key</c> de paso. Si es
+    /// null, el frontend cae al paso DERIVADO de los gates (comportamiento previo, sin regresión).
+    /// </summary>
+    public string? PersistedCurrentStep { get; init; }
 }
 
 /// <summary>
@@ -130,7 +137,11 @@ public sealed class GetWizardStateHandler(
         {
             var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
             if (snapshot is not null)
-                return (await BuildDynamicStateAsync(instance, snapshot, ct), null);
+            {
+                // HU #10879 — el paso persistido prima como punto de retoma también en el wizard dinámico.
+                var dynamicState = await BuildDynamicStateAsync(instance, snapshot, ct);
+                return (dynamicState with { PersistedCurrentStep = instance.CurrentStep }, null);
+            }
         }
 
         // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
@@ -170,6 +181,8 @@ public sealed class GetWizardStateHandler(
         {
             IdentityValidationEnabled = identityRequired,
             RnmcEnabled = rnmcEnabled,
+            // HU #10879 (AC2) — el paso persistido prima como punto de retoma al reabrir el borrador.
+            PersistedCurrentStep = instance.CurrentStep,
         };
         return (state, null);
     }
@@ -790,6 +803,38 @@ public sealed class GetWizardStateHandler(
 
     private static string StepLabel(IReadOnlyList<PasoTipologia> pasos, int index) =>
         pasos.FirstOrDefault(p => p.Paso == index)?.Titulo ?? $"Paso {index}";
+
+    /// <summary>
+    /// HU #10879 — ¿la consulta del vehículo está completa? (VIN o placa hidratados en field_values).
+    /// Es la MISMA señal que abre el paso 1 del wizard; se expone para el gate de "avanzar de paso"
+    /// (AC1: solo se puede persistir el avance una vez consultado el vehículo). La instancia debe traer
+    /// cargados sus <c>FieldValues</c>.
+    /// </summary>
+    public static bool VehiculoConsultado(ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        return HasVehiculoConsulta(FieldValues(instance));
+    }
+
+    /// <summary>
+    /// HU #10879 — <c>Key</c>s ORDENADAS de los pasos del wizard estático para la modalidad de la
+    /// instancia (matrícula 5 · traspaso 6). Fuente única para validar que el paso que se intenta
+    /// persistir es uno legítimo del wizard, reusando el MISMO mapeo índice→key que expone el contrato.
+    /// </summary>
+    public static IReadOnlyList<string> StepKeysFor(ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
+                        ?? TramiteModalidadEntrada.MatriculaInicial;
+        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
+        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
+
+        var keys = new List<string>(total);
+        for (var p = 1; p <= total; p++)
+            keys.Add(StepKey(traspaso, p));
+        return keys;
+    }
 
     private static string StepKey(bool traspaso, int index) =>
         traspaso
