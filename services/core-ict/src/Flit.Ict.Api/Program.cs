@@ -27,11 +27,16 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Logging de requests entrantes a /api/ict/** (redactado, en scope propio). Tras la auth para
+// resolver el tenant del token ICT.
+app.UseMiddleware<Flit.Ict.Api.Middleware.IctRequestLoggingMiddleware>();
+
 app.MapIctAuthEndpoints();
 app.MapIctRegisterEndpoints();
 app.MapIctPreTramiteEndpoints();
 app.MapIctAttachmentEndpoints();
 app.MapIctStatusEndpoints();
+app.MapIctObservabilityEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 app.MapGrpcService<IctStateCallbackService>();

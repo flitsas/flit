@@ -3,6 +3,7 @@ using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Ict.Infrastructure.ExternalClients;
 using Flit.Ict.Infrastructure.Jobs;
+using Flit.Ict.Infrastructure.Logging;
 using Flit.Ict.Infrastructure.Persistence;
 using Flit.Ict.Infrastructure.Persistence.Repositories;
 using Flit.Ict.Infrastructure.Security;
@@ -39,6 +40,12 @@ public static class IctInfrastructureExtensions
         services.AddScoped<IPreTramiteRepository, PreTramiteRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>();
+
+        // Observabilidad (HU5): logs en Postgres (escritura + consulta enmascarada) y métricas de alerta.
+        services.AddScoped<IntegrationLogRepository>();
+        services.AddScoped<IIntegrationLogWriter>(sp => sp.GetRequiredService<IntegrationLogRepository>());
+        services.AddScoped<IIntegrationLogQuery>(sp => sp.GetRequiredService<IntegrationLogRepository>());
+        services.AddScoped<IIctAlertMetricsQuery, IctAlertMetricsQuery>();
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));

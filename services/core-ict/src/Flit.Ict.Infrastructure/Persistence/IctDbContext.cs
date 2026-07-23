@@ -24,6 +24,8 @@ public sealed class IctDbContext(DbContextOptions<IctDbContext> options) : DbCon
 
     public DbSet<ConfigurationDocument> ConfigurationDocuments => Set<ConfigurationDocument>();
 
+    public DbSet<IntegrationLog> IntegrationLogs => Set<IntegrationLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

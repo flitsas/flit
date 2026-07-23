@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flit.Ict.Application\Flit.Ict.Application.csproj" />
     <ProjectReference Include="..\..\src\Flit.Ict.Domain\Flit.Ict.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Flit.Ict.Infrastructure\Flit.Ict.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
