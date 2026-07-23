@@ -68,11 +68,29 @@ function getDuplicateActiveProcedureId(err: unknown): string | null {
   return procedureInstanceId;
 }
 
+// AC1/AC2 (HU #10884) — mismo patrón: reimplementación local (duck-typing sobre `{status, problem}`)
+// de `getVehicleStateBlock` (lib/api/tramites-client.ts), porque el módulo real está mockeado abajo.
+function getVehicleStateBlock(
+  err: unknown,
+): { vehicleStatus: string; procedureType: string } | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, vehicleStatus, procedureType } = problem as {
+    title?: unknown;
+    vehicleStatus?: unknown;
+    procedureType?: unknown;
+  };
+  if (title !== 'VEHICLE_STATE_INVALID_FOR_TYPE' || typeof vehicleStatus !== 'string') return null;
+  return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
+}
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
   getDuplicateActiveProcedureId,
+  getVehicleStateBlock,
 }));
 
 // El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para
@@ -753,6 +771,114 @@ describe('TramiteWizard — bloqueo de duplicidad de trámite en curso (HU #1088
     expect(
       screen.queryByRole('button', { name: /Retomar el trámite existente/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () => {
+  it('AC1: 422 VEHICLE_STATE_INVALID_FOR_TYPE con vehicleStatus ACTIVO informa "ya matriculado" y bloquea el avance', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(
+        422,
+        'El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.',
+        {
+          title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+          status: 422,
+          detail: 'El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.',
+          vehicleStatus: 'ACTIVO',
+          procedureType: 'matricula_inicial',
+        },
+      ),
+    );
+    // El paso de consulta arranca 'incomplete' (sin preflight persistido aún): sin avance posible.
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: MATRICULA_WIZARD.steps.map((s) =>
+        s.key === 'consulta_vin' ? { ...s, status: 'incomplete' as const, reasons: [] } : s,
+      ),
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/ya se encuentra matriculado según el RUNT/i);
+    // Bloqueo no subsanable: sin botón de acción (a diferencia del aviso de duplicidad con "Retomar").
+    expect(screen.queryByRole('button', { name: /Retomar/ })).not.toBeInTheDocument();
+    // El error genérico NO se muestra a la vez que el aviso específico.
+    expect(screen.queryByText(/No se pudo consultar\./)).not.toBeInTheDocument();
+    // El preflight no se persistió (422): el paso sigue incompleto → "Continuar" deshabilitado.
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('AC1 (variante FLIT): vehicleStatus APROBADO_FLIT también informa "ya matriculado"', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(422, 'El vehículo ya se encuentra matriculado.', {
+        title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+        status: 422,
+        vehicleStatus: 'APROBADO_FLIT',
+        procedureType: 'matricula_inicial',
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/ya cuenta con una matrícula aprobada/i);
+  });
+
+  it('AC2: vehicleStatus DESCONOCIDO informa que no se pudo confirmar el estado (RUNT sin dato) y bloquea', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(
+        422,
+        'No fue posible confirmar el estado del vehículo en el RUNT. Vuelve a intentarlo.',
+        {
+          title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+          status: 422,
+          vehicleStatus: 'DESCONOCIDO',
+          procedureType: 'matricula_inicial',
+        },
+      ),
+    );
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: MATRICULA_WIZARD.steps.map((s) =>
+        s.key === 'consulta_vin' ? { ...s, status: 'incomplete' as const, reasons: [] } : s,
+      ),
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/no fue posible confirmar el estado del vehículo en el runt/i);
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('un 422 de otro código (no VEHICLE_STATE_INVALID_FOR_TYPE) muestra el error genérico', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(422, 'Dato inválido en el payload.', {
+        title: 'OTRO_CODIGO',
+        status: 422,
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    expect(await screen.findByText(/Dato inválido en el payload\./)).toBeInTheDocument();
   });
 });
 

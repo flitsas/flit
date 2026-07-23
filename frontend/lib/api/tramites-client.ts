@@ -237,6 +237,37 @@ export function getDuplicateActiveProcedureId(err: unknown): string | null {
   return procedureInstanceId;
 }
 
+/** Detalle del bloqueo registral CF-03 (HU #10877) extraído de las extensions RFC7807 del 422. */
+export interface VehicleStateBlockInfo {
+  vehicleStatus: string;
+  procedureType: string;
+}
+
+/**
+ * AC1/AC2 (HU #10884) — detecta el bloqueo DURO "vehículo ya matriculado" (422
+ * `VEHICLE_STATE_INVALID_FOR_TYPE`, CF-03 de HU #10877) que puede devolver el preflight de
+ * consulta de vehículo y extrae `vehicleStatus`/`procedureType` para diferenciar el mensaje:
+ * `ACTIVO` (el RUNT reporta el vehículo ya matriculado) y `APROBADO_FLIT` (ya existe una
+ * matrícula APROBADA en FLIT para el mismo VIN) ⇒ AC1 "ya matriculado"; `DESCONOCIDO` (el RUNT no
+ * respondió o no trajo el dato) ⇒ AC2 "RUNT sin dato". A diferencia del check informativo (HU
+ * #10538) o del "riesgo aceptado" sobre un fail clásico de `estado_vehiculo`, este bloqueo NO es
+ * subsanable: no se ofrece continuar.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que `getDuplicateActiveProcedureId`.
+ */
+export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, vehicleStatus, procedureType } = problem as {
+    title?: unknown;
+    vehicleStatus?: unknown;
+    procedureType?: unknown;
+  };
+  if (title !== 'VEHICLE_STATE_INVALID_FOR_TYPE' || typeof vehicleStatus !== 'string') return null;
+  return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {

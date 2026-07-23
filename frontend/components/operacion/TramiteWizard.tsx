@@ -39,7 +39,12 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
-import { tramitesClient, getDuplicateActiveProcedureId } from '@/lib/api/tramites-client';
+import {
+  tramitesClient,
+  getDuplicateActiveProcedureId,
+  getVehicleStateBlock,
+  type VehicleStateBlockInfo,
+} from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -992,6 +997,25 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   );
 }
 
+// AC1/AC2 (HU #10884) — copy UX por `vehicleStatus` del bloqueo 422 VEHICLE_STATE_INVALID_FOR_TYPE
+// (CF-03, HU #10877): distingue "ya matriculado" (ACTIVO en RUNT | APROBADO_FLIT en FLIT, AC1) de
+// "RUNT sin dato" (DESCONOCIDO, AC2). Fallback genérico ante un vehicleStatus futuro no mapeado.
+const VEHICLE_STATE_BLOCK_COPY: Record<string, string> = {
+  ACTIVO:
+    'El vehículo ya se encuentra matriculado según el RUNT. No es posible continuar con este trámite.',
+  APROBADO_FLIT:
+    'Este vehículo ya cuenta con una matrícula aprobada. No es posible continuar con este trámite.',
+  DESCONOCIDO:
+    'No fue posible confirmar el estado del vehículo en el RUNT. No es posible continuar hasta poder verificarlo; vuelve a intentarlo en unos minutos.',
+};
+
+function vehicleStateBlockMessage(vehicleStatus: string): string {
+  return (
+    VEHICLE_STATE_BLOCK_COPY[vehicleStatus] ??
+    'No fue posible validar el estado del vehículo. No es posible continuar con este trámite.'
+  );
+}
+
 /**
  * Paso de consulta inicial. Captura el identificador del vehículo
  * (VIN en matrícula; placa + propietario en traspaso) y, al consultar,
@@ -1034,6 +1058,11 @@ function ConsultaStep({
   // AC1 (HU #10882) — id del trámite existente cuando el preflight bloquea por duplicidad (409
   // DUPLICATE_ACTIVE_PROCEDURE, HU #10876). Presente ⇒ se ofrece "Retomar" (AC2) en vez del error genérico.
   const [duplicateInstanceId, setDuplicateInstanceId] = useState<string | null>(null);
+  // AC1/AC2 (HU #10884) — detalle del bloqueo DURO "vehículo ya matriculado" (422
+  // VEHICLE_STATE_INVALID_FOR_TYPE, CF-03 de HU #10877). Presente ⇒ banner de bloqueo no
+  // subsanable (sin acción de continuar): el preflight no se persiste, así que el paso nunca
+  // queda 'complete' y el avance del wizard permanece bloqueado (mismo mecanismo que AC1/#10882).
+  const [vehicleStateBlock, setVehicleStateBlock] = useState<VehicleStateBlockInfo | null>(null);
   // field_values frescos de la instancia: rehidratan inputs y alimentan la
   // tarjeta "Datos del vehículo · RUNT" tras la consulta.
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -1165,6 +1194,7 @@ function ConsultaStep({
     }
     setError(null);
     setDuplicateInstanceId(null);
+    setVehicleStateBlock(null);
     setPersisting(true);
     try {
       // UNA sola consulta a Verifik: 1) persistir identificador → 2) preflight,
@@ -1182,7 +1212,15 @@ function ConsultaStep({
       if (duplicateId) {
         setDuplicateInstanceId(duplicateId);
       } else {
-        setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+        // AC1/AC2 (HU #10884) — bloqueo DURO "vehículo ya matriculado" (422
+        // VEHICLE_STATE_INVALID_FOR_TYPE, CF-03 de HU #10877): banner específico según vehicleStatus,
+        // en vez del error genérico.
+        const stateBlock = getVehicleStateBlock(err);
+        if (stateBlock) {
+          setVehicleStateBlock(stateBlock);
+        } else {
+          setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+        }
       }
     } finally {
       setPersisting(false);
@@ -1441,6 +1479,24 @@ function ConsultaStep({
           >
             Retomar
           </button>
+        </div>
+      )}
+
+      {/* AC1/AC2 (HU #10884) — bloqueo DURO "vehículo ya matriculado": el RUNT reporta el vehículo
+          ACTIVO (AC1), ya hay una matrícula APROBADA en FLIT para el mismo VIN (AC1), o el RUNT no
+          respondió el estado (AC2, "RUNT sin dato"). 422 VEHICLE_STATE_INVALID_FOR_TYPE del preflight
+          (CF-03, HU #10877). Sin acción de continuar: no es subsanable (mismo patrón visual que el
+          aviso de duplicidad de HU #10882, sin el botón "Retomar"). */}
+      {vehicleStateBlock && (
+        <div
+          className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            {vehicleStateBlockMessage(vehicleStateBlock.vehicleStatus)}
+          </span>
         </div>
       )}
 
