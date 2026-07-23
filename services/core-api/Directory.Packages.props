@@ -92,6 +92,9 @@
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
 
+    <!-- gRPC server para la orquestación de creación de borrador desde core-ict (ICT). -->
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
+
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->
     <PackageVersion Include="AWSSDK.S3" Version="3.7.410" />

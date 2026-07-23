@@ -4,6 +4,9 @@ using Flit.Ict.Api.Grpc;
 using Flit.Ict.Application;
 using Flit.Ict.Infrastructure;
 
+// Permite gRPC sobre HTTP/2 en claro (h2c) hacia core-api en la red interna (sin TLS).
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddIctInfrastructure(builder.Configuration);
@@ -28,6 +31,7 @@ app.MapIctAuthEndpoints();
 app.MapIctRegisterEndpoints();
 app.MapIctPreTramiteEndpoints();
 app.MapIctAttachmentEndpoints();
+app.MapIctStatusEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 app.MapGrpcService<IctStateCallbackService>();

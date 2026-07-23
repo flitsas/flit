@@ -1,23 +1,38 @@
 using Flit.Ict.Grpc.Contracts;
+using Flit.Ict.Infrastructure.Persistence;
 using Grpc.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Ict.Api.Grpc;
 
 /// <summary>
 /// Servidor gRPC del callback de estados: core-api hace push cuando cambia el estado de un trámite
-/// con origin='ict'. En HU4 se resuelve el master por external_ref y se encola el webhook al gestor.
+/// con origin='ict'. Resuelve el pre-trámite por external_ref y encola un webhook con el vocabulario
+/// v2 para que el job de notificación lo entregue al gestor.
 /// </summary>
-public sealed partial class IctStateCallbackService(ILogger<IctStateCallbackService> logger)
+public sealed partial class IctStateCallbackService(IctDbContext db, ILogger<IctStateCallbackService> logger)
     : IctStateCallback.IctStateCallbackBase
 {
-    public override Task<Ack> NotifyProcedureStateChanged(StateChangeNotification request, ServerCallContext context)
+    public override async Task<Ack> NotifyProcedureStateChanged(StateChangeNotification request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         Log.StateChange(logger, request.ExternalRef, request.FromStatus, request.ToStatus);
 
-        // TODO(ICT-HU4): resolver el master por external_ref, proyectar el estado v2 y encolar el
-        // webhook al gestor (ict.external_integration_webhook_master).
-        return Task.FromResult(new Ack { Received = true });
+        if (Guid.TryParse(request.ExternalRef, out var masterId) && Guid.TryParse(request.TenantId, out var tenantId))
+        {
+            var reason = string.IsNullOrWhiteSpace(request.Reason) ? request.ToStatus : request.Reason;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO ict.external_integration_webhook_master
+                    (id_transaction, tenant_id, manager_id_transaction, transaction_type, status_validation,
+                     message_validation, ict_estado, target_url)
+                SELECT m.id, m.tenant_id, m.manager_id_transaction, m.transaction_type, 3,
+                       {reason}, {request.ToStatus}, m.url_web_hook
+                FROM ict.external_integration_master m
+                WHERE m.id = {masterId} AND m.tenant_id = {tenantId}
+                """, context.CancellationToken);
+        }
+
+        return new Ack { Received = true };
     }
 
     private static partial class Log

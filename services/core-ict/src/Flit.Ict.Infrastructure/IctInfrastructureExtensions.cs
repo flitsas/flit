@@ -55,7 +55,6 @@ public static class IctInfrastructureExtensions
         // Pipeline de validación: clientes externos (stubs en dev) + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
         services.AddScoped<IConsultationClient, StubConsultationClient>();
-        services.AddScoped<IProcedureDraftClient, PendingProcedureDraftClient>();
         services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddHostedService<BusinessValidationJob>();
         services.AddHostedService<ExternalValidationJob>();
@@ -63,13 +62,19 @@ public static class IctInfrastructureExtensions
         services.AddHostedService<SendToCoreApiJob>();
         services.AddHostedService<WebhookNotificationJob>();
 
-        // Cliente gRPC hacia core-api (orquestación de creación del borrador). Usado en HU4.
+        // Cliente gRPC hacia core-api (orquestación de creación del borrador).
         // TODO(ICT-GRPC-AUTH): adjuntar el service-token (client-credentials) vía interceptor/CallCredentials.
         var grpcAddress = configuration["CoreApiGrpc:Address"];
         if (!string.IsNullOrWhiteSpace(grpcAddress))
         {
             services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
                 options.Address = new Uri(grpcAddress));
+            services.AddScoped<IProcedureDraftClient, IctGrpcProcedureDraftClient>();
+        }
+        else
+        {
+            // Sin canal gRPC configurado: stub que deja el pre-trámite para el siguiente ciclo.
+            services.AddScoped<IProcedureDraftClient, PendingProcedureDraftClient>();
         }
 
         return services;

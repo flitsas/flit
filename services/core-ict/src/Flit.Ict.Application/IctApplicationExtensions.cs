@@ -2,6 +2,7 @@ using Flit.Ict.Application.Attachments;
 using Flit.Ict.Application.Auth.Login;
 using Flit.Ict.Application.Edit;
 using Flit.Ict.Application.Register;
+using Flit.Ict.Application.Status;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Ict.Application;
@@ -17,6 +18,8 @@ public static class IctApplicationExtensions
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
+        services.AddScoped<StatusQueryHandler>();
+        services.AddScoped<ReprocessHandler>();
         return services;
     }
 }

@@ -34,6 +34,20 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
         return master;
     }
 
+    public async Task<ExternalIntegrationMaster?> FindByManagerIdTransactionAsync(
+        string managerIdTransaction,
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await SetTenantGucAsync(tenantId, ct);
+        var master = await db.Masters
+            .Include(m => m.Actors)
+            .FirstOrDefaultAsync(m => m.ManagerIdTransaction == managerIdTransaction && m.DeletedAt == null, ct);
+        await tx.CommitAsync(ct);
+        return master;
+    }
+
     public async Task SaveAsync(Guid tenantId, CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);

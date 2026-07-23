@@ -108,6 +108,10 @@ builder.Services.AddCors(options => options.AddPolicy(
         .AllowAnyMethod()
         .AllowCredentials()));
 
+// gRPC server para la orquestación desde core-ict (ICT): crear el borrador reutilizando los casos
+// de uso de trámites. Se sirve sobre el mismo puerto (Http1AndHttp2 / h2c) que la API REST.
+builder.Services.AddGrpc();
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -166,6 +170,9 @@ app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
+
+// Orquestación ICT (core-ict -> core-api). TODO(ICT-GRPC-AUTH): policy con service-token dedicado.
+app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>();
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
