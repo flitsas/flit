@@ -22,3 +22,9 @@ INSERT INTO ict.external_integration_document_type (document_type_code, name) VA
     ('CC','Cédula de ciudadanía'), ('CE','Cédula de extranjería'), ('NIT','NIT'),
     ('PAS','Pasaporte'), ('TI','Tarjeta de identidad')
 ON CONFLICT (document_type_code) DO NOTHING;
+
+-- Catálogo de documentos permitidos (adjuntos). Rango genérico para dev/compatibilidad; en
+-- producción importar el catálogo real de v1. TODO(ICT-DOCS-CATALOG): sembrar los ids/nombres de v1.
+INSERT INTO ict.external_integration_allowed_documents (id, name)
+SELECT g, 'Documento ' || g FROM generate_series(1, 50) AS g
+ON CONFLICT (id) DO NOTHING;

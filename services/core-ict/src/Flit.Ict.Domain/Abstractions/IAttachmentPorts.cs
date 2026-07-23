@@ -15,6 +15,16 @@ public interface IIctAttachmentStorage
         string filename,
         string mimeType,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Sube el contenido del archivo del lado del servidor (flujo v1: el cliente envía los bytes en
+    /// multipart) y devuelve el storage_path. En dev sin File Manager, sintetiza el path sin persistir.
+    /// </summary>
+    Task<string> UploadAsync(
+        string filename,
+        string mimeType,
+        ReadOnlyMemory<byte> content,
+        CancellationToken ct = default);
 }
 
 /// <summary>Persistencia de adjuntos y catálogos documentales del pre-trámite (RLS por tenant).</summary>

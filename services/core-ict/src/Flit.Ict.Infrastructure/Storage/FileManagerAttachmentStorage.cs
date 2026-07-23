@@ -46,6 +46,34 @@ public sealed class FileManagerAttachmentStorage(HttpClient http, IOptions<FileM
             dto.Fields ?? new Dictionary<string, string>());
     }
 
+    public async Task<string> UploadAsync(
+        string filename,
+        string mimeType,
+        ReadOnlyMemory<byte> content,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.BaseUrl))
+        {
+            // Dev sin File Manager: no se persiste el binario, solo se sintetiza el path.
+            return $"ict/dev/{Guid.NewGuid():N}/{filename}";
+        }
+
+        var presign = await CreatePresignedUploadAsync(filename, mimeType, ct);
+        using var form = new MultipartFormDataContent();
+        foreach (var (key, value) in presign.Fields)
+        {
+            form.Add(new StringContent(value), key);
+        }
+
+        var fileContent = new ByteArrayContent(content.ToArray());
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mimeType);
+        form.Add(fileContent, "file", filename);
+
+        using var response = await http.PostAsync(new Uri(presign.UploadUrl), form, ct);
+        response.EnsureSuccessStatusCode();
+        return presign.StoragePath;
+    }
+
     private sealed record FileManagerPresignResponse(
         string UploadUrl,
         string StoragePath,
