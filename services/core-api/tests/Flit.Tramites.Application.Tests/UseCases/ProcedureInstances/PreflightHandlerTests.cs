@@ -203,7 +203,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
         var handler = HandlerWith();
 
-        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+        var (result, error, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         error.Should().Be("not_found");
         result.Should().BeNull();
@@ -217,7 +217,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().Be("not_draft");
     }
@@ -282,7 +282,7 @@ public sealed class PreflightHandlerTests
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // SIMIT no corre en matrícula.
@@ -315,7 +315,7 @@ public sealed class PreflightHandlerTests
             ],
             transitOfficeResolver: resolver);
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         resolver.LastName.Should().Be("SDM BOGOTÁ");
@@ -347,7 +347,7 @@ public sealed class PreflightHandlerTests
             ],
             transitOfficeResolver: resolver);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         // Se conserva el nombre RUNT pero NO se inventa un transit_office_id.
@@ -371,7 +371,7 @@ public sealed class PreflightHandlerTests
 
         var handler = BuildHandler(null, [("kyverum_runt", vehiculo)], transitOfficeResolver: resolver);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         // Matrícula: el operador elige libremente; el preflight NO consulta el resolver ni fija el id.
@@ -391,7 +391,7 @@ public sealed class PreflightHandlerTests
             ("kyverum_runt", new StubProvider("kyverum_runt", Result("green", Check("ok")))),
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("kyverum_runt"); // Kyverum-first: gana al fallback Verifik.
@@ -407,7 +407,7 @@ public sealed class PreflightHandlerTests
             ("kyverum_runt", new StubProvider("kyverum_runt", Result("red", Check("error")))),
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // fallback al proveedor de contingencia.
@@ -431,7 +431,7 @@ public sealed class PreflightHandlerTests
         var verifik = new StubProvider("verifik", Result("green", Check("ok")));
         var handler = HandlerWith(tenantOverride, ("kyverum_runt", kyverum), ("verifik", verifik));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik");
@@ -453,7 +453,7 @@ public sealed class PreflightHandlerTests
         var handler = HandlerWith(
             ("verifik", new StubProvider("verifik", Result("red", EstadoVehiculoCheck("fail")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("yellow");
@@ -472,7 +472,7 @@ public sealed class PreflightHandlerTests
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
             ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("red");
@@ -496,7 +496,7 @@ public sealed class PreflightHandlerTests
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
             ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         vehiculo.LastContext.Should().NotBeNull();
@@ -515,7 +515,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("red", Check("fail")))));
 
-        var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         result!.Overall.Should().Be("red");
         await _repo.Received(1).AddPreflightSnapshotAsync(
@@ -540,7 +540,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new ThrowingProvider("verifik")));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("red"); // error bloquea (dato vital no verificable).
@@ -555,7 +555,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(); // registry vacío → no se puede verificar.
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().ContainSingle(c => c.Status == "error");
@@ -583,7 +583,7 @@ public sealed class PreflightHandlerTests
                     FechaRegistro: new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
             });
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         var check = result!.Checks.Should().ContainSingle(c => c.Key == "vin_matricula").Subject;
@@ -609,7 +609,7 @@ public sealed class PreflightHandlerTests
                     Vin: "1HGCM82633A004352"),
             });
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
@@ -627,12 +627,131 @@ public sealed class PreflightHandlerTests
         _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
             .Returns(new List<VinTramiteExistente>());
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
         result.Overall.Should().Be("green");
         instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
+    }
+
+    // ── CF-01 (HU #10876): bloqueo DURO de duplicidad EN PROCESO por familia ───────────────────
+
+    [Fact]
+    public async Task Post_Matricula_DuplicadoActivoPorVin_Bloquea409()
+    {
+        // AC1: un trámite EN PROCESO (borrador) con el mismo VIN bloquea con
+        // DUPLICATE_ACTIVE_PROCEDURE, sin persistir el snapshot.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        var existingId = Guid.NewGuid();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(existingId, TramiteEstado.Borrador, Paso: 2, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error, existingProcedureInstanceId) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existingProcedureInstanceId.Should().Be(existingId);
+        await _repo.DidNotReceive().AddPreflightSnapshotAsync(Arg.Any<ProcedureInstancePreflightSnapshot>(), ct);
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_DuplicadoActivoPorPlaca_Bloquea409()
+    {
+        // AC2: un trámite EN PROCESO (preparado) con la misma placa bloquea con
+        // DUPLICATE_ACTIVE_PROCEDURE.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        var existingId = Guid.NewGuid();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByPlacaAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<PlacaTramiteExistente>
+            {
+                new(existingId, TramiteEstado.Preparado, Placa: "ABC123"),
+            });
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error, existingProcedureInstanceId) =
+            await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existingProcedureInstanceId.Should().Be(existingId);
+    }
+
+    [Fact]
+    public async Task Post_OtraFamilia_NoActivaBloqueoDeDuplicidad()
+    {
+        // AC3: la activación es HARDCODED por familia — solo Matrícula Inicial y Traspaso bloquean.
+        // Otro tipo de trámite ni siquiera consulta placa (FindTramitesByPlacaAsync no se invoca).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("otro_tipo", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var (result, error, existingProcedureInstanceId) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        existingProcedureInstanceId.Should().BeNull();
+        await _repo.DidNotReceive().FindTramitesByPlacaAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), ct);
+    }
+
+    [Fact]
+    public async Task Post_Matricula_DuplicadoEnEstadoFinalAprobado_NoBloquea()
+    {
+        // AC4: el estado final "aprobado" NO cuenta como "en proceso" — libera la llave del VIN
+        // (aunque el check informativo de HU #10538 siga avisando que el VIN ya tiene matrícula).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error, existingProcedureInstanceId) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        existingProcedureInstanceId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_DuplicadoEnEstadoFinalAnulado_NoBloquea()
+    {
+        // AC4: "anulado" (final) libera la llave de placa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByPlacaAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<PlacaTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Anulado, Placa: "ABC123"),
+            });
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error, existingProcedureInstanceId) =
+            await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        existingProcedureInstanceId.Should().BeNull();
     }
 
 // ── A4/B4 (HU #10673) — transformaciones color/combustible: snapshots *_runt + no pisar ────
@@ -658,7 +777,7 @@ public sealed class PreflightHandlerTests
             new HydratedField("vehicle_color", "PLATA", null),
             new HydratedField("vehicle_fuel", "GASOLINA", null));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         instance.FieldValues.Should().ContainSingle(f =>
@@ -682,7 +801,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "AZUL", null));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         ValueOf(instance, "vehicle_color").Should().Be("AZUL");
@@ -701,7 +820,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "PLATA", null));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         ValueOf(instance, "vehicle_color").Should().Be("NEGRO");       // cambio declarado intacto
@@ -719,7 +838,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = VehiculoHydratesHandler(new HydratedField("vehicle_fuel", "GASOLINA", null));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         ValueOf(instance, "vehicle_fuel").Should().Be("ELECTRICO");
@@ -749,7 +868,7 @@ public sealed class PreflightHandlerTests
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
         ]);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         ValueOf(instance, "vehicle_color").Should().Be("NEGRO");
@@ -782,7 +901,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("flit_fines");
@@ -799,7 +918,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("flit_fines");
@@ -815,7 +934,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("verifik_simit");
@@ -831,7 +950,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("kyverum_fines");
@@ -857,7 +976,7 @@ public sealed class PreflightHandlerTests
             ("kyverum_fines", kyverum),
             ("verifik_simit", verifikSimit));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         // El comprador (NIT) fue a Kyverum...
@@ -880,7 +999,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(TodosLosProveedoresDeComparendos()); // NullOverrideProvider
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("verifik_simit");
@@ -900,7 +1019,7 @@ public sealed class PreflightHandlerTests
         var handler = HandlerWith(FuenteDeComparendos("internal"),
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().Contain(c => c.Key == "simit_comprador" && c.Status == "error");
@@ -917,7 +1036,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         var vendedor = result!.Checks.Single(c => c.Key == "simit_vendedor");
@@ -940,7 +1059,7 @@ public sealed class PreflightHandlerTests
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
             ("flit_fines", new StubProvider("flit_fines", multasWarn)));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("yellow");
@@ -962,7 +1081,7 @@ public sealed class PreflightHandlerTests
         var handler = BuildHandler(null, [("kyverum_runt", vehiculo)],
             blockingPolicy: new StubBlockingPolicy(("soat", false)));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Single(c => c.Key == "soat").Status.Should().Be("warn");
@@ -980,7 +1099,7 @@ public sealed class PreflightHandlerTests
             [new ConsultationCheck("soat", "SOAT", "fail", "kyverum_runt", "SOAT vencido o no vigente")], []));
         var handler = BuildHandler(null, [("kyverum_runt", vehiculo)]);
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Single(c => c.Key == "soat").Status.Should().Be("fail");
@@ -1005,7 +1124,7 @@ public sealed class PreflightHandlerTests
             ],
             blockingPolicy: new StubBlockingPolicy(("fines", true)));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().Contain(c =>
@@ -1045,7 +1164,7 @@ public sealed class PreflightHandlerTests
             ],
             restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Fines));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         simit.LastContext.Should().BeNull(); // ningún actor se consultó.
@@ -1078,7 +1197,7 @@ public sealed class PreflightHandlerTests
             ],
             restrictionPolicy: policy);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         policy.Calls.Should().Be(1);
@@ -1099,7 +1218,7 @@ public sealed class PreflightHandlerTests
             ],
             restrictionPolicy: new CountingRestrictionPolicy()); // sin kinds inhabilitados.
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Contain("verifik_simit");

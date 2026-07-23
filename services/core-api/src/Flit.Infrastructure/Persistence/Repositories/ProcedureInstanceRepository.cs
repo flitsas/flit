@@ -72,6 +72,53 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToList();
     }
 
+    // HU #10876 (CF-01) — bloqueo de duplicidad EN PROCESO para la familia Traspaso: busca otros
+    // trámites de traspaso del tenant con la misma placa. Simétrico a FindTramitesByVinAsync (misma
+    // convención de comparación trim+upper contra field_values, mismo patrón de subconsulta), pero
+    // sobre ModalidadEntrada == Traspaso y FieldKey == "plate". El VIN (si existe) se proyecta solo
+    // como dato informativo del registro previo, no participa en la comparación.
+    public async Task<IReadOnlyList<PlacaTramiteExistente>> FindTramitesByPlacaAsync(
+        Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(placaNormalizada))
+            return [];
+
+        var rows = await db.ProcedureInstances
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId
+                && i.DeletedAt == null
+                && i.Id != excludeInstanceId
+                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.Traspaso
+                && i.FieldValues.Any(f => f.FieldKey == "plate"
+                    && f.ValueText != null
+                    && f.ValueText.Trim().ToUpper() == placaNormalizada))
+            .Select(i => new
+            {
+                i.Id,
+                i.Status,
+                i.CompletedAt,
+                i.SubmittedAt,
+                i.CreatedAt,
+                Vin = i.FieldValues
+                    .Where(f => f.FieldKey == "vin")
+                    .Select(f => f.ValueText)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+
+        // Mismo orden por recencia desc que FindTramitesByVinAsync (determinismo, aunque
+        // DuplicateActiveProcedurePolicy solo necesita el PRIMER "en proceso", no el más reciente).
+        return rows
+            .OrderByDescending(r => r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt)
+            .Select(r => new PlacaTramiteExistente(
+                r.Id,
+                r.Status,
+                Placa: placaNormalizada,
+                Vin: r.Vin,
+                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt))
+            .ToList();
+    }
+
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.FieldValues)

@@ -87,17 +87,17 @@ public sealed class RunPreflightHandler(
             ["vehicle_fuel"] = "cambio_combustible",
         };
 
-    public async Task<(PreflightSnapshotDto? Result, string? Error)> HandleAsync(
+    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
     {
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found");
+            return (null, "not_found", null);
 
         if (instance.Status != TramiteEstado.Borrador)
-            return (null, "not_draft");
+            return (null, "not_draft", null);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
 
@@ -178,6 +178,15 @@ public sealed class RunPreflightHandler(
         // Matrícula inicial: el estado del vehículo no debe bloquear (ver RelajarEstadoVehiculoMatricula).
         RelajarEstadoVehiculoMatricula(checks, modalidad);
 
+        // CF-01 (HU #10876) — bloqueo DURO de duplicidad EN PROCESO por familia (VIN en Matrícula
+        // Inicial, placa en Traspaso), evaluado ANTES de componer el overall y persistir el snapshot.
+        // Si hay coincidencia, el preflight NO se persiste: se devuelve el bloqueo 409 con el id del
+        // trámite existente. Independiente del check informativo de DetectVinConflictoTraspasoAsync
+        // (HU #10538), que ya corrió arriba y sigue intacto.
+        var duplicateId = await FindDuplicateActiveProcedureAsync(instance, modalidad, tenantId, vin, plate, ct);
+        if (duplicateId is not null)
+            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId);
+
         // Composición del overall con la regla del dominio.
         var overall = ComposeOverall(checks);
         var provider = providersUsed.Count == 0 ? null : string.Join(",", providersUsed);
@@ -197,7 +206,47 @@ public sealed class RunPreflightHandler(
         await repo.AddPreflightSnapshotAsync(snapshot, ct);
         await repo.SaveChangesAsync(ct);
 
-        return (new PreflightSnapshotDto(overall, checks, provider, now), null);
+        return (new PreflightSnapshotDto(overall, checks, provider, now), null, null);
+    }
+
+    /// <summary>
+    /// CF-01 (HU #10876) — resuelve el bloqueo DURO de duplicidad EN PROCESO por familia. ACTIVACIÓN
+    /// HARDCODED por familia (no depende de <c>gate_profile.validateDuplicateProcedure</c>, honrando
+    /// CF-01 al pie de la letra): SOLO Matrícula Inicial (llave VIN) y Traspaso (llave placa) activan
+    /// el bloqueo; el resto de familias permite múltiples instancias en proceso. Devuelve el
+    /// <c>Id</c> del primer trámite EN PROCESO encontrado, o <c>null</c> si la llave está libre.
+    /// </summary>
+    private async Task<Guid?> FindDuplicateActiveProcedureAsync(
+        ProcedureInstance instance,
+        TramiteModalidadEntrada? modalidad,
+        Guid tenantId,
+        string? vin,
+        string? plate,
+        CancellationToken ct)
+    {
+        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        {
+            var vinNorm = VinNormalizer.Normalize(vin);
+            if (vinNorm is null)
+                return null;
+
+            var existentes = await repo.FindTramitesByVinAsync(tenantId, vinNorm, instance.Id, ct);
+            return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
+                existentes.Select(e => (e.Id, e.Estado)).ToList());
+        }
+
+        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        {
+            var placaNorm = plate?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(placaNorm))
+                return null;
+
+            var existentes = await repo.FindTramitesByPlacaAsync(tenantId, placaNorm, instance.Id, ct);
+            return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
+                existentes.Select(e => (e.Id, e.Estado)).ToList());
+        }
+
+        return null;
     }
 
     /// <summary>
