@@ -106,6 +106,11 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ILegalRepresentativeRepository, LegalRepresentativeRepository>();
         services.AddScoped<IDeedReader, DbDeedReader>();
         services.AddScoped<IDeedRepository, DeedRepository>();
+
+        // HU #10902 (ADR-0033) — custodia del PDF de la escritura en storage (delega en
+        // IAttachmentStorage vía presigned URLs; el SHA-256 lo aporta el cliente).
+        services.AddScoped<Flit.Admin.Application.Companies.Deeds.IDeedDocumentStorage,
+            Flit.Infrastructure.Storage.DeedDocumentStorage>();
         services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
             RepresentativeIdentityLookup>();
 

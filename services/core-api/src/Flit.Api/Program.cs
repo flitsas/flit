@@ -181,6 +181,7 @@ app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
 app.MapAdminSignatureVaultEndpoints();
 app.MapAdminLegalRepresentativesEndpoints();
+app.MapAdminDeedsEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();

@@ -185,6 +185,15 @@ public static class DependencyInjection
         services.AddScoped<Companies.LegalRepresentatives.GetLegalRepresentative.GetLegalRepresentativeByIdHandler>();
         services.AddScoped<Companies.LegalRepresentatives.DeleteLegalRepresentative.DeleteLegalRepresentativeHandler>();
 
+        // HU #10902 (ADR-0033) — gestión de escrituras (PDF) con vigencia por compañía: CRUD
+        // paginado SuperAdmin. IDeedReader/IDeedRepository e IDeedDocumentStorage se registran en
+        // AddAdminInfrastructure.
+        services.AddScoped<Companies.Deeds.CreateDeed.CreateDeedHandler>();
+        services.AddScoped<Companies.Deeds.UpdateDeed.UpdateDeedHandler>();
+        services.AddScoped<Companies.Deeds.ListDeeds.ListDeedsHandler>();
+        services.AddScoped<Companies.Deeds.GetDeed.GetDeedByIdHandler>();
+        services.AddScoped<Companies.Deeds.DeleteDeed.DeleteDeedHandler>();
+
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
         services.AddScoped<ListImprontasHandler>();
