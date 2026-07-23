@@ -79,6 +79,7 @@ using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Admin.Application;
 
@@ -171,6 +172,18 @@ public static class DependencyInjection
         // registran en AddAdminInfrastructure.
         services.AddScoped<Companies.LegalRepresentatives.ILegalRepresentativeSignatureResolver,
             Companies.LegalRepresentatives.LegalRepresentativeSignatureResolver>();
+
+        // HU #10901 (ADR-0033) — CRUD de representantes legales por compañía (API paginada). El writer
+        // comparte validación + upsert de compañía + resolución de firma/identidad + persistencia entre
+        // el alta y la edición. ILegalRepresentativeReader/Repository e IProcedureTypeCatalog se
+        // registran en AddAdminInfrastructure. TimeProvider ancla el "hoy" en Colombia para la vigencia.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<Companies.LegalRepresentatives.LegalRepresentativeWriter>();
+        services.AddScoped<Companies.LegalRepresentatives.CreateLegalRepresentative.CreateLegalRepresentativeHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.UpdateLegalRepresentative.UpdateLegalRepresentativeHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.ListLegalRepresentatives.ListLegalRepresentativesHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.GetLegalRepresentative.GetLegalRepresentativeByIdHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.DeleteLegalRepresentative.DeleteLegalRepresentativeHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
