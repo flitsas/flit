@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package flit.ict.v1;
+
+option csharp_namespace = "Flit.Ict.Grpc.Contracts";
+
+// Consulta de fuentes externas (RUNT/SOAT/RTM/RNMC/conductor). core-ict = cliente, core-api = servidor.
+// core-api reutiliza su subsistema de consultas (IConsultationProviderChainResolver / Registry, con su
+// toggle mock|real y credenciales) y normaliza el resultado a los 5 hechos que valida core-ict. El
+// tenant viaja explícito; el service-token autoriza a ICT como sistema (TODO ICT-GRPC-AUTH).
+service IctConsultation {
+  rpc Query (ConsultationRequest) returns (ConsultationReply);
+}
+
+message ConsultationRequest {
+  string tenant_id = 1;
+  string query_type = 2;        // VEHICLE | VIN | RNMC | DRIVER
+  string plate = 3;
+  string vin = 4;
+  string document_type = 5;
+  string document_number = 6;
+}
+
+message ConsultationReply {
+  // "" = desconocido / no aplica: core-ict lo trata como null y NO bloquea por esa fuente.
+  string soat_status = 1;             // "VIGENTE" | "NO_VIGENTE" | ""
+  string rtm_status = 2;              // "VIGENTE" | "NO_VIGENTE" | ""
+  int32 vehicle_model_year = 3;       // 0 = desconocido
+  bool has_active_sanctions = 4;      // RNMC: medidas correctivas activas
+  bool paz_y_salvo_known = 5;         // false => paz_y_salvo desconocido (no bloquea)
+  bool paz_y_salvo = 6;
+  string error_code = 7;              // "" en éxito; si viene, core-ict reintenta (no marca válido)
+}

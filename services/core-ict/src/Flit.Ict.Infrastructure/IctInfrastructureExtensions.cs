@@ -64,9 +64,8 @@ public static class IctInfrastructureExtensions
         // Datos mock para que el submódulo frontend (logs/alertas) muestre contenido (solo Development).
         services.AddHostedService<DevMockDataSeeder>();
 
-        // Pipeline de validación: clientes externos (stubs en dev) + 5 jobs programados.
+        // Pipeline de validación: clientes externos + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
-        services.AddScoped<IConsultationClient, StubConsultationClient>();
         services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddHostedService<BusinessValidationJob>();
         services.AddHostedService<ExternalValidationJob>();
@@ -79,14 +78,21 @@ public static class IctInfrastructureExtensions
         var grpcAddress = configuration["CoreApiGrpc:Address"];
         if (!string.IsNullOrWhiteSpace(grpcAddress))
         {
+            var grpcUri = new Uri(grpcAddress);
             services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
-                options.Address = new Uri(grpcAddress));
+                options.Address = grpcUri);
             services.AddScoped<IProcedureDraftClient, IctGrpcProcedureDraftClient>();
+
+            // Consulta real de fuentes externas: se delega en core-api (reusa RUNT/SOAT/RTM/RNMC).
+            services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
+                options.Address = grpcUri);
+            services.AddScoped<IConsultationClient, IctGrpcConsultationClient>();
         }
         else
         {
-            // Sin canal gRPC configurado: stub que deja el pre-trámite para el siguiente ciclo.
+            // Sin canal gRPC configurado: stubs que dejan el pre-trámite para el siguiente ciclo.
             services.AddScoped<IProcedureDraftClient, PendingProcedureDraftClient>();
+            services.AddScoped<IConsultationClient, StubConsultationClient>();
         }
 
         return services;

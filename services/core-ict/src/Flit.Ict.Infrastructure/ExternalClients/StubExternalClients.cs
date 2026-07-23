@@ -12,6 +12,7 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 public sealed class StubConsultationClient : IConsultationClient
 {
     public Task<ConsultationResult> QueryAsync(
+        Guid tenantId,
         string queryType,
         string plate,
         string vin,

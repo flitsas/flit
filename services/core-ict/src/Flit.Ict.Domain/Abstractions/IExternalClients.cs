@@ -10,6 +10,7 @@ namespace Flit.Ict.Domain.Abstractions;
 public interface IConsultationClient
 {
     Task<ConsultationResult> QueryAsync(
+        Guid tenantId,
         string queryType,
         string plate,
         string vin,

@@ -205,6 +205,8 @@ app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAn
 
 // Orquestación ICT (core-ict -> core-api). TODO(ICT-GRPC-AUTH): policy con service-token dedicado.
 app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>();
+// Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
+app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>();
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();

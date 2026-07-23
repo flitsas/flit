@@ -16,6 +16,7 @@
   <ItemGroup>
     <Protobuf Include="Protos\ict_orchestration.proto" GrpcServices="Both" />
     <Protobuf Include="Protos\ict_state_callback.proto" GrpcServices="Both" />
+    <Protobuf Include="Protos\ict_consultation.proto" GrpcServices="Both" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,7 +5,15 @@
       "applicationUrl": "http://localhost:4003",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Ict__GrpcPort": "4021"
+        "Ict__GrpcPort": "4021",
+        "//": "Consultas ICT en local: modo mock y cadena Verifik-first (kyverum no tiene mock ni credenciales locales). Solo afecta 'dotnet run'; docker/QA/PDN usan su propia config.",
+        "VERIFIK_VEHICLE_MODE": "mock",
+        "VERIFIK_CONDUCTOR_MODE": "mock",
+        "VERIFIK_SIMIT_MODE": "mock",
+        "VERIFIK_RNMC_MODE": "mock",
+        "Consultations__DefaultChains__vehicle_vin__0": "verifik",
+        "Consultations__DefaultChains__vehicle_plate__0": "verifik",
+        "Consultations__DefaultChains__conductor__0": "verifik_conductor"
       }
     }
   }

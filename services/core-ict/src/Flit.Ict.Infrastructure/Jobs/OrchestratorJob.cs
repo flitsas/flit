@@ -48,7 +48,8 @@ public sealed class OrchestratorJob(
 
             foreach (var q in pending)
             {
-                var result = await consult.QueryAsync(q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
+                var result = await consult.QueryAsync(
+                    q.TenantId, q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
                 var issues = ExternalSourceValidators.Validate(q.TransactionType, result, currentYear);
                 var isValid = issues.Count == 0;
 

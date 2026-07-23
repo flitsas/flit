@@ -28,11 +28,18 @@ BEGIN
         PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2, 'IDENTIFICANDO FUENTES',
             rec.manager_user, rec.manager_mail, rec.company_manager_document);
 
-        -- Consulta de vehículo por placa (traspasos) o por VIN (matrículas).
+        -- Consulta de vehículo por placa (traspasos) o por VIN (matrículas). La consulta por placa
+        -- en RUNT necesita el documento del propietario/vendedor, así que se adjunta al source_query.
         IF rec.transaction_type IN (3, 4) AND rec.plate <> '' THEN
             INSERT INTO ict.external_integration_source_query
-                (eim_id, tenant_id, actor_level, query_type, plate_complete)
-            VALUES (rec.id_master, rec.tenant_id, 'VEHI', 'VEHICLE', rec.plate);
+                (eim_id, tenant_id, actor_level, query_type, plate_complete, document_type, document_number)
+            VALUES (rec.id_master, rec.tenant_id, 'VEHI', 'VEHICLE', rec.plate,
+                COALESCE((SELECT eia.document_type FROM ict.external_integration_actors eia
+                          WHERE eia.master_id = rec.id_master AND eia.actor_type = 'seller'
+                          ORDER BY eia.document_number LIMIT 1), ''),
+                COALESCE((SELECT eia.document_number FROM ict.external_integration_actors eia
+                          WHERE eia.master_id = rec.id_master AND eia.actor_type = 'seller'
+                          ORDER BY eia.document_number LIMIT 1), ''));
         END IF;
 
         IF rec.transaction_type IN (1, 2) AND COALESCE(rec.vin, '') <> '' THEN
