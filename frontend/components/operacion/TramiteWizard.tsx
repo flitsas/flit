@@ -39,7 +39,7 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
-import { tramitesClient } from '@/lib/api/tramites-client';
+import { tramitesClient, getDuplicateActiveProcedureId } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -1031,6 +1031,9 @@ function ConsultaStep({
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AC1 (HU #10882) — id del trámite existente cuando el preflight bloquea por duplicidad (409
+  // DUPLICATE_ACTIVE_PROCEDURE, HU #10876). Presente ⇒ se ofrece "Retomar" (AC2) en vez del error genérico.
+  const [duplicateInstanceId, setDuplicateInstanceId] = useState<string | null>(null);
   // field_values frescos de la instancia: rehidratan inputs y alimentan la
   // tarjeta "Datos del vehículo · RUNT" tras la consulta.
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -1161,6 +1164,7 @@ function ConsultaStep({
       return;
     }
     setError(null);
+    setDuplicateInstanceId(null);
     setPersisting(true);
     try {
       // UNA sola consulta a Verifik: 1) persistir identificador → 2) preflight,
@@ -1172,10 +1176,24 @@ function ConsultaStep({
       await onRunPreflight();
       await loadInstance();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+      // AC1 (HU #10882) — el preflight puede bloquear por duplicidad (409 DUPLICATE_ACTIVE_PROCEDURE,
+      // HU #10876): en vez del error genérico, se ofrece el aviso con "Retomar" (AC2).
+      const duplicateId = getDuplicateActiveProcedureId(err);
+      if (duplicateId) {
+        setDuplicateInstanceId(duplicateId);
+      } else {
+        setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+      }
     } finally {
       setPersisting(false);
     }
+  };
+
+  // AC2 (HU #10882) — "Retomar": abre el trámite existente que reportó el bloqueo de duplicidad,
+  // en su propia ruta de wizard (misma ruta que usa el listado de trámites para abrir un trámite).
+  const handleRetomarDuplicado = () => {
+    if (!duplicateInstanceId) return;
+    router.push(`/tramites/${duplicateInstanceId}`);
   };
 
   const inputClass =
@@ -1399,6 +1417,31 @@ function ConsultaStep({
         >
           {error}
         </p>
+      )}
+
+      {/* AC1/AC2 (HU #10882) — bloqueo de duplicidad: ya hay un trámite en curso para este
+          VIN/placa (409 DUPLICATE_ACTIVE_PROCEDURE del preflight, HU #10876). "Retomar" abre
+          ese trámite existente en vez de continuar este borrador duplicado. */}
+      {duplicateInstanceId && (
+        <div
+          className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            Ya existe un trámite en curso para este vehículo.
+          </span>
+          <button
+            type="button"
+            onClick={handleRetomarDuplicado}
+            className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            aria-label="Retomar el trámite existente"
+          >
+            Retomar
+          </button>
+        </div>
       )}
 
       <VehicleDataCard fieldValues={fieldValues} />

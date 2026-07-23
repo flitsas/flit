@@ -184,6 +184,59 @@ function problemMessage(res: Response, body: string): string {
   return 'No se pudo completar la solicitud. Revisa los datos e inténtalo de nuevo.';
 }
 
+/**
+ * Cuerpo ProblemDetails (RFC 7807) parseado, si la respuesta de error trae JSON. `title` viaja
+ * como código de error en varios endpoints de trámites (p. ej. `DUPLICATE_ACTIVE_PROCEDURE`); las
+ * `extensions` del backend (p. ej. `procedureInstanceId`) se serializan como miembros adicionales
+ * a nivel raíz.
+ */
+function parseProblem(body: string): Record<string, unknown> | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Error de una llamada a la API de trámites: conserva el `status` HTTP y el ProblemDetails
+ * parseado (`problem`) además del mensaje legible que ya consumen los callers existentes
+ * (`err.message`, vía `err instanceof Error`). Los callers que solo necesitan el mensaje siguen
+ * funcionando sin cambios; los que necesitan reaccionar a un código de error concreto (p. ej. AC1
+ * de HU #10882, 409 `DUPLICATE_ACTIVE_PROCEDURE`) leen `.status` / `.problem`.
+ */
+export class TramitesApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly problem: Record<string, unknown> | null,
+  ) {
+    super(message);
+    this.name = 'TramitesApiError';
+  }
+}
+
+/**
+ * AC1 (HU #10882) — detecta el bloqueo de duplicidad de trámite en curso (409
+ * `DUPLICATE_ACTIVE_PROCEDURE`, HU #10876) que puede devolver el preflight de consulta de
+ * vehículo y extrae el id del trámite existente para ofrecer "Retomar" (AC2). Devuelve `null`
+ * para cualquier otro error (incluidos otros 409, p. ej. el de creación por tipo no publicado).
+ *
+ * Duck-typing sobre `{ status, problem }` (en vez de `instanceof TramitesApiError`): la función
+ * queda desacoplada de la identidad exacta de la clase, así sigue funcionando igual sobre
+ * cualquier error con esa forma (p. ej. en tests que mockean `@/lib/api/tramites-client`).
+ */
+export function getDuplicateActiveProcedureId(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 409 || !problem || typeof problem !== 'object') return null;
+  const { title, procedureInstanceId } = problem as { title?: unknown; procedureInstanceId?: unknown };
+  if (title !== 'DUPLICATE_ACTIVE_PROCEDURE' || typeof procedureInstanceId !== 'string') return null;
+  return procedureInstanceId;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
@@ -196,7 +249,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(problemMessage(res, body));
+    throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
   }
 
   if (res.status === 204) {
