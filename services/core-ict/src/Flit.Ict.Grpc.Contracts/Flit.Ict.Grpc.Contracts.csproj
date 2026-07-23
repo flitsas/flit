@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Contratos gRPC compartidos entre core-ict (cliente de IctOrchestration / servidor de
+    IctStateCallback) y core-api (servidor de IctOrchestration / cliente de IctStateCallback).
+    Se genera código Both (cliente + servidor) para que cada consumidor use lo que necesite.
+    Este .csproj se referencia también desde services/core-api/Flit.slnx por ruta relativa.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Ict.Grpc.Contracts</RootNamespace>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\ict_orchestration.proto" GrpcServices="Both" />
+    <Protobuf Include="Protos\ict_state_callback.proto" GrpcServices="Both" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.Tools">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

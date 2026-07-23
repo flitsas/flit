@@ -41,6 +41,25 @@ services:
         condition: service_healthy
     # volume configuration can be added if code changes need to be reflected dynamically (though usually require rebuilding for .NET unless dotnet watch is configured inside container)
 
+  # ── Backend: core-ict (Integración con Terceros) ──────────────────────────
+  core-ict:
+    build:
+      context: ./services/core-ict
+      dockerfile: Dockerfile
+    container_name: flit-core-ict-dev
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
+      # gRPC hacia core-api (orquestación de creación del borrador). core-api expone el server en HU4.
+      CoreApiGrpc__Address: http://backend:8081
+    ports:
+      - "4014:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
   # ── Frontend: Next.js ─────────────────────────────────────────────────────
   frontend:
     build:
