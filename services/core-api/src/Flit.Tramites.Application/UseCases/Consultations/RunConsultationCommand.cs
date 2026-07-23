@@ -21,6 +21,16 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// <c>RunConsultationHandlerTests.HandleAsync_HappyPath_...BeSameAs</c>) y, tras el
 /// <c>SaveChangesAsync</c> exitoso, cachea el resultado (AC2: la próxima consulta dentro del TTL
 /// sirve el HIT).
+///
+/// HU #10885 (Feature #10862, CF-04, botón "Actualizar"): el parámetro opcional
+/// <c>forceRefresh</c> (default <c>false</c>, cero regresión) permite al llamador SALTAR
+/// deliberadamente el intento de reúso de caché (<see cref="TryReuseFromCacheAsync"/>) y forzar el
+/// mismo camino que un MISS: consulta real al proveedor + upsert de la caché con el dato fresco al
+/// final (AC2 original). El gate de consentimiento (ADR-0031) vive en
+/// <see cref="ExternalQueryCacheService.TryReusePersonAsync"/>, que solo se invoca para intentar un
+/// HIT: con <c>forceRefresh=true</c> ese intento ni siquiera ocurre, así que el consentimiento no se
+/// evade ni se vuelve a exigir para la reconsulta — simplemente deja de ser relevante porque no hay
+/// lectura de caché que gatear.
 /// </remarks>
 public sealed class RunConsultationHandler(
     IProcedureInstanceRepository instanceRepo,
@@ -39,6 +49,7 @@ public sealed class RunConsultationHandler(
         Guid instanceId,
         Guid tenantId,
         string templateCode,
+        bool forceRefresh = false,
         CancellationToken ct = default)
     {
         var instance = await instanceRepo.GetByIdWithDetailsAsync(instanceId, tenantId, ct);
@@ -57,7 +68,9 @@ public sealed class RunConsultationHandler(
 
         // HU #10878 — cache-aside ANTES de resolver el proveedor: en HIT ni siquiera hace falta que
         // el provider esté configurado/registrado (AC1: cero llamadas al proveedor externo).
-        if (!string.IsNullOrWhiteSpace(sourceCode))
+        // HU #10885 (forceRefresh=true, botón "Actualizar"): se salta este bloque por completo — ni
+        // siquiera se intenta el HIT — y cae directo al camino de MISS (consulta real + recacheo).
+        if (!forceRefresh && !string.IsNullOrWhiteSpace(sourceCode))
         {
             var cached = await TryReuseFromCacheAsync(template, fieldValues, tenantId, sourceCode, now, ct);
             if (cached is not null)

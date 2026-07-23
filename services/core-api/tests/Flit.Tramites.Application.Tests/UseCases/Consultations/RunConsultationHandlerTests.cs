@@ -67,7 +67,7 @@ public sealed class RunConsultationHandlerTests
         _instanceRepo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("instance_not_found");
         result.Should().BeNull();
@@ -83,7 +83,7 @@ public sealed class RunConsultationHandlerTests
         _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_VEHICLE", ct)
             .Returns((ConsultationTemplate?)null);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("template_not_found");
         result.Should().BeNull();
@@ -99,7 +99,7 @@ public sealed class RunConsultationHandlerTests
         _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_VEHICLE", ct)
             .Returns(Template("RUNT_VEHICLE", "{}"));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("provider_not_resolved");
         result.Should().BeNull();
@@ -116,7 +116,7 @@ public sealed class RunConsultationHandlerTests
             .Returns(Template("RUNT_VEHICLE", """{"provider":"verifik"}"""));
         _registry.Resolve("verifik").Returns((IConsultationProvider?)null);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("provider_not_found");
         result.Should().BeNull();
@@ -143,7 +143,7 @@ public sealed class RunConsultationHandlerTests
         var provider = new FakeProvider("verifik", providerResult);
         _registry.Resolve("verifik").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().BeNull();
         result.Should().BeSameAs(providerResult);
@@ -189,7 +189,7 @@ public sealed class RunConsultationHandlerTests
             new ConsultationResult("verifik", "green", [], []));
         _registry.Resolve("verifik").Returns(provider);
 
-        await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         provider.CapturedContext.Should().NotBeNull();
         provider.CapturedContext!.FieldValues.Should().ContainKey("vin");
@@ -212,7 +212,7 @@ public sealed class RunConsultationHandlerTests
         _instanceRepo.SaveChangesAsync(ct)
             .Returns<Task>(_ => throw new InvalidOperationException("23514: check_violation on field_values"));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("not_draft");
         result.Should().BeNull();

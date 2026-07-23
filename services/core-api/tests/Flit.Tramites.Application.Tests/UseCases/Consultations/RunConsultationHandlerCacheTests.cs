@@ -130,7 +130,7 @@ public sealed class RunConsultationHandlerCacheTests
             new ConsultationResult("verifik_conductor", "green", [], []));
         _registry.Resolve("verifik_conductor").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -189,7 +189,7 @@ public sealed class RunConsultationHandlerCacheTests
         var provider = new FakeProvider("verifik_conductor", freshResult);
         _registry.Resolve("verifik_conductor").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct: ct);
 
         error.Should().BeNull();
         provider.Called.Should().BeTrue(); // vencida => MISS => reconsulta real.
@@ -203,6 +203,125 @@ public sealed class RunConsultationHandlerCacheTests
         await _cacheRepo.DidNotReceive().AddAsync(Arg.Any<ExternalQueryCacheEntry>(), Arg.Any<CancellationToken>());
         expiredEntry.Payload.Should().Contain("JUAN NUEVO");
         expiredEntry.ExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// HU #10885 (Feature #10862, CF-04, botón "Actualizar") — con <c>forceRefresh=true</c> el HIT
+    /// vigente (mismo escenario que <see cref="HandleAsync_PersonaConCacheVigenteYConsentimiento_NoLlamaProveedor_Precarga"/>,
+    /// que SÍ obtiene HIT y NO llama al proveedor) se ignora deliberadamente: consulta el proveedor
+    /// real y recachea (upsert) el dato fresco, igual que un MISS por vencimiento.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_ForceRefreshTrue_ConCacheVigenteYConsentimiento_SiLlamaProveedor_Recachea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = PersonInstance(id, tenantId);
+        _instanceRepo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_ACTOR_NATURAL", ct).Returns(ActorTemplate());
+
+        _consentRepo.GetAsync(tenantId, "CC", "123456789", ct)
+            .Returns(new PersonDataConsent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DocumentType = "CC",
+                DocumentNumber = "123456789",
+                Status = PersonDataConsentStatus.Granted,
+                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+
+        // Cache VIGENTE (no vencida): sin forceRefresh, esto sería un HIT (ver test AC1).
+        var vigenteEntry = new ExternalQueryCacheEntry
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ExternalDataSourceId = RuntSourceId,
+            SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
+            DocumentType = "CC",
+            DocumentNumber = "123456789",
+            Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN PEREZ","valueJson":null}]""",
+            QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
+        };
+        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct).Returns(vigenteEntry);
+
+        var freshResult = new ConsultationResult(
+            "verifik_conductor", "green", [],
+            [new HydratedField("person_full_name", "JUAN ACTUALIZADO", null)]);
+        var provider = new FakeProvider("verifik_conductor", freshResult);
+        _registry.Resolve("verifik_conductor").Returns(provider);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", forceRefresh: true, ct: ct);
+
+        error.Should().BeNull();
+        provider.Called.Should().BeTrue(); // forceRefresh=true => ignora el HIT vigente => reconsulta real.
+        result.Should().BeSameAs(freshResult);
+        result!.FromCache.Should().BeFalse();
+
+        instance.FieldValues.Should().Contain(f =>
+            f.FieldKey == "person_full_name" && f.ValueText == "JUAN ACTUALIZADO" && f.Source == "consultation");
+
+        // Recachea (upsert) el dato fresco sobre la entrada vigente existente.
+        await _cacheRepo.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _cacheRepo.DidNotReceive().AddAsync(Arg.Any<ExternalQueryCacheEntry>(), Arg.Any<CancellationToken>());
+        vigenteEntry.Payload.Should().Contain("JUAN ACTUALIZADO");
+
+        // El HIT vigente jamás se "tocó" como reúso (no se llegó a servir, se ignoró de raíz).
+        vigenteEntry.ReuseCount.Should().Be(0);
+    }
+
+    /// <summary>
+    /// HU #10885 — contraste explícito: <c>forceRefresh=false</c> (default) preserva el comportamiento
+    /// original de AC1 exactamente (mismo escenario que
+    /// <see cref="HandleAsync_PersonaConCacheVigenteYConsentimiento_NoLlamaProveedor_Precarga"/>).
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_ForceRefreshFalse_ConCacheVigenteYConsentimiento_NoLlamaProveedor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = PersonInstance(id, tenantId);
+        _instanceRepo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_ACTOR_NATURAL", ct).Returns(ActorTemplate());
+
+        _consentRepo.GetAsync(tenantId, "CC", "123456789", ct)
+            .Returns(new PersonDataConsent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DocumentType = "CC",
+                DocumentNumber = "123456789",
+                Status = PersonDataConsentStatus.Granted,
+                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+
+        var vigenteEntry = new ExternalQueryCacheEntry
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ExternalDataSourceId = RuntSourceId,
+            SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
+            DocumentType = "CC",
+            DocumentNumber = "123456789",
+            Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN PEREZ","valueJson":null}]""",
+            QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
+        };
+        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct).Returns(vigenteEntry);
+
+        var provider = new FakeProvider("verifik_conductor",
+            new ConsultationResult("verifik_conductor", "green", [], []));
+        _registry.Resolve("verifik_conductor").Returns(provider);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", forceRefresh: false, ct: ct);
+
+        error.Should().BeNull();
+        result!.FromCache.Should().BeTrue();
+        provider.Called.Should().BeFalse(); // forceRefresh=false (explícito) => comportamiento intacto: HIT sirve sin proveedor.
+        vigenteEntry.ReuseCount.Should().Be(1);
     }
 
     [Fact]
@@ -238,7 +357,7 @@ public sealed class RunConsultationHandlerCacheTests
         var provider = new FakeProvider("verifik_conductor", freshResult);
         _registry.Resolve("verifik_conductor").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_ACTOR_NATURAL", ct: ct);
 
         error.Should().BeNull();
         provider.Called.Should().BeTrue(); // sin consent => MISS => se consulta igual (no bloquea).
@@ -307,7 +426,7 @@ public sealed class RunConsultationHandlerCacheTests
         var provider = new FakeProvider("verifik", new ConsultationResult("verifik", "green", [], []));
         _registry.Resolve("verifik").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().BeNull();
         result!.FromCache.Should().BeTrue();
