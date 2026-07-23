@@ -747,6 +747,21 @@ export const tramitesClient = {
     return mapPreflight(dto);
   },
 
+  // HU #10879/#10883 — autosave del avance del wizard: persiste la `key` del paso donde quedó el
+  // operador para retomar ahí al reabrir el borrador (AC2). PATCH /instances/{id}/current-step; el
+  // backend valida internamente que el trámite esté en borrador y que la consulta del vehículo ya
+  // esté completa (409 en otro caso) — el caller (AC1) trata cualquier fallo como no bloqueante
+  // (autosave silencioso, no debe interrumpir la navegación del wizard).
+  setCurrentStep: (instanceId: string, step: string, tenantId?: string) =>
+    request<{ id: string; currentStep: string | null }>(
+      `/api/v1/tramites/instances/${instanceId}/current-step`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ step }),
+      },
+    ),
+
   getPreflight: async (
     instanceId: string,
     tenantId?: string,

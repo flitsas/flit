@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
@@ -296,6 +296,21 @@ export function TramiteWizard(props: Props) {
     configuration?.name ??
     (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
 
+  // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
+  // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
+  // borrador (AC2). Fire-and-forget: el backend valida internamente (borrador + vehículo consultado,
+  // HU #10879) y un 409/400 no debe bloquear la navegación del wizard — el autosave es best-effort.
+  const persistCurrentStep = useCallback(
+    (stepKey: string) => {
+      if (!instanceId) return;
+      void tramitesClient.setCurrentStep(instanceId, stepKey).catch(() => {
+        // Silencioso a propósito: p.ej. aún no se consultó el vehículo (409) o el trámite ya no es
+        // borrador. No es una acción explícita del usuario, así que no se interrumpe ni se avisa.
+      });
+    },
+    [instanceId],
+  );
+
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
@@ -303,6 +318,9 @@ export function TramiteWizard(props: Props) {
     // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
     // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
     if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
+    // AC1 (HU #10883) — solo se persiste al avanzar (index > activeIndex), no al retroceder ni al
+    // reabrir un paso ya visitado: retroceder a revisar un paso no debe mover el punto de retoma.
+    if (index > activeIndex && steps[index]) persistCurrentStep(steps[index].key);
     setActiveIndex(index);
   };
 
@@ -316,10 +334,22 @@ export function TramiteWizard(props: Props) {
     if (steps.length === 0) return;
     stepInitializedRef.current = true;
     if (existingInstanceId) {
+      // AC2 (HU #10883) — el paso persistido (autosave, HU #10879) PRIMA como punto de retoma: si el
+      // wizard trae `persistedCurrentStep`, corresponde a un paso visible Y sigue siendo alcanzable por
+      // la cascada (`canNavigateToStep`: por construcción el paso solo se persistió al avanzar, cuando
+      // SÍ era navegable — ver `persistCurrentStep`/`goToStep`), arranca ahí. Se revalida la cascada aquí
+      // (y no solo la existencia del paso) para no pelear con el efecto de corrección de abajo si algún
+      // gate previo retrocedió entre la persistencia y la reapertura (p.ej. se eliminó un documento): en
+      // ese caso cae al primer paso incompleto derivado de los gates (comportamiento previo, sin
+      // regresión — el backend #10879 ya provee ese mismo fallback null-safe cuando no hay paso persistido).
+      const persistedKey = wizard?.persistedCurrentStep;
+      const persistedIndex = persistedKey ? steps.findIndex((s) => s.key === persistedKey) : -1;
+      const persistedNavigable =
+        persistedIndex !== -1 && canNavigateToStep(steps, persistedIndex, navViewOnly);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setActiveIndex(frontierIndex(steps));
+      setActiveIndex(persistedNavigable ? persistedIndex : frontierIndex(steps));
     }
-  }, [steps, existingInstanceId]);
+  }, [steps, existingInstanceId, wizard?.persistedCurrentStep, navViewOnly]);
 
   // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
   // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
@@ -515,7 +545,11 @@ export function TramiteWizard(props: Props) {
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
         // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
         telemetry.trackStepComplete();
-        setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
+        const nextIndex = Math.min(activeIndex + 1, steps.length - 1);
+        // AC1 (HU #10883) — mismo autosave de `goToStep`, pero este avance mueve `activeIndex`
+        // directamente (no pasa por `goToStep`) porque primero guarda el formulario embebido.
+        if (nextIndex > activeIndex && steps[nextIndex]) persistCurrentStep(steps[nextIndex].key);
+        setActiveIndex(nextIndex);
       }
     } catch (err) {
       setSubmitError(

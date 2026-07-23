@@ -30,6 +30,10 @@ const mocks = vi.hoisted(() => ({
   getInstance: vi.fn(),
   getWizardState: vi.fn(),
   patchFieldValues: vi.fn(),
+  // HU #10883 — autosave del paso (PATCH current-step). Mockeado aquí también porque el wizard lo
+  // dispara al avanzar de paso (goToStep/handleContinue), invocado por varios tests de este archivo
+  // que no son específicos de HU #10883 (ver el archivo dedicado hu10883-autosave-current-step.test.tsx).
+  setCurrentStep: vi.fn(),
   runPreflight: vi.fn(),
   getPreflight: vi.fn(),
   getConsultationConfig: vi.fn(),
@@ -194,6 +198,7 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.getWizardState.mockResolvedValue(MATRICULA_WIZARD);
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
+  mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: null });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
   // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).

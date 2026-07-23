@@ -157,6 +157,11 @@ export interface ProcedureInstanceDetail {
   completedAt: string | null;
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
+   * frontend cae al paso derivado de los gates (comportamiento previo).
+   */
+  currentStep?: string | null;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -496,6 +501,13 @@ export interface WizardState {
    * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
    */
   rnmcEnabled?: boolean;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO (autosave del avance del wizard, PATCH
+   * /instances/{id}/current-step). Si NO es null/ausente, PRIMA como punto de retoma al reabrir el
+   * borrador (AC2 de HU #10883): el frontend abre en esta `key` de paso. Si es null, el frontend cae
+   * al paso DERIVADO de los gates (comportamiento previo, sin regresión).
+   */
+  persistedCurrentStep?: string | null;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
