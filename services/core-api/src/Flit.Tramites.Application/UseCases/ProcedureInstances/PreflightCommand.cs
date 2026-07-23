@@ -87,17 +87,17 @@ public sealed class RunPreflightHandler(
             ["vehicle_fuel"] = "cambio_combustible",
         };
 
-    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId)> HandleAsync(
+    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
     {
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found", null);
+            return (null, "not_found", null, null);
 
         if (instance.Status != TramiteEstado.Borrador)
-            return (null, "not_draft", null);
+            return (null, "not_draft", null, null);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
 
@@ -112,6 +112,11 @@ public sealed class RunPreflightHandler(
         var checks = new List<PreflightCheckDto>();
         var providersUsed = new SortedSet<string>(StringComparer.Ordinal);
         IReadOnlyList<HydratedField> vehicleFields;
+        // CF-03 (HU #10877) — bloqueo DURO "vehículo ya matriculado" (doble fuente RUNT/FLIT). Se
+        // resuelve durante la rama de matrícula (ver DetectVinConflictoTraspasoAsync más abajo) y/o al
+        // endurecer el check estado_vehiculo (ver EndurecerEstadoVehiculoMatricula). Solo aplica a
+        // Matrícula Inicial: en traspaso queda siempre null.
+        VehicleStateBlock? vehicleStateBlock = null;
 
         // HU #10478: la cadena de proveedores (Kyverum-first → Verifik) y el presupuesto de failover
         // salen de la config del tenant; null ⇒ defaults globales.
@@ -152,8 +157,11 @@ public sealed class RunPreflightHandler(
         {
             // Matrícula inicial: vehículo por VIN (primera matrícula, sin propietario previo).
             vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
-            // R3 (HU #10538): si el VIN ya tiene una matrícula previa en el tenant, informar y ofrecer traspaso.
-            await DetectVinConflictoTraspasoAsync(checks, instance, tenantId, vin, ct);
+            // R3 (HU #10538) / CF-03 (HU #10877, AC2): si el VIN ya tiene una matrícula previa en el
+            // tenant. Con la única previa APROBADA (fuente FLIT) es bloqueo DURO CF-03 (ver
+            // VehicleStateBlock); con una previa EN PROCESO se conserva el check informativo que
+            // ofrece la ruta de traspaso (HU #10538).
+            vehicleStateBlock = await DetectVinConflictoTraspasoAsync(checks, instance, tenantId, vin, ct);
         }
 
         // El RNMC (medidas correctivas) ya NO se consulta aquí ni deja señal: corre en su consulta
@@ -175,17 +183,21 @@ public sealed class RunPreflightHandler(
         // (piso: el estado del 0km nunca bloquea) y de componer el overall.
         AplicarPoliticaDeBloqueo(checks, blockingRules);
 
-        // Matrícula inicial: el estado del vehículo no debe bloquear (ver RelajarEstadoVehiculoMatricula).
-        RelajarEstadoVehiculoMatricula(checks, modalidad);
+        // CF-03 (HU #10877, AC1/AC3) — endurece estado_vehiculo para Matrícula Inicial: ACTIVO (RUNT
+        // reporta el vehículo ya matriculado) y unknown (RUNT sin dato) pasan a bloqueo DURO; el fail
+        // "clásico" (p. ej. REGISTRADO, esperado en un 0 km) conserva la degradación histórica a warn
+        // (HU #10538). Si AC2 (fuente FLIT) ya bloqueó arriba, no hace falta re-endurecer.
+        vehicleStateBlock ??= EndurecerEstadoVehiculoMatricula(checks, modalidad);
+        if (vehicleStateBlock is not null)
+            return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
 
         // CF-01 (HU #10876) — bloqueo DURO de duplicidad EN PROCESO por familia (VIN en Matrícula
         // Inicial, placa en Traspaso), evaluado ANTES de componer el overall y persistir el snapshot.
         // Si hay coincidencia, el preflight NO se persiste: se devuelve el bloqueo 409 con el id del
-        // trámite existente. Independiente del check informativo de DetectVinConflictoTraspasoAsync
-        // (HU #10538), que ya corrió arriba y sigue intacto.
+        // trámite existente. Independiente de CF-03 (registral) — ambos deben dar luz verde.
         var duplicateId = await FindDuplicateActiveProcedureAsync(instance, modalidad, tenantId, vin, plate, ct);
         if (duplicateId is not null)
-            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId);
+            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
 
         // Composición del overall con la regla del dominio.
         var overall = ComposeOverall(checks);
@@ -206,7 +218,7 @@ public sealed class RunPreflightHandler(
         await repo.AddPreflightSnapshotAsync(snapshot, ct);
         await repo.SaveChangesAsync(ct);
 
-        return (new PreflightSnapshotDto(overall, checks, provider, now), null, null);
+        return (new PreflightSnapshotDto(overall, checks, provider, now), null, null, null);
     }
 
     /// <summary>
@@ -346,25 +358,66 @@ public sealed class RunPreflightHandler(
     };
 
     /// <summary>
-    /// En MATRÍCULA INICIAL el estado del vehículo en RUNT suele ser <c>"REGISTRADO"</c> (registrado
-    /// pero aún no activo/matriculado), no <c>"ACTIVO"</c>: es el estado ESPERADO para un 0 km, así que
-    /// NO debe bloquear. Se degrada el check <c>estado_vehiculo</c> de <c>fail</c> a <c>warn</c>
-    /// (informativo, amarillo) para que nunca pinte el preflight en rojo. En traspaso se exige
-    /// <c>"ACTIVO"</c> (vehículo en circulación) → el <c>fail</c> se mantiene intacto.
+    /// CF-03 (HU #10877, AC1/AC3) — en MATRÍCULA INICIAL endurece el check <c>estado_vehiculo</c> según
+    /// lo que reporte el RUNT (sustituye la antigua <c>RelajarEstadoVehiculoMatricula</c>, que degradaba
+    /// TODO <c>fail</c> a <c>warn</c> sin distinguir el motivo):
+    /// <list type="bullet">
+    /// <item><c>ok</c> (RUNT reporta <c>"ACTIVO"</c>): el vehículo YA está matriculado/circulando →
+    /// AC1, bloqueo DURO (<see cref="VehicleStatePolicy.VehicleStatusActivoRunt"/>).</item>
+    /// <item><c>unknown</c> (RUNT no respondió o no trajo el estado): AC3, bloqueo DURO hasta poder
+    /// confirmar el estado (<see cref="VehicleStatePolicy.VehicleStatusDesconocido"/>) — un dato no
+    /// verificable NO debe preservar el semáforo en verde para esta familia.</item>
+    /// <item><c>fail</c> con un estado explícito distinto de ACTIVO (p. ej. <c>"REGISTRADO"</c>, el
+    /// esperado para un 0 km sin matricular aún): se conserva la degradación histórica a <c>warn</c>
+    /// (informativo, HU #10538) — NO es "ya matriculado".</item>
+    /// </list>
+    /// En TRASPASO no se toca: se exige <c>"ACTIVO"</c> (vehículo en circulación) y el <c>fail</c> se
+    /// mantiene intacto (comportamiento previo).
     /// </summary>
-    private static void RelajarEstadoVehiculoMatricula(
+    private static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
         TramiteModalidadEntrada? modalidad)
     {
         if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
-            return;
+            return null;
 
         for (var i = 0; i < checks.Count; i++)
         {
             var c = checks[i];
-            if (string.Equals(c.Key, "estado_vehiculo", StringComparison.Ordinal) && c.Status == "fail")
-                checks[i] = c with { Status = "warn" };
+            if (!string.Equals(c.Key, "estado_vehiculo", StringComparison.Ordinal))
+                continue;
+
+            switch (c.Status)
+            {
+                case "ok":
+                    checks[i] = c with
+                    {
+                        Status = "fail",
+                        Message = "El vehículo ya se encuentra matriculado según el RUNT.",
+                    };
+                    return new VehicleStateBlock(
+                        VehicleStatePolicy.VehicleStatusActivoRunt,
+                        VehicleStatePolicy.ProcedureTypeMatriculaInicial,
+                        VehicleStateSource.Runt);
+
+                case "unknown":
+                    checks[i] = c with
+                    {
+                        Status = "fail",
+                        Message = "No fue posible confirmar el estado del vehículo en el RUNT. Vuelve a intentarlo.",
+                    };
+                    return new VehicleStateBlock(
+                        VehicleStatePolicy.VehicleStatusDesconocido,
+                        VehicleStatePolicy.ProcedureTypeMatriculaInicial,
+                        VehicleStateSource.RuntDesconocido);
+
+                case "fail":
+                    checks[i] = c with { Status = "warn" };
+                    break;
+            }
         }
+
+        return null;
     }
 
     /// <summary>
@@ -514,15 +567,23 @@ public sealed class RunPreflightHandler(
     }
 
     /// <summary>
-    /// R3 (HU #10538) — en MATRÍCULA INICIAL detecta si el VIN ya tiene una matrícula previa en el mismo
-    /// tenant (invariante <see cref="VinPolicyEvaluator"/>). Si hay conflicto: agrega el check informativo
-    /// <see cref="CheckVinMatricula"/> (<c>warn</c>, con secretaría + fecha del registro previo) e hidrata
-    /// la señal <see cref="FieldVinConflictoTraspaso"/> = <c>true</c> en field_values para que el front
-    /// ofrezca la ruta de traspaso. Sin previas o con la única previa en estado <c>rechazado</c> no hay
-    /// conflicto (AC2/AC3): en ese caso la señal previa se limpia (idempotencia entre corridas si el
-    /// gestor cambió el VIN). El estado <c>warn</c> mantiene el preflight informativo (nunca bloquea rojo).
+    /// R3 (HU #10538) / CF-03 (HU #10877, AC2) — en MATRÍCULA INICIAL detecta si el VIN ya tiene una
+    /// matrícula previa en el mismo tenant (invariante <see cref="VinPolicyEvaluator"/>):
+    /// <list type="bullet">
+    /// <item><see cref="VinConflictCode.TramiteMatriculaCompletada"/> (la previa está APROBADA en FLIT):
+    /// AC2, bloqueo DURO — un VIN aprobado no puede volver a matricularse. Ya NO es solo informativo:
+    /// se devuelve el <see cref="VehicleStateBlock"/> SIN agregar el check informativo ni la señal de
+    /// traspaso (el preflight completo se descarta cuando hay bloqueo, ver <c>HandleAsync</c>).</item>
+    /// <item><see cref="VinConflictCode.TramiteDuplicado"/> (la previa sigue EN PROCESO): se conserva el
+    /// comportamiento HU #10538 — check informativo <see cref="CheckVinMatricula"/> (<c>warn</c>, con
+    /// secretaría + fecha) + señal <see cref="FieldVinConflictoTraspaso"/> = <c>true</c> para que el
+    /// front ofrezca la ruta de traspaso. Independiente del bloqueo DURO 409 de CF-01
+    /// (<see cref="DuplicateActiveProcedurePolicy"/>), que evalúa la misma llave más abajo.</item>
+    /// </list>
+    /// Sin previas o con la única previa en estado <c>rechazado</c>/<c>anulado</c> no hay conflicto: la
+    /// señal previa se limpia (idempotencia entre corridas si el gestor cambió el VIN).
     /// </summary>
-    private async Task DetectVinConflictoTraspasoAsync(
+    private async Task<VehicleStateBlock?> DetectVinConflictoTraspasoAsync(
         List<PreflightCheckDto> checks,
         ProcedureInstance instance,
         Guid tenantId,
@@ -540,7 +601,15 @@ public sealed class RunPreflightHandler(
             // Sin conflicto: si una corrida anterior dejó la señal en true (p. ej. el gestor corrigió el
             // VIN), bajarla a false para que el front no siga ofreciendo el traspaso.
             SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "false", createIfMissing: false);
-            return;
+            return null;
+        }
+
+        if (conflicto.Code == VinConflictCode.TramiteMatriculaCompletada)
+        {
+            return new VehicleStateBlock(
+                VehicleStatePolicy.VehicleStatusAprobadoFlit,
+                VehicleStatePolicy.ProcedureTypeMatriculaInicial,
+                VehicleStateSource.Flit);
         }
 
         var previo = conflicto.ExistingTramite;
@@ -557,6 +626,7 @@ public sealed class RunPreflightHandler(
             "Puede iniciar un traspaso de este vehículo en lugar de una nueva matrícula."));
 
         SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "true", createIfMissing: true);
+        return null;
     }
 
     /// <summary>

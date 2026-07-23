@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -86,6 +87,18 @@ public sealed class TramiteLifecycleService(
             return TramiteTransitionOutcome.Fail(
                 TramiteEstadoErrores.MotivoRequerido,
                 $"Debe indicar el motivo para pasar el trámite a '{command.ToStatus}'.");
+
+        // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado", SEGUNDO momento
+        // ("de nuevo al radicar", el estado pudo cambiar desde el preflight). SOLO Matrícula Inicial,
+        // SOLO fuente FLIT (bloqueo duro por repo, sin IO externo al RUNT en este gate — la fuente RUNT
+        // ya se validó de forma DURA en el preflight, AC1/AC3): si OTRO trámite del mismo VIN llegó a
+        // 'aprobado' mientras este seguía en curso, esta relectura lo atrapa antes de preparar/entregar.
+        if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado)
+        {
+            var vehicleStateDetail = await EvaluarEstadoVehiculoRegistralAsync(instance, ct).ConfigureAwait(false);
+            if (vehicleStateDetail is not null)
+                return TramiteTransitionOutcome.Fail(VehicleStatePolicy.ErrorCode, vehicleStateDetail);
+        }
 
         // RF03 — gate borrador→preparado: identidad aprobada/vigente + documentos obligatorios.
         if (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
@@ -322,6 +335,32 @@ public sealed class TramiteLifecycleService(
         if (approvedParties.Contains(BiometricRules.ParteVendedor)) codes.Add("OWNER");
         if (approvedParties.Contains("locatario")) codes.Add("LESSEE");
         return codes;
+    }
+
+    /// <summary>
+    /// CF-03 (HU #10877) — re-evalúa la fuente FLIT del bloqueo registral "vehículo ya matriculado" al
+    /// preparar/entregar (segundo momento). SOLO Matrícula Inicial; sin VIN persistido (instancia sin
+    /// consulta de vehículo aún) es no-op. Devuelve el mensaje de bloqueo, o <c>null</c> si el VIN sigue
+    /// libre de una matrícula APROBADA de otro trámite.
+    /// </summary>
+    private async Task<string?> EvaluarEstadoVehiculoRegistralAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
+            return null;
+
+        var vin = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var vinNorm = VinNormalizer.Normalize(vin);
+        if (vinNorm is null)
+            return null;
+
+        var existentes = await repo.FindTramitesByVinAsync(instance.TenantId, vinNorm, instance.Id, ct)
+            .ConfigureAwait(false);
+        var conflicto = VinPolicyEvaluator.EvaluarConflicto(existentes);
+        if (conflicto?.Code != VinConflictCode.TramiteMatriculaCompletada)
+            return null;
+
+        return "El vehículo ya tiene una matrícula inicial APROBADA en FLIT para este VIN: no puede radicarse.";
     }
 
     /// <summary>

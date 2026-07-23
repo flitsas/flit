@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -168,6 +169,70 @@ public sealed class TramiteLifecycleServiceTests
 
         var conMotivo = await Transition(i, destino, reason: "Motivo de negocio");
         conMotivo.Success.Should().BeTrue();
+    }
+
+    // ── CF-03 (HU #10877): precondición registral, SEGUNDO momento (radicar) ────────────────────
+
+    private static void ConVin(ProcedureInstance instance, string vin) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "vin",
+            ValueText = vin,
+            Source = "user",
+        });
+
+    [Fact]
+    public async Task Radicar_VinConMatriculaAprobadaEnFlit_BloqueaConVehicleStateInvalid()
+    {
+        // CF-03 (AC2) — el estado registral pudo cambiar ENTRE el preflight y la radicación: si otro
+        // trámite del mismo VIN llegó a 'aprobado' mientras este seguía en curso, el gate de
+        // preparación lo atrapa antes de avanzar (no solo el preflight).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(VehicleStatePolicy.ErrorCode);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Radicar_VinSinMatriculaAprobada_Permite()
+    {
+        // Sin conflicto registral (sin previas, o previa no aprobada): el gate CF-03 no bloquea.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>());
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task Radicar_SinVinPersistido_NoConsultaRepoYPermite()
+    {
+        // Instancias sin VIN (p. ej. otras familias, o tests que no lo ejercitan): el gate CF-03 es
+        // no-op y NO dispara IO contra el repo (guarda por VinNormalizer.Normalize(null) == null).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        await _repo.DidNotReceive().FindTramitesByVinAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
