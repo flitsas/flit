@@ -3,11 +3,15 @@
 import { UserSquare } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import type { LegalRepresentativeItem } from "@/lib/api/admin-legal-representatives";
+import type {
+  AssignableProcedureType,
+  LegalRepresentativeItem,
+} from "@/lib/api/admin-legal-representatives";
 import { fullName, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
 
 export interface LegalRepresentativeDetailModalProps {
   item: LegalRepresentativeItem | null;
+  procedureTypes: AssignableProcedureType[];
   onClose: () => void;
 }
 
@@ -16,10 +20,14 @@ export interface LegalRepresentativeDetailModalProps {
  * representante, los tipos de trámite y el estado de firma/identidad. El número de documento se
  * muestra completo aquí (vista de gestión SuperAdmin autenticada); nunca se descarga artefacto alguno.
  */
-export function LegalRepresentativeDetailModal({ item, onClose }: LegalRepresentativeDetailModalProps) {
+export function LegalRepresentativeDetailModal({
+  item,
+  procedureTypes,
+  onClose,
+}: LegalRepresentativeDetailModalProps) {
   if (!item) return null;
   const status = signatureStatus(item.hasSignatureOrIdentity);
-  const tramites = procedureTypeLabels(item.procedureTypeIds);
+  const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
 
   return (
     <Modal

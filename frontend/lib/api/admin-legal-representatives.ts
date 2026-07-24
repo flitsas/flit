@@ -64,6 +64,17 @@ export interface LegalRepresentativeInput {
   procedureTypeIds: string[];
 }
 
+/**
+ * Tipo de trámite asignable a un representante (activo + publicado), tal como lo devuelve el
+ * catálogo real (`tramites.procedure_types`). El `id` es el del catálogo del entorno: NUNCA debe
+ * hardcodearse en el frontend (los seeds usan `uuidv7()`, no deterministas por BD).
+ */
+export interface AssignableProcedureType {
+  id: string;
+  code: string;
+  name: string;
+}
+
 /** Señal estable que el guardado puede emitir (no es un error 422): el registro persistió igual. */
 export const SIGNAL_SIN_FIRMA_NI_IDENTIDAD = "sin_firma_ni_identidad";
 
@@ -131,6 +142,18 @@ export function updateLegalRepresentative(
 /** DELETE "/{id}" — baja lógica idempotente (204). */
 export function deleteLegalRepresentative(tenantId: string, id: string): Promise<void> {
   return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "DELETE" });
+}
+
+/**
+ * GET "/procedure-types" — tipos de trámite asignables (activos + publicados) con sus IDs reales del
+ * catálogo. El multiselect del formulario se alimenta de aquí en vez de una lista estática, para que
+ * los ids enviados existan en `tramites.procedure_types` del entorno (corrige `tipo_tramite_inexistente`).
+ */
+export function fetchAssignableProcedureTypes(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<AssignableProcedureType[]> {
+  return apiFetch<AssignableProcedureType[]>(`${base(tenantId)}/procedure-types`, { signal });
 }
 
 /**

@@ -303,6 +303,11 @@ public sealed class LegalRepresentativeCrudHandlerTests
 
         public Task<bool> ExistsAsync(Guid procedureTypeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_known.Contains(procedureTypeId));
+
+        public Task<IReadOnlyList<ProcedureTypeCatalogItem>> ListActivePublishedAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProcedureTypeCatalogItem>>(
+                [.. _known.Select(id => new ProcedureTypeCatalogItem(id, "CODE", "Tipo"))]);
     }
 
     /// <summary>Resolutor de firma/identidad en memoria: devuelve una resolución fija.</summary>

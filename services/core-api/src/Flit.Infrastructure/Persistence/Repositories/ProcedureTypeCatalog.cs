@@ -23,4 +23,14 @@ internal sealed class ProcedureTypeCatalog : IProcedureTypeCatalog
         _context.ProcedureTypes
             .AsNoTracking()
             .AnyAsync(p => p.Id == procedureTypeId, cancellationToken);
+
+    public async Task<IReadOnlyList<ProcedureTypeCatalogItem>> ListActivePublishedAsync(
+        CancellationToken cancellationToken = default) =>
+        await _context.ProcedureTypes
+            .AsNoTracking()
+            .Where(p => p.IsActive && p.PublicationStatus == "published")
+            .OrderBy(p => p.Name)
+            .Select(p => new ProcedureTypeCatalogItem(p.Id, p.Code, p.Name))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 }

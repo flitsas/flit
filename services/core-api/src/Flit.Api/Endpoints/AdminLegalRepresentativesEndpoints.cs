@@ -5,6 +5,7 @@ using Flit.Admin.Application.Companies.LegalRepresentatives.DeleteLegalRepresent
 using Flit.Admin.Application.Companies.LegalRepresentatives.GetLegalRepresentative;
 using Flit.Admin.Application.Companies.LegalRepresentatives.ListLegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -72,6 +73,18 @@ public static class AdminLegalRepresentativesEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        // GET /procedure-types — catálogo de tipos de trámite asignables (activos + publicados).
+        // Alimenta el multiselect del formulario con los IDs REALES del catálogo: los seeds usan
+        // uuidv7() (ids no deterministas por BD), así que el FE no puede fijarlos hardcodeados
+        // (corrige el 422 `tipo_tramite_inexistente`). Catálogo global; el tenantId de la ruta no
+        // filtra (procedure_types no es tenant-scoped), pero mantiene la pantalla bajo el mismo grupo.
+        group.MapGet("/procedure-types", ListProcedureTypesAsync)
+            .WithName("AdminLegalRepresentativesProcedureTypes")
+            .WithSummary("Tipos de trámite asignables (activos y publicados)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         return app;
     }
@@ -216,6 +229,15 @@ public static class AdminLegalRepresentativesEndpoints
         return outcome == DeleteLegalRepresentativeOutcome.Deactivated
             ? Results.NoContent()
             : Results.NotFound(new { error = $"No existe el representante {id} en esta compañía." });
+    }
+
+    private static async Task<IResult> ListProcedureTypesAsync(
+        Guid tenantId,
+        [FromServices] IProcedureTypeCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        var items = await catalog.ListActivePublishedAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(items.Select(p => new { id = p.Id, code = p.Code, name = p.Name }));
     }
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>

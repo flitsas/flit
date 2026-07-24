@@ -12,4 +12,17 @@ public interface IProcedureTypeCatalog
     Task<bool> ExistsAsync(
         Guid procedureTypeId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tipos de trámite asignables a un representante/gestor: solo los <b>activos y publicados</b>
+    /// (los "habilitados" en el módulo de trámites). Devuelve id + código + nombre para que el
+    /// selector del admin trabaje con los IDs reales del catálogo. Los seeds generan los ids con
+    /// <c>uuidv7()</c> (no deterministas por BD/entorno), por lo que el frontend NO puede fijar ids
+    /// hardcodeados: debe consumir esta lista (ADR-0033, corrección del error <c>tipo_tramite_inexistente</c>).
+    /// </summary>
+    Task<IReadOnlyList<ProcedureTypeCatalogItem>> ListActivePublishedAsync(
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>Ítem del catálogo de tipos de trámite para selección en el admin (HU #10901/#10904).</summary>
+public sealed record ProcedureTypeCatalogItem(Guid Id, string Code, string Name);

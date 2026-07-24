@@ -1,8 +1,7 @@
 // Helpers de presentación del directorio de representantes legales (HU #10904): nombre completo,
 // enmascarado de documento (PII, Ley 1581), estado de firma/identidad y etiquetas de tipo de trámite.
 import type { StatusTone } from "@/components/atom/StatusBadge";
-import { findProcedureType } from "@/lib/constants/procedure-types";
-import type { LegalRepresentativeItem } from "@/lib/api/admin-legal-representatives";
+import type { AssignableProcedureType, LegalRepresentativeItem } from "@/lib/api/admin-legal-representatives";
 
 /** Nombre completo del representante: nombres + primer apellido + segundo apellido. */
 export function fullName(rep: Pick<LegalRepresentativeItem, "name" | "firstLastName" | "secondLastName">): string {
@@ -25,7 +24,17 @@ export function signatureStatus(hasSignatureOrIdentity: boolean): { tone: Status
     : { tone: "warning", label: "Sin firma ni identidad" };
 }
 
-/** Nombres de los tipos de trámite marcados (según el catálogo estático alineado al backend). */
-export function procedureTypeLabels(ids: readonly string[]): string[] {
-  return ids.map((id) => findProcedureType(id)?.name ?? "Trámite").filter(Boolean);
+/**
+ * Nombres de los tipos de trámite marcados, resueltos contra el catálogo real (activos + publicados)
+ * cargado desde el backend. Si un id ya no está en el catálogo (p. ej. tipo archivado tras marcarlo),
+ * cae a su código o a "Trámite" para no romper la fila.
+ */
+export function procedureTypeLabels(
+  ids: readonly string[],
+  catalog: readonly AssignableProcedureType[],
+): string[] {
+  return ids.map((id) => {
+    const match = catalog.find((p) => p.id === id);
+    return match?.name ?? match?.code ?? "Trámite";
+  });
 }

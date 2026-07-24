@@ -16,6 +16,7 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
   return {
     ...actual,
     fetchLegalRepresentatives: vi.fn(),
+    fetchAssignableProcedureTypes: vi.fn(),
     createLegalRepresentative: vi.fn(),
     updateLegalRepresentative: vi.fn(),
     deleteLegalRepresentative: vi.fn(),
@@ -25,11 +26,19 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
 
 import {
   deleteLegalRepresentative,
+  fetchAssignableProcedureTypes,
   fetchLegalRepresentatives,
   sendLegalRepresentativeIdentity,
+  type AssignableProcedureType,
 } from "@/lib/api/admin-legal-representatives";
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
+
+// IDs reales del catálogo (uuidv7 del entorno), NO los hardcodeados que causaban tipo_tramite_inexistente.
+const PROC_TYPES: AssignableProcedureType[] = [
+  { id: "019f8195-fed1-770a-98ae-295ed59b53d4", code: "TRASPASO_STANDARD", name: "Traspaso" },
+  { id: "019f8195-bbdf-72ea-b226-e026826cbfa6", code: "MATRICULA_NUEVA", name: "Matrícula inicial" },
+];
 
 const ITEM: LegalRepresentativeItem = {
   id: "rep-1",
@@ -69,6 +78,8 @@ function renderTab() {
 describe("LegalRepresentativesTab (HU #10904)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Por defecto el catálogo de tipos de trámite responde con los tipos activos+published.
+    vi.mocked(fetchAssignableProcedureTypes).mockResolvedValue(PROC_TYPES);
   });
 
   it("muestra el estado vacío cuando no hay representantes", async () => {
@@ -113,6 +124,35 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await waitFor(() =>
       expect(sendLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-1"),
     );
+  });
+
+  it("alimenta el multiselect con los tipos del catálogo del backend (no una lista estática)", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
+    renderTab();
+    await screen.findByText(/aún no tiene representantes legales registrados/i);
+
+    // Se consultó el catálogo real acotado al tenant.
+    await waitFor(() =>
+      expect(fetchAssignableProcedureTypes).toHaveBeenCalledWith(TENANT, expect.anything()),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
+
+    // El multiselect muestra los nombres devueltos por el backend.
+    expect(await screen.findByText("Traspaso")).toBeInTheDocument();
+    expect(screen.getByText("Matrícula inicial")).toBeInTheDocument();
+  });
+
+  it("muestra el aviso cuando no hay tipos de trámite habilitados", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
+    vi.mocked(fetchAssignableProcedureTypes).mockResolvedValue([]);
+    renderTab();
+    await screen.findByText(/aún no tiene representantes legales registrados/i);
+
+    await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
+    expect(
+      await screen.findByText(/no hay tipos de trámite habilitados en el módulo de trámites/i),
+    ).toBeInTheDocument();
   });
 
   it("elimina un representante tras confirmar en el diálogo", async () => {

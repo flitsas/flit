@@ -5,8 +5,8 @@ import { Loader2 } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
-import { PROCEDURE_TYPES } from "@/lib/constants/procedure-types";
 import type {
+  AssignableProcedureType,
   LegalRepresentativeInput,
   LegalRepresentativeItem,
   LegalRepresentativeSaved,
@@ -24,6 +24,8 @@ export interface LegalRepresentativesFormPanelProps {
   open: boolean;
   /** Representante a editar; `null` = alta. */
   editing: LegalRepresentativeItem | null;
+  /** Catálogo de tipos de trámite asignables (activos + publicados) cargado del backend. */
+  procedureTypes: AssignableProcedureType[];
   onClose: () => void;
   onSubmit: (input: LegalRepresentativeInput) => Promise<LegalRepresentativeSaved>;
   onSaved: (saved: LegalRepresentativeSaved) => void;
@@ -97,6 +99,7 @@ function fromItem(item: LegalRepresentativeItem): FormState {
 export function LegalRepresentativesFormPanel({
   open,
   editing,
+  procedureTypes,
   onClose,
   onSubmit,
   onSaved,
@@ -402,26 +405,33 @@ export function LegalRepresentativesFormPanel({
               {fieldErrors.procedureTypeIds}
             </p>
           )}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {PROCEDURE_TYPES.map((pt) => {
-              const checked = form.procedureTypeIds.includes(pt.id);
-              return (
-                <label
-                  key={pt.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
-                  style={checked ? { borderColor: "#557EFF" } : undefined}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleProcedureType(pt.id)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
-                  />
-                  <span className="font-medium">{pt.name}</span>
-                </label>
-              );
-            })}
-          </div>
+          {procedureTypes.length === 0 ? (
+            <p className="text-[11px] opacity-60">
+              No hay tipos de trámite habilitados en el módulo de trámites. Publica al menos un tipo
+              (activo y publicado) para poder asignarlo al representante.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {procedureTypes.map((pt) => {
+                const checked = form.procedureTypeIds.includes(pt.id);
+                return (
+                  <label
+                    key={pt.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
+                    style={checked ? { borderColor: "#557EFF" } : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProcedureType(pt.id)}
+                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                    />
+                    <span className="font-medium">{pt.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </fieldset>
       </div>
     </OtSidePanel>
