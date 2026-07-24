@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
@@ -15,8 +16,9 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// <c>RUNT</c>, llave = documento FLIT tal cual llega — CC/CE/PAS/TI, el mismo vocabulario que
 /// <c>ActorInput.TipoDocumento</c>, para que el gate de consentimiento capturado en <c>PUT
 /// actors</c> resuelva la misma llave). En HIT reconstruye el DTO desde el payload cacheado sin
-/// llamar a ningún proveedor (AC1) — la consulta best-effort de multas SIMIT queda fuera de
-/// alcance en el HIT (no se re-ejecuta). En MISS, el flujo original queda intacto y, al final,
+/// llamar al proveedor del RUNT (AC1); el DETALLE de comparendos SÍ se vuelve a consultar
+/// (best-effort), porque no viaja en el payload cacheado y sin él la ficha del actor perdía la
+/// lista de multas que antes mostraba. En MISS, el flujo original queda intacto y, al final,
 /// cachea el resultado fresco del RUNT (AC2), sin incluir el detalle de multas (SIMIT es una
 /// sub-consulta best-effort distinta, fuera de alcance de esta HU).
 /// </remarks>
@@ -25,7 +27,8 @@ public sealed class RuntPersonLookupHandler(
     IConsultationProviderChainResolver chainResolver,
     IConsultationTenantOverrideProvider overrideProvider,
     ExternalQueryCacheService cacheService,
-    IConsultationProviderRegistry? finesRegistry = null)
+    IConsultationProviderRegistry? finesRegistry = null,
+    ILogger<RuntPersonLookupHandler>? logger = null)
 {
     private const string KyverumConductorProvider = "kyverum_runt_conductor";
     private const string RuntSourceCode = "RUNT";
@@ -53,7 +56,25 @@ public sealed class RuntPersonLookupHandler(
         // HU #10878 — cache-aside ANTES de resolver la cadena de proveedores (AC1).
         var cacheLookup = await cacheService.TryReusePersonAsync(tenantId, RuntSourceCode, documentType, documentNumber, now, ct);
         if (cacheLookup.Hit)
-            return (BuildDtoFromFields(cacheLookup.Fields!, documentType, documentNumber, "cache"), null);
+        {
+            var cachedDto = BuildDtoFromFields(cacheLookup.Fields!, documentType, documentNumber, "cache");
+
+            // La caché guarda el FLAG de multas, no el detalle de cada comparendo (el detalle es una
+            // sub-consulta SIMIT best-effort, fuera del payload cacheado). Sin esto, al reusar la
+            // persona la ficha del actor mostraba la alerta "Comparendos/Multas pendientes" PERO sin
+            // la lista de comparendos — se perdía información que antes sí se veía. Se recompone con
+            // la misma consulta best-effort del camino en vivo: si falla, queda la alerta sola.
+            if (cachedDto is { Found: true, HasPendingFines: true })
+            {
+                var cachedOverride = await overrideProvider.GetAsync(tenantId, ct);
+                var cachedFines = await TryConsultFinesDetailAsync(
+                    cachedOverride, documentType, documentNumber, instanceId, tenantId, ct);
+                if (cachedFines is not null)
+                    cachedDto = cachedDto with { Fines = cachedFines };
+            }
+
+            return (cachedDto, null);
+        }
 
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -108,7 +129,11 @@ public sealed class RuntPersonLookupHandler(
         var providerKey = FinesProviderResolver.Resolve(tenantOverride?.FinesQuerySource, isNaturalPerson: true);
         var provider = finesRegistry.Resolve(providerKey);
         if (provider is null)
+        {
+            if (logger is not null)
+                RuntPersonLookupLog.ProveedorMultasNoRegistrado(logger, providerKey, documentType, documentNumber);
             return null;
+        }
 
         try
         {
@@ -121,14 +146,22 @@ public sealed class RuntPersonLookupHandler(
             var result = await provider.ConsultAsync(ctx, ct);
             var multas = result.Checks.FirstOrDefault(c =>
                 string.Equals(c.Key, FinesCheckFactory.KeyMultas, StringComparison.Ordinal));
+
+            if (logger is not null && multas?.Details is null or { Count: 0 })
+                RuntPersonLookupLog.SinDetalleDeComparendos(logger, provider.Key, documentType, documentNumber);
+
             return multas?.Details;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // Best-effort: no rompe el lookup del actor, pero SÍ deja traza — sin esto, un fallo del
+            // proveedor de multas era indistinguible de "esta persona no tiene comparendos".
+            if (logger is not null)
+                RuntPersonLookupLog.ConsultaDeComparendosFallo(logger, ex, provider.Key, documentType, documentNumber);
             return null;
         }
     }
@@ -193,6 +226,29 @@ public sealed class RuntPersonLookupHandler(
         var mode = Environment.GetEnvironmentVariable("VERIFIK_CONDUCTOR_MODE") ?? "mock";
         return string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase) ? "real" : "mock";
     }
+}
+
+/// <summary>
+/// Trazas del detalle de comparendos. Es una sub-consulta best-effort: nunca rompe el lookup del
+/// actor, pero su fallo debe quedar registrado — de lo contrario "el proveedor falló" y "esta persona
+/// no tiene comparendos" se ven exactamente igual en la UI (alerta sin lista).
+/// </summary>
+internal static partial class RuntPersonLookupLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Detalle de comparendos omitido para {DocumentType} {DocumentNumber}: el proveedor '{ProviderKey}' no está registrado.")]
+    public static partial void ProveedorMultasNoRegistrado(
+        ILogger logger, string providerKey, string documentType, string documentNumber);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "El proveedor '{ProviderKey}' no devolvió detalle de comparendos para {DocumentType} {DocumentNumber} aunque el RUNT reporta multas pendientes: la ficha del actor mostrará la alerta sin la lista.")]
+    public static partial void SinDetalleDeComparendos(
+        ILogger logger, string providerKey, string documentType, string documentNumber);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Falló la consulta de detalle de comparendos ('{ProviderKey}') para {DocumentType} {DocumentNumber}.")]
+    public static partial void ConsultaDeComparendosFallo(
+        ILogger logger, Exception ex, string providerKey, string documentType, string documentNumber);
 }
 
 /// <summary>

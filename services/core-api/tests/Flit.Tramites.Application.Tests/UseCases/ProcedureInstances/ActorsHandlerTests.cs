@@ -729,6 +729,47 @@ public sealed class ActorsHandlerTests
     }
 
     [Fact]
+    public async Task Put_EmailChanged_IdentidadYaAprobada_NoLaExpiraNiReenvia()
+    {
+        // La identidad APROBADA no se toca al corregir un correo: el AC habla de una validación
+        // "enviada", y expirar una aprobación obligaría a revalidar a quien ya validó, rompiendo la
+        // radicación. La aprobación vigente se conserva para su reúso (HU #10350).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, modalidad: "matricula_inicial");
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ActorType = "comprador",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            FullName = "Juan Comprador",
+            Email = "viejo@x.com",
+            ProcedureEntityId = BuyerEntityId,
+        });
+        var aprobada = SentValidation("comprador", "CC", "123", "viejo@x.com", BiometricEstados.Aprobado);
+        instance.BiometricValidations.Add(aprobada);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        _providerOptions.Provider = BiometricProviders.Kyverum;
+        StubKyverumOk();
+
+        var (result, error) = await _put.HandleAsync(
+            id, tenant, new PutActorsRequest([Comprador(doc: "123", email: "nuevo@x.com")]), ct);
+
+        error.Should().BeNull();
+        result!.Actors.Should().ContainSingle().Which.Email.Should().Be("nuevo@x.com");
+
+        aprobada.Status.Should().Be(BiometricEstados.Aprobado);
+        instance.BiometricValidations.Should().ContainSingle();
+        await _kyverumClient.DidNotReceiveWithAnyArgs()
+            .StartVerificationAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Put_EmailIgual_NoReenviaValidacion()
     {
         // AC2: el correo se guarda igual (aun con distinto casing/espacios) -> no se toca la biométrica.

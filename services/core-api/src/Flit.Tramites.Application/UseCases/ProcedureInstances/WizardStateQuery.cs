@@ -871,6 +871,48 @@ public sealed class GetWizardStateHandler(
     /// instancia (matrícula 5 · traspaso 6). Fuente única para validar que el paso que se intenta
     /// persistir es uno legítimo del wizard, reusando el MISMO mapeo índice→key que expone el contrato.
     /// </summary>
+    /// <summary>
+    /// CF-02 (HU #10883, AC3) — esqueleto del wizard para el paso 1 cuando el trámite AÚN NO EXISTE.
+    /// Mismos pasos, keys y etiquetas que el wizard real (misma fuente: el catálogo de la tipología),
+    /// con el paso 1 abierto y el resto bloqueado: la cascada de gates no es evaluable sin instancia,
+    /// y el trámite se crea justo al avanzar al paso 2. Devuelve <c>null</c> si la modalidad no existe.
+    /// </summary>
+    public static WizardStateDto? BuildPreview(string? modalidadCodigo)
+    {
+        var modalidad = TramiteModalidadEntradaCodes.FromCode(modalidadCodigo);
+        if (modalidad is null)
+            return null;
+
+        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
+        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
+        var pasos = TipologiaMatrizCatalog.Get(
+                        traspaso
+                            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
+                            : TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
+                    ?? [];
+
+        var steps = new List<WizardStepDto>(total);
+        for (var p = 1; p <= total; p++)
+        {
+            steps.Add(new WizardStepDto(
+                p,
+                StepKey(traspaso, p),
+                StepLabel(pasos, p),
+                p == 1 ? "incomplete" : "locked",
+                []));
+        }
+
+        return new WizardStateDto(
+            traspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
+            traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial,
+            total,
+            steps,
+            CanSubmit: false,
+            Blockers: [],
+            TramiteEstado.Borrador,
+            AllowedTransitions: []);
+    }
+
     public static IReadOnlyList<string> StepKeysFor(ProcedureInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);

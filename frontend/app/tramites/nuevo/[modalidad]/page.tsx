@@ -1,19 +1,16 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { Suspense } from 'react';
 import { notFound, useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useProcedureInstance } from '@/hooks/useProcedureInstance';
-import { tramitesClient } from '@/lib/api/tramites-client';
-import type {
-  FieldValueInput,
-  WizardModalidad,
-} from '@/lib/api/types/procedure-runtime';
+import { TramiteWizard } from '@/components/operacion/TramiteWizard';
+import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Track B — /tramites/nuevo/[modalidad]: crea UNA instancia draft y redirige a
- * /tramites/[instanceId] (replace, para que el back del browser no vuelva aquí
- * y re-cree). Modalidad inválida → notFound(). Guard anti doble-create por ref
- * (StrictMode re-invoca efectos en dev).
+ * Track B — /tramites/nuevo/[modalidad]: PASO 1 del wizard SIN trámite creado (CF-02, HU
+ * #10883 AC3). Entrar aquí ya no da de alta ningún registro: el operador consulta el vehículo
+ * contra el preview desacoplado y, al pulsar "Continuar", el wizard crea el trámite y esta página
+ * navega a /tramites/[instanceId] (replace: el back del navegador no vuelve a este paso ya
+ * consumido). Modalidad inválida → notFound().
  */
 export default function NuevoTramitePage() {
   const params = useParams<{ modalidad: string }>();
@@ -27,91 +24,35 @@ export default function NuevoTramitePage() {
   // para no romper el prerender en `next build`.
   return (
     <Suspense fallback={null}>
-      <CrearInstancia modalidad={modalidad as WizardModalidad} />
+      <PasoConsulta modalidad={modalidad as WizardModalidad} />
     </Suspense>
   );
 }
 
-function CrearInstancia({ modalidad }: { modalidad: WizardModalidad }) {
+function PasoConsulta({ modalidad }: { modalidad: WizardModalidad }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { state, start } = useProcedureInstance();
-  const startedRef = useRef(false);
 
-  // Crea la instancia y, si venimos de la ruta de traspaso con seed (R3/HU #10539: VIN ya
-  // matriculado), persiste placa/VIN en el borrador con el tenant EXPLÍCITO de la instancia recién
-  // creada (no el activo, que aún no se fijó) antes de redirigir. El seed es best-effort: si el PATCH
-  // falla, el gestor captura placa/VIN a mano en el paso 1 (no se aborta la creación del trámite).
-  const startFlow = useCallback(async () => {
-    const summary = await start({ modalidad });
-    if (!summary) return;
-    const seedVin = searchParams.get('seedVin')?.trim();
-    const seedPlaca = searchParams.get('seedPlaca')?.trim();
-    const items: FieldValueInput[] = [];
-    if (seedVin) items.push({ formFieldId: null, fieldKey: 'vin', valueText: seedVin, valueJson: null });
-    if (seedPlaca) items.push({ formFieldId: null, fieldKey: 'plate', valueText: seedPlaca, valueJson: null });
-    if (items.length > 0) {
-      try {
-        await tramitesClient.patchFieldValues(summary.id, items, summary.tenantId);
-      } catch {
-        // Seed best-effort: se ignora el fallo y se continúa a la instancia.
-      }
-    }
-    // Propaga el tenant REAL de la instancia recién creada (?t=) para que la página
-    // destino fije activeTramitesTenant y el primer field-values use el MISMO tenant que
-    // el create. Sin esto, el SuperAdmin cae en jwtTenantId() (su propio tenant) ≠ el de
-    // la instancia → 404 "Procedure instance not found." hasta re-entrar desde la tabla.
-    router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
-  }, [modalidad, start, searchParams, router]);
-
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    void startFlow();
-  }, [startFlow]);
-
-  if (state.error) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-3 py-16 text-center"
-        role="alert"
-      >
-        <p className="text-sm font-bold">No se pudo iniciar el trámite</p>
-        <p className="text-xs opacity-60 max-w-xs">{state.error}</p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              startedRef.current = true;
-              void startFlow();
-            }}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-          >
-            Reintentar
-          </button>
-          <button
-            onClick={() => router.push('/tramites')}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold border"
-            style={{ borderColor: '#162744', color: '#162744' }}
-          >
-            Volver a Trámites
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // R3 (HU #10539) — "Iniciar traspaso" siembra el vehículo del trámite de origen. Ya no se
+  // persiste al crear (no hay instancia todavía): solo prellena el campo del paso 1, y el valor
+  // definitivo lo fija la consulta que el operador dispare.
+  const seedVin = searchParams.get('seedVin')?.trim() || undefined;
+  const seedPlaca = searchParams.get('seedPlaca')?.trim() || undefined;
 
   return (
-    <div
-      className="flex flex-col items-center justify-center gap-3 py-16 text-center"
-      aria-busy="true"
-      aria-label="Creando el trámite"
-    >
-      <div
-        className="h-10 w-10 rounded-full border-2 border-t-transparent animate-spin"
-        style={{ borderColor: '#557EFF', borderTopColor: 'transparent' }}
-      />
-      <p className="text-xs opacity-60">Iniciando trámite…</p>
-    </div>
+    <TramiteWizard
+      modalidad={modalidad}
+      title={modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial'}
+      seedVin={seedVin}
+      seedPlaca={seedPlaca}
+      onCreated={(summary) => {
+        // Propaga el tenant REAL de la instancia recién creada (?t=) para que la página destino
+        // fije activeTramitesTenant y las llamadas per-instance usen el MISMO tenant que la
+        // creación. Sin esto, el SuperAdmin cae en jwtTenantId() (su propio tenant) ≠ el de la
+        // instancia → 404 "Procedure instance not found." hasta re-entrar desde la tabla.
+        router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
+      }}
+      onExit={() => router.push('/tramites')}
+    />
   );
 }

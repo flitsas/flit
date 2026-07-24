@@ -11,9 +11,12 @@ import type {
   CommercialData,
   SuggestedCommercialValue,
   CompletarBiometriaResult,
+  ConsultaVehiculoInput,
   ConsultationProvidersConfig,
   ConsultationResult,
+  CreateFromConsultaResult,
   CreateInstanceRequest,
+  PreflightPreviewResult,
   DocumentOcrResult,
   EnsureIdentityResult,
   FieldValueInput,
@@ -58,6 +61,7 @@ import type {
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
   StuckIdentityValidationsResponse,
+  WizardModalidad,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -78,6 +82,12 @@ interface PreflightSnapshotDto {
   }>;
   provider?: string;
   createdAt: string;
+}
+
+/** Espejo del PreflightPreviewDto del backend (CF-02): snapshot del paso 1 + token de reúso. */
+interface PreflightPreviewDto extends PreflightSnapshotDto {
+  previewToken: string;
+  vehicleFields?: Array<{ fieldKey: string; valueText?: string | null; valueJson?: string | null }>;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -753,6 +763,77 @@ export const tramitesClient = {
     );
     return mapPreflight(dto);
   },
+
+  // CF-02 (HU #10879 AC3 / #10883 AC3) — consulta del vehículo del PASO 1 SIN crear el trámite.
+  // Devuelve el mismo semáforo que el preflight de una instancia (y los mismos bloqueos 409/422),
+  // más el token con el que la creación posterior reusa esta consulta.
+  runPreflightPreview: async (
+    input: ConsultaVehiculoInput,
+    tenantId?: string,
+  ): Promise<PreflightPreviewResult> => {
+    const dto = await request<PreflightPreviewDto>('/api/v1/tramites/preflight-preview', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({
+        tenantId: tenantId ?? jwtTenantId() ?? DEV_TENANT_ID,
+        modalidad: input.modalidad,
+        vin: input.vin ?? null,
+        plate: input.plate ?? null,
+        ownerDocumentType: input.ownerDocumentType ?? null,
+        ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+      }),
+    });
+    return {
+      previewToken: dto.previewToken,
+      preflight: mapPreflight(dto),
+      vehicleFields: (dto.vehicleFields ?? []).map((f) => ({
+        formFieldId: '',
+        fieldKey: f.fieldKey,
+        valueText: f.valueText ?? null,
+        valueJson: f.valueJson ?? null,
+        source: 'consultation',
+      })),
+    };
+  },
+
+  // CF-02 (HU #10879 AC5 / #10883 AC4) — crea el trámite AL AVANZAR al paso 2, ya con el vehículo
+  // consultado: es el único punto del flujo que da de alta el registro. `previewToken` evita repetir
+  // la consulta al proveedor externo; si expiró, el backend consulta de nuevo (no falla).
+  createInstanceFromConsulta: async (
+    input: ConsultaVehiculoInput & { previewToken?: string | null },
+    tenantId?: string,
+  ): Promise<CreateFromConsultaResult> => {
+    const payload = decodeJwtPayload(getToken());
+    const dto = await request<{
+      instance: ProcedureInstanceSummary;
+      preflight: PreflightSnapshotDto | null;
+    }>('/api/v1/tramites/instances/from-consulta', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({
+        tenantId: tenantId ?? payload?.tenant_id ?? DEV_TENANT_ID,
+        createdByUserId: payload?.sub ?? DEV_USER_ID,
+        modalidad: input.modalidad,
+        vin: input.vin ?? null,
+        plate: input.plate ?? null,
+        ownerDocumentType: input.ownerDocumentType ?? null,
+        ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+        previewToken: input.previewToken ?? null,
+        transitOfficeId: null,
+      }),
+    });
+    return {
+      instance: dto.instance,
+      preflight: dto.preflight ? mapPreflight(dto.preflight) : null,
+    };
+  },
+
+  // CF-02 (HU #10883, AC3) — esqueleto de pasos para pintar el wizard en el paso 1 mientras el
+  // trámite aún no existe. Mismos pasos/etiquetas que el wizard real, con el resto bloqueado.
+  getWizardPreview: (modalidad: WizardModalidad) =>
+    request<WizardState>(
+      `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
+    ),
 
   // HU #10879/#10883 — autosave del avance del wizard: persiste la `key` del paso donde quedó el
   // operador para retomar ahí al reabrir el borrador (AC2). PATCH /instances/{id}/current-step; el

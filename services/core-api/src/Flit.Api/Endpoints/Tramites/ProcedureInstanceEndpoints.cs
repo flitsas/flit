@@ -8,6 +8,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -404,7 +405,161 @@ internal static class ProcedureInstanceEndpoints
             return Results.Ok(new { enabled });
         }).WithName("PlatePreassignStatus");
 
+        // CF-02 (HU #10879 AC3 / #10883 AC3) — consulta del vehículo del PASO 1 SIN crear el trámite.
+        // Devuelve el mismo semáforo y los mismos bloqueos (409 duplicidad / 422 estado registral) que
+        // el preflight de una instancia, pero no persiste nada: si el operador abandona aquí, no queda
+        // ningún registro. El token devuelto se entrega luego a /instances/from-consulta.
+        group.MapPost("/preflight-preview", async (
+            PreflightPreviewBody body,
+            HttpContext http,
+            RunPreflightPreviewHandler handler,
+            GetTenantSettingsHandler settingsHandler,
+            CancellationToken ct) =>
+        {
+            var (tenant, error) = await ResolveEffectiveTenantAsync(http, body.TenantId, body.Modalidad, settingsHandler, ct);
+            if (error is not null)
+                return error;
+
+            var (result, err, existingId, vehicleState) = await handler.HandleAsync(
+                new PreflightPreviewRequest(
+                    tenant,
+                    body.Modalidad,
+                    body.Vin,
+                    body.Plate,
+                    body.OwnerDocumentType,
+                    body.OwnerDocumentNumber),
+                ct);
+
+            return err switch
+            {
+                "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para consultar."),
+                InitialProcedureValidationGate.DuplicateActiveProcedure => Results.Problem(
+                    statusCode: 409,
+                    title: InitialProcedureValidationGate.DuplicateActiveProcedure,
+                    detail: "Ya existe un trámite en proceso para este VIN/placa.",
+                    extensions: new Dictionary<string, object?> { ["procedureInstanceId"] = existingId }),
+                VehicleStatePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleStatePolicy.ErrorCode,
+                    detail: "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["vehicleStatus"] = vehicleState?.VehicleStatus,
+                        ["procedureType"] = vehicleState?.ProcedureType,
+                    }),
+                _ => Results.Ok(result),
+            };
+        }).WithName("RunProcedureInstancePreflightPreview");
+
+        // CF-02 (HU #10879 AC5 / #10883 AC4) — creación del trámite AL AVANZAR al segundo paso, con el
+        // vehículo ya consultado. Reemplaza al POST /instances "vacío" en el flujo del wizard: crea,
+        // persiste los identificadores capturados y deja el preflight persistido en una sola operación,
+        // reusando la consulta del paso 1 (sin segunda llamada al proveedor externo).
+        group.MapPost("/instances/from-consulta", async (
+            CreateFromConsultaBody body,
+            HttpContext http,
+            CreateProcedureInstanceFromConsultaHandler handler,
+            GetTenantSettingsHandler settingsHandler,
+            CancellationToken ct) =>
+        {
+            var (tenant, error) = await ResolveEffectiveTenantAsync(http, body.TenantId, body.Modalidad, settingsHandler, ct);
+            if (error is not null)
+                return error;
+
+            var (result, err, existingId, vehicleState) = await handler.HandleAsync(
+                new CreateFromConsultaRequest(
+                    tenant,
+                    ResolveUserId(http.User) ?? body.CreatedByUserId,
+                    body.Modalidad,
+                    body.Vin,
+                    body.Plate,
+                    body.OwnerDocumentType,
+                    body.OwnerDocumentNumber,
+                    body.PreviewToken,
+                    body.TransitOfficeId),
+                ct);
+
+            return err switch
+            {
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
+                "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
+                "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
+                "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
+                InitialProcedureValidationGate.DuplicateActiveProcedure => Results.Problem(
+                    statusCode: 409,
+                    title: InitialProcedureValidationGate.DuplicateActiveProcedure,
+                    detail: "Ya existe un trámite en proceso para este VIN/placa.",
+                    extensions: new Dictionary<string, object?> { ["procedureInstanceId"] = existingId }),
+                VehicleStatePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleStatePolicy.ErrorCode,
+                    detail: "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["vehicleStatus"] = vehicleState?.VehicleStatus,
+                        ["procedureType"] = vehicleState?.ProcedureType,
+                    }),
+                null => Results.Created($"/api/v1/tramites/instances/{result!.Instance.Id}", result),
+                _ => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo crear el trámite."),
+            };
+        }).WithName("CreateProcedureInstanceFromConsulta");
+
         return app;
+    }
+
+    /// <summary>
+    /// Tenant efectivo + gate de matrícula inicial, compartidos por el preview del paso 1 y por la
+    /// creación al avanzar al paso 2: ambos deben respetar exactamente las mismas reglas que el POST
+    /// /instances original (#1 el tenant sale del JWT; #5 la compañía debe habilitar la modalidad).
+    /// Devuelve el error listo para retornar cuando alguna regla falla.
+    /// </summary>
+    private static async Task<(Guid Tenant, IResult? Error)> ResolveEffectiveTenantAsync(
+        HttpContext http,
+        Guid bodyTenantId,
+        string? modalidad,
+        GetTenantSettingsHandler settingsHandler,
+        CancellationToken ct)
+    {
+        var (resolvedTenant, isSuperAdmin) = ResolveTenantContext(http);
+        Guid effectiveTenant;
+        if (isSuperAdmin)
+        {
+            effectiveTenant = resolvedTenant ?? bodyTenantId;
+            if (effectiveTenant == Guid.Empty)
+            {
+                return (Guid.Empty, Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "Indique la compañía destino (X-Tenant-Id) para crear el trámite."));
+            }
+        }
+        else if (resolvedTenant is { } companyTenant)
+        {
+            effectiveTenant = companyTenant;
+        }
+        else
+        {
+            return (Guid.Empty, Results.Problem(statusCode: 403, title: "Forbidden",
+                detail: "El usuario autenticado no tiene una compañía asignada."));
+        }
+
+        if (EsMatriculaInicial(modalidad))
+        {
+            var settings = await settingsHandler.HandleAsync(
+                new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
+            if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
+            {
+                return (effectiveTenant, Results.Problem(
+                    statusCode: 422,
+                    title: "Unprocessable Entity",
+                    detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla."));
+            }
+        }
+
+        return (effectiveTenant, null);
     }
 
     /// <summary>
@@ -450,3 +605,30 @@ internal sealed record SetPriorityRequest(bool Prioritario);
 
 /// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
 internal sealed record SetCurrentStepRequest(string? Step);
+
+/// <summary>
+/// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
+/// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
+/// </summary>
+internal sealed record PreflightPreviewBody(
+    Guid TenantId,
+    string Modalidad,
+    string? Vin,
+    string? Plate,
+    string? OwnerDocumentType,
+    string? OwnerDocumentNumber);
+
+/// <summary>
+/// Body de POST /instances/from-consulta (CF-02). <c>PreviewToken</c> es el de la consulta del paso 1:
+/// si falta o expiró, el preflight vuelve a consultar (degradación, no error).
+/// </summary>
+internal sealed record CreateFromConsultaBody(
+    Guid TenantId,
+    Guid CreatedByUserId,
+    string Modalidad,
+    string? Vin,
+    string? Plate,
+    string? OwnerDocumentType,
+    string? OwnerDocumentNumber,
+    string? PreviewToken,
+    Guid? TransitOfficeId);

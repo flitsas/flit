@@ -356,12 +356,15 @@ public sealed class PutActorsHandler(
 
             var parte = RolToCode(rol);
 
-            // Solo hay algo que reenviar si la parte YA tenía una validación enviada (no terminal) para el
-            // documento del sujeto ANTERIOR (mismo doc: solo cambió el correo).
+            // Solo hay algo que reenviar si la parte tenía una validación EN CURSO para el documento del
+            // sujeto ANTERIOR (mismo doc: solo cambió el correo). Una identidad ya APROBADA NO se toca:
+            // el AC habla de una validación "enviada", y expirar una aprobación obligaría a revalidar a
+            // una persona que ya validó — rompiendo la radicación por corregir un correo. La aprobación
+            // vigente sigue reutilizándose (HU #10350) aunque el correo cambie.
             var previa = instance.BiometricValidations.FirstOrDefault(v =>
                 string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
                 && v.Status is BiometricEstados.PendienteEnvio or BiometricEstados.Enviado
-                    or BiometricEstados.EnProceso or BiometricEstados.Aprobado
+                    or BiometricEstados.EnProceso
                 && DocCoincide(v, previous.TipoDocumento, previous.NumeroDocumento));
             if (previa is null)
                 continue; // AC1 precondición: no había validación enviada -> nada que reenviar aquí.

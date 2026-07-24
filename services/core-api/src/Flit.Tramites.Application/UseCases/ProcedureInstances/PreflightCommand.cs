@@ -87,10 +87,25 @@ public sealed class RunPreflightHandler(
             ["vehicle_fuel"] = "cambio_combustible",
         };
 
-    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
+    public Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
+        => HandleAsync(id, tenantId, precomputedVehicle: null, ct);
+
+    /// <summary>
+    /// CF-02 (HU #10879/#10883) — variante que REUSA una consulta de vehículo ya resuelta en el paso 1
+    /// (<see cref="RunPreflightPreviewHandler"/>, cuando el trámite todavía no existía). Todo lo demás
+    /// —duplicidad, precondición registral, política de bloqueo, hidratación y persistencia del
+    /// snapshot— corre EXACTAMENTE igual sobre la instancia recién creada; lo único que se salta es la
+    /// segunda llamada al proveedor externo. Con <paramref name="precomputedVehicle"/> en <c>null</c>
+    /// el comportamiento es el histórico (consulta fresca).
+    /// </summary>
+    public async Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        PreflightVehicleSnapshot? precomputedVehicle,
+        CancellationToken ct)
     {
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
@@ -140,7 +155,7 @@ public sealed class RunPreflightHandler(
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
             // antes de que exista el actor vendedor); de ahí lo toma el provider.
-            vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
+            vehicleFields = await RunVehiculoAsync(chainResolver, checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, precomputedVehicle, ct);
             // Comparendos del comprador y del vendedor. El proveedor se resuelve por actor según la
             // fuente configurada por la compañía (FEATURE 05).
             if (finesDisabled)
@@ -149,14 +164,14 @@ public sealed class RunPreflightHandler(
             }
             else
             {
-                await RunSimitAsync(checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
-                await RunSimitAsync(checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
+                await RunSimitAsync(registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
             }
         }
         else
         {
             // Matrícula inicial: vehículo por VIN (primera matrícula, sin propietario previo).
-            vehicleFields = await RunVehiculoAsync(checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, ct);
+            vehicleFields = await RunVehiculoAsync(chainResolver, checks, providersUsed, ConsultationKind.VehicleVin, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, precomputedVehicle, ct);
             // R3 (HU #10538) / CF-03 (HU #10877, AC2): si el VIN ya tiene una matrícula previa en el
             // tenant. Con la única previa APROBADA (fuente FLIT) es bloqueo DURO CF-03 (ver
             // VehicleStateBlock); con una previa EN PROCESO se conserva el check informativo que
@@ -301,7 +316,7 @@ public sealed class RunPreflightHandler(
     /// warn, así que unknown PRESERVA el verde. Con warn, toda compañía con una restricción activa
     /// viviría en amarillo permanente y el amarillo dejaría de significar "hallazgo".
     /// </summary>
-    private static void AddOmittedCheck(
+    internal static void AddOmittedCheck(
         List<PreflightCheckDto> checks,
         string key,
         string label,
@@ -320,7 +335,7 @@ public sealed class RunPreflightHandler(
     /// un no-op exacto → preserva el comportamiento previo. Reusa el patrón de reescritura
     /// <c>checks[i] = c with { Status = ... }</c> de <see cref="RelajarEstadoVehiculoMatricula"/>.
     /// </summary>
-    private static void AplicarPoliticaDeBloqueo(
+    internal static void AplicarPoliticaDeBloqueo(
         List<PreflightCheckDto> checks,
         ConsultationBlockingRules rules)
     {
@@ -374,7 +389,7 @@ public sealed class RunPreflightHandler(
     /// En TRASPASO no se toca: se exige <c>"ACTIVO"</c> (vehículo en circulación) y el <c>fail</c> se
     /// mantiene intacto (comportamiento previo).
     /// </summary>
-    private static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
+    internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
         TramiteModalidadEntrada? modalidad)
     {
@@ -426,7 +441,8 @@ public sealed class RunPreflightHandler(
     /// placa desde los field_values (VIN prioritario); <paramref name="kind"/> selecciona la cadena por
     /// modalidad. Nunca propaga 500: cualquier excepción inesperada se traduce a un check <c>error</c>.
     /// </summary>
-    private async Task<IReadOnlyList<HydratedField>> RunVehiculoAsync(
+    internal static async Task<IReadOnlyList<HydratedField>> RunVehiculoAsync(
+        IConsultationProviderChainResolver chainResolver,
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
         ConsultationKind kind,
@@ -436,8 +452,19 @@ public sealed class RunPreflightHandler(
         string? plate,
         Dictionary<string, string?> fieldValues,
         ConsultationTenantOverride? tenantOverride,
+        PreflightVehicleSnapshot? precomputed,
         CancellationToken ct)
     {
+        // CF-02 — la consulta ya se resolvió en el paso 1 (preview sin instancia): se reusan sus checks
+        // y atributos tal cual, sin volver a llamar al proveedor externo.
+        if (precomputed is not null)
+        {
+            checks.AddRange(precomputed.Checks);
+            foreach (var p in precomputed.Providers)
+                providersUsed.Add(p);
+            return precomputed.HydratedFields;
+        }
+
         var fv = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(vin)) fv["vin"] = vin;
         if (!string.IsNullOrWhiteSpace(plate)) fv["plate"] = plate;
@@ -480,7 +507,8 @@ public sealed class RunPreflightHandler(
     /// va a un proveedor distinto. Por eso las guardas van en este orden — hace falta el actor para
     /// saber a quién preguntarle y con qué proveedor.
     /// </summary>
-    private async Task RunSimitAsync(
+    internal static async Task RunSimitAsync(
+        IConsultationProviderRegistry registry,
         List<PreflightCheckDto> checks,
         SortedSet<string> providersUsed,
         string fallbackKey,
@@ -612,21 +640,31 @@ public sealed class RunPreflightHandler(
                 VehicleStateSource.Flit);
         }
 
-        var previo = conflicto.ExistingTramite;
+        checks.Add(BuildVinMatriculaCheck(conflicto.ExistingTramite));
+
+        SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "true", createIfMissing: true);
+        return null;
+    }
+
+    /// <summary>
+    /// Check informativo (HU #10538, R3) del VIN con una matrícula previa EN PROCESO: mismo texto tanto
+    /// en el preflight de la instancia como en el preview del paso 1 (CF-02), para que el mensaje y la
+    /// oferta de "iniciar traspaso" no diverjan entre ambos caminos.
+    /// </summary>
+    internal static PreflightCheckDto BuildVinMatriculaCheck(VinTramiteExistente previo)
+    {
+        ArgumentNullException.ThrowIfNull(previo);
         var secretaria = string.IsNullOrWhiteSpace(previo.Secretaria) ? "otra secretaría" : previo.Secretaria!;
         var fecha = previo.FechaRegistro?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var cuando = fecha is null ? string.Empty : $" el {fecha}";
 
-        checks.Add(new PreflightCheckDto(
+        return new PreflightCheckDto(
             CheckVinMatricula,
             "VIN ya matriculado",
             "warn",
             SystemSource,
             $"Este VIN ya tiene una matrícula registrada en {secretaria}{cuando}. " +
-            "Puede iniciar un traspaso de este vehículo en lugar de una nueva matrícula."));
-
-        SetSignalIfChanged(instance, tenantId, FieldVinConflictoTraspaso, "true", createIfMissing: true);
-        return null;
+            "Puede iniciar un traspaso de este vehículo en lugar de una nueva matrícula.");
     }
 
     /// <summary>
@@ -859,7 +897,7 @@ public sealed class RunPreflightHandler(
         return Guid.TryParse(raw, out var id) ? id : null;
     }
 
-    private sealed record ActorRef(string DocumentType, string DocumentNumber, string? PersonType);
+    internal sealed record ActorRef(string DocumentType, string DocumentNumber, string? PersonType);
 }
 
 /// <summary>GET del último snapshot de preflight. Devuelve null si aún no se ha corrido.</summary>

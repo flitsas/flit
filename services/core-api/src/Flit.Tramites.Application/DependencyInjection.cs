@@ -81,6 +81,13 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
 
+        // CF-02 (HU #10879/#10883) — consulta del paso 1 sin trámite creado y creación al avanzar al
+        // paso 2. El store es SINGLETON: custodia en memoria las consultas del paso 1 (minutos) para
+        // que crear el trámite no repita la llamada al proveedor externo.
+        services.AddSingleton<IPreflightPreviewStore, InMemoryPreflightPreviewStore>();
+        services.AddScoped<RunPreflightPreviewHandler>();
+        services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
+
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
         services.AddScoped<GetRnmcHandler>();

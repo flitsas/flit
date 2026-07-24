@@ -190,4 +190,125 @@ public sealed class RuntPersonLookupHandlerCacheTests
         result!.FullName.Should().Be("CONSULTA FRESCA");
         vigenteEntry.ReuseCount.Should().Be(0);
     }
+
+    /// <summary>
+    /// Regresión — la caché guarda el FLAG de multas pero NO el detalle de cada comparendo (el
+    /// detalle es una sub-consulta SIMIT best-effort que no viaja en el payload). Al reusar la
+    /// persona, la ficha del actor mostraba la alerta "Comparendos/Multas pendientes" pero SIN la
+    /// lista: se perdía información que el operador sí veía en la primera consulta. El detalle debe
+    /// recomponerse también en el HIT.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_HitDeCacheConMultas_DevuelveElDetalleDeComparendos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+
+        _consentRepo.GetAsync(tenantId, "CC", "1193552679", ct)
+            .Returns(new PersonDataConsent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DocumentType = "CC",
+                DocumentNumber = "1193552679",
+                Status = PersonDataConsentStatus.Granted,
+                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+
+        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "1193552679", ct)
+            .Returns(new ExternalQueryCacheEntry
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ExternalDataSourceId = RuntSourceId,
+                SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
+                DocumentType = "CC",
+                DocumentNumber = "1193552679",
+                // Lo que realmente guarda la caché: nombre + FLAG de multas, sin detalle.
+                Payload = """
+                [{"fieldKey":"person_full_name","valueText":"DANIEL AMADO GARCIA","valueJson":null},
+                 {"fieldKey":"person_has_pending_fines","valueText":"true","valueJson":null}]
+                """,
+                QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
+            });
+
+        var comparendo = new FineDetail(
+            "05001000000044805008", "26/01/2025", 651906m, "Medellín", "Pendiente de pago",
+            "Conducir un vehículo a velocidad superior a la máxima permitida.");
+        var simit = new FakeFinesProvider([comparendo]);
+        _registry.Resolve("verifik_simit").Returns(simit);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "1193552679", ct);
+
+        error.Should().BeNull();
+        result!.HasPendingFines.Should().BeTrue();
+        simit.Called.Should().BeTrue("el detalle no está en la caché, hay que volver a pedirlo");
+        result.Fines.Should().ContainSingle()
+            .Which.Numero.Should().Be("05001000000044805008");
+    }
+
+    /// <summary>Sin multas pendientes, el HIT no gasta una consulta de comparendos.</summary>
+    [Fact]
+    public async Task HandleAsync_HitDeCacheSinMultas_NoConsultaComparendos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+
+        _consentRepo.GetAsync(tenantId, "CC", "123456789", ct)
+            .Returns(new PersonDataConsent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DocumentType = "CC",
+                DocumentNumber = "123456789",
+                Status = PersonDataConsentStatus.Granted,
+                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+
+        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct)
+            .Returns(new ExternalQueryCacheEntry
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ExternalDataSourceId = RuntSourceId,
+                SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
+                DocumentType = "CC",
+                DocumentNumber = "123456789",
+                Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN PEREZ","valueJson":null}]""",
+                QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
+            });
+
+        var simit = new FakeFinesProvider([]);
+        _registry.Resolve("verifik_simit").Returns(simit);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
+
+        error.Should().BeNull();
+        result!.HasPendingFines.Should().BeFalse();
+        simit.Called.Should().BeFalse();
+        result.Fines.Should().BeNull();
+    }
+
+    /// <summary>Proveedor de comparendos que devuelve un detalle fijo, contando invocaciones.</summary>
+    private sealed class FakeFinesProvider(IReadOnlyList<FineDetail> fines) : IConsultationProvider
+    {
+        public string Key => "verifik_simit";
+        public bool Called { get; private set; }
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
+        {
+            Called = true;
+            return Task.FromResult(new ConsultationResult(
+                Key,
+                "yellow",
+                [new ConsultationCheck(FinesCheckFactory.KeyMultas, "Multas", "warn", Key, "1 comparendo", fines)],
+                []));
+        }
+    }
 }

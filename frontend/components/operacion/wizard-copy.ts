@@ -25,8 +25,17 @@ const REASON_COPY: Record<string, string> = {
   comprador_incompleto: 'Faltan datos del comprador',
   vendedor_incompleto: 'Faltan datos del vendedor',
   actores_incompletos: 'Faltan datos de los participantes',
+  comprador_doc: 'Falta el documento del comprador',
+  // Comparendos del comprador (traspaso). Sin estas entradas el código crudo se "humanizaba"
+  // a "Simit Pendiente", que no le dice al operador ni qué falta ni dónde resolverlo.
+  simit_pendiente:
+    'Falta la consulta de comparendos del comprador: vuelve al paso 1 y ejecuta "Consultar RUNT" para generar el pre-vuelo',
+  simit_doc:
+    'La consulta de comparendos no corresponde al documento del comprador: vuelve al paso 1 y repite la consulta',
+  simit_multas: 'El comprador tiene comparendos pendientes en el SIMIT',
   // datos comerciales
   comercial_incompleto: 'Faltan datos comerciales (valor, causal, impuestos)',
+  comercial_valor: 'Ingresa un valor de venta mayor a cero',
   // identidad / firma / FUR (Slice 6-7)
   identidad_pendiente: 'Validación biométrica pendiente',
   pendiente_biometria: 'Validación biométrica pendiente',

@@ -51,6 +51,36 @@ export interface CreateInstanceRequest {
   transitOfficeId?: string;
 }
 
+/**
+ * CF-02 (HU #10879/#10883) — datos del vehículo capturados en el PASO 1, cuando el trámite todavía
+ * no existe. Alimentan tanto la consulta desacoplada (`runPreflightPreview`) como la creación al
+ * avanzar al paso 2 (`createInstanceFromConsulta`).
+ */
+export interface ConsultaVehiculoInput {
+  modalidad: WizardModalidad;
+  vin?: string | null;
+  plate?: string | null;
+  ownerDocumentType?: string | null;
+  ownerDocumentNumber?: string | null;
+}
+
+/**
+ * Resultado de la consulta del paso 1 SIN trámite creado. `previewToken` se devuelve al backend al
+ * avanzar al paso 2 para que la creación reuse esta consulta en vez de repetirla contra el RUNT.
+ */
+export interface PreflightPreviewResult {
+  previewToken: string;
+  preflight: PreflightSnapshot;
+  /** Atributos del vehículo hidratados por la consulta, en la forma que ya pinta el wizard. */
+  vehicleFields: FieldValue[];
+}
+
+/** Trámite recién creado al avanzar al paso 2, con su preflight ya persistido. */
+export interface CreateFromConsultaResult {
+  instance: ProcedureInstanceSummary;
+  preflight: PreflightSnapshot | null;
+}
+
 export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
@@ -762,6 +792,13 @@ export interface TenantBiometricValidation {
   validUntil: string | null;
   /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
   daysRemaining: number | null;
+  /**
+   * CF-05 (HU #10886, AC2) — enlace de captura VIGENTE, para reenviarlo por otros medios. Null cuando
+   * no hay nada que compartir: proveedor sin enlace (mock), estado terminal o enlace ya vencido.
+   */
+  captureUrl: string | null;
+  /** Vencimiento del ENLACE de captura (distinto de `validUntil`, que es la vigencia de la identidad). */
+  linkExpiresAt: string | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
