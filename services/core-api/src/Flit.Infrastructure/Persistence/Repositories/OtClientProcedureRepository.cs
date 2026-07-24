@@ -334,9 +334,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     entity.PlateFlowStatus = null;
                 }
 
-                // Feature #10701 — la decisión del OT (aprobar/rechazar) invalida el consolidado
-                // maestro persistido: el próximo "Ver consolidado" lo regenerará antes de mostrarlo.
-                entity.ConsolidadoMaestroVigente = false;
+                // Feature #10701 / HU #10860 — la decisión del OT (aprobar/rechazar) invalida los
+                // consolidados persistidos (maestro y wizard): la próxima generación los regenerará.
+                entity.InvalidarConsolidados();
 
                 // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
                 // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).

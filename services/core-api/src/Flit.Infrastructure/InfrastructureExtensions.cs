@@ -93,12 +93,19 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
+        // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
+        // SNAPSHOT: solo overrides activos antes de crear el trámite.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();
         // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
         services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
             configuration.GetSection(
@@ -137,8 +144,13 @@ public static class InfrastructureExtensions
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
+        // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
+        // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
+        services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
+        services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);

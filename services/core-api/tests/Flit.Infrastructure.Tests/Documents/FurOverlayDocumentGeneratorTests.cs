@@ -100,6 +100,38 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateCompraventa_IdentidadValidada_PintaFirmasConSello()
+    {
+        // HU #10859 (ADR-0031): con identidad validada la compraventa se firma con el sello por rol.
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = true,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["comprador"] = "hash-comprador (2026)",
+                ["vendedor"] = "hash-vendedor (2026)",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void GenerateCompraventa_IdentidadPendiente_ProducePdfSinFirmas_SinLanzar()
+    {
+        // HU #10859: sin validación de identidad, la compraventa se emite igual (sin firmas), no bloquea.
+        var data = TraspasoData() with { IdentidadValidada = false, SellosIdentidad = null };
+
+        byte[]? pdf = null;
+        var act = () => pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        act.Should().NotThrow();
+        Encoding.ASCII.GetString(pdf!, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
     public void FurFieldMapper_MarksMatriculaTramite()
     {
         var values = FurFieldMapper.Map(FullData());
@@ -390,8 +422,9 @@ public sealed class FurOverlayDocumentGeneratorTests
     {
         // Construir el generador dispara el static ctor que registra el resolutor embebido.
         _ = CreateGenerator();
-        GlobalFontSettings.FontResolver.Should().BeOfType<FurFontResolver>(
-            "sin resolutor, PdfSharpCore no resuelve 'Arial' en runtimes sin fuentes (alpine) y el FUR responde HTTP 500");
+        GlobalFontSettings.FontResolver.Should().BeOfType<Flit.Infrastructure.Documents.Branding.FlitFontResolver>(
+            "desde HU #10855 el overlay del FUR comparte el resolutor superset (Poppins + DejaVu); sin él, "
+            + "PdfSharpCore no resuelve 'Arial' en runtimes sin fuentes (alpine) y el FUR responde HTTP 500");
     }
 
     [Fact]

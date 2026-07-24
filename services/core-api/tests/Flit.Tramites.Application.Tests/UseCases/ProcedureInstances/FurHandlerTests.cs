@@ -129,6 +129,29 @@ public sealed class FurHandlerTests
             Source = "user",
         });
 
+    private static void WithField(ProcedureInstance instance, string key, string value) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = key,
+            ValueText = value,
+            Source = "user",
+        });
+
+    private sealed class FakeSoatRtmGenerator : ISoatRtmCertificateGenerator
+    {
+        public SoatRtmCertificateData? LastData { get; private set; }
+
+        public GeneratedDocument GenerateSoatRtmCertificate(SoatRtmCertificateData data)
+        {
+            LastData = data;
+            return new GeneratedDocument("certificado_soat_rtm", "certificado_soat_rtm.pdf", "application/pdf",
+                Encoding.UTF8.GetBytes("SOAT_RTM"));
+        }
+    }
+
     private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
         new()
         {
@@ -177,6 +200,96 @@ public sealed class FurHandlerTests
         // FUR + compraventa (traspaso), SIN certificado_identidad.
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "compraventa"]);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    [Fact]
+    public async Task Generar_InvalidaConsolidadosPersistidos()
+    {
+        // HU #10860 (ADR-0032): el consolidado embebe el FUR/certificados que se acaban de regenerar,
+        // así que regenerar el FUR debe invalidar ambos consolidados persistidos (maestro + wizard) para
+        // que la próxima petición del consolidado los reconstruya con el FUR fresco.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoMaestroVigente = true;
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoWizardVigente.Should().BeFalse();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generar_Traspaso_ConCompraventaDelUsuario_AutogeneraLaDelSistemaYConservaLaDelUsuario()
+    {
+        // ADR-0035 (supersede ADR-0031): la compraventa del sistema se genera SIEMPRE en traspaso, aunque
+        // el usuario haya cargado la suya; la del usuario (Source=user) se conserva intacta y ambas coexisten.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        var userCompraventaId = Guid.NewGuid();
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = userCompraventaId,
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "compraventa",
+            Filename = "compraventa_usuario.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 3,
+            Sha256 = "sha-user-cv",
+            StoragePath = $"{id:D}/compraventa_user",
+            Source = "user",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        // El sistema SÍ genera su compraventa (ADR-0035).
+        result!.Documents.Select(d => d.Tipo).Should().Contain("compraventa");
+        // Y la del usuario sigue intacta: ambas coexisten como adjuntos del expediente.
+        var compraventas = instance.Attachments.Where(a => a.Tipo == "compraventa").ToList();
+        compraventas.Should().HaveCount(2);
+        compraventas.Should().ContainSingle(a => a.Id == userCompraventaId && a.Source == "user");
+        compraventas.Should().ContainSingle(a => a.Source == "system");
+    }
+
+    [Fact]
+    public async Task Generar_ConVencimientosSoatRtm_GeneraCertificadoCombinado()
+    {
+        // HU #10856: con soat_vencimiento/rtm_vencimiento (RUNT) se emite UN certificado combinado
+        // "Certificado de vigencia SOAT Y RTM" (Source=system, tipo certificado_soat_rtm).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        WithField(instance, "soat_vencimiento", "2027-01-15");
+        WithField(instance, "soat_aseguradora", "La Previsora S.A.");
+        WithField(instance, "rtm_vencimiento", "2027-03-20");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        var fakeSoatRtm = new FakeSoatRtmGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm);
+
+        var (result, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_soat_rtm");
+        // Matrícula → sin bloque de avalúo, sin tabla RTM; entidad SOAT proyectada.
+        fakeSoatRtm.LastData!.Avaluo.Should().BeNull();
+        fakeSoatRtm.LastData!.Rtm.Should().BeNull();
+        fakeSoatRtm.LastData!.Soat.Entidad.Should().Be("La Previsora S.A.");
     }
 
     [Fact]

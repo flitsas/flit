@@ -37,4 +37,27 @@ public static class PrendaGate
 
         return null;
     }
+
+    /// <summary>
+    /// CF-06 (HU #10881) — override del Organismo de Tránsito: exige el documento de prenda con
+    /// INDEPENDENCIA del semáforo de gravámenes/decisión (a diferencia de <see cref="Evaluate"/>).
+    /// Basta con que el trámite tenga adjunto CUALQUIER documento de prenda conocido (solicitud,
+    /// registro o levantamiento — la decisión concreta la sigue tomando el gestor en su paso de
+    /// prenda) para satisfacer el gate. <c>otRequiereDocumentoPrenda</c> ya viene resuelto con el
+    /// comportamiento SNAPSHOT (AC2): solo <c>true</c> cuando el override ya estaba activo al crear
+    /// el trámite.
+    /// </summary>
+    public static string? EvaluateOtOverride(
+        bool otRequiereDocumentoPrenda,
+        IReadOnlyCollection<string> docTipos)
+    {
+        if (!otRequiereDocumentoPrenda)
+            return null;
+
+        ArgumentNullException.ThrowIfNull(docTipos);
+
+        var tieneDocumentoPrenda = docTipos.Any(t => PrendaDocTipos.All.Contains(t));
+
+        return tieneDocumentoPrenda ? null : TramiteEstadoErrores.PrendaDocumentoRequerido;
+    }
 }

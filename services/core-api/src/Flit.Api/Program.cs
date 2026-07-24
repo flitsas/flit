@@ -224,6 +224,9 @@ app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
 app.MapAdminSignatureVaultEndpoints();
+app.MapAdminLegalRepresentativesEndpoints();
+app.MapAdminDeedsEndpoints();
+app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
@@ -256,6 +259,7 @@ app.MapTramitesPreflightEndpoints();
 app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
+app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();

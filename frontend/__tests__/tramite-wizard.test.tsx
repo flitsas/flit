@@ -10,12 +10,30 @@ import type {
   WizardState,
 } from '@/lib/api/types/procedure-runtime';
 
+// AC1 (HU #10882) — error mínimo con la misma forma `{ status, problem }` que
+// TramitesApiError (lib/api/tramites-client.ts) para simular el 409 DUPLICATE_ACTIVE_PROCEDURE
+// que devuelve el preflight (HU #10876). getDuplicateActiveProcedureId detecta por forma (duck
+// typing), no por `instanceof`, así que esta clase local basta sin depender de la real.
+class FakeTramitesApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly problem: Record<string, unknown> | null,
+  ) {
+    super(message);
+  }
+}
+
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),
   patchFieldValues: vi.fn(),
+  // HU #10883 — autosave del paso (PATCH current-step). Mockeado aquí también porque el wizard lo
+  // dispara al avanzar de paso (goToStep/handleContinue), invocado por varios tests de este archivo
+  // que no son específicos de HU #10883 (ver el archivo dedicado hu10883-autosave-current-step.test.tsx).
+  setCurrentStep: vi.fn(),
   runPreflight: vi.fn(),
   getPreflight: vi.fn(),
   getConsultationConfig: vi.fn(),
@@ -42,10 +60,41 @@ const mocks = vi.hoisted(() => ({
   listParticipantes: vi.fn(),
 }));
 
+// AC1 (HU #10882) — el wizard también importa `getDuplicateActiveProcedureId` de este módulo; se
+// reimplementa aquí (idéntica a lib/api/tramites-client.ts: duck-typing sobre `{status, problem}`,
+// sin red) porque el módulo real está mockeado por completo más abajo.
+function getDuplicateActiveProcedureId(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 409 || !problem || typeof problem !== 'object') return null;
+  const { title, procedureInstanceId } = problem as { title?: unknown; procedureInstanceId?: unknown };
+  if (title !== 'DUPLICATE_ACTIVE_PROCEDURE' || typeof procedureInstanceId !== 'string') return null;
+  return procedureInstanceId;
+}
+
+// AC1/AC2 (HU #10884) — mismo patrón: reimplementación local (duck-typing sobre `{status, problem}`)
+// de `getVehicleStateBlock` (lib/api/tramites-client.ts), porque el módulo real está mockeado abajo.
+function getVehicleStateBlock(
+  err: unknown,
+): { vehicleStatus: string; procedureType: string } | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, vehicleStatus, procedureType } = problem as {
+    title?: unknown;
+    vehicleStatus?: unknown;
+    procedureType?: unknown;
+  };
+  if (title !== 'VEHICLE_STATE_INVALID_FOR_TYPE' || typeof vehicleStatus !== 'string') return null;
+  return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
+}
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
+  getDuplicateActiveProcedureId,
+  getVehicleStateBlock,
 }));
 
 // El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para
@@ -149,6 +198,7 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.getWizardState.mockResolvedValue(MATRICULA_WIZARD);
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
+  mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: null });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
   // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).
@@ -652,6 +702,188 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
       ]),
     );
     await waitFor(() => expect(mocks.runPreflight).toHaveBeenCalledWith('inst-1'));
+  });
+});
+
+describe('TramiteWizard — bloqueo de duplicidad de trámite en curso (HU #10882)', () => {
+  it('AC1: el preflight con 409 DUPLICATE_ACTIVE_PROCEDURE muestra el aviso y el botón Retomar', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Ya existe un trámite en proceso para este VIN/placa.', {
+        title: 'DUPLICATE_ACTIVE_PROCEDURE',
+        status: 409,
+        detail: 'Ya existe un trámite en proceso para este VIN/placa.',
+        procedureInstanceId: 'inst-existente-1',
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/Ya existe un trámite en curso para este vehículo/);
+    expect(
+      screen.getByRole('button', { name: /Retomar el trámite existente/ }),
+    ).toBeInTheDocument();
+    // El error genérico NO se muestra a la vez que el aviso específico de duplicidad.
+    expect(screen.queryByText(/No se pudo consultar\./)).not.toBeInTheDocument();
+  });
+
+  it('AC2: al pulsar Retomar navega al trámite existente devuelto por el bloqueo', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Ya existe un trámite en proceso para este VIN/placa.', {
+        title: 'DUPLICATE_ACTIVE_PROCEDURE',
+        status: 409,
+        detail: 'Ya existe un trámite en proceso para este VIN/placa.',
+        procedureInstanceId: 'inst-existente-1',
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const retomarButton = await screen.findByRole('button', {
+      name: /Retomar el trámite existente/,
+    });
+    await user.click(retomarButton);
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-existente-1');
+  });
+
+  it('un 409 de otro origen (no duplicidad) muestra el error genérico, sin el botón Retomar', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Solo se puede correr preflight en estado borrador.', {
+        title: 'Conflict',
+        status: 409,
+        detail: 'Solo se puede correr preflight en estado borrador.',
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    expect(
+      await screen.findByText(/Solo se puede correr preflight en estado borrador\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Retomar el trámite existente/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () => {
+  it('AC1: 422 VEHICLE_STATE_INVALID_FOR_TYPE con vehicleStatus ACTIVO informa "ya matriculado" y bloquea el avance', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(
+        422,
+        'El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.',
+        {
+          title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+          status: 422,
+          detail: 'El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.',
+          vehicleStatus: 'ACTIVO',
+          procedureType: 'matricula_inicial',
+        },
+      ),
+    );
+    // El paso de consulta arranca 'incomplete' (sin preflight persistido aún): sin avance posible.
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: MATRICULA_WIZARD.steps.map((s) =>
+        s.key === 'consulta_vin' ? { ...s, status: 'incomplete' as const, reasons: [] } : s,
+      ),
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/ya se encuentra matriculado según el RUNT/i);
+    // Bloqueo no subsanable: sin botón de acción (a diferencia del aviso de duplicidad con "Retomar").
+    expect(screen.queryByRole('button', { name: /Retomar/ })).not.toBeInTheDocument();
+    // El error genérico NO se muestra a la vez que el aviso específico.
+    expect(screen.queryByText(/No se pudo consultar\./)).not.toBeInTheDocument();
+    // El preflight no se persistió (422): el paso sigue incompleto → "Continuar" deshabilitado.
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('AC1 (variante FLIT): vehicleStatus APROBADO_FLIT también informa "ya matriculado"', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(422, 'El vehículo ya se encuentra matriculado.', {
+        title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+        status: 422,
+        vehicleStatus: 'APROBADO_FLIT',
+        procedureType: 'matricula_inicial',
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/ya cuenta con una matrícula aprobada/i);
+  });
+
+  it('AC2: vehicleStatus DESCONOCIDO informa que no se pudo confirmar el estado (RUNT sin dato) y bloquea', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(
+        422,
+        'No fue posible confirmar el estado del vehículo en el RUNT. Vuelve a intentarlo.',
+        {
+          title: 'VEHICLE_STATE_INVALID_FOR_TYPE',
+          status: 422,
+          vehicleStatus: 'DESCONOCIDO',
+          procedureType: 'matricula_inicial',
+        },
+      ),
+    );
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: MATRICULA_WIZARD.steps.map((s) =>
+        s.key === 'consulta_vin' ? { ...s, status: 'incomplete' as const, reasons: [] } : s,
+      ),
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/no fue posible confirmar el estado del vehículo en el runt/i);
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('un 422 de otro código (no VEHICLE_STATE_INVALID_FOR_TYPE) muestra el error genérico', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(422, 'Dato inválido en el payload.', {
+        title: 'OTRO_CODIGO',
+        status: 422,
+      }),
+    );
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    expect(await screen.findByText(/Dato inválido en el payload\./)).toBeInTheDocument();
   });
 });
 

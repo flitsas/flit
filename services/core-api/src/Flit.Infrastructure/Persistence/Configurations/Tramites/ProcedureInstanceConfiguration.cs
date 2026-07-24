@@ -47,6 +47,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_procedure_instances_draft_finalized")
             .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
 
+        // HU #10879 — paso actual persistido del wizard (autosave del avance). Columna agregada por
+        // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+        builder.Property(x => x.CurrentStep)
+            .HasColumnName("current_step")
+            .HasMaxLength(40);
+
         // HU #10536 — prioritario. Columna agregada por migración SQL cruda (la tabla está
         // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Índice que sostiene el
         // ordenamiento con primacía de los listados (prioritarios primero, luego por fecha).
@@ -63,6 +69,15 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         // a false cualquier transición de estado o el adjuntar la LT; la sube a true la generación.
         builder.Property(x => x.ConsolidadoMaestroVigente)
             .HasColumnName("consolidado_maestro_vigente")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        // HU #10860 (Feature #10852, ADR-0032) — vigencia del expediente derivado del wizard, espejo
+        // de consolidado_maestro_vigente. Columna agregada por migración SQL cruda (tabla
+        // ExcludeFromMigrations); aquí solo se mapea. La baja a false cualquier transición de estado,
+        // la decisión del OT o el adjuntar la LT; la sube a true la generación del consolidado.
+        builder.Property(x => x.ConsolidadoWizardVigente)
+            .HasColumnName("consolidado_wizard_vigente")
             .IsRequired()
             .HasDefaultValue(false);
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FluentAssertions;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Xunit;
@@ -56,15 +57,28 @@ public sealed class VinPolicyEvaluatorTests
     }
 
     [Fact]
-    public void EvaluarConflicto_Completado_BloqueoDePorVida()
+    public void EvaluarConflicto_Aprobado_BloqueoDePorVida()
     {
+        // Fix HU #10876: el estado real de "completado" en TramiteEstado es "aprobado" (no
+        // "completado", que nunca se persiste — TramiteEstado.cs:14).
         var existentes = new List<VinTramiteExistente>
         {
-            new(Guid.NewGuid(), "completado", Paso: 5, Placa: "ZZZ", Vin: "VIN2"),
+            new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: "ZZZ", Vin: "VIN2"),
         };
         var c = VinPolicyEvaluator.EvaluarConflicto(existentes);
         c!.Code.Should().Be(VinConflictCode.TramiteMatriculaCompletada);
         c.Message.Should().Contain("una vez");
+    }
+
+    [Fact]
+    public void EvaluarConflicto_SoloAnulados_Null_PermiteReintentar()
+    {
+        // AC4 (HU #10876): anulado es estado final y libera la llave, igual que rechazado.
+        var existentes = new List<VinTramiteExistente>
+        {
+            new(Guid.NewGuid(), TramiteEstado.Anulado, Paso: 2, Placa: "X", Vin: "ABC123"),
+        };
+        VinPolicyEvaluator.EvaluarConflicto(existentes).Should().BeNull();
     }
 
     [Fact]
@@ -75,6 +89,19 @@ public sealed class VinPolicyEvaluatorTests
         {
             new(Guid.NewGuid(), "rechazado", 1, null, "V"),
             new(Guid.NewGuid(), "borrador", 2, null, "V"),
+        };
+        VinPolicyEvaluator.EvaluarConflicto(existentes)!.Code.Should().Be(VinConflictCode.TramiteDuplicado);
+    }
+
+    [Fact]
+    public void EvaluarConflicto_IgnoraRechazadoYAnulado_Prioriza1erBloqueante()
+    {
+        // Ordenado por recencia desc: rechazado y anulado se ignoran, el preparado (1er bloqueante) define.
+        var existentes = new List<VinTramiteExistente>
+        {
+            new(Guid.NewGuid(), TramiteEstado.Rechazado, 1, null, "V"),
+            new(Guid.NewGuid(), TramiteEstado.Anulado, 2, null, "V"),
+            new(Guid.NewGuid(), TramiteEstado.Preparado, 3, null, "V"),
         };
         VinPolicyEvaluator.EvaluarConflicto(existentes)!.Code.Should().Be(VinConflictCode.TramiteDuplicado);
     }

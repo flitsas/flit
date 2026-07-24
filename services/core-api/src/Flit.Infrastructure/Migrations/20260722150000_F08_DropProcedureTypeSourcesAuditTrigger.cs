@@ -1,3 +1,6 @@
+using Flit.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -12,6 +15,10 @@ namespace Flit.Infrastructure.Migrations
     /// bloqueando el seed F08 (<c>38-F08-seeds-tipos-configurados.sql</c>) y la radicación
     /// local cuando el schema F08 estaba a medias. Idempotente: <c>DROP TRIGGER IF EXISTS</c>.
     /// </remarks>
+    // Atributos inline (patrón HU10774): sin ellos EF no descubre la migración y el DROP TRIGGER
+    // nunca corre en DEV. Ver F08_ConformationProfile para el detalle.
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20260722150000_F08_DropProcedureTypeSourcesAuditTrigger")]
     public partial class F08_DropProcedureTypeSourcesAuditTrigger : Migration
     {
         /// <inheritdoc />

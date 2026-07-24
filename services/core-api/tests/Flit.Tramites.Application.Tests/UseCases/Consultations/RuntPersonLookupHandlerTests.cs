@@ -13,6 +13,12 @@ public sealed class RuntPersonLookupHandlerTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly IConsultationProviderRegistry _registry = Substitute.For<IConsultationProviderRegistry>();
+    // HU #10878: dependencia nueva (cache-aside). Sin stub de _consentRepo/_cacheRepo, NSubstitute
+    // devuelve null => TryReusePersonAsync siempre resuelve "no_consent"/MISS => el resto de la suite
+    // ejercita el flujo EXACTO de antes (ver RuntPersonLookupHandlerCacheTests para el HIT/AC2/gate).
+    private readonly ICatalogRepository _catalogRepo = Substitute.For<ICatalogRepository>();
+    private readonly IExternalQueryCacheRepository _cacheRepo = Substitute.For<IExternalQueryCacheRepository>();
+    private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
     private readonly RuntPersonLookupHandler _sut;
 
     public RuntPersonLookupHandlerTests()
@@ -23,8 +29,9 @@ public sealed class RuntPersonLookupHandlerTests
         // a verifik_conductor, que es lo que estos tests stubbean.
         _registry.Resolve("kyverum_runt_conductor").Returns((IConsultationProvider?)null);
         var resolver = new ConsultationProviderChainResolver(_registry, new ConsultationChainOptions());
+        var cacheService = new ExternalQueryCacheService(_cacheRepo, _consentRepo, _catalogRepo);
         // El mismo registry alimenta la consulta SIMIT best-effort del detalle de comparendos.
-        _sut = new RuntPersonLookupHandler(_repo, resolver, new NullOverrideProvider(), _registry);
+        _sut = new RuntPersonLookupHandler(_repo, resolver, new NullOverrideProvider(), cacheService, _registry);
     }
 
     private sealed class NullOverrideProvider : IConsultationTenantOverrideProvider

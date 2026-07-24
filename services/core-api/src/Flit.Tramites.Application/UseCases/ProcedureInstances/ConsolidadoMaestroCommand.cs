@@ -41,7 +41,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
         IReadOnlyList<string>? matrizPrecedencia = null,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        // Graph con FieldValues (HU #10857): necesarios para los datos de la portada (placa, secretaría).
+        var instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -94,7 +95,12 @@ public sealed class GenerarConsolidadoMaestroHandler(
             }
         }
 
-        var merged = merger.Merge(pdfParts);
+        // HU #10857 — expediente maestro con portada institucional (primera página).
+        var mergeRequest = new MergeRequest(
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            EstadoTramite: instance.Status);
+        var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
         var filename = $"consolidado_maestro_{SafeRef(instance.ReferenceNumber)}.pdf";
         const string tipoMaestro = "consolidado_maestro";

@@ -18,6 +18,16 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document, bool Regenerado = true);
 
 /// <summary>
+/// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
+/// para que salgan con fecha vigente antes de consolidar (HU #10860, cascada β de ADR-0032). Lo
+/// implementa <c>GenerarFurHandler</c>; devuelve un código de error o null si la regeneración fue ok.
+/// </summary>
+public interface IExpedienteHotDocumentsRegenerator
+{
+    Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Genera el expediente consolidado de matrícula inicial: fusiona el FUR, el certificado de
 /// identidad y los demás adjuntos del trámite en un único PDF (tipo <c>consolidado</c>).
 /// Idempotente: re-generar reemplaza el adjunto previo. Requiere FUR generado y documentos
@@ -27,7 +37,8 @@ public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
-    ChecklistMatrixCompleteness? matrixCompleteness = null)
+    ChecklistMatrixCompleteness? matrixCompleteness = null,
+    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null)
 {
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -39,6 +50,23 @@ public sealed class GenerarConsolidadoHandler(
         var instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+
+        // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
+        // consolidado persistido existe, se sirve sin regenerar (espejo del maestro, Feature #10701).
+        var consolidadoVigente = instance.Attachments
+            .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        if (instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
+        {
+            var vigenteDto = new ConsolidadoDocumentDto(
+                consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
+            return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
+        }
+
+        // HU #10860 — regeneración en cascada (β): al estar invalidado, se regeneran primero el FUR y
+        // los documentos en caliente (con fecha vigente) y luego se consolida. Best-effort: si la
+        // regeneración falla (p. ej. falta el organismo), se consolida con los documentos existentes.
+        if (!instance.ConsolidadoWizardVigente && hotDocsRegenerator is not null)
+            await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
 
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
@@ -75,7 +103,12 @@ public sealed class GenerarConsolidadoHandler(
             }
         }
 
-        var merged = merger.Merge(pdfParts);
+        // HU #10857 — expediente con portada institucional (primera página) para todos los tipos.
+        var mergeRequest = new MergeRequest(
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            EstadoTramite: instance.Status);
+        var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
         var filename = $"consolidado_{SafeRef(instance.ReferenceNumber)}.pdf";
         var doc = new GeneratedDocument("consolidado", filename, "application/pdf", merged);
@@ -123,6 +156,9 @@ public sealed class GenerarConsolidadoHandler(
         };
         instance.Events.Add(evento);
         repo.Add(evento);
+
+        // HU #10860 — el consolidado recién generado refleja el expediente actual: marca vigente.
+        instance.ConsolidadoWizardVigente = true;
 
         await repo.SaveChangesAsync(ct);
 

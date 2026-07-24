@@ -19,6 +19,20 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyList<VinTramiteExistente>> FindTramitesByVinAsync(
         Guid tenantId, string vinNormalizado, Guid excludeInstanceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista los trámites de TRASPASO del tenant (no eliminados) cuya placa coincide con
+    /// <paramref name="placaNormalizada"/>, EXCLUYENDO <paramref name="excludeInstanceId"/> (el
+    /// trámite en curso, para que no se detecte a sí mismo). Simétrico a
+    /// <see cref="FindTramitesByVinAsync"/> pero para la familia Traspaso (llave placa): el CF-01 de
+    /// duplicidad de trámite EN PROCESO (HU #10876) usa este método cuando la familia es Traspaso, tal
+    /// como <see cref="FindTramitesByVinAsync"/> se usa cuando la familia es Matrícula Inicial. La
+    /// placa almacenada se compara normalizada (mayúsculas + trim) contra
+    /// <paramref name="placaNormalizada"/>. Set vacío si no hay coincidencias. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<PlacaTramiteExistente>> FindTramitesByPlacaAsync(
+        Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct = default);
+
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>

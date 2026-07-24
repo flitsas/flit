@@ -383,6 +383,9 @@ public sealed class LicenciaTransitoHandlerTests
         public byte[] NormalizeToPdf(byte[] content, string mimetype) => content;
 
         public byte[] Merge(IReadOnlyList<byte[]> pdfParts) => pdfParts.SelectMany(x => x).ToArray();
+
+        public byte[] Compose(Flit.Tramites.Application.Documents.MergeRequest request) =>
+            Merge(request.Parts.Select(p => p.Pdf).ToList());
     }
 
     private async Task AddPdf(ProcedureInstance instance, string tipo)

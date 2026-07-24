@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -22,6 +23,7 @@ public sealed class TramiteLifecycleServiceTests
     private readonly IProcedureTypeRepository _typeRepo = Substitute.For<IProcedureTypeRepository>();
     private readonly ITransitOfficeGrantGate _grantGate = Substitute.For<ITransitOfficeGrantGate>();
     private readonly IOtOperabilityGate _operabilityGate = Substitute.For<IOtOperabilityGate>();
+    private readonly IPrendaDocumentRequirementPolicy _prendaPolicy = Substitute.For<IPrendaDocumentRequirementPolicy>();
     private readonly RecordingTransitionRecorder _recorder = new();
     private readonly RecordingTransitionPublisher _publisher = new();
     private readonly TramiteLifecycleService _sut;
@@ -36,7 +38,8 @@ public sealed class TramiteLifecycleServiceTests
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
         _sut = new TramiteLifecycleService(
-            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy);
     }
 
     private ProcedureInstance Wire(string status, bool conGates = false)
@@ -168,6 +171,70 @@ public sealed class TramiteLifecycleServiceTests
 
         var conMotivo = await Transition(i, destino, reason: "Motivo de negocio");
         conMotivo.Success.Should().BeTrue();
+    }
+
+    // ── CF-03 (HU #10877): precondición registral, SEGUNDO momento (radicar) ────────────────────
+
+    private static void ConVin(ProcedureInstance instance, string vin) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "vin",
+            ValueText = vin,
+            Source = "user",
+        });
+
+    [Fact]
+    public async Task Radicar_VinConMatriculaAprobadaEnFlit_BloqueaConVehicleStateInvalid()
+    {
+        // CF-03 (AC2) — el estado registral pudo cambiar ENTRE el preflight y la radicación: si otro
+        // trámite del mismo VIN llegó a 'aprobado' mientras este seguía en curso, el gate de
+        // preparación lo atrapa antes de avanzar (no solo el preflight).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(VehicleStatePolicy.ErrorCode);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Radicar_VinSinMatriculaAprobada_Permite()
+    {
+        // Sin conflicto registral (sin previas, o previa no aprobada): el gate CF-03 no bloquea.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>());
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task Radicar_SinVinPersistido_NoConsultaRepoYPermite()
+    {
+        // Instancias sin VIN (p. ej. otras familias, o tests que no lo ejercitan): el gate CF-03 es
+        // no-op y NO dispara IO contra el repo (guarda por VinNormalizer.Normalize(null) == null).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        await _repo.DidNotReceive().FindTramitesByVinAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -347,4 +414,143 @@ public sealed class TramiteLifecycleServiceTests
             Source = "system",
         });
 
+    // ── CF-06 (HU #10881) — override OT del documento de prenda, independiente del gravamen ─────
+    // La resolución del comportamiento SNAPSHOT (AC2: solo overrides ya activos al crear el trámite)
+    // vive en IPrendaDocumentRequirementPolicy (Infraestructura, probada aparte con EF); aquí se
+    // prueba que TramiteLifecycleService respeta EXACTAMENTE lo que la política resuelve.
+
+    private ProcedureInstance WireTraspaso(
+        string status, Guid transitOfficeId, DateTimeOffset createdAt, bool conDocumentoPrenda = false)
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var i = new ProcedureInstance
+        {
+            Id = id,
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000900",
+            Status = status,
+            ModalidadEntrada = "traspaso",
+            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
+            TransitOfficeId = transitOfficeId,
+            CreatedAt = createdAt,
+        };
+
+        foreach (var t in new[] { "compraventa", "soat", "rtm", "paz_salvo", "cedulas", "fur", "impronta" })
+        {
+            i.Attachments.Add(new ProcedureInstanceAttachment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = t,
+                StoragePath = $"p/{t}",
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        if (conDocumentoPrenda)
+        {
+            i.Attachments.Add(new ProcedureInstanceAttachment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = "prenda_registro",
+                StoragePath = "p/prenda_registro",
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        foreach (var parte in new[] { "comprador", "vendedor" })
+        {
+            i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                PartyRole = parte,
+                Status = BiometricEstados.Aprobado,
+                Name = parte,
+                DocumentType = "CC",
+                DocumentNumber = parte == "comprador" ? "1" : "2",
+                Email = $"{parte}@x.com",
+                TokenHash = Guid.NewGuid().ToString("N"),
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_code",
+            ValueText = "11001000",
+            Source = "user",
+        });
+
+        _repo.GetByIdWithWizardGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(i);
+        _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(new ProcedureType
+        {
+            Id = i.ProcedureTypeId,
+            Code = "TRASPASO_STANDARD",
+            Name = "Traspaso estándar",
+            Family = "traspaso",
+            PublicationStatus = PublicationStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        return i;
+    }
+
+    [Fact]
+    public async Task Ac1_OverrideOtActivo_SinDocumentoDePrenda_BloqueaConCodigoExacto()
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Ac1_OverrideOtActivo_ConDocumentoDePrendaAdjunto_Permite()
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: true);
+        _prendaPolicy
+            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task Ac2_TramiteEnCurso_ConOverrideNoAplicable_NoBloquea()
+    {
+        // Snapshot: la política resuelve `false` para un trámite que ya estaba en curso cuando el
+        // override se activó (la comparación de fechas la hace IPrendaDocumentRequirementPolicy).
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
 }
