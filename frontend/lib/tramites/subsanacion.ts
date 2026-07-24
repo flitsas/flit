@@ -1,14 +1,14 @@
 /**
- * HU #10874 — parseo cliente del checklist HÍBRIDO de subsanación (motivo + items +
- * fieldSnapshot) que el backend persiste como JSON en
- * `procedure_instance_status_history.metadata` (ver `SubsanacionObservation` en
- * `Flit.Tramites.Domain.Tramites.ValueObjects`, HU #10871/#10872).
+ * HU #10874 — parseo cliente del checklist HÍBRIDO de subsanación que el backend
+ * persiste en `procedure_instance_status_history.metadata` (ver `SubsanacionObservation`
+ * en `Flit.Tramites.Domain.Tramites.ValueObjects`, HU #10871/#10872).
  *
- * GAP conocido: `GET /instances/{id}` (`ProcedureInstanceStatusHistoryDto`) todavía NO expone
- * `metadata` — solo `reason` (motivo general en texto libre). Este módulo queda listo para
- * consumir `metadata` en cuanto el backend lo agregue al contrato; mientras tanto
- * `parseSubsanacionObservation` recibe `undefined`/`null` y degrada a `null`, y
- * `SubsanacionPanel` cae al `reason` plano como motivo (sin checklist estructurado).
+ * Contrato vigente: `GET /instances/{id}` (`ProcedureInstanceStatusHistoryDto.metadata`)
+ * expone la observación filtrada a `{motivo, items:[{campo,detalle}]}` (HU #10871, commit
+ * f3b64f5e). Por seguridad/Habeas Data el backend NO envía `fieldSnapshot` ni los tenant ids
+ * al cliente; el campo `fieldSnapshot` de abajo se conserva solo como parseo DEFENSIVO
+ * (siempre llegará ausente → `null`). Si no hay observación estructurada, `SubsanacionPanel`
+ * degrada al `reason` plano como motivo.
  */
 
 import type { InstanceStatus, StatusHistory } from '@/lib/api/types/procedure-runtime';

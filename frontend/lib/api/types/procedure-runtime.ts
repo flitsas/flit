@@ -169,12 +169,12 @@ export interface StatusHistory {
   changedAt: string;
   reason: string | null;
   /**
-   * HU #10871/#10872 (backend) — checklist HÍBRIDO de la observación de subsanación (motivo +
-   * items + fieldSnapshot), serializado como JSON en `procedure_instance_status_history.metadata`.
-   * GAP conocido (HU #10874): `GetProcedureInstanceHandler.ToDetail` (backend) todavía NO incluye
-   * `metadata` en `ProcedureInstanceStatusHistoryDto` — este campo queda declarado aquí para
-   * consumirlo en cuanto el backend lo exponga; mientras tanto llega `undefined`/`null` y
-   * `lib/tramites/subsanacion.ts` degrada al `reason` plano (ver SubsanacionPanel).
+   * HU #10871/#10872 (backend) — observación de subsanación serializada como JSON en
+   * `procedure_instance_status_history.metadata`. `GetProcedureInstanceHandler.ToDetail`
+   * (commit f3b64f5e) la expone filtrada a `{motivo, items:[{campo,detalle}]}`; por
+   * seguridad/Habeas Data NO incluye `fieldSnapshot` ni los tenant ids. Llega `null` en
+   * entradas sin observación (p. ej. aprobar/rechazar); `lib/tramites/subsanacion.ts` degrada
+   * entonces al `reason` plano (ver SubsanacionPanel).
    */
   metadata?: string | null;
 }
