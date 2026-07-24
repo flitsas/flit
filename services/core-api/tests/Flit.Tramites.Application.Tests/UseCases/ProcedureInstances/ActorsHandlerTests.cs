@@ -88,6 +88,9 @@ public sealed class ActorsHandlerTests
     [Theory]
     [InlineData("submitted")]
     [InlineData("completed")]
+    [InlineData(TramiteEstado.Entregado)]
+    [InlineData(TramiteEstado.Aprobado)]
+    [InlineData(TramiteEstado.Rechazado)]
     public async Task Put_NotDraft_ReturnsConflict(string status)
     {
         var ct = TestContext.Current.CancellationToken;
@@ -99,6 +102,25 @@ public sealed class ActorsHandlerTests
 
         error.Should().Be("not_draft");
         result.Should().BeNull();
+    }
+
+    // HU #10870 (AC1) — subsanación reabre la edición COMPLETA del trámite (entregado/rechazado →
+    // subsanacion) SIN pasar por borrador: los actores deben poder editarse en este estado, igual que
+    // PatchFieldValuesHandler y el trigger de BD (trg_field_value_immutable).
+    [Fact]
+    public async Task Put_Subsanacion_PermiteEditarActores()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct)
+            .Returns(Instance(id, tenant, status: TramiteEstado.Subsanacion));
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Actors.Should().ContainSingle(a => a.NumeroDocumento == "123");
     }
 
     // ── Charset del número de documento (Ajuste 3) ────────────────────────────
