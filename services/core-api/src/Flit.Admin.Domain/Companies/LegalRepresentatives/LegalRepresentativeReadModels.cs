@@ -68,9 +68,60 @@ public sealed class LegalRepresentativeItem
 
 /// <summary>
 /// Resumen de una compañía representada por un representante (HU #10932): id + NIT + razón social.
-/// Alimenta la vista representante-céntrica (empresas anidadas) y el consumo del wizard.
+/// Alimenta la vista representante-céntrica (empresas anidadas) y el consumo del wizard. Desde la
+/// HU #10933 puede traer el HISTORIAL de escrituras de la compañía (<see cref="Deeds"/>): vacío en el
+/// listado/consumo del wizard, poblado solo en el detalle del representante.
 /// </summary>
-public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, string Name);
+public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, string Name)
+{
+    /// <summary>
+    /// Historial de escrituras de la compañía (HU #10933): vigentes y vencidas, ordenadas por
+    /// <c>VigenciaHasta</c> descendente. Solo se puebla en el detalle del representante; en el listado
+    /// y en el consumo del wizard queda vacío para no cargar el M:N innecesariamente.
+    /// </summary>
+    public IReadOnlyList<RepresentativeDeedSummary> Deeds { get; init; } = [];
+}
+
+/// <summary>
+/// Escritura de una compañía dentro de la vista representante-céntrica (HU #10933): proyección ligera
+/// del historial (sin storage). <see cref="Estado"/> resume la vigencia contra "hoy" en Colombia
+/// (UTC-5) y la baja lógica: <c>"vigente"</c>, <c>"vencida"</c>, <c>"futura"</c> o <c>"inactiva"</c>.
+/// </summary>
+public sealed record RepresentativeDeedSummary(
+    Guid Id,
+    string Description,
+    DateOnly VigenciaDesde,
+    DateOnly VigenciaHasta,
+    bool IsActive,
+    string Estado)
+{
+    /// <summary>Estados posibles de una escritura en la vista de historial.</summary>
+    public const string EstadoVigente = "vigente";
+    public const string EstadoVencida = "vencida";
+    public const string EstadoFutura = "futura";
+    public const string EstadoInactiva = "inactiva";
+
+    /// <summary>
+    /// Construye el resumen calculando <see cref="Estado"/> a partir de la vigencia y de la baja
+    /// lógica contra <paramref name="today"/> (día calendario en Colombia). La baja lógica tiene
+    /// prioridad: una escritura inactiva es <c>"inactiva"</c> sin importar su rango de vigencia.
+    /// </summary>
+    public static RepresentativeDeedSummary Create(
+        Guid id,
+        string description,
+        DateOnly vigenciaDesde,
+        DateOnly vigenciaHasta,
+        bool isActive,
+        DateOnly today)
+    {
+        var estado = !isActive ? EstadoInactiva
+            : today < vigenciaDesde ? EstadoFutura
+            : today > vigenciaHasta ? EstadoVencida
+            : EstadoVigente;
+
+        return new RepresentativeDeedSummary(id, description, vigenciaDesde, vigenciaHasta, isActive, estado);
+    }
+}
 
 /// <summary>
 /// Read model de una escritura para el listado/detalle admin y el consumo del wizard — HU #10900.
