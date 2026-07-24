@@ -27,6 +27,17 @@ internal static class WizardEndpoints
                 : Results.Ok(result);
         }).WithName("GetProcedureInstanceWizardState");
 
+        // CF-02 (HU #10883, AC3) — esqueleto de pasos para el PASO 1 cuando el trámite todavía no
+        // existe. Mismos pasos/keys/etiquetas que el wizard real, con el paso 1 abierto y el resto
+        // bloqueado: el trámite se crea al avanzar al paso 2. Sin tenant: no lee datos de negocio.
+        group.MapGet("/wizard-preview", (string? modalidad) =>
+        {
+            var preview = GetWizardStateHandler.BuildPreview(modalidad);
+            return preview is null
+                ? Results.Problem(statusCode: 400, title: "Bad Request", detail: "Modalidad no válida.")
+                : Results.Ok(preview);
+        }).WithName("GetProcedureWizardPreview");
+
         return app;
     }
 }

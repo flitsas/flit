@@ -174,6 +174,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
 
+    // Trámites — caché cross-trámite de consultas externas + gate de consentimiento Habeas Data
+    // (HU #10878, Feature #10862, CF-04, ADR-0030/ADR-0031).
+    public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
+    public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
+
     // FEATURE-08 / Fase 2b — catálogo global de fuentes por tipo (CFD-04, ADR-0019 excepción A4/A20).
     public DbSet<ProcedureTypeSource> ProcedureTypeSources => Set<ProcedureTypeSource>();
 

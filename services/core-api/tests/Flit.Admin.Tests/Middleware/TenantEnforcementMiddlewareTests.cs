@@ -171,4 +171,31 @@ public sealed class TenantEnforcementMiddlewareTests
         ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
         ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
     }
+
+    // CF-02 (HU #10879) — la consulta del paso 1 corre ANTES de crear el trámite, así que su ruta no
+    // cuelga de /instances. Igual es tenant-scoped: sin estar en IsRuntimeScoped, http.Items no traía
+    // el tenant y el endpoint respondía 403 "sin compañía asignada" a un radicador que sí la tiene.
+    [Fact]
+    public async Task PreflightPreview_CompanyUser_ResuelveTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/preflight-preview",
+            User("Radicador", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        // El header del cliente NO manda: el tenant sale del token, igual que en el resto del runtime.
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task PreflightPreview_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/preflight-preview");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
 }

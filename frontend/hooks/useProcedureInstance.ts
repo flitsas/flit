@@ -176,7 +176,9 @@ export function useProcedureInstance() {
     }
   }, []);
 
-  const runConsulta = useCallback(async () => {
+  // HU #10885 (Feature #10862, CF-04) — `forceRefresh` (AC2, botón "Actualizar") salta el reúso de
+  // caché del backend (ADR-0030) y fuerza una consulta nueva; default false (comportamiento previo).
+  const runConsulta = useCallback(async (forceRefresh = false) => {
     const instanceId = stateRef.current.instanceId;
     if (!instanceId) return null;
     setState((s) => ({ ...s, preflightLoading: true }));
@@ -186,6 +188,8 @@ export function useProcedureInstance() {
       const snapshot = await tramitesClient.runConsultation(
         instanceId,
         'RUNT_VEHICLE',
+        undefined,
+        forceRefresh,
       );
       setState((s) => ({
         ...s,

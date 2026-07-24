@@ -11,9 +11,12 @@ import type {
   CommercialData,
   SuggestedCommercialValue,
   CompletarBiometriaResult,
+  ConsultaVehiculoInput,
   ConsultationProvidersConfig,
   ConsultationResult,
+  CreateFromConsultaResult,
   CreateInstanceRequest,
+  PreflightPreviewResult,
   DocumentOcrResult,
   EnsureIdentityResult,
   FieldValueInput,
@@ -60,6 +63,7 @@ import type {
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
   StuckIdentityValidationsResponse,
+  WizardModalidad,
   WizardState,
 } from './types/procedure-runtime';
 
@@ -80,6 +84,12 @@ interface PreflightSnapshotDto {
   }>;
   provider?: string;
   createdAt: string;
+}
+
+/** Espejo del PreflightPreviewDto del backend (CF-02): snapshot del paso 1 + token de reúso. */
+interface PreflightPreviewDto extends PreflightSnapshotDto {
+  previewToken: string;
+  vehicleFields?: Array<{ fieldKey: string; valueText?: string | null; valueJson?: string | null }>;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -186,6 +196,90 @@ function problemMessage(res: Response, body: string): string {
   return 'No se pudo completar la solicitud. Revisa los datos e inténtalo de nuevo.';
 }
 
+/**
+ * Cuerpo ProblemDetails (RFC 7807) parseado, si la respuesta de error trae JSON. `title` viaja
+ * como código de error en varios endpoints de trámites (p. ej. `DUPLICATE_ACTIVE_PROCEDURE`); las
+ * `extensions` del backend (p. ej. `procedureInstanceId`) se serializan como miembros adicionales
+ * a nivel raíz.
+ */
+function parseProblem(body: string): Record<string, unknown> | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Error de una llamada a la API de trámites: conserva el `status` HTTP y el ProblemDetails
+ * parseado (`problem`) además del mensaje legible que ya consumen los callers existentes
+ * (`err.message`, vía `err instanceof Error`). Los callers que solo necesitan el mensaje siguen
+ * funcionando sin cambios; los que necesitan reaccionar a un código de error concreto (p. ej. AC1
+ * de HU #10882, 409 `DUPLICATE_ACTIVE_PROCEDURE`) leen `.status` / `.problem`.
+ */
+export class TramitesApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly problem: Record<string, unknown> | null,
+  ) {
+    super(message);
+    this.name = 'TramitesApiError';
+  }
+}
+
+/**
+ * AC1 (HU #10882) — detecta el bloqueo de duplicidad de trámite en curso (409
+ * `DUPLICATE_ACTIVE_PROCEDURE`, HU #10876) que puede devolver el preflight de consulta de
+ * vehículo y extrae el id del trámite existente para ofrecer "Retomar" (AC2). Devuelve `null`
+ * para cualquier otro error (incluidos otros 409, p. ej. el de creación por tipo no publicado).
+ *
+ * Duck-typing sobre `{ status, problem }` (en vez de `instanceof TramitesApiError`): la función
+ * queda desacoplada de la identidad exacta de la clase, así sigue funcionando igual sobre
+ * cualquier error con esa forma (p. ej. en tests que mockean `@/lib/api/tramites-client`).
+ */
+export function getDuplicateActiveProcedureId(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 409 || !problem || typeof problem !== 'object') return null;
+  const { title, procedureInstanceId } = problem as { title?: unknown; procedureInstanceId?: unknown };
+  if (title !== 'DUPLICATE_ACTIVE_PROCEDURE' || typeof procedureInstanceId !== 'string') return null;
+  return procedureInstanceId;
+}
+
+/** Detalle del bloqueo registral CF-03 (HU #10877) extraído de las extensions RFC7807 del 422. */
+export interface VehicleStateBlockInfo {
+  vehicleStatus: string;
+  procedureType: string;
+}
+
+/**
+ * AC1/AC2 (HU #10884) — detecta el bloqueo DURO "vehículo ya matriculado" (422
+ * `VEHICLE_STATE_INVALID_FOR_TYPE`, CF-03 de HU #10877) que puede devolver el preflight de
+ * consulta de vehículo y extrae `vehicleStatus`/`procedureType` para diferenciar el mensaje:
+ * `ACTIVO` (el RUNT reporta el vehículo ya matriculado) y `APROBADO_FLIT` (ya existe una
+ * matrícula APROBADA en FLIT para el mismo VIN) ⇒ AC1 "ya matriculado"; `DESCONOCIDO` (el RUNT no
+ * respondió o no trajo el dato) ⇒ AC2 "RUNT sin dato". A diferencia del check informativo (HU
+ * #10538) o del "riesgo aceptado" sobre un fail clásico de `estado_vehiculo`, este bloqueo NO es
+ * subsanable: no se ofrece continuar.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que `getDuplicateActiveProcedureId`.
+ */
+export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, vehicleStatus, procedureType } = problem as {
+    title?: unknown;
+    vehicleStatus?: unknown;
+    procedureType?: unknown;
+  };
+  if (title !== 'VEHICLE_STATE_INVALID_FOR_TYPE' || typeof vehicleStatus !== 'string') return null;
+  return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
@@ -198,7 +292,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(problemMessage(res, body));
+    throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
   }
 
   if (res.status === 204) {
@@ -481,13 +575,18 @@ export const tramitesClient = {
 
   // #10201 — consulta real de fuentes externas (RUNT/SIMIT). Mapea
   // ConsultationResult del backend al shape PreflightSnapshot del panel.
+  // HU #10885 (Feature #10862, CF-04): `forceRefresh` (AC2, botón "Actualizar") viaja como query
+  // param opcional — default false (cero regresión) — y salta el reúso de caché en el backend
+  // (ADR-0030). `fromCache`/`queriedAt` (AC1) viajan tal cual del DTO al PreflightSnapshot.
   runConsultation: async (
     instanceId: string,
     templateCode: string,
     tenantId?: string,
+    forceRefresh = false,
   ): Promise<PreflightSnapshot> => {
+    const query = forceRefresh ? '?forceRefresh=true' : '';
     const result = await request<ConsultationResult>(
-      `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}`,
+      `/api/v1/tramites/instances/${instanceId}/consultations/${templateCode}${query}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -503,6 +602,8 @@ export const tramitesClient = {
         message: c.message ?? '',
       })),
       createdAt: new Date().toISOString(),
+      fromCache: result.fromCache ?? false,
+      queriedAt: result.queriedAt ?? null,
     };
   },
 
@@ -698,6 +799,92 @@ export const tramitesClient = {
     );
     return mapPreflight(dto);
   },
+
+  // CF-02 (HU #10879 AC3 / #10883 AC3) — consulta del vehículo del PASO 1 SIN crear el trámite.
+  // Devuelve el mismo semáforo que el preflight de una instancia (y los mismos bloqueos 409/422),
+  // más el token con el que la creación posterior reusa esta consulta.
+  runPreflightPreview: async (
+    input: ConsultaVehiculoInput,
+    tenantId?: string,
+  ): Promise<PreflightPreviewResult> => {
+    const dto = await request<PreflightPreviewDto>('/api/v1/tramites/preflight-preview', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({
+        tenantId: tenantId ?? jwtTenantId() ?? DEV_TENANT_ID,
+        modalidad: input.modalidad,
+        vin: input.vin ?? null,
+        plate: input.plate ?? null,
+        ownerDocumentType: input.ownerDocumentType ?? null,
+        ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+      }),
+    });
+    return {
+      previewToken: dto.previewToken,
+      preflight: mapPreflight(dto),
+      vehicleFields: (dto.vehicleFields ?? []).map((f) => ({
+        formFieldId: '',
+        fieldKey: f.fieldKey,
+        valueText: f.valueText ?? null,
+        valueJson: f.valueJson ?? null,
+        source: 'consultation',
+      })),
+    };
+  },
+
+  // CF-02 (HU #10879 AC5 / #10883 AC4) — crea el trámite AL AVANZAR al paso 2, ya con el vehículo
+  // consultado: es el único punto del flujo que da de alta el registro. `previewToken` evita repetir
+  // la consulta al proveedor externo; si expiró, el backend consulta de nuevo (no falla).
+  createInstanceFromConsulta: async (
+    input: ConsultaVehiculoInput & { previewToken?: string | null },
+    tenantId?: string,
+  ): Promise<CreateFromConsultaResult> => {
+    const payload = decodeJwtPayload(getToken());
+    const dto = await request<{
+      instance: ProcedureInstanceSummary;
+      preflight: PreflightSnapshotDto | null;
+    }>('/api/v1/tramites/instances/from-consulta', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({
+        tenantId: tenantId ?? payload?.tenant_id ?? DEV_TENANT_ID,
+        createdByUserId: payload?.sub ?? DEV_USER_ID,
+        modalidad: input.modalidad,
+        vin: input.vin ?? null,
+        plate: input.plate ?? null,
+        ownerDocumentType: input.ownerDocumentType ?? null,
+        ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+        previewToken: input.previewToken ?? null,
+        transitOfficeId: null,
+      }),
+    });
+    return {
+      instance: dto.instance,
+      preflight: dto.preflight ? mapPreflight(dto.preflight) : null,
+    };
+  },
+
+  // CF-02 (HU #10883, AC3) — esqueleto de pasos para pintar el wizard en el paso 1 mientras el
+  // trámite aún no existe. Mismos pasos/etiquetas que el wizard real, con el resto bloqueado.
+  getWizardPreview: (modalidad: WizardModalidad) =>
+    request<WizardState>(
+      `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
+    ),
+
+  // HU #10879/#10883 — autosave del avance del wizard: persiste la `key` del paso donde quedó el
+  // operador para retomar ahí al reabrir el borrador (AC2). PATCH /instances/{id}/current-step; el
+  // backend valida internamente que el trámite esté en borrador y que la consulta del vehículo ya
+  // esté completa (409 en otro caso) — el caller (AC1) trata cualquier fallo como no bloqueante
+  // (autosave silencioso, no debe interrumpir la navegación del wizard).
+  setCurrentStep: (instanceId: string, step: string, tenantId?: string) =>
+    request<{ id: string; currentStep: string | null }>(
+      `/api/v1/tramites/instances/${instanceId}/current-step`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ step }),
+      },
+    ),
 
   getPreflight: async (
     instanceId: string,

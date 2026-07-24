@@ -51,6 +51,36 @@ export interface CreateInstanceRequest {
   transitOfficeId?: string;
 }
 
+/**
+ * CF-02 (HU #10879/#10883) — datos del vehículo capturados en el PASO 1, cuando el trámite todavía
+ * no existe. Alimentan tanto la consulta desacoplada (`runPreflightPreview`) como la creación al
+ * avanzar al paso 2 (`createInstanceFromConsulta`).
+ */
+export interface ConsultaVehiculoInput {
+  modalidad: WizardModalidad;
+  vin?: string | null;
+  plate?: string | null;
+  ownerDocumentType?: string | null;
+  ownerDocumentNumber?: string | null;
+}
+
+/**
+ * Resultado de la consulta del paso 1 SIN trámite creado. `previewToken` se devuelve al backend al
+ * avanzar al paso 2 para que la creación reuse esta consulta en vez de repetirla contra el RUNT.
+ */
+export interface PreflightPreviewResult {
+  previewToken: string;
+  preflight: PreflightSnapshot;
+  /** Atributos del vehículo hidratados por la consulta, en la forma que ya pinta el wizard. */
+  vehicleFields: FieldValue[];
+}
+
+/** Trámite recién creado al avanzar al paso 2, con su preflight ya persistido. */
+export interface CreateFromConsultaResult {
+  instance: ProcedureInstanceSummary;
+  preflight: PreflightSnapshot | null;
+}
+
 export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
@@ -157,6 +187,11 @@ export interface ProcedureInstanceDetail {
   completedAt: string | null;
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
+   * frontend cae al paso derivado de los gates (comportamiento previo).
+   */
+  currentStep?: string | null;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -231,6 +266,14 @@ export interface ProcedureActor {
   personType?: ActorPersonType;
   /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
   representanteLegal?: RepresentanteLegal;
+  /**
+   * HU #10885 (Feature #10862, CF-04, Habeas Data) — autorización explícita de esta persona para
+   * que sus datos se reutilicen en futuros trámites del mismo tenant (gate de
+   * `tramites.person_data_consents`, ver ADR-0031). Se envía en el PUT de actores; `true` → el
+   * backend registra el consentimiento (`AutorizaReutilizacionDatos`). Ausente/`false` ⇒ no se
+   * toca ningún consentimiento previo (fail-safe: nunca degrada un `granted` existente).
+   */
+  autorizaReutilizacionDatos?: boolean;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -256,7 +299,10 @@ export interface RuntPersonLookupResult {
   documentNumber: string;
   licenseStatus: string | null;    // driverStatus del conductor
   source: 'RUNT';
-  mode: 'real' | 'mock';
+  // HU #10885 (Feature #10862, CF-04) — 'cache' cuando el dato se reutilizó de una consulta previa
+  // vigente del mismo tenant (AC1, ADR-0030/ADR-0031), sin llamar al proveedor externo. El backend
+  // NO expone `queriedAt` para este lookup (gap de contrato documentado, HU #10885): solo el origen.
+  mode: 'real' | 'mock' | 'cache';
   // Campos enriquecidos (presentes cuando found=true)
   citizenStatus?: string | null;    // Estado del ciudadano (ACTIVA/INACTIVA)
   hasPendingFines?: boolean;        // true si tieneMultas == "SI"
@@ -296,7 +342,9 @@ export interface RuesPersonLookupResult {
   camaraComercio: string | null;
   documentType: 'NIT';
   source: 'RUES';
-  mode: 'real' | 'mock';
+  // HU #10885 — igual que RuntPersonLookupResult.mode: 'cache' = dato reutilizado (AC1), sin
+  // `queriedAt` disponible en el backend para este lookup.
+  mode: 'real' | 'mock' | 'cache';
 }
 
 // ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
@@ -384,6 +432,14 @@ export interface PreflightSnapshot {
   overall: PreflightOverall;
   checks: PreflightCheck[];
   createdAt: string;
+  /**
+   * HU #10885 (Feature #10862, CF-04, AC1) — presentes solo cuando el snapshot viene de
+   * `tramitesClient.runConsultation` (espejo de `ConsultationResult.fromCache/queriedAt`, ADR-0030).
+   * `runPreflight`/`getPreflight` (semáforo multi-proveedor) no los completan hoy: quedan
+   * `undefined` y el panel simplemente no muestra el badge de origen/fecha.
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Consulta real #10201: POST /instances/{id}/consultations/{templateCode} ──
@@ -408,6 +464,13 @@ export interface ConsultationResult {
   overall: PreflightOverall;
   checks: ConsultationCheck[];
   hydratedFields: ConsultationHydratedField[];
+  /**
+   * HU #10878/#10885 (ADR-0030, CF-04) — `true` cuando el resultado se sirvió desde
+   * `tramites.external_query_cache` (AC1), sin llamar al proveedor externo. `queriedAt` es la
+   * fecha de la consulta ORIGEN (la que generó el dato cacheado, no necesariamente "ahora").
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Documentos / checklist del trámite (Slice 3) ───────────────────
@@ -539,6 +602,13 @@ export interface WizardState {
    * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
    */
   rnmcEnabled?: boolean;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO (autosave del avance del wizard, PATCH
+   * /instances/{id}/current-step). Si NO es null/ausente, PRIMA como punto de retoma al reabrir el
+   * borrador (AC2 de HU #10883): el frontend abre en esta `key` de paso. Si es null, el frontend cae
+   * al paso DERIVADO de los gates (comportamiento previo, sin regresión).
+   */
+  persistedCurrentStep?: string | null;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -765,6 +835,13 @@ export interface TenantBiometricValidation {
   validUntil: string | null;
   /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
   daysRemaining: number | null;
+  /**
+   * CF-05 (HU #10886, AC2) — enlace de captura VIGENTE, para reenviarlo por otros medios. Null cuando
+   * no hay nada que compartir: proveedor sin enlace (mock), estado terminal o enlace ya vencido.
+   */
+  captureUrl: string | null;
+  /** Vencimiento del ENLACE de captura (distinto de `validUntil`, que es la vigencia de la identidad). */
+  linkExpiresAt: string | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
