@@ -131,6 +131,7 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
