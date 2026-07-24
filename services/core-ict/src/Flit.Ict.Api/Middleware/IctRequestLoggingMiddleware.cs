@@ -13,6 +13,24 @@ namespace Flit.Ict.Api.Middleware;
 /// </summary>
 public sealed class IctRequestLoggingMiddleware(RequestDelegate next, IServiceScopeFactory scopeFactory)
 {
+    /// <summary>
+    /// Prefijos de rutas de CLIENTE que se registran en el log. Incluye los alias de desarrollo
+    /// (<c>/api/ict/*</c>) Y las rutas v1 que usan los clientes antiguos (compat): sin esto el log
+    /// solo veía el tráfico de desarrollo y se perdía el de los clientes reales (que pegan a v1).
+    /// NO se incluye <c>/api/v1/ict</c> (observabilidad del submódulo frontend) para no auto-loguear
+    /// las consultas del propio panel de logs.
+    /// </summary>
+    private static readonly string[] LoggedPrefixes =
+    [
+        "/api/ict",                     // alias de desarrollo (auth/register/status/…)
+        "/api/v1/auth",                 // login ICT (compat v1)
+        "/api/v1/external-transaction", // register, abortProcess, pauseDraftProcess (compat v1)
+        "/api/v1/status-process",       // estado (compat v1)
+        "/api/v1/transactions",         // reproceso (compat v1)
+        "/api/v1/secretaries",          // secretarías (compat v1)
+        "/api/v1/transact-attachments", // adjuntos (compat v1)
+    ];
+
     public async Task InvokeAsync(HttpContext context)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -24,12 +42,15 @@ public sealed class IctRequestLoggingMiddleware(RequestDelegate next, IServiceSc
         {
             stopwatch.Stop();
             var path = context.Request.Path.Value ?? string.Empty;
-            if (path.StartsWith("/api/ict", StringComparison.OrdinalIgnoreCase))
+            if (ShouldLog(path))
             {
                 await WriteLogAsync(context, path, (int)stopwatch.ElapsedMilliseconds);
             }
         }
     }
+
+    private static bool ShouldLog(string path) =>
+        Array.Exists(LoggedPrefixes, p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
     private async Task WriteLogAsync(HttpContext context, string path, int durationMs)
     {
