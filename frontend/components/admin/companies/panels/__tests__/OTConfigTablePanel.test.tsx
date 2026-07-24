@@ -1,9 +1,10 @@
 // HU #10194 — consolidación de la config de OT en una tabla con menú de acciones. Cubre:
 // (a) la tabla lista OT con columnas Organismo/Código/Estado/Acciones; (b) el switch de
 // Estado habilita/deshabilita (add/removeTransitGrant, UI optimista); (c) un OT no operable
-// no se puede habilitar (switch deshabilitado + badge); (d) el menú "⋯ Acciones" abre el
-// modal de bloqueos y togglea un criterio; (e) las acciones de config están deshabilitadas
-// si el OT no tiene grant. API y toast mockeados.
+// no se puede habilitar (switch deshabilitado + badge); (d) el menú "⋯ Acciones" → único
+// ítem "Configurar" abre el modal UNIFICADO (bloqueos + restricciones de consulta en el
+// mismo modal) y se puede togglear un criterio de cada sección; (e) "Configurar" está
+// deshabilitado si el OT no tiene grant. API y toast mockeados.
 //
 // Uso de ejemplo:
 //   render(<OTConfigTablePanel tenantId={TENANT} />);
@@ -43,6 +44,7 @@ import {
   fetchTransitOffices,
   removeTransitGrant,
   setOtBlockingPolicy,
+  setOtConsultationRestriction,
 } from "@/lib/api/admin-companies";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 
@@ -154,28 +156,44 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     expect(bogotaSwitch).not.toBeDisabled();
   });
 
-  it("(d) el menú «⋯ Acciones» abre el modal de bloqueos y togglea un criterio", async () => {
+  it("(d) el menú «⋯ Acciones» → «Configurar» abre el modal unificado con ambas secciones y togglea un criterio de cada una", async () => {
     const user = userEvent.setup();
     arrange({ grantedIds: ["o1"] });
     vi.mocked(setOtBlockingPolicy).mockResolvedValue(undefined);
+    vi.mocked(setOtConsultationRestriction).mockResolvedValue(undefined);
     render(<OTConfigTablePanel tenantId={TENANT} />);
 
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
     await user.click(screen.getByRole("button", { name: /acciones para secretaría de movilidad bogotá/i }));
-    await user.click(await screen.findByRole("menuitem", { name: /configurar bloqueos/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /^configurar$/i }));
 
-    const dialog = await screen.findByRole("dialog", { name: /configurar bloqueos/i });
-    // SOAT arranca ON (default bloquea, sin fila configurada).
+    const dialog = await screen.findByRole("dialog", { name: /configurar — secretaría de movilidad bogotá/i });
+    // Ambas secciones conviven en el mismo modal.
+    expect(within(dialog).getByRole("heading", { name: /^bloqueos$/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: /restricciones de consulta/i })).toBeInTheDocument();
+
+    // Sección Bloqueos: SOAT arranca ON (default bloquea, sin fila configurada).
     const soatSwitch = within(dialog).getByRole("switch", { name: /soat vencido/i });
     expect(soatSwitch).toBeChecked();
-
     await user.click(soatSwitch);
     await waitFor(() => expect(setOtBlockingPolicy).toHaveBeenCalledWith(TENANT, "o1", "soat", false));
     expect(soatSwitch).not.toBeChecked();
+
+    // Sección Restricciones de consulta: RNMC arranca OFF (opt-in, sin fila configurada). El
+    // criterio "RNMC" existe en AMBAS secciones (bloqueos y restricciones) con el mismo label,
+    // así que se acota la búsqueda al grupo de restricciones (`ot-restrictions-o1`).
+    const restrictionsSection = within(dialog).getByTestId("ot-restrictions-o1");
+    const rnmcSwitch = within(restrictionsSection).getByRole("switch", { name: /rnmc/i });
+    expect(rnmcSwitch).not.toBeChecked();
+    await user.click(rnmcSwitch);
+    await waitFor(() =>
+      expect(setOtConsultationRestriction).toHaveBeenCalledWith(TENANT, "o1", "rnmc", true),
+    );
+    expect(rnmcSwitch).toBeChecked();
   });
 
-  it("revierte el switch del modal de bloqueos y avisa si falla la persistencia", async () => {
+  it("revierte el switch de bloqueos del modal unificado y avisa si falla la persistencia", async () => {
     const user = userEvent.setup();
     arrange({ grantedIds: ["o1"] });
     const serverMessage = "Este organismo no está habilitado para la compañía.";
@@ -186,9 +204,9 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
 
     await screen.findByText("Secretaría de Movilidad Bogotá");
     await user.click(screen.getByRole("button", { name: /acciones para secretaría de movilidad bogotá/i }));
-    await user.click(await screen.findByRole("menuitem", { name: /configurar bloqueos/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /^configurar$/i }));
 
-    const dialog = await screen.findByRole("dialog", { name: /configurar bloqueos/i });
+    const dialog = await screen.findByRole("dialog", { name: /configurar — secretaría de movilidad bogotá/i });
     const soatSwitch = within(dialog).getByRole("switch", { name: /soat vencido/i });
     await user.click(soatSwitch);
 
@@ -196,7 +214,7 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     expect(show).toHaveBeenCalledWith(serverMessage, "error");
   });
 
-  it("(e) las acciones de config están deshabilitadas si el OT no tiene grant", async () => {
+  it("(e) «Configurar» está deshabilitado si el OT no tiene grant", async () => {
     const user = userEvent.setup();
     arrange({ grantedIds: ["o1"] }); // o2 sin grant
     render(<OTConfigTablePanel tenantId={TENANT} />);
@@ -204,15 +222,11 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
     await user.click(screen.getByRole("button", { name: /acciones para medellín/i }));
-    const blockingItem = await screen.findByRole("menuitem", { name: /configurar bloqueos/i });
-    const restrictionsItem = screen.getByRole("menuitem", { name: /configurar restricciones de consulta/i });
-    expect(blockingItem).toBeDisabled();
-    expect(restrictionsItem).toBeDisabled();
+    const configItem = await screen.findByRole("menuitem", { name: /^configurar$/i });
+    expect(configItem).toBeDisabled();
 
-    // El OT habilitado sí tiene las acciones disponibles.
+    // El OT habilitado sí tiene la acción disponible.
     await user.click(screen.getByRole("button", { name: /acciones para secretaría de movilidad bogotá/i }));
-    expect(
-      await screen.findByRole("menuitem", { name: /configurar bloqueos/i }),
-    ).not.toBeDisabled();
+    expect(await screen.findByRole("menuitem", { name: /^configurar$/i })).not.toBeDisabled();
   });
 });

@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { OTConfigTable, type OtOperationalInfo } from "@/components/admin/companies/OTConfigTable";
-import { OTBlockingPoliciesModal } from "@/components/admin/companies/OTBlockingPoliciesModal";
-import { OTConsultationRestrictionsModal } from "@/components/admin/companies/OTConsultationRestrictionsModal";
+import { OTConfigModal } from "@/components/admin/companies/OTConfigModal";
 import {
   addTransitGrant,
   fetchOtBlockingPolicies,
@@ -28,18 +27,13 @@ import type {
   TransitOffice,
 } from "@/lib/api/types";
 
-type ModalState =
-  | { type: "blocking"; office: TransitOffice }
-  | { type: "restrictions"; office: TransitOffice }
-  | null;
-
 // Panel único de configuración de Organismos de Tránsito (HU #10194 — consolidación).
 // Reemplaza los 3 slots que antes se apilaban en "Configuración Empresa" (matriz de
 // grants, restricciones de consulta y políticas de bloqueo) por UNA tabla con switch de
-// habilitación y un menú "⋯ Acciones" que abre, por OT, los modales de configuración.
-// Carga todo lo que antes cargaban los 3 paneles (catálogo, grants, estado operativo,
-// políticas de bloqueo y restricciones de consulta) para poder abrir cualquiera de los
-// dos modales sin una petición adicional por fila.
+// habilitación y un menú "⋯ Acciones" → "Configurar" que abre, por OT, UN solo modal con
+// las dos secciones (bloqueos + restricciones de consulta). Carga todo lo que antes
+// cargaban los 3 paneles (catálogo, grants, estado operativo, políticas de bloqueo y
+// restricciones de consulta) para poder abrir el modal sin una petición adicional por fila.
 export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -48,7 +42,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
-  const [modal, setModal] = useState<ModalState>(null);
+  const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -145,28 +139,19 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
           grantedIds={grantedIds}
           operationalById={operationalById}
           onToggleGrant={handleToggleGrant}
-          onOpenBlocking={(office) => setModal({ type: "blocking", office })}
-          onOpenRestrictions={(office) => setModal({ type: "restrictions", office })}
+          onOpenConfig={(office) => setConfigOffice(office)}
           onError={(message) => show(message, "error")}
         />
       </UiStateBoundary>
 
-      {modal?.type === "blocking" && (
-        <OTBlockingPoliciesModal
-          office={modal.office}
+      {configOffice && (
+        <OTConfigModal
+          office={configOffice}
           policies={policies}
-          onToggle={handleToggleBlocking}
-          onClose={() => setModal(null)}
-          onError={(message) => show(message, "error")}
-        />
-      )}
-
-      {modal?.type === "restrictions" && (
-        <OTConsultationRestrictionsModal
-          office={modal.office}
           restrictions={restrictions}
-          onToggle={handleToggleRestriction}
-          onClose={() => setModal(null)}
+          onToggleBlocking={handleToggleBlocking}
+          onToggleRestriction={handleToggleRestriction}
+          onClose={() => setConfigOffice(null)}
           onError={(message) => show(message, "error")}
         />
       )}

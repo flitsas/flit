@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search, ShieldAlert, SlidersHorizontal } from "lucide-react";
+import { Check, Search, Settings2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
@@ -30,10 +30,8 @@ export interface OTConfigTableProps {
   operationalById?: Record<string, OtOperationalInfo>;
   /** Persiste el cambio de grant (POST si enabled, DELETE si !enabled). */
   onToggleGrant: (officeId: string, enabled: boolean) => Promise<void>;
-  /** Abre el modal de criterios de bloqueo scoped a ese OT. */
-  onOpenBlocking: (office: TransitOffice) => void;
-  /** Abre el modal de restricciones de consulta scoped a ese OT. */
-  onOpenRestrictions: (office: TransitOffice) => void;
+  /** Abre el modal unificado de configuración (bloqueos + restricciones) scoped a ese OT. */
+  onOpenConfig: (office: TransitOffice) => void;
   /** Notificación opcional de error de persistencia (toast). */
   onError?: (message: string) => void;
 }
@@ -59,8 +57,7 @@ export function OTConfigTable({
   grantedIds,
   operationalById,
   onToggleGrant,
-  onOpenBlocking,
-  onOpenRestrictions,
+  onOpenConfig,
   onError,
 }: OTConfigTableProps) {
   const [search, setSearch] = useState("");
@@ -194,26 +191,17 @@ export function OTConfigTable({
         // criterio que antes: las matrices de bloqueos/restricciones solo listaban OT
         // habilitados; ahora se refleja como acción deshabilitada con motivo).
         const enabledForConfig = granted.has(office.id);
-        const disabledReason = "Habilita este organismo para configurar bloqueos o restricciones.";
         return (
           <ActionsMenu
             ariaLabel={`Acciones para ${office.name}`}
             items={[
               {
-                key: "blocking",
-                label: "Configurar bloqueos",
-                icon: ShieldAlert,
-                onSelect: () => onOpenBlocking(office),
+                key: "config",
+                label: "Configurar",
+                icon: Settings2,
+                onSelect: () => onOpenConfig(office),
                 disabled: !enabledForConfig,
-                disabledReason,
-              },
-              {
-                key: "restrictions",
-                label: "Configurar restricciones de consulta",
-                icon: SlidersHorizontal,
-                onSelect: () => onOpenRestrictions(office),
-                disabled: !enabledForConfig,
-                disabledReason,
+                disabledReason: "Habilita este organismo para configurar bloqueos y restricciones.",
               },
             ]}
           />
