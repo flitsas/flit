@@ -39,7 +39,11 @@ public interface IMandateSignerRepository
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>Datos de alta de un mandatario. <c>DocumentNumber</c> es PII: no loguear.</summary>
+/// <summary>
+/// Datos de alta de un mandatario. <c>DocumentNumber</c>/<c>Email</c> son PII: no loguear. Los campos
+/// ADR-0036 (<c>DocumentType</c>, <c>Email</c>, <c>UserId</c>) son opcionales para no romper callers
+/// previos; la firma/identidad se resuelven en flujos posteriores (HU #10911/#10916).
+/// </summary>
 public sealed record CreateMandateSignerData(
     Guid TransitOfficeId,
     Guid OtTenantId,
@@ -49,7 +53,10 @@ public sealed record CreateMandateSignerData(
     DateTimeOffset RegisteredAt,
     IReadOnlyList<Guid> CompanyTenantIds,
     Guid? CreatedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    string DocumentType = "CC",
+    string? Email = null,
+    Guid? UserId = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -60,7 +67,10 @@ public sealed record UpdateMandateSignerData(
     string IntegrityHash,
     IReadOnlyList<Guid> CompanyTenantIds,
     Guid? UpdatedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    string DocumentType = "CC",
+    string? Email = null,
+    Guid? UserId = null);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

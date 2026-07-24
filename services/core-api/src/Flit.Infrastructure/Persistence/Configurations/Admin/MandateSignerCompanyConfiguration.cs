@@ -25,10 +25,12 @@ internal sealed class MandateSignerCompanyConfiguration : IEntityTypeConfigurati
             .HasForeignKey(x => x.MandateSignerId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // EXCLUSIVIDAD ESTRICTA (ADR-0023): una compañía tiene como máximo un mandatario
-        // ACTIVO por OT. Índice único parcial filtrado por asignación activa; al inactivar el
-        // mandatario sus filas quedan is_active=false y dejan de contar, liberando la compañía.
-        builder.HasIndex(x => new { x.TransitOfficeId, x.CompanyTenantId })
+        // MULTIPLICIDAD (ADR-0036, supersede la exclusividad de ADR-0023): una compañía puede tener
+        // VARIOS mandatarios activos por OT, y un mandatario varias compañías. El índice único ahora
+        // incluye mandate_signer_id (evita duplicar la MISMA asignación activa, no la excluye entre
+        // mandatarios distintos). Sigue filtrado por is_active: al inactivar el mandatario sus filas
+        // quedan is_active=false y dejan de contar.
+        builder.HasIndex(x => new { x.TransitOfficeId, x.CompanyTenantId, x.MandateSignerId })
             .IsUnique()
             .HasDatabaseName("uq_mandate_signer_companies_active")
             .HasFilter("is_active");
