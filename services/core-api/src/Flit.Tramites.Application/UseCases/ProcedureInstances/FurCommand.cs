@@ -224,14 +224,13 @@ public sealed class GenerarFurHandler(
             repo.RemoveAttachment(prev);
         }
 
-        // R1 (ADR-0033) — si cambian las escrituras del expediente (se adjunta una o se retira una
-        // huérfana), invalidar el consolidado maestro cacheado (#10701) para que su próxima vista lo
-        // regenere con la escritura correcta. El consolidado del wizard ya regenera siempre; el maestro
-        // cachea con este flag (se pone true al generarlo en ConsolidadoMaestroCommand).
-        if (tiposEscritura.Count > 0 || escriturasHuerfanas.Count > 0)
-        {
-            instance.ConsolidadoMaestroVigente = false;
-        }
+        // (Re)generar el FUR SIEMPRE reemplaza el adjunto 'fur' (y, en traspaso, la compraventa) y puede
+        // cambiar certificados/escrituras del expediente. Como el consolidado maestro (#10701) cachea su
+        // copia con este flag (se pone true al generarlo en ConsolidadoMaestroCommand), hay que invalidarlo
+        // en CUALQUIER regeneración para que su próxima vista lo refunda con el FUR/escrituras vigentes; si
+        // no, seguiría sirviendo el consolidado con el FUR viejo (el del wizard ya regenera siempre; solo el
+        // maestro cachea). R1 (ADR-0033) cubría solo el cambio de escrituras; aquí se generaliza al FUR.
+        instance.ConsolidadoMaestroVigente = false;
 
         foreach (var doc in generated)
         {

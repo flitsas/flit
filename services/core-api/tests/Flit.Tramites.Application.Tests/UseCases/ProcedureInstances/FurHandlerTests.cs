@@ -491,6 +491,27 @@ public sealed class FurHandlerTests
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_identidad");
     }
 
+    [Fact]
+    public async Task Generar_InvalidaElConsolidadoMaestroCacheado()
+    {
+        // El consolidado maestro (#10701) cachea su copia con ConsolidadoMaestroVigente. Como (re)generar
+        // el FUR SIEMPRE reemplaza el adjunto 'fur', hay que invalidar ese caché para que su próxima vista
+        // lo refunda con el FUR nuevo; si no, seguiría sirviendo el consolidado con el FUR viejo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.ConsolidadoMaestroVigente = true; // consolidado maestro previamente cacheado
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
     // ── HU #10762 · Certificado RNMC ──────────────────────────────────────
 
     private static ProcedureInstanceActor ActorNatural(ProcedureInstance instance, string rol, string nombre, string doc) =>
