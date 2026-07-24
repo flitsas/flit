@@ -28,7 +28,7 @@ internal sealed class KyverumVerifyClient(
     public async Task<KyverumVerifyStartResult> StartVerificationAsync(KyverumVerifyStartRequest request, CancellationToken ct)
     {
         var body = new KyverumCreateValidationBody(
-            ExternalRef: request.ProcedureInstanceId.ToString("D"),
+            ExternalRef: request.ProcedureInstanceId?.ToString("D") ?? string.Empty,
             Metadata: new KyverumMetadata(request.Parte),
             // El webhook de Kyverum no repite nuestro id en el cuerpo: lo incrustamos en la URL de callback
             // para poder correlacionar la notificación con la validación.

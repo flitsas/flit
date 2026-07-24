@@ -13,7 +13,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public sealed record TenantBiometricValidationDto(
     Guid Id,
-    Guid InstanceId,
+    /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
+    Guid? InstanceId,
     string ReferenceNumber,
     string Modalidad,
     string? PartyRole,

@@ -9,9 +9,20 @@ public sealed class ProcedureInstanceBiometricValidation
 {
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
-    public Guid ProcedureInstanceId { get; set; }
 
-    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial (única parte = comprador).</summary>
+    /// <summary>
+    /// HU #10865 — nullable para soportar prevalidaciones standalone (sin trámite).
+    /// Invariante: <c>ProcedureInstanceId IS NOT NULL OR PersonId IS NOT NULL</c> (CHECK en BD).
+    /// </summary>
+    public Guid? ProcedureInstanceId { get; set; }
+
+    /// <summary>
+    /// HU #10865 — FK a <see cref="Person"/>. Null en validaciones históricas (backcompat);
+    /// NOT NULL en filas nuevas (tanto standalone como ligadas a trámite).
+    /// </summary>
+    public Guid? PersonId { get; set; }
+
+    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial o en prevalidación standalone.</summary>
     public string? PartyRole { get; set; }
 
     public string Name { get; set; } = string.Empty;
@@ -101,6 +112,9 @@ public sealed class ProcedureInstanceBiometricValidation
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public ProcedureInstance? ProcedureInstance { get; set; }
+
+    /// <summary>HU #10865 — navegación a la entidad persona del tenant.</summary>
+    public Person? Person { get; set; }
 
     /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y

@@ -4778,6 +4778,122 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.Person", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("LegalRepDocumentNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("legal_rep_document_number");
+
+                    b.Property<string>("LegalRepDocumentType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("legal_rep_document_type");
+
+                    b.Property<string>("LegalRepEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("legal_rep_email");
+
+                    b.Property<string>("LegalRepName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("legal_rep_name");
+
+                    b.Property<string>("PersonType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("natural")
+                        .HasColumnName("person_type");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_persons");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_persons_tenant_id");
+
+                    b.HasIndex("TenantId", "DocumentType", "DocumentNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_persons_tenant_document")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("persons", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_persons_audit");
+
+                            t.HasTrigger("tr_persons_row_version");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5274,7 +5390,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("party_role");
 
-                    b.Property<Guid>("ProcedureInstanceId")
+                    // HU #10865 — person_id FK (nullable backcompat)
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
+                    // HU #10865 — nullable para prevalidaciones standalone
+                    b.Property<Guid?>("ProcedureInstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
 
@@ -5348,6 +5470,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("uq_procedure_instance_biometric_validations_kyverum_verification_id")
                         .HasFilter("kyverum_verification_id IS NOT NULL");
 
+                    // HU #10865 — índice FK person_id
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_procedure_instance_biometric_validations_person_id")
+                        .HasFilter("person_id IS NOT NULL");
+
                     b.HasIndex("ProcedureInstanceId")
                         .HasDatabaseName("ix_procedure_instance_biometric_validations_procedure_instance");
 
@@ -5357,6 +5484,11 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ProcedureInstanceId")
                         .HasDatabaseName("ix_procedure_instance_biometric_validations_tenant_id_instance");
+
+                    // HU #10865 — índice de cobertura para FindVigenteApprovedByDocumentAsync (CF-02)
+                    b.HasIndex("TenantId", "DocumentType", "DocumentNumber", "Status", "ValidUntil")
+                        .HasDatabaseName("ix_biometric_validations_vigente_approved")
+                        .HasFilter("status = 'aprobado' AND deleted_at IS NULL");
 
                     b.ToTable("procedure_instance_biometric_validations", "tramites", t =>
                         {
@@ -6628,12 +6760,21 @@ namespace Flit.Infrastructure.Migrations
 
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceBiometricValidation", b =>
                 {
+                    // HU #10865 — FK a Person (nullable backcompat; Restrict protege la entidad persona)
+                    b.HasOne("Flit.Tramites.Domain.Entities.Person", "Person")
+                        .WithMany("BiometricValidations")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_procedure_instance_biometric_validations_persons");
+
+                    // HU #10865 — CASCADE → SET NULL (protege validaciones standalone)
                     b.HasOne("Flit.Tramites.Domain.Entities.ProcedureInstance", "ProcedureInstance")
                         .WithMany("BiometricValidations")
                         .HasForeignKey("ProcedureInstanceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_procedure_instance_biometric_validations_procedure_instances");
+
+                    b.Navigation("Person");
 
                     b.Navigation("ProcedureInstance");
                 });
@@ -6764,6 +6905,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasConstraintName("fk_procedure_steps_procedure_types_procedure_type_id");
 
                     b.Navigation("ProcedureType");
+                });
+
+            // HU #10865 — Person tiene colección inversa de BiometricValidations
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.Person", b =>
+                {
+                    b.Navigation("BiometricValidations");
                 });
 
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstance", b =>
