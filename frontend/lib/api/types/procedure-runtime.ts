@@ -812,12 +812,19 @@ export interface BiometricValidationsResponse {
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
  * captureUrl (vista de monitoreo, no de gestión de la captura).
+ *
+ * HU #10869 — Feature #10864: instanceId, referenceNumber y modalidad son nullable para soportar
+ * prevalidaciones standalone (sin trámite asociado). Los campos null se muestran como "—" en la
+ * tabla y la navegación al trámite se condiciona a instanceId != null.
  */
 export interface TenantBiometricValidation {
   id: string;
-  instanceId: string;
-  referenceNumber: string;
-  modalidad: string;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  instanceId: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  referenceNumber: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  modalidad: string | null;
   partyRole: BiometricParte | null;
   name: string;
   documentType: string;
@@ -1194,6 +1201,45 @@ export interface PortalFirmaUrl {
 /** Resultado de finalizar la participación. */
 export interface FinalizarPortalResult {
   completedAt: string;
+}
+
+// ── Prevalidación de identidad standalone (Feature #10864 — HU #10868) ──────
+// POST /api/v1/tramites/biometric-validations (sin instanceId)
+// Crea una validación biométrica sin trámite previo. El enlace de captura
+// se devuelve en captureUrl para que el operador lo comparta.
+
+/**
+ * Tipo de persona para prevalidación standalone. 'natural' → valida al titular;
+ * 'juridical' → valida al representante legal (datos legalRep* requeridos).
+ */
+export type PrevalidacionPersonType = 'natural' | 'juridical';
+
+/**
+ * Cuerpo del POST /api/v1/tramites/biometric-validations (sin trámite).
+ * Espejo de IniciarPrevalidacionRequest del contrato OpenAPI (§5.2 del diseño).
+ */
+export interface IniciarPrevalidacionRequest {
+  documentType: string;
+  documentNumber: string;
+  name: string;
+  email: string;
+  personType?: PrevalidacionPersonType;
+  legalRepDocumentType?: string | null;
+  legalRepDocumentNumber?: string | null;
+  legalRepName?: string | null;
+  legalRepEmail?: string | null;
+}
+
+/**
+ * Resultado del POST /api/v1/tramites/biometric-validations (201/202).
+ * Espejo de IniciarKyverumVerifyResult del contrato OpenAPI (§5.1 del diseño).
+ */
+export interface IniciarPrevalidacionResult {
+  validationId: string;
+  captureUrl: string | null;
+  status: BiometricEstado;
+  /** 201 = creada de inmediato; 202 = encolada (fallo transitorio del proveedor). */
+  enqueued?: boolean;
 }
 
 // ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────

@@ -25,6 +25,8 @@ import type {
   GenerarConsolidadoResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
+  IniciarPrevalidacionRequest,
+  IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
   InstanceSummary,
@@ -1114,6 +1116,25 @@ export const tramitesClient = {
     request<{ requeued: number }>(
       '/api/v1/tramites/identity-validation/stuck/requeue-all',
       { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #10868 (Feature #10864, CF-01) — crea una prevalidación de identidad standalone (sin trámite).
+  // POST /api/v1/tramites/biometric-validations. El backend encuentra o crea la entidad persona en el
+  // tenant por (documentType, documentNumber), luego inicia la validación con el proveedor activo.
+  // Contrato-first: el endpoint aún puede no estar mergeado en develop; el cliente está listo para
+  // consumirlo en cuanto el backend (HU #10866) lo exponga.
+  // 201 = creada; 202 = encolada (fallo transitorio del proveedor); 409 = ya existe prevalidación activa.
+  createPrevalidacion: (
+    body: IniciarPrevalidacionRequest,
+    tenantId?: string,
+  ): Promise<IniciarPrevalidacionResult> =>
+    request<IniciarPrevalidacionResult>(
+      '/api/v1/tramites/biometric-validations',
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
     ),
 
   // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
