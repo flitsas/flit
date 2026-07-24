@@ -34,7 +34,6 @@ import { PrendaForm } from './PrendaForm';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
-import { IdentityStatusPanel } from './IdentityStatusPanel';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
@@ -789,11 +788,6 @@ export function TramiteWizard(props: Props) {
           {wizardError ?? submitError ?? state.error}
         </div>
       )}
-
-      {/* HU #10875 (AC1/AC2) — vista consolidada de identidad de TODOS los actores del trámite +
-          alertas/recordatorios POR PULL. Visible sin importar el paso activo del wizard; complementa
-          (no reemplaza) el detalle operable de BiometricStep dentro de los pasos "identidad"/"fur". */}
-      <IdentityStatusPanel instanceId={instanceId} modalidad={modalidad} />
 
       {/* AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista de
           pasos cuando excede el alto disponible; ambos contenedores quedan a la par abajo. */}

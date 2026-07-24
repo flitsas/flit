@@ -110,11 +110,14 @@ export function IdentityStatusPanel({
   modalidad,
 }: {
   instanceId: string | null;
-  modalidad: WizardModalidad;
+  /** Opcional: si no se pasa, el panel resuelve la modalidad solo (getWizardState). Así es
+   *  autosuficiente y se puede montar fuera del wizard (p. ej. en el detalle del trámite). */
+  modalidad?: WizardModalidad;
 }) {
   const [actors, setActors] = useState<ProcedureActor[] | null>(null);
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [alerts, setAlerts] = useState<IdentityValidationAlert[] | null>(null);
+  const [wizardModalidad, setWizardModalidad] = useState<WizardModalidad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -123,11 +126,13 @@ export function IdentityStatusPanel({
     setLoading(true);
     setError(null);
     try {
-      const [actorsRes, biometricRes, alertsRes] = await Promise.all([
+      const [wizardRes, actorsRes, biometricRes, alertsRes] = await Promise.all([
+        tramitesClient.getWizardState(instanceId),
         tramitesClient.getActors(instanceId),
         tramitesClient.getBiometricState(instanceId),
         tramitesClient.getInstanceIdentityValidationAlerts(instanceId),
       ]);
+      setWizardModalidad(wizardRes?.modalidad ?? null);
       setActors(actorsRes);
       setValidations(biometricRes.validations);
       setAlerts(alertsRes.alerts);
@@ -154,7 +159,10 @@ export function IdentityStatusPanel({
   // (sin actores todavía) y lleno (tarjetas por actor + banner de alertas cuando aplica).
   const hasData = actors !== null && validations !== null && alerts !== null;
   const initialLoading = loading && !hasData && error === null;
-  const rows = hasData ? buildRows(modalidad, actors, validations, alerts) : [];
+  // Modalidad efectiva: prop (si el padre la pasa) o la resuelta por getWizardState; traspaso por
+  // defecto (empareja por party_role, el caso más común).
+  const effModalidad = modalidad ?? wizardModalidad ?? 'traspaso';
+  const rows = hasData ? buildRows(effModalidad, actors, validations, alerts) : [];
   const accionables = rows.filter((r) => r.alert?.alertKind);
   const reminders = rows.filter((r) => r.alert?.requiresResendReminder && !r.alert.alertKind);
 

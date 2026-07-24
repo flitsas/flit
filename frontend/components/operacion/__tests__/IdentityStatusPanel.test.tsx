@@ -10,6 +10,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 const mocks = vi.hoisted(() => ({
+  // El panel resuelve la modalidad por su cuenta (autosuficiente); los tests pasan además la prop
+  // `modalidad`, que tiene precedencia, así que este mock solo evita que el Promise.all falle.
+  getWizardState: vi.fn(),
   getActors: vi.fn(),
   getBiometricState: vi.fn(),
   getInstanceIdentityValidationAlerts: vi.fn(),
@@ -75,6 +78,7 @@ function alert(overrides: Partial<IdentityValidationAlert> = {}): IdentityValida
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getWizardState.mockResolvedValue({ modalidad: 'traspaso' });
 });
 
 describe('IdentityStatusPanel — 4 estados de UI', () => {
