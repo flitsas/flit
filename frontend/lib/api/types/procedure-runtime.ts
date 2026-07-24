@@ -15,7 +15,10 @@ export type InstanceStatus =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
+  // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
+  | 'subsanacion';
 
 /**
  * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
@@ -165,6 +168,15 @@ export interface StatusHistory {
   toStatus: InstanceStatus;
   changedAt: string;
   reason: string | null;
+  /**
+   * HU #10871/#10872 (backend) — checklist HÍBRIDO de la observación de subsanación (motivo +
+   * items + fieldSnapshot), serializado como JSON en `procedure_instance_status_history.metadata`.
+   * GAP conocido (HU #10874): `GetProcedureInstanceHandler.ToDetail` (backend) todavía NO incluye
+   * `metadata` en `ProcedureInstanceStatusHistoryDto` — este campo queda declarado aquí para
+   * consumirlo en cuanto el backend lo exponga; mientras tanto llega `undefined`/`null` y
+   * `lib/tramites/subsanacion.ts` degrada al `reason` plano (ver SubsanacionPanel).
+   */
+  metadata?: string | null;
 }
 
 export interface Actor {

@@ -31,6 +31,7 @@ import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm } from './PrendaForm';
+import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -69,6 +70,7 @@ import type {
   PreflightSnapshot,
   ProcedureConfiguration,
   ProcedureInstanceSummary,
+  StatusHistory,
   WizardModalidad,
   WizardStep,
   WizardStepStatus,
@@ -227,18 +229,37 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
+  // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
+  // (no el `.catch` silencioso de arriba) porque sin ellos el panel no podría distinguir "cargando"
+  // de "sin observación" (4 estados de UI).
+  const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
+  // Estado inicial derivado de `existingInstanceId` (prop estable durante el ciclo de vida del
+  // wizard: la página lo remonta por `key` en cada refresh) para no llamar setState de forma
+  // síncrona dentro del efecto (react-hooks/set-state-in-effect).
+  const [instanceDetailLoading, setInstanceDetailLoading] = useState(!!existingInstanceId);
+  const [instanceDetailError, setInstanceDetailError] = useState<string | null>(null);
   useEffect(() => {
     if (!existingInstanceId) return;
     let active = true;
     tramitesClient
       .getInstance(existingInstanceId)
       .then((d) => {
-        if (active) {
-          setInstanceStatus(d.status ?? null);
-          setDraftFinalizedAt(d.draftFinalizedAt ?? null);
-        }
+        if (!active) return;
+        setInstanceStatus(d.status ?? null);
+        setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+        setStatusHistory(d.statusHistory ?? []);
+        setInstanceDetailError(null);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (!active) return;
+        setInstanceDetailError(
+          err instanceof Error ? err.message : 'No se pudo cargar el detalle del trámite.',
+        );
+      })
+      .finally(() => {
+        if (active) setInstanceDetailLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -291,8 +312,12 @@ export function TramiteWizard(props: Props) {
   //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
   //    paso de decisión.
   //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
-  const fullReadOnly = !!estadoTramite && estadoTramite !== 'borrador';
+  // HU #10874 (AC1) — subsanación (HU #10870) reabre la edición COMPLETA, igual que borrador: no
+  // cuenta como solo-lectura ni como "borrador finalizado".
+  const fullReadOnly =
+    !!estadoTramite && estadoTramite !== 'borrador' && estadoTramite !== 'subsanacion';
   const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
+  const inSubsanacion = estadoTramite === 'subsanacion';
   // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
   // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
@@ -737,6 +762,22 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
+      {/* HU #10874 (AC1/AC2) — panel de subsanación: motivo + checklist de ítems a subsanar y la
+          acción "Re-radicar". El trámite sigue editable (campos/documentos) mientras se muestra. */}
+      {inSubsanacion && (
+        <SubsanacionPanel
+          instanceId={instanceId}
+          statusHistory={statusHistory}
+          loading={instanceDetailLoading}
+          error={instanceDetailError}
+          onReradicado={() => {
+            telemetry.trackComplete();
+            show('Trámite re-radicado a tránsito correctamente.', 'success');
+            onExit();
+          }}
+        />
+      )}
+
       {(wizardError || submitError || state.error) && (
         <div
           className="rounded-xl p-3 text-xs border shrink-0"
@@ -898,7 +939,10 @@ export function TramiteWizard(props: Props) {
                 </button>
               ) : null
             ) : isDecisionStep ? (
-              canRadicar ? (
+              // HU #10874 — en subsanación NO se ofrece Preparar/Finalizar (flujo borrador→preparado):
+              // el re-radicado (subsanacion→entregado) vive en el botón "Re-radicar" del
+              // SubsanacionPanel, siempre visible mientras dure el estado.
+              inSubsanacion ? null : canRadicar ? (
                 <button
                   onClick={() => void handlePreparar()}
                   disabled={submitting}

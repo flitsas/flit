@@ -1,0 +1,84 @@
+/**
+ * HU #10874 — parseo cliente del checklist HÍBRIDO de subsanación (motivo + items +
+ * fieldSnapshot) que el backend persiste como JSON en
+ * `procedure_instance_status_history.metadata` (ver `SubsanacionObservation` en
+ * `Flit.Tramites.Domain.Tramites.ValueObjects`, HU #10871/#10872).
+ *
+ * GAP conocido: `GET /instances/{id}` (`ProcedureInstanceStatusHistoryDto`) todavía NO expone
+ * `metadata` — solo `reason` (motivo general en texto libre). Este módulo queda listo para
+ * consumir `metadata` en cuanto el backend lo agregue al contrato; mientras tanto
+ * `parseSubsanacionObservation` recibe `undefined`/`null` y degrada a `null`, y
+ * `SubsanacionPanel` cae al `reason` plano como motivo (sin checklist estructurado).
+ */
+
+import type { InstanceStatus, StatusHistory } from '@/lib/api/types/procedure-runtime';
+
+export interface SubsanacionObservationItem {
+  campo: string | null;
+  detalle: string | null;
+}
+
+export interface SubsanacionObservation {
+  motivo: string | null;
+  items: SubsanacionObservationItem[];
+  fieldSnapshot: Record<string, string | null> | null;
+}
+
+const ESTADO_SUBSANACION: InstanceStatus = 'subsanacion';
+
+/**
+ * Última entrada del historial que transiciona el trámite A `subsanacion` (por `changedAt`
+ * descendente). `null` si el trámite nunca pasó por subsanación (no debería ocurrir cuando el
+ * status actual es `subsanacion`, pero el parseo es defensivo).
+ */
+export function latestSubsanacionEntry(
+  history: StatusHistory[] | null | undefined,
+): StatusHistory | null {
+  if (!history || history.length === 0) return null;
+  const entries = history.filter((h) => h.toStatus === ESTADO_SUBSANACION);
+  if (entries.length === 0) return null;
+  return entries.reduce((latest, current) =>
+    new Date(current.changedAt).getTime() >= new Date(latest.changedAt).getTime() ? current : latest,
+  );
+}
+
+/**
+ * Deserialización tolerante del JSON híbrido de `metadata` (camelCase, espejo de
+ * `SubsanacionObservation.ToJson()` en backend). Cualquier forma inesperada (null/vacío/corrupto/
+ * sin las claves esperadas) degrada a `null` sin romper el render.
+ */
+export function parseSubsanacionObservation(
+  metadata: string | null | undefined,
+): SubsanacionObservation | null {
+  if (!metadata || !metadata.trim()) return null;
+
+  try {
+    const raw = JSON.parse(metadata) as {
+      motivo?: unknown;
+      items?: unknown;
+      fieldSnapshot?: unknown;
+    };
+
+    const items: SubsanacionObservationItem[] = Array.isArray(raw.items)
+      ? raw.items
+          .filter((it): it is Record<string, unknown> => !!it && typeof it === 'object')
+          .map((it) => ({
+            campo: typeof it.campo === 'string' ? it.campo : null,
+            detalle: typeof it.detalle === 'string' ? it.detalle : null,
+          }))
+      : [];
+
+    const fieldSnapshot =
+      raw.fieldSnapshot && typeof raw.fieldSnapshot === 'object'
+        ? (raw.fieldSnapshot as Record<string, string | null>)
+        : null;
+
+    return {
+      motivo: typeof raw.motivo === 'string' ? raw.motivo : null,
+      items,
+      fieldSnapshot,
+    };
+  } catch {
+    return null;
+  }
+}
