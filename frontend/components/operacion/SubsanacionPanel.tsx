@@ -4,7 +4,11 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
-import { latestSubsanacionEntry, parseSubsanacionObservation } from '@/lib/tramites/subsanacion';
+import {
+  latestRejectionReason,
+  latestSubsanacionEntry,
+  parseSubsanacionObservation,
+} from '@/lib/tramites/subsanacion';
 
 interface SubsanacionPanelProps {
   instanceId: string | null;
@@ -41,7 +45,12 @@ export function SubsanacionPanel({
 }: SubsanacionPanelProps) {
   const entry = useMemo(() => latestSubsanacionEntry(statusHistory), [statusHistory]);
   const observation = useMemo(() => parseSubsanacionObservation(entry?.metadata), [entry]);
-  const motivo = observation?.motivo?.trim() || entry?.reason?.trim() || FALLBACK_MOTIVO;
+  // HU #10870 — cuando la subsanación la inicia el operador desde `rechazado`, la guía de QUÉ
+  // corregir es el motivo del rechazo del Organismo de Tránsito (transición entregado→rechazado),
+  // no una observación estructurada (que ya no existe en este flujo).
+  const rejectionReason = useMemo(() => latestRejectionReason(statusHistory), [statusHistory]);
+  const motivo =
+    observation?.motivo?.trim() || rejectionReason || entry?.reason?.trim() || FALLBACK_MOTIVO;
   const items = useMemo(() => observation?.items ?? [], [observation]);
   const hasChecklist = items.length > 0;
 
@@ -125,7 +134,14 @@ export function SubsanacionPanel({
             Trámite en subsanación
           </h3>
           <p className="mt-1 text-xs" style={{ color: '#162744' }}>
-            {motivo}
+            {rejectionReason ? (
+              <>
+                El Organismo de Tránsito devolvió el trámite para corrección.{' '}
+                <span className="font-semibold">Motivo del rechazo:</span> {rejectionReason}
+              </>
+            ) : (
+              motivo
+            )}
           </p>
         </div>
       </div>

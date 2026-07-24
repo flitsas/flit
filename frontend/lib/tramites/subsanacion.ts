@@ -25,6 +25,27 @@ export interface SubsanacionObservation {
 }
 
 const ESTADO_SUBSANACION: InstanceStatus = 'subsanacion';
+const ESTADO_RECHAZADO: InstanceStatus = 'rechazado';
+
+/**
+ * Motivo del rechazo del Organismo de Tránsito: `reason` de la última transición A `rechazado`
+ * (entregado→rechazado). Es la guía de QUÉ corregir cuando el operador subsana un trámite
+ * rechazado (HU #10870 — la subsanación la inicia el operador, no el OT). `null` si no hay un
+ * rechazo con motivo en el historial.
+ */
+export function latestRejectionReason(
+  history: StatusHistory[] | null | undefined,
+): string | null {
+  if (!history || history.length === 0) return null;
+  const entries = history.filter(
+    (h) => h.toStatus === ESTADO_RECHAZADO && !!h.reason?.trim(),
+  );
+  if (entries.length === 0) return null;
+  const latest = entries.reduce((a, b) =>
+    new Date(b.changedAt).getTime() >= new Date(a.changedAt).getTime() ? b : a,
+  );
+  return latest.reason?.trim() ?? null;
+}
 
 /**
  * Última entrada del historial que transiciona el trámite A `subsanacion` (por `changedAt`

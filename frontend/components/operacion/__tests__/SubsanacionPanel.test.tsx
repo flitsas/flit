@@ -43,6 +43,20 @@ const HISTORY_WITHOUT_METADATA: StatusHistory[] = [
   },
 ];
 
+// HU #10870 — flujo NUEVO (subsanación iniciada por el operador): el OT rechaza con motivo
+// (entregado→rechazado) y luego el operador pasa el trámite a subsanación (rechazado→subsanacion,
+// sin motivo ni metadata). La guía de qué corregir debe ser el motivo del rechazo del OT.
+const HISTORY_OPERATOR_DRIVEN: StatusHistory[] = [
+  { fromStatus: 'preparado', toStatus: 'entregado', changedAt: '2026-07-01T10:05:00Z', reason: null },
+  {
+    fromStatus: 'entregado',
+    toStatus: 'rechazado',
+    changedAt: '2026-07-02T08:00:00Z',
+    reason: 'Documentos ilegibles; vuelve a cargar la cédula del comprador.',
+  },
+  { fromStatus: 'rechazado', toStatus: 'subsanacion', changedAt: '2026-07-02T09:00:00Z', reason: null },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
@@ -113,6 +127,24 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
     expect(
       screen.getByText('Corrige el documento de identidad del comprador.'),
     ).toBeInTheDocument();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+
+  it('subsanación iniciada por el operador: muestra el motivo del rechazo del OT como guía', () => {
+    const { container } = render(
+      <SubsanacionPanel
+        instanceId="inst-1"
+        statusHistory={HISTORY_OPERATOR_DRIVEN}
+        loading={false}
+        error={null}
+        onReradicado={vi.fn()}
+      />,
+    );
+
+    expect(container).toHaveTextContent(
+      'Motivo del rechazo: Documentos ilegibles; vuelve a cargar la cédula del comprador.',
+    );
+    // En el flujo operador-driven no hay checklist estructurado.
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
   });
 });
