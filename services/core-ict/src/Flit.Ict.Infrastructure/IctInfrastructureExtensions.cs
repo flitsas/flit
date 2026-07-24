@@ -39,7 +39,9 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ICurrentTenant, HttpCurrentTenant>();
         services.AddScoped<IPreTramiteRepository, PreTramiteRepository>();
         services.AddScoped<IStatusProcessV1Query, StatusProcessV1Query>();
+        services.AddScoped<ISecretariesV1Query, SecretariesV1Query>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+        services.AddScoped<IAttachmentDocTypeResolver, AttachmentDocTypeResolver>();
         services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>();
 
         // Observabilidad (HU5): logs en Postgres (escritura + consulta enmascarada) y métricas de alerta.
@@ -73,19 +75,27 @@ public static class IctInfrastructureExtensions
         services.AddHostedService<SendToCoreApiJob>();
         services.AddHostedService<WebhookNotificationJob>();
 
-        // Cliente gRPC hacia core-api (orquestación de creación del borrador).
-        // TODO(ICT-GRPC-AUTH): adjuntar el service-token (client-credentials) vía interceptor/CallCredentials.
+        // Service-token gRPC este-oeste (core-ict → core-api): JWT de sistema que autentica que la
+        // llamada la hace core-ict (no un tercero que alcance el puerto interno). Secreto compartido (HMAC).
+        services.Configure<Security.IctServiceTokenOptions>(
+            configuration.GetSection(Security.IctServiceTokenOptions.SectionName));
+        services.AddSingleton<Security.IctServiceTokenProvider>();
+        services.AddSingleton<Security.IctServiceTokenClientInterceptor>();
+
+        // Cliente gRPC hacia core-api (orquestación + consultas). Cada llamada adjunta el service-token.
         var grpcAddress = configuration["CoreApiGrpc:Address"];
         if (!string.IsNullOrWhiteSpace(grpcAddress))
         {
             var grpcUri = new Uri(grpcAddress);
             services.AddGrpcClient<IctOrchestration.IctOrchestrationClient>(options =>
-                options.Address = grpcUri);
+                    options.Address = grpcUri)
+                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
             services.AddScoped<IProcedureDraftClient, IctGrpcProcedureDraftClient>();
 
             // Consulta real de fuentes externas: se delega en core-api (reusa RUNT/SOAT/RTM/RNMC).
             services.AddGrpcClient<IctConsultation.IctConsultationClient>(options =>
-                options.Address = grpcUri);
+                    options.Address = grpcUri)
+                .AddInterceptor<Security.IctServiceTokenClientInterceptor>();
             services.AddScoped<IConsultationClient, IctGrpcConsultationClient>();
         }
         else

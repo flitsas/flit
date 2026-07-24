@@ -22,9 +22,12 @@ public sealed class OrchestratorJob(
     IOptions<IctJobOptions> options,
     ILogger<OrchestratorJob> logger) : IctPollingJob(scopeFactory, options, logger)
 {
+    /// <summary>Tope de reintentos por fuente ante fallo TÉCNICO (core-api caído/timeout); al agotar, novedad.</summary>
+    private const int MaxAttempts = 3;
+
     private sealed record PendingQuery(
         Guid Id, Guid MasterId, Guid TenantId, string QueryType,
-        string Plate, string Vin, string DocumentType, string DocumentNumber, int TransactionType);
+        string Plate, string Vin, string DocumentType, string DocumentNumber, int TransactionType, short Attempts);
 
     protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.OrchestratorPollSeconds);
 
@@ -48,17 +51,49 @@ public sealed class OrchestratorJob(
 
             foreach (var q in pending)
             {
-                var result = await consult.QueryAsync(
-                    q.TenantId, q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
-                var issues = ExternalSourceValidators.Validate(q.TransactionType, result, currentYear);
-                var isValid = issues.Count == 0;
-
-                await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
-                await MarkQueriedAsync(connection, q.Id, isValid, ct);
-
-                if (!isValid)
+                try
                 {
-                    await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
+                    var result = await consult.QueryAsync(
+                        q.TenantId, q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
+                    var issues = ExternalSourceValidators.Validate(q.TransactionType, q.QueryType, result, currentYear);
+                    var warnings = ExternalSourceValidators.Warnings(result);
+                    var isValid = issues.Count == 0;
+
+                    await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
+                    await MarkQueriedAsync(connection, q.Id, isValid, ct);
+
+                    // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC): terminal, deja el master en ps=4.
+                    if (!isValid)
+                    {
+                        await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
+                    }
+                    // Advertencia INFORMATIVA (paz y salvo del conductor/DRIVER): fiel a v1, se registra en el
+                    // master pero NO bloquea el paso a borrador (el OT decidirá). Visible en el estado.
+                    else if (warnings.Count > 0)
+                    {
+                        await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);
+                    }
+                }
+#pragma warning disable CA1031 // el orquestador debe ser resiliente a CUALQUIER fallo técnico de la fuente
+                catch (Exception ex)
+#pragma warning restore CA1031
+                {
+                    // Fallo TÉCNICO de la fuente (core-api caído, ErrorCode gRPC, timeout): reintentar hasta
+                    // MaxAttempts. Una fila que falla NO aborta el resto del lote. Al AGOTAR los intentos se
+                    // deja el master con novedades (ps=4) con el MENSAJE del fallo: el cliente lo ve en el
+                    // estado (messageValidation/statusObservation/statusProcess[].observation) y corrige. El
+                    // response v1 NO cambia: se reusa el mismo camino (external_comments_validation + record_process_status).
+                    await RecordAttemptFailureAsync(connection, q.Id, ct);
+                    if (q.Attempts + 1 >= MaxAttempts)
+                    {
+                        // FlagNovelty PRIMERO (deja el master en ps=4, excluido del gate de materialización
+                        // aunque lo siguiente fallara); luego cerrar la source_query para liberar el gate.
+                        await FlagNoveltyAsync(connection, q.MasterId,
+                            $"Fuentes externas no disponibles tras {MaxAttempts} intentos: {ex.Message}", ct);
+                        await MarkQueriedAsync(connection, q.Id, isValid: false, ct);
+                    }
+
+                    IctJobLog.CycleError(logger, ex, JobName);
                 }
             }
         }
@@ -76,13 +111,14 @@ public sealed class OrchestratorJob(
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             SELECT sq.id, sq.eim_id, sq.tenant_id, sq.query_type, sq.plate_complete, sq.vehicle_vin,
-                   sq.document_type, sq.document_number, m.transaction_type
+                   sq.document_type, sq.document_number, m.transaction_type, sq.attempts
             FROM ict.external_integration_source_query sq
             JOIN ict.external_integration_master m ON m.id = sq.eim_id
-            WHERE sq.is_data_queried = false
+            WHERE sq.is_data_queried = false AND sq.attempts < @max
             ORDER BY sq.created_at
             LIMIT 50
             """;
+        AddParam(cmd, "max", (short)MaxAttempts);
         var list = new List<PendingQuery>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -90,7 +126,7 @@ public sealed class OrchestratorJob(
             list.Add(new PendingQuery(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3),
                 reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
-                reader.GetInt32(8)));
+                reader.GetInt32(8), reader.GetInt16(9)));
         }
 
         return list;
@@ -119,6 +155,36 @@ public sealed class OrchestratorJob(
             """;
         AddParam(cmd, "id", queryId);
         AddParam(cmd, "valid", isValid);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Registra una advertencia INFORMATIVA en el master (external_comments_validation) SIN bloquear: no
+    /// cambia process_status_id, así que el master avanza a borrador con la observación visible en el estado.
+    /// </summary>
+    private static async Task RecordWarningAsync(DbConnection connection, Guid masterId, string message, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE ict.external_integration_master
+            SET external_comments_validation = external_comments_validation || @msg
+            WHERE id = @id
+            """;
+        AddParam(cmd, "id", masterId);
+        AddParam(cmd, "msg", " " + message + ";");
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Incrementa el contador de intentos de una source_query tras un fallo técnico.</summary>
+    private static async Task RecordAttemptFailureAsync(DbConnection connection, Guid queryId, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE ict.external_integration_source_query
+            SET attempts = attempts + 1, updated_at = now()
+            WHERE id = @id
+            """;
+        AddParam(cmd, "id", queryId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

@@ -47,6 +47,7 @@ public sealed class SendToCoreApiJob(
 
         var ready = await db.Masters
             .Include(m => m.Actors)
+            .Include(m => m.Attachments)
             .Where(m => readyIds.Contains(m.Id))
             .ToListAsync(ct);
 
@@ -71,6 +72,17 @@ public sealed class SendToCoreApiJob(
                 master.ProcedureInstanceId = instanceId;
                 master.ProcessStatusId = 5; // BORRADOR (terminal en ICT tras materializar)
                 await db.SaveChangesAsync(ct);
+
+                // starts_procedure_in_paused (contrato v1): el borrador nace pausado, con la
+                // observación que el gestor quiere ver en el dashboard.
+                if (master.StartsProcedureInPaused)
+                {
+                    await draftClient.PauseDraftAsync(
+                        master.TenantId, instanceId, paused: true,
+                        master.ObservationWhenPaused ?? string.Empty,
+                        master.ManagerUser, master.ManagerMail, master.CompanyManagerDocument, ct);
+                }
+
                 // Histórico v1: el trámite pasa por Procesado (3) y luego Borrador (5).
                 await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
                 await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);

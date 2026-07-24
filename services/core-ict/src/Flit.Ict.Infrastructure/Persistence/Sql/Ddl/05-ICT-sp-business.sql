@@ -159,16 +159,13 @@ BEGIN
                 WHERE id = rec.id_master;
             END IF;
 
-            -- Secretaría habilitada para la compañía (grant positivo v2).
-            IF NOT EXISTS (
-                SELECT 1 FROM admin.tenant_transit_office_grants g
-                JOIN catalogs.transit_offices ts ON ts.id = g.transit_office_id
-                WHERE g.tenant_id = rec.tenant_id AND ts.code = rec.traffic_secretary_code AND g.is_enabled = true
-            ) AND rec.traffic_secretary_code <> '' THEN
-                UPDATE ict.external_integration_master
-                SET business_comments_validation = business_comments_validation || ' La secretaria no esta habilitada para la compania;'
-                WHERE id = rec.id_master;
-            END IF;
+            -- Secretaría habilitada para la compañía (grant positivo v2). RELAJADO PARA ICT (decisión de
+            -- negocio 2026-07-24): el cliente de integración YA sabe con qué secretarías trabaja, así que el
+            -- flujo ICT NO exige el grant admin.tenant_transit_office_grants (a diferencia del wizard v2).
+            -- Se sigue validando que la secretaría EXISTA y esté ACTIVA (bloque de arriba, líneas 44-49).
+            -- TODO(ICT-GRANT): validación más segura y sin fricción — como el tenant_id ya viaja en el token
+            -- ICT, derivar la compañía del token y validar contra SUS grants habilitados, en vez de confiar
+            -- ciegamente en el traffic_secretary_code que envía el cliente.
         END IF;
 
         -- Placa activa (traspasos 3/4).

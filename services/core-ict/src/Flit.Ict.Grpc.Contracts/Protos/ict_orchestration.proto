@@ -19,6 +19,11 @@ service IctOrchestration {
   rpc UpsertActors       (UpsertActorsRequest)       returns (DraftReply);
   rpc RegisterAttachment (RegisterAttachmentRequest) returns (AttachmentReply);
   rpc GetStatus          (GetStatusRequest)          returns (StatusReply);
+
+  // Ciclo de vida del borrador ya materializado (servicios v1 pauseDraftProcess/abortProcess).
+  // Actúan sobre tramites.procedure_instances; validan el estado (borrador) en core-api.
+  rpc PauseDraft (PauseDraftRequest) returns (DraftReply);
+  rpc AbortDraft (AbortDraftRequest) returns (DraftReply);
 }
 
 message CreateDraftFromIctRequest {
@@ -87,6 +92,25 @@ message RegisterAttachmentRequest {
 message GetStatusRequest {
   string tenant_id             = 1;
   string procedure_instance_id = 2;
+}
+
+message PauseDraftRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  bool   paused                = 3;   // true = pausar, false = reanudar
+  string observation           = 4;   // se muestra en dashboard cuando está pausado
+  string actor_user            = 5;   // manager (auditoría)
+  string actor_mail            = 6;
+  string actor_company         = 7;
+}
+
+message AbortDraftRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  string observation           = 3;   // nota/razón de la anulación
+  string actor_user            = 4;
+  string actor_mail            = 5;
+  string actor_company         = 6;
 }
 
 message DraftReply {

@@ -38,4 +38,25 @@ public sealed class PendingProcedureDraftClient : IProcedureDraftClient
         string procedureTypeCode,
         CancellationToken ct = default) =>
         Task.FromResult(new CreateDraftResult(null, null, null, "grpc_unavailable"));
+
+    public Task<DraftActionResult> PauseDraftAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        bool paused,
+        string observation,
+        string actorUser,
+        string actorMail,
+        string actorCompany,
+        CancellationToken ct = default) =>
+        Task.FromResult(new DraftActionResult(null, "grpc_unavailable"));
+
+    public Task<DraftActionResult> AbortDraftAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string observation,
+        string actorUser,
+        string actorMail,
+        string actorCompany,
+        CancellationToken ct = default) =>
+        Task.FromResult(new DraftActionResult(null, "grpc_unavailable"));
 }

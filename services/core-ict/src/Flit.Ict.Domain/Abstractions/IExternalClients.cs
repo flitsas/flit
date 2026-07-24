@@ -26,14 +26,39 @@ public sealed record CreateDraftResult(
     string? Status,
     string? ErrorCode);
 
+/// <summary>Resultado de una acción de ciclo de vida (pausar/anular) sobre el borrador en core-api.</summary>
+public sealed record DraftActionResult(string? Status, string? ErrorCode);
+
 /// <summary>
 /// Cliente de orquestación hacia core-api (gRPC). Materializa el pre-trámite validado como un
-/// borrador reutilizando los casos de uso de core-api. Implementación real en HU4.
+/// borrador reutilizando los casos de uso de core-api, y opera su ciclo de vida (pausar/anular,
+/// servicios v1 pauseDraftProcess/abortProcess).
 /// </summary>
 public interface IProcedureDraftClient
 {
     Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
         string procedureTypeCode,
+        CancellationToken ct = default);
+
+    /// <summary>Pausa o reanuda un borrador ya materializado (v1 pauseDraftProcess).</summary>
+    Task<DraftActionResult> PauseDraftAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        bool paused,
+        string observation,
+        string actorUser,
+        string actorMail,
+        string actorCompany,
+        CancellationToken ct = default);
+
+    /// <summary>Anula un borrador (o rechazado) ya materializado (v1 abortProcess).</summary>
+    Task<DraftActionResult> AbortDraftAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string observation,
+        string actorUser,
+        string actorMail,
+        string actorCompany,
         CancellationToken ct = default);
 }

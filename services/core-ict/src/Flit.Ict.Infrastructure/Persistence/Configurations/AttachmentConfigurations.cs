@@ -32,5 +32,11 @@ internal sealed class TransactionAttachmentConfiguration : IEntityTypeConfigurat
         builder.HasKey(x => x.Id);
         builder.Property(x => x.RowVersion).IsConcurrencyToken().HasDefaultValue(0L);
         builder.HasIndex(x => x.MasterId);
+        // Navegación master -> adjuntos (para materializarlos al borrador con un solo Include). La FK
+        // ya existe en el DDL (fk_eita_master, ON DELETE CASCADE); esto es solo metadata EF.
+        builder.HasOne<ExternalIntegrationMaster>()
+            .WithMany(m => m.Attachments)
+            .HasForeignKey(x => x.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

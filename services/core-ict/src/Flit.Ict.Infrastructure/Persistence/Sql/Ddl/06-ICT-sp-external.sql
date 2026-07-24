@@ -48,12 +48,26 @@ BEGIN
             VALUES (rec.id_master, rec.tenant_id, 'VEHI', 'VIN', rec.vin);
         END IF;
 
-        -- Consulta de actor principal (vendedor) — RNMC/DRIVER.
+        -- RNMC (medidas correctivas) del actor principal (vendedor). Solo personas naturales.
         INSERT INTO ict.external_integration_source_query
             (eim_id, tenant_id, eia_id, actor_level, query_type, document_type, document_number)
         SELECT rec.id_master, rec.tenant_id, eia.id, 'MAIN', 'RNMC', eia.document_type, eia.document_number
         FROM ict.external_integration_actors eia
         WHERE eia.master_id = rec.id_master AND eia.actor_type = 'seller' AND eia.document_type <> 'NIT';
+
+        -- DRIVER (paz y salvo del conductor) para VENDEDOR (MAIN) y COMPRADOR (ASSI). Calcado de v1
+        -- (BackApiExternalTransactValiQueryExt: DRIVER_MAIN / DRIVER_ASSI). Solo personas naturales (el
+        -- paz y salvo aplica a la licencia; un NIT no conduce). El INSERT...SELECT produce 0 filas si el
+        -- actor no existe (p. ej. matrícula sin comprador). La novedad de paz y salvo es INFORMATIVA: NO
+        -- bloquea el paso a borrador (ver ExternalSourceValidators.Warnings), fiel a v1 (validateDriverRequest
+        -- registra la novedad y retorna OK, no un error).
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, eia_id, actor_level, query_type, document_type, document_number)
+        SELECT rec.id_master, rec.tenant_id, eia.id,
+               CASE WHEN eia.actor_type = 'seller' THEN 'MAIN' ELSE 'ASSI' END,
+               'DRIVER', eia.document_type, eia.document_number
+        FROM ict.external_integration_actors eia
+        WHERE eia.master_id = rec.id_master AND eia.actor_type IN ('seller', 'buyer') AND eia.document_type <> 'NIT';
 
         -- Fin: fuentes identificadas.
         UPDATE ict.external_integration_master

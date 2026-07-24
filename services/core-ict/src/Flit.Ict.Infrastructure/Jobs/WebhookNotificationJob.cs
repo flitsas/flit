@@ -75,13 +75,14 @@ public sealed class WebhookNotificationJob(
     {
         try
         {
-            // Forma de payload v1 (clientes existentes): no cambiar los nombres de campo.
+            // Forma de payload v1 (clientes existentes): no cambiar los nombres de campo. v1 emite
+            // `status` como NÚMERO (no cadena) y adjunta statusText/message; se calca exactamente.
             var description = DescribeStatus(wh.StatusValidation);
             var payload = new
             {
                 transactionFlit = wh.ManagerIdTransaction,
                 managerIdTransaction = wh.ManagerIdTransaction,
-                status = wh.StatusValidation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                status = (int)wh.StatusValidation,
                 statusDescription = description,
                 statusMessage = wh.Message,
                 statusObservation = string.Empty,
