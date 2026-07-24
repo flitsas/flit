@@ -57,7 +57,7 @@ describe('EstadoAcciones — el backend manda', () => {
     expect(screen.queryByRole('button', { name: 'Volver a borrador' })).not.toBeInTheDocument();
   });
 
-  it('subsanar: transiciona el trámite rechazado a subsanacion (sin motivo obligatorio)', async () => {
+  it('subsanar: acción DIRECTA — transiciona a subsanacion sin pedir motivo, con motivo por defecto', async () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
     mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'subsanacion' });
     const onChanged = vi.fn();
@@ -65,12 +65,19 @@ describe('EstadoAcciones — el backend manda', () => {
     render(<EstadoAcciones instanceId="inst-1" onChanged={onChanged} />);
 
     await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
-    await user.click(screen.getByRole('button', { name: /Confirmar: Subsanar/ }));
 
+    // No abre el panel de motivo: transiciona directo con el motivo por defecto por debajo.
     await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'subsanacion', undefined),
+      expect(mocks.transitionInstance).toHaveBeenCalledWith(
+        'inst-1',
+        'subsanacion',
+        'Subsanación iniciada por el operador',
+      ),
     );
     expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('button', { name: /Confirmar: Subsanar/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('estado final (aprobado, sin transiciones): no pinta ningún botón de acción', async () => {
@@ -116,8 +123,8 @@ describe('EstadoAcciones — el backend manda', () => {
     render(<EstadoAcciones instanceId="inst-1" />);
 
     await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
-    await user.click(screen.getByRole('button', { name: /Confirmar: Subsanar/ }));
 
+    // Acción directa: el error del API se muestra sin pasar por el panel de confirmación.
     expect(await screen.findByRole('alert')).toHaveTextContent(/modificado por otro usuario/i);
   });
 });
