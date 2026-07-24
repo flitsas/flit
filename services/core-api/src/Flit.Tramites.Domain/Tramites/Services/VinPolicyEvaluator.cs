@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
@@ -13,15 +14,22 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// existentes del mismo VIN ya cargados y decide. Reglas:
 /// </para>
 /// <list type="bullet">
-///   <item><c>rechazado</c> → permite reintentar (no bloquea).</item>
-///   <item><c>completado</c> → bloquea de por vida (<see cref="VinConflictCode.TramiteMatriculaCompletada"/>).</item>
+///   <item><c>rechazado</c>/<c>anulado</c> → permite reintentar (no bloquea; son estados finales que
+///   liberan la llave, HU #10876/CF-01 AC4).</item>
+///   <item><c>aprobado</c> → bloquea de por vida (<see cref="VinConflictCode.TramiteMatriculaCompletada"/>).</item>
 ///   <item>cualquier otro estado activo → duplicado (<see cref="VinConflictCode.TramiteDuplicado"/>).</item>
 /// </list>
+/// <para>
+/// Rol INFORMATIVO (check <c>warn</c>, HU #10538): distinto del bloqueo DURO (409) de duplicidad EN
+/// PROCESO de <see cref="DuplicateActiveProcedurePolicy"/> (HU #10876/CF-01) — no fusionar ambas
+/// responsabilidades.
+/// </para>
 /// </summary>
 public static class VinPolicyEvaluator
 {
-    private const string EstadoRechazado = "rechazado";
-    private const string EstadoCompletado = "completado";
+    private const string EstadoRechazado = TramiteEstado.Rechazado;
+    private const string EstadoAnulado = TramiteEstado.Anulado;
+    private const string EstadoCompletado = TramiteEstado.Aprobado;
 
     /// <summary>
     /// Matrícula inicial = modalidad VIN-first sin tipología de traspaso/otra
@@ -43,7 +51,8 @@ public static class VinPolicyEvaluator
         ArgumentNullException.ThrowIfNull(existentes);
 
         var bloqueantes = existentes
-            .Where(t => !string.Equals(t.Estado, EstadoRechazado, StringComparison.OrdinalIgnoreCase))
+            .Where(t => !string.Equals(t.Estado, EstadoRechazado, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(t.Estado, EstadoAnulado, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (bloqueantes.Count == 0)

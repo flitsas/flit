@@ -47,6 +47,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_procedure_instances_draft_finalized")
             .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
 
+        // HU #10879 — paso actual persistido del wizard (autosave del avance). Columna agregada por
+        // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+        builder.Property(x => x.CurrentStep)
+            .HasColumnName("current_step")
+            .HasMaxLength(40);
+
         // HU #10536 — prioritario. Columna agregada por migración SQL cruda (la tabla está
         // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Índice que sostiene el
         // ordenamiento con primacía de los listados (prioritarios primero, luego por fecha).

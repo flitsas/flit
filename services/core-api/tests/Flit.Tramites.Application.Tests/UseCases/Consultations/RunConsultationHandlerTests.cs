@@ -14,11 +14,19 @@ public sealed class RunConsultationHandlerTests
     private readonly IProcedureInstanceRepository _instanceRepo = Substitute.For<IProcedureInstanceRepository>();
     private readonly ICatalogRepository _catalogRepo = Substitute.For<ICatalogRepository>();
     private readonly IConsultationProviderRegistry _registry = Substitute.For<IConsultationProviderRegistry>();
+    // HU #10878: dependencia nueva (cache-aside). Los repos internos de la caché quedan sin stub
+    // (NSubstitute auto-completa Task<T> con default => null): sin ExternalDataSource en el template
+    // de estos tests (Template() no lo setea), el handler nunca la toca — el resto de la suite queda
+    // exactamente igual (ver RunConsultationHandlerCacheTests para la cobertura del cache-aside).
+    private readonly IExternalQueryCacheRepository _cacheRepo = Substitute.For<IExternalQueryCacheRepository>();
+    private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
+    private readonly ExternalQueryCacheService _cacheService;
     private readonly RunConsultationHandler _sut;
 
     public RunConsultationHandlerTests()
     {
-        _sut = new RunConsultationHandler(_instanceRepo, _catalogRepo, _registry);
+        _cacheService = new ExternalQueryCacheService(_cacheRepo, _consentRepo, _catalogRepo);
+        _sut = new RunConsultationHandler(_instanceRepo, _catalogRepo, _registry, _cacheService);
     }
 
     private sealed class FakeProvider(string key, ConsultationResult result) : IConsultationProvider
@@ -59,7 +67,7 @@ public sealed class RunConsultationHandlerTests
         _instanceRepo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("instance_not_found");
         result.Should().BeNull();
@@ -75,7 +83,7 @@ public sealed class RunConsultationHandlerTests
         _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_VEHICLE", ct)
             .Returns((ConsultationTemplate?)null);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("template_not_found");
         result.Should().BeNull();
@@ -91,7 +99,7 @@ public sealed class RunConsultationHandlerTests
         _catalogRepo.GetConsultationTemplateByCodeAsync("RUNT_VEHICLE", ct)
             .Returns(Template("RUNT_VEHICLE", "{}"));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("provider_not_resolved");
         result.Should().BeNull();
@@ -108,7 +116,7 @@ public sealed class RunConsultationHandlerTests
             .Returns(Template("RUNT_VEHICLE", """{"provider":"verifik"}"""));
         _registry.Resolve("verifik").Returns((IConsultationProvider?)null);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("provider_not_found");
         result.Should().BeNull();
@@ -135,7 +143,7 @@ public sealed class RunConsultationHandlerTests
         var provider = new FakeProvider("verifik", providerResult);
         _registry.Resolve("verifik").Returns(provider);
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().BeNull();
         result.Should().BeSameAs(providerResult);
@@ -181,7 +189,7 @@ public sealed class RunConsultationHandlerTests
             new ConsultationResult("verifik", "green", [], []));
         _registry.Resolve("verifik").Returns(provider);
 
-        await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         provider.CapturedContext.Should().NotBeNull();
         provider.CapturedContext!.FieldValues.Should().ContainKey("vin");
@@ -204,7 +212,7 @@ public sealed class RunConsultationHandlerTests
         _instanceRepo.SaveChangesAsync(ct)
             .Returns<Task>(_ => throw new InvalidOperationException("23514: check_violation on field_values"));
 
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "RUNT_VEHICLE", ct: ct);
 
         error.Should().Be("not_draft");
         result.Should().BeNull();

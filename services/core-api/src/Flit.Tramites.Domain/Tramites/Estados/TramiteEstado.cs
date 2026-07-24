@@ -25,6 +25,15 @@ public static class TramiteEstado
     /// <summary>Estados FINALES (RF04): sin transiciones posteriores ni edición de datos.</summary>
     public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado];
 
+    /// <summary>
+    /// Estados "en proceso" (CF-01, HU #10876): activan el bloqueo de duplicidad de trámite por
+    /// familia (Matrícula Inicial → VIN, Traspaso → placa, ver
+    /// <c>Flit.Tramites.Domain.Tramites.Services.DuplicateActiveProcedurePolicy</c>). Los estados finales de este enum
+    /// (<see cref="Aprobado"/>, <see cref="Rechazado"/>, <see cref="Anulado"/>) NO cuentan como "en
+    /// proceso" y LIBERAN la llave.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EstadosEnProceso = [Borrador, Preparado, Entregado];
+
     /// <summary>¿<paramref name="estado"/> es un estado de negocio conocido?</summary>
     public static bool EsValido(string? estado) =>
         estado is not null && Todos.Contains(estado, StringComparer.Ordinal);

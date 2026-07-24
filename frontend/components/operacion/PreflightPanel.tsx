@@ -14,7 +14,11 @@ import type {
 interface Props {
   snapshot: PreflightSnapshot | null;
   loading: boolean;
-  onRun: () => void;
+  // HU #10885 (Feature #10862, CF-04, AC2) — `forceRefresh=true` cuando el disparo viene del botón
+  // "Actualizar" (ya hay un resultado precargado): el caller lo reenvía a
+  // `tramitesClient.runConsultation`/`runConsulta` para saltar el reúso de caché. Los callers que
+  // ignoran el argumento (p. ej. `() => void handleRun()`) siguen siendo válidos (sin regresión).
+  onRun: (forceRefresh?: boolean) => void;
   riesgoAceptado: boolean;
   onToggleRiesgo: (v: boolean) => void;
   /** Persistiendo la aceptación de riesgo: deshabilita el checkbox para evitar dobles clics. */
@@ -185,11 +189,11 @@ export function PreflightPanel({
           {canRun && (
             <button
               type="button"
-              onClick={onRun}
+              onClick={() => onRun(hasResult)}
               disabled={loading}
               className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              aria-label="Consultar RUNT y SIMIT"
+              aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
             >
               {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
             </button>
@@ -201,6 +205,37 @@ export function PreflightPanel({
         <p className="text-[11px] opacity-60">
           Ejecuta la consulta para ver el semáforo de requisitos del vehículo.
         </p>
+      )}
+
+      {/* AC1 (HU #10885) — origen + fecha del dato precargado, solo cuando el snapshot viene de una
+          reutilización de caché vigente (ADR-0030). Ausente en el semáforo multi-proveedor clásico
+          (`runPreflight`/`getPreflight`, que no completa `fromCache`). */}
+      {hasResult && snapshot?.fromCache && (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-[11px]"
+          style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
+          >
+            Dato reutilizado
+          </span>
+          <span className="opacity-80">
+            Origen: <span className="font-semibold">{sourceLabel(checks[0]?.source) || 'RUNT'}</span>
+            {snapshot.queriedAt && (
+              <>
+                {' '}
+                · Consultado el{' '}
+                <span className="font-semibold">
+                  {new Date(snapshot.queriedAt).toLocaleString('es-CO')}
+                </span>
+              </>
+            )}
+          </span>
+        </div>
       )}
 
       {hasResult && (

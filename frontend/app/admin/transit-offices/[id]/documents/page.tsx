@@ -22,7 +22,7 @@ function OtDocumentsPageInner() {
       activeTab="documents"
       moduleTitle="Administración OT — Documentos y prelación"
     >
-      <DocumentsSection />
+      <DocumentsSection transitOfficeId={params.id} />
     </OtHubLayout>
   );
 }
