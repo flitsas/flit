@@ -85,6 +85,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     private static bool IsRuntimeScoped(PathString path) =>
         path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
+        // CF-02 (HU #10879) — consulta del paso 1 ANTES de crear el trámite: no lleva instancia en la
+        // ruta, pero es tan tenant-scoped como el resto del runtime (usa los proveedores de consulta de
+        // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
+        // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
+        || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
         // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
         // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía

@@ -17,12 +17,15 @@ internal static class ConsultationEndpoints
             string templateCode,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             RunConsultationHandler handler,
-            CancellationToken ct) =>
+            CancellationToken ct,
+            // HU #10885 (Feature #10862, CF-04, botón "Actualizar"): query param opcional, default
+            // false (cero regresión). En true, salta el reúso de caché y fuerza reconsulta + recacheo.
+            [FromQuery] bool forceRefresh = false) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, templateCode, ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, templateCode, forceRefresh, ct);
             return error switch
             {
                 "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

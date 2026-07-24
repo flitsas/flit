@@ -127,6 +127,19 @@ public sealed class WizardStateHandlerTests
                 settings.Select(s => new KeyValuePair<string, bool>(s.kind, s.enabled))));
     }
 
+    /// <summary>
+    /// CF-06 (HU #10881) — stub del override OT del documento de prenda. El comportamiento SNAPSHOT
+    /// (AC2) se prueba aparte, en la implementación EF (Infraestructura); aquí solo se fija si "ya
+    /// aplica" para poder probar el cableado en <see cref="GetWizardStateHandler"/> (canSubmit/blockers).
+    /// </summary>
+    private sealed class StubPrendaDocumentRequirementPolicy(bool required) : IPrendaDocumentRequirementPolicy
+    {
+        public Task<bool> IsRequiredAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(required);
+    }
+
     // ── FEATURE 05 — RnmcEnabled controla la visibilidad de la fecha de expedición ──
 
     [Fact] // El OT exige RNMC → RnmcEnabled=true (el frontend muestra la fecha de expedición).
@@ -358,6 +371,71 @@ public sealed class WizardStateHandlerTests
         fur.Status.Should().Be("complete");
         fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
         result.CanSubmit.Should().BeTrue();
+    }
+
+    // ── CF-06 (HU #10881) — override OT del documento de prenda ───────────────
+
+    private static ProcedureInstance TraspasoListoParaRadicar()
+    {
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "transit_office_code", ValueText = "11001000", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        CompletarDocsTraspaso(instance);
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+        AprobarIdentidad(instance, "comprador", "666");
+        AprobarIdentidad(instance, "vendedor", "555");
+        instance.Attachments.Add(Attachment("fur"));
+        return instance;
+    }
+
+    [Fact]
+    public async Task Ac1_Get_Traspaso_OverrideOtPrendaActivo_SinDocumento_CanSubmitFalseConBlocker()
+    {
+        // AC1 — con el override activo y SIN el documento de prenda, canSubmit refleja el bloqueo
+        // con el MISMO código que usa el gate de preparación (prenda_documento_requerido).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeFalse();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Ac1_Get_Traspaso_OverrideOtPrendaActivo_ConDocumentoAdjunto_CanSubmitTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        instance.Attachments.Add(Attachment("prenda_registro"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_OverrideOtPrendaInactivo_NoAgregaBlocker()
+    {
+        // Sin override (comportamiento previo / matrícula sin concepto de prenda): sin regresión.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
     }
 
     // ── Mapeo persistencia → GateContext (pasos completan al llenarlos) ───────

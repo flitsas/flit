@@ -21,6 +21,11 @@ internal sealed class ExternalDataSourceConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.BaseUrl).HasMaxLength(500).IsRequired();
         builder.Property(x => x.AuthType).HasMaxLength(20).IsRequired().HasDefaultValue("none");
         builder.Property(x => x.ExternalRefs).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
+
+        // HU #10878 (ADR-0030) — TTL de caché cross-trámite GLOBAL por fuente (columna nueva
+        // agregada por migración SQL cruda, sin tabla nueva; excepción A20 ya aplicada a este catálogo).
+        builder.Property(x => x.CacheTtlHours).HasColumnName("cache_ttl_hours");
+
         builder.Property(x => x.CreatedAt).IsRequired();
     }
 }
