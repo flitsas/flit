@@ -36,6 +36,8 @@ app.MapIctRegisterEndpoints();
 app.MapIctPreTramiteEndpoints();
 app.MapIctAttachmentEndpoints();
 app.MapIctStatusEndpoints();
+app.MapIctSecretariesEndpoints();
+app.MapIctLifecycleEndpoints();
 app.MapIctObservabilityEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).

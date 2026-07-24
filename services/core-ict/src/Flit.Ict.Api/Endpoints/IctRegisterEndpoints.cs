@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Ict.Api.Authorization;
 using Flit.Ict.Application.Register;
 
@@ -27,10 +28,29 @@ public static class IctRegisterEndpoints
     }
 
     private static async Task<IResult> RegisterAsync(
-        List<RegisterRowInput> rows,
+        HttpRequest request,
         RegisterIctBatchHandler handler,
         CancellationToken ct)
     {
+        // Deserialización tolerante (v1): se lee el cuerpo con opciones que aceptan números donde el
+        // contrato documenta String (p.ej. traffic_secretary_code numérico). Se hace manual para acotar
+        // esa laxitud SOLO a este endpoint y no afectar al resto de la API.
+        List<RegisterRowInput>? rows;
+        try
+        {
+            rows = await request.ReadFromJsonAsync<List<RegisterRowInput>>(
+                RegisterPayloadSerialization.Options, ct);
+        }
+        catch (JsonException)
+        {
+            return Results.Json(new { error = "invalid_body" }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (rows is null)
+        {
+            return Results.Json(new { error = "empty_body" }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var (result, error) = await handler.HandleAsync(new RegisterBatchCommand(rows), ct);
         if (error is not null)
         {

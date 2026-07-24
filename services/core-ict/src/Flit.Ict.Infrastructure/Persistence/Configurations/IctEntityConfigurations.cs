@@ -48,7 +48,22 @@ internal sealed class ExternalIntegrationMasterConfiguration : IEntityTypeConfig
             .WithOne()
             .HasForeignKey(a => a.MasterId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(x => x.Transformations)
+            .WithOne()
+            .HasForeignKey(t => t.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(x => new { x.TenantId, x.ManagerIdTransaction });
+    }
+}
+
+internal sealed class ExternalIntegrationMasterTransformationConfiguration
+    : IEntityTypeConfiguration<ExternalIntegrationMasterTransformation>
+{
+    public void Configure(EntityTypeBuilder<ExternalIntegrationMasterTransformation> builder)
+    {
+        builder.ToTable("external_integration_master_transformation_type", SchemaNames.Ict, t => t.ExcludeFromMigrations());
+        // PK compuesta (master, código RUNT): una transformación de cada tipo por pre-trámite.
+        builder.HasKey(x => new { x.MasterId, x.IdTransformationType });
     }
 }
 

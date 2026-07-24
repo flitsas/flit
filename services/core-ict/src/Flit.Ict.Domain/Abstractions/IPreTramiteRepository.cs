@@ -22,4 +22,17 @@ public interface IPreTramiteRepository
 
     /// <summary>Persiste cambios de un pre-trámite ya rastreado (edición). Lanza si hay conflicto de row_version.</summary>
     Task SaveAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Marca el pre-trámite como anulado (process_status_id=6) y registra la fila 'ANULADO' en el
+    /// histórico (para que el endpoint de estado v1 refleje la anulación). Idempotente por estado.
+    /// </summary>
+    Task MarkAbortedAsync(
+        Guid masterId,
+        Guid tenantId,
+        string observation,
+        string user,
+        string mail,
+        string company,
+        CancellationToken ct = default);
 }

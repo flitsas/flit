@@ -50,6 +50,12 @@ public sealed class ExternalIntegrationActor : AuditableEntity
 
     public string? LegalRepresentativePhone { get; set; }
 
+    public string? LegalRepresentativeCity { get; set; }
+
+    public string? LegalRepresentativeState { get; set; }
+
+    public string? LegalRepresentativeAddress { get; set; }
+
     // Mandante principal
     public string? PrincipalMandanteDocumentType { get; set; }
 

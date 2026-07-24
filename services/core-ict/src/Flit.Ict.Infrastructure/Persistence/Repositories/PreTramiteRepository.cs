@@ -63,6 +63,28 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
         }
     }
 
+    public Task MarkAbortedAsync(
+        Guid masterId,
+        Guid tenantId,
+        string observation,
+        string user,
+        string mail,
+        string company,
+        CancellationToken ct = default) =>
+        InTenantTransactionAsync(tenantId, async () =>
+        {
+            // El trámite ya fue anulado en core-api (autoridad). Aquí solo se refleja en el pre-trámite
+            // y su histórico para que el endpoint de estado v1 muestre 'ANULADO' (6).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE ict.external_integration_master
+                SET process_status_id = 6, updated_at = now()
+                WHERE id = {masterId} AND tenant_id = {tenantId};
+                SELECT ict.record_process_status({masterId}, {tenantId}, 6, 'ANULADO',
+                    {user}, {mail}, {company}, {observation}, 'integration')
+                """, ct);
+            return 0;
+        }, ct);
+
     /// <summary>Ejecuta <paramref name="work"/> en una transacción con el GUC de tenant fijado, dentro de la execution strategy.</summary>
     private async Task<T> InTenantTransactionAsync<T>(Guid tenantId, Func<Task<T>> work, CancellationToken ct)
     {

@@ -44,22 +44,23 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
             var latest = history[0];
             var items = history
                 .Select(h => new StatusProcessV1Item(
-                    Status: h.Code.ToString(CultureInfo.InvariantCulture),
+                    Status: h.Code,
                     StatusDescription: Describe(h.Code),
                     Observation: h.Observation,
                     UserMailRegistered: h.Mail,
                     UserRoleRegistered: h.Role,
+                    UserNameRegistered: h.UserName,
                     DateRegistered: h.Date,
                     CompanyRegistered: string.IsNullOrEmpty(h.Company) ? companyDocument : h.Company))
                 .ToList();
 
             return new StatusProcessV1Response(
                 TransactionFlit: managerIdTransaction,
-                StatusValidation: latest.Code.ToString(CultureInfo.InvariantCulture),
+                StatusValidation: latest.Code,
                 StatusDescription: Describe(latest.Code),
                 MessageValidation: latest.Message,
                 StatusObservation: latest.Observation,
-                Status: latest.Code.ToString(CultureInfo.InvariantCulture),
+                Status: latest.Code,
                 StatusMessage: latest.Message,
                 StatusProcess: items);
         }
@@ -72,7 +73,7 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
         }
     }
 
-    private sealed record HistoryRow(int Code, string Message, string Observation, string Mail, string Role, string Date, string Company);
+    private sealed record HistoryRow(int Code, string Message, string Observation, string Mail, string Role, string UserName, string Date, string Company);
 
     private static async Task<(Guid? MasterId, string CompanyDocument)> FindMasterAsync(
         DbConnection connection, string flit, Guid tenantId, CancellationToken ct)
@@ -98,7 +99,8 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
         cmd.CommandText = """
             SELECT s.id_parprosta, s.message_validation, s.status_process_observation,
                    s.status_process_mail_userregistered, s.status_process_role_userregistered,
-                   s.status_process_registrationdate, s.status_process_company_registered
+                   s.status_process_registrationdate, s.status_process_company_registered,
+                   s.status_process_userregistered
             FROM ict.external_integration_process_status s
             WHERE s.id_eimas = @masterId
             ORDER BY s.status_process_registrationdate DESC, s.created_at DESC
@@ -115,7 +117,8 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
                 Mail: reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
                 Role: reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
                 Date: reader.IsDBNull(5) ? string.Empty : reader.GetDateTime(5).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-                Company: reader.IsDBNull(6) ? string.Empty : reader.GetString(6)));
+                Company: reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                UserName: reader.IsDBNull(7) ? string.Empty : reader.GetString(7)));
         }
 
         return list;
