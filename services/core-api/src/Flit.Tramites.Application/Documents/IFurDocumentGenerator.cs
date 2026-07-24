@@ -85,7 +85,10 @@ public sealed record FurDocumentData(
     // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
     // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
     bool TienePrenda = false,
-    string? AcreedorPrenda = null)
+    string? AcreedorPrenda = null,
+    // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
+    // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
+    FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

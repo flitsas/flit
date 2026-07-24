@@ -39,11 +39,16 @@ public sealed class GenerarFurHandler(
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IFurTemplateResolver? templateResolver = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
+    // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
+    private readonly IFurTemplateResolver? _templateResolver = templateResolver;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -98,7 +103,12 @@ public sealed class GenerarFurHandler(
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
         var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos);
+        // HU #10920 — plantilla de FUR según la clasificación del vehículo (vehicle_class). Sin resolver → AUTOMOTOR.
+        var templateFormat = _templateResolver is not null
+            ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
+            : FurTemplateFormat.Automotor;
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos, templateFormat);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -252,7 +262,8 @@ public sealed class GenerarFurHandler(
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
         bool tienePrenda, string? acreedorPrenda,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
-        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos)
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
+        FurTemplateFormat templateFormat)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -315,7 +326,8 @@ public sealed class GenerarFurHandler(
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
-            AcreedorPrenda: acreedorPrenda);
+            AcreedorPrenda: acreedorPrenda,
+            TemplateFormat: templateFormat);
     }
 
     /// <summary>
