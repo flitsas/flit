@@ -13,6 +13,13 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// solo la entrega. Cada transición registra su fila de historial y su notificación. Si la
 /// preparación pasa pero la entrega falla (p.ej. organismo_no_habilitado), el trámite queda en
 /// <c>preparado</c>: corregida la causa, un nuevo submit solo reintenta la entrega.
+/// <para>
+/// Desde <c>subsanacion</c> (HU #10870) este MISMO handler re-radica directo a <c>entregado</c>
+/// (sin encadenar preparado): <see cref="ITramiteLifecycleService"/> re-evalúa SOLO los gates de
+/// negocio afectados por los campos corregidos desde el snapshot capturado al entrar a
+/// subsanación (HU #10872, AC1) — más el gate final de entrega al OT, que siempre corre. La
+/// identidad y las consultas externas aún vigentes NO se vuelven a solicitar (AC2).
+/// </para>
 /// </summary>
 public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,

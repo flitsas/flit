@@ -28,6 +28,16 @@ public sealed record SubsanacionObservation
     /// <summary>Checklist de ítems subsanables (campo/documento + detalle de la corrección).</summary>
     public IReadOnlyList<SubsanacionObservationItem> Items { get; init; } = [];
 
+    /// <summary>
+    /// HU #10872 (AC1) — snapshot de <c>field_values</c> (clave→valor canónico) capturado en el MISMO
+    /// instante en que el trámite entra a <c>subsanacion</c>. Es el baseline del DIFF que la
+    /// re-radicación (<c>subsanacion → entregado</c>) computa para re-evaluar SOLO los gates de lo
+    /// corregido (ver <see cref="Tramites.Services.FieldValueSnapshot"/> /
+    /// <see cref="Tramites.Services.SubsanacionGateMap"/>). <c>null</c> = observación previa a esta HU
+    /// (sin snapshot): el re-radicado degrada a re-evaluar TODOS los gates (fail-safe).
+    /// </summary>
+    public IReadOnlyDictionary<string, string?>? FieldSnapshot { get; init; }
+
     private static readonly JsonSerializerOptions SerializeOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

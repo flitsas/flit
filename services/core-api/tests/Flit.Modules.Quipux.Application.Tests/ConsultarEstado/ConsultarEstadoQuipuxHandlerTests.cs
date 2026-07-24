@@ -177,4 +177,78 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
         observation.Should().NotBeNull();
         observation!.Motivo.Should().Be("Rechazado por el organismo de tránsito vía Quipux (sin descripción).");
     }
+
+    [Fact] // HU #10872 (AC1) — el rechazo de Quipux también captura el snapshot de field_values.
+    public async Task Ac1_RechazoDeSecretaria_CapturaSnapshotDeFieldValuesEnMetadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        var submissionId = Guid.NewGuid();
+
+        var submission = new QuipuxSubmission
+        {
+            Id = submissionId,
+            TenantId = tenantId,
+            ProcedureInstanceId = instanceId,
+            DocumentName = "doc-3",
+            DivipoCode = "0101",
+            Status = QuipuxSubmissionEstado.Registrado,
+        };
+
+        var instance = new ProcedureInstance
+        {
+            Id = instanceId,
+            TenantId = tenantId,
+            Status = TramiteEstado.Entregado,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000003",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        _settings.GetAsync(ct).Returns(new QuipuxSettings
+        {
+            Enabled = true,
+            UrlLogin = "x",
+            UrlRegisterDocument = "x",
+            UrlValidateStatus = "x",
+            Username = "x",
+            Password = "x",
+            ConsumerCode = "1003",
+            Bucket = "b",
+            AwsAccessKeyId = "k",
+            AwsSecretAccessKey = "s",
+            OfficerDocumentNumber = "900000000",
+        });
+        _submissions.GetByIdAsync(submissionId, ct).Returns(submission);
+        _client.ValidateStatusAsync(Arg.Any<QuipuxValidateStatusRequest>(), ct)
+            .Returns(new QuipuxValidateStatusResult(
+                Codigo: 1, Descripcion: null,
+                EstadoTramiteCodigo: QuipuxCodigos.TramiteRechazado,
+                EstadoTramiteDescripcion: "Falta corregir el VIN"));
+        _instances.GetByIdAsync(instanceId, tenantId, ct).Returns(instance);
+        _instances.GetFieldValuesAsync(instanceId, tenantId, ct).Returns(
+        [
+            new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = instanceId,
+                FieldKey = "vin",
+                ValueText = "1HGCM82633A004352",
+            },
+        ]);
+
+        TramiteTransitionCommand? captured = null;
+        _lifecycle
+            .TransitionAsync(Arg.Do<TramiteTransitionCommand>(c => captured = c), ct)
+            .Returns(TramiteTransitionOutcome.Ok(instance));
+
+        await _sut.HandleAsync(new ConsultarEstadoQuipuxCommand { SubmissionId = submissionId }, ct);
+
+        var observation = SubsanacionObservation.FromJson(captured!.Metadata);
+        observation.Should().NotBeNull();
+        observation!.FieldSnapshot.Should().NotBeNull();
+        observation.FieldSnapshot!["vin"].Should().Be("1HGCM82633A004352");
+    }
 }

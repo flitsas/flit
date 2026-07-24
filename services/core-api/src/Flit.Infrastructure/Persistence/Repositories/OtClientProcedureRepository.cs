@@ -373,6 +373,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         now),
                     cancellationToken).ConfigureAwait(false);
 
+                // HU #10872 (AC1) — snapshot de field_values AL ENTRAR a subsanación: baseline del diff
+                // que la re-radicación (TramiteLifecycleService) computará para re-evaluar solo los
+                // gates de lo corregido. Solo se consulta cuando el destino ES subsanación.
+                IReadOnlyDictionary<string, string?>? fieldSnapshot = null;
+                if (targetStatus == TramiteEstado.Subsanacion)
+                {
+                    var fieldValues = await _context.ProcedureInstanceFieldValues
+                        .AsNoTracking()
+                        .Where(f => f.ProcedureInstanceId == procedureInstanceId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    fieldSnapshot = Flit.Tramites.Domain.Tramites.Services.FieldValueSnapshot.Capture(fieldValues);
+                }
+
                 // El historial se escribe aquí (no vía ITramiteTransitionRecorder) para conservar
                 // el metadata cross-tenant (ot_tenant_id/source) dentro de la transacción RLS del
                 // tenant cliente; la unificación con el recorder queda para la integración N 03.
@@ -386,7 +400,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ChangedAt = now,
                     ChangedBy = resolvedChangedBy,
                     Reason = reason,
-                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, targetStatus, reason, items),
+                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, targetStatus, reason, items, fieldSnapshot),
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -400,17 +414,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     /// <summary>
     /// HU #10871 (AC1) — shape del metadata de <c>procedure_instance_status_history</c>. Para
-    /// <c>subsanacion</c> agrega el checklist HÍBRIDO (<c>motivo</c> + <c>items</c>) sobre el mismo
-    /// shape de auditoría (<c>ot_tenant_id</c>/<c>approver_tenant_id</c>/<c>source</c>) que ya usaban
-    /// aprobar/rechazar; para cualquier otro destino el shape queda IGUAL al de antes de esta HU (sin
-    /// regresión de contrato).
+    /// <c>subsanacion</c> agrega el checklist HÍBRIDO (<c>motivo</c> + <c>items</c>) MÁS el snapshot de
+    /// field_values (HU #10872 AC1, <paramref name="fieldSnapshot"/>) sobre el mismo shape de auditoría
+    /// (<c>ot_tenant_id</c>/<c>approver_tenant_id</c>/<c>source</c>) que ya usaban aprobar/rechazar;
+    /// para cualquier otro destino el shape queda IGUAL al de antes de esta HU (sin regresión de
+    /// contrato). Las claves <c>motivo</c>/<c>items</c>/<c>fieldSnapshot</c> son las que
+    /// <c>SubsanacionObservation.FromJson</c> deserializa.
     /// </summary>
     private static string BuildStatusHistoryMetadata(
         Guid otTenantId,
         string source,
         string targetStatus,
         string? reason,
-        IReadOnlyList<OtProcedureObservationItem>? items)
+        IReadOnlyList<OtProcedureObservationItem>? items,
+        IReadOnlyDictionary<string, string?>? fieldSnapshot = null)
     {
         if (targetStatus != TramiteEstado.Subsanacion)
         {
@@ -429,6 +446,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             source,
             motivo = reason,
             items = (items ?? []).Select(i => new { campo = i.Campo, detalle = i.Detalle }),
+            fieldSnapshot,
         });
     }
 

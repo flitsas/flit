@@ -53,4 +53,39 @@ public sealed class SubsanacionObservationTests
     {
         SubsanacionObservation.FromJson(json).Should().BeNull();
     }
+
+    // ── HU #10872 (AC1) — snapshot de field_values embebido en la observación ──────────────
+
+    [Fact]
+    public void ToJson_ConFieldSnapshot_SerializaYDeserializaElBaseline()
+    {
+        var observation = new SubsanacionObservation
+        {
+            Motivo = "Corregir VIN",
+            FieldSnapshot = new Dictionary<string, string?>
+            {
+                ["vin"] = "1HGCM82633A004352",
+                ["transit_office_id"] = "11111111-1111-1111-1111-111111111111",
+            },
+        };
+
+        var roundTripped = SubsanacionObservation.FromJson(observation.ToJson());
+
+        roundTripped.Should().NotBeNull();
+        roundTripped!.FieldSnapshot.Should().NotBeNull();
+        roundTripped.FieldSnapshot!["vin"].Should().Be("1HGCM82633A004352");
+        roundTripped.FieldSnapshot["transit_office_id"].Should().Be("11111111-1111-1111-1111-111111111111");
+    }
+
+    [Fact]
+    public void FromJson_SinFieldSnapshot_DegradaANull()
+    {
+        // HU #10871 (dato legado, anterior a HU #10872): observaciones sin fieldSnapshot siguen
+        // deserializando OK, con FieldSnapshot en null (fail-safe del re-radicado).
+        var observation = new SubsanacionObservation { Motivo = "Rechazado por Quipux" };
+
+        var roundTripped = SubsanacionObservation.FromJson(observation.ToJson());
+
+        roundTripped!.FieldSnapshot.Should().BeNull();
+    }
 }

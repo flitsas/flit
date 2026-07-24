@@ -7,6 +7,7 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -227,10 +228,20 @@ public sealed class ConsultarEstadoQuipuxHandler
             ? MotivoRechazoPorDefecto
             : consulta.EstadoTramiteDescripcion.Trim();
 
+        // HU #10872 (AC1) — snapshot de field_values AL ENTRAR a subsanación: baseline del diff que
+        // la re-radicación (TramiteLifecycleService) computará para re-evaluar solo los gates de lo
+        // corregido. Proyección lean (GetFieldValuesAsync), sin cargar el resto del grafo del wizard.
+        var fieldValues = await _instances.GetFieldValuesAsync(
+            submission.ProcedureInstanceId, submission.TenantId, cancellationToken);
+
         // HU #10871 (AC2) — checklist HÍBRIDO de metadata: solo `motivo` (Quipux no entrega un
         // checklist estructurado por campo; `items` queda vacío). El destino es `subsanacion`, no
         // `rechazado`: la secretaría observó, pero el trámite sigue vivo para corregirse.
-        var metadata = new SubsanacionObservation { Motivo = motivo }.ToJson();
+        var metadata = new SubsanacionObservation
+        {
+            Motivo = motivo,
+            FieldSnapshot = FieldValueSnapshot.Capture(fieldValues ?? []),
+        }.ToJson();
 
         var (ok, error) = await TransicionarAsync(
             submission, TramiteEstado.Subsanacion, motivo, metadata, cancellationToken);

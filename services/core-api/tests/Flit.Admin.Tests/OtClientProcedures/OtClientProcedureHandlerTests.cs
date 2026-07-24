@@ -15,6 +15,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Admin.Tests.OtClientProcedures;
 
@@ -238,6 +239,47 @@ public sealed class OtClientProcedureHandlerTests
         history.ToStatus.Should().Be(TramiteEstado.Subsanacion);
         history.ChangedBy.Should().Be(Approver);
         history.Metadata.Should().Contain("aduana").And.Contain("Documento vencido").And.Contain("Revisar el checklist");
+    }
+
+    [Fact] // HU #10872 (AC1) — ObserveAsync captura el snapshot de field_values AL ENTRAR a subsanación.
+    public async Task Ac1_ObserveAsync_CapturaSnapshotDeFieldValuesEnMetadata()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = procedureId,
+                TenantId = ClientTenant,
+                FieldKey = "vin",
+                ValueText = "1HGCM82633A004352",
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var updated = await repo.ObserveAsync(
+            OtTenant, procedureId, "Corregir el VIN",
+            [new OtProcedureObservationItem { Campo = "vin", Detalle = "No coincide con el RUNT" }],
+            Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        updated.Should().NotBeNull();
+
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        var observation = SubsanacionObservation.FromJson(history.Metadata);
+        observation.Should().NotBeNull();
+        observation!.FieldSnapshot.Should().NotBeNull();
+        observation.FieldSnapshot!["vin"].Should().Be("1HGCM82633A004352");
     }
 
     [Fact]
