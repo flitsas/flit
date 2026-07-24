@@ -11,8 +11,25 @@ public sealed class MandateSignerItem
     public Guid Id { get; init; }
     public Guid TransitOfficeId { get; init; }
     public string FullName { get; init; } = string.Empty;
+
+    /// <summary>Tipo de documento (ADR-0036). Insumo del descriptor de validación de identidad.</summary>
+    public string DocumentType { get; init; } = "CC";
+
     public string DocumentNumber { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
+
+    /// <summary>Correo del mandatario para la validación de identidad (ADR-0036, HU #10911). PII.</summary>
+    public string? Email { get; init; }
+
+    /// <summary>Firma del baúl vinculada (ADR-0025), si está resuelta.</summary>
+    public Guid? SignatureVaultId { get; init; }
+
+    /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
+    public Guid? IdentityValidationRef { get; init; }
+
+    /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9): cotejo del firmante al aprobar.</summary>
+    public Guid? UserId { get; init; }
+
     public DateTimeOffset RegisteredAt { get; init; }
     public bool IsActive { get; init; }
 
