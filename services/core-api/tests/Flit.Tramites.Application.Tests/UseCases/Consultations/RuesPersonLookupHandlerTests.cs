@@ -69,7 +69,7 @@ public sealed class RuesPersonLookupHandlerTests
     public async Task HandleAsync_InstanceNotFound_ReturnsError()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        _repo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
 
         var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), "900123456", ct);
 
@@ -83,7 +83,7 @@ public sealed class RuesPersonLookupHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
         _registry.Resolve("verifik_rues").Returns((IConsultationProvider?)null);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, "900123456", ct);
@@ -98,7 +98,7 @@ public sealed class RuesPersonLookupHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
         var providerResult = new ConsultationResult("verifik_rues", "green", [],
             [
                 new HydratedField("rues_razon_social", "ACME S.A.S.", null),
@@ -124,7 +124,7 @@ public sealed class RuesPersonLookupHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
 
         _consentRepo.GetAsync(tenantId, "NIT", "900123456", ct)
             .Returns(new PersonDataConsent
@@ -168,7 +168,7 @@ public sealed class RuesPersonLookupHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
 
         var vigenteEntry = new ExternalQueryCacheEntry
         {

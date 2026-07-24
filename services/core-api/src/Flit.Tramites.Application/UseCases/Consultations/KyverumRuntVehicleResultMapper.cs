@@ -138,12 +138,14 @@ public static class KyverumRuntVehicleResultMapper
             ?? data?.Soat?.FirstOrDefault();
         Add(fields, "soat_vencimiento", soat?.FechaVencimSoat);
         Add(fields, "soat_aseguradora", soat?.RazonSocialAsegur);
+        Add(fields, "soat_estado", soat?.Estado); // HU #10856 — estado real del SOAT para el certificado.
 
         // RTM: preferir vigente; si no, la primera.
         var rtm = data?.Rtm?.FirstOrDefault(t =>
             string.Equals(t?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
             ?? data?.Rtm?.FirstOrDefault();
         Add(fields, "rtm_vencimiento", rtm?.FechaVencimiento);
+        Add(fields, "rtm_estado", rtm?.Estado); // HU #10856 — estado real de la RTM para el certificado.
 
         return fields;
     }

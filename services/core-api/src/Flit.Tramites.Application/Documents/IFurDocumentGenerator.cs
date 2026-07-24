@@ -134,17 +134,43 @@ public interface IIdentityCertificateGenerator
     GeneratedDocument GenerateIdentityCertificate(IdentityCertificateData data);
 }
 
+/// <summary>Una actividad económica del RUES (HU #10589): código CIIU, nombre y descripción. Nulos → en blanco.</summary>
+public sealed record RuesActividad(string? Codigo, string? Nombre, string? Descripcion);
+
 /// <summary>
 /// Datos para el Certificado RUES (HU #10589): razón social + NIT del actor persona jurídica y su
 /// estado en RUES. En modo mock el estado es "ACTIVA"; con el proveedor real se enriquece con
-/// matrícula mercantil / cámara de comercio.
+/// matrícula mercantil / cámara de comercio. HU #10589 (Feature #10852) — se amplía a la tabla
+/// certificadora completa según la muestra oficial: REGISTRO COMERCIAL, REPRESENTACIÓN LEGAL y
+/// ACTIVIDADES ECONÓMICAS. Todo lo que no devuelve la consulta se deja en blanco.
 /// </summary>
 public sealed record RuesCertificateData(
     Guid ProcedureInstanceId,
     string ReferenceNumber,
     string RazonSocial,
     string Nit,
-    string Estado);
+    string Estado,
+    // Tabla certificadora del RUES (existencia y representación legal). Nulos → en blanco.
+    string? MatriculaMercantil = null,
+    string? CamaraComercio = null,
+    string? Sigla = null,
+    string? FechaMatricula = null,
+    string? UltimoAnoRenovado = null,
+    string? FechaRenovacion = null,
+    string? Direccion = null,
+    string? Municipio = null,
+    string? Categoria = null,
+    string? ActividadEconomica = null,
+    string? TipoOrganizacion = null,
+    // HU #10589 (Feature #10852) — campos adicionales del REGISTRO COMERCIAL de la muestra oficial.
+    string? TipoCompania = null,
+    string? Email = null,
+    string? IdRm = null,
+    string? FechaActualizacion = null,
+    string? RazonCancelacion = null,
+    // Bloque de texto de la REPRESENTACIÓN LEGAL (facultades del representante) y lista de ACTIVIDADES.
+    string? RepresentacionLegal = null,
+    IReadOnlyList<RuesActividad>? Actividades = null);
 
 /// <summary>
 /// Contrato del generador del Certificado RUES. La implementación productiva es

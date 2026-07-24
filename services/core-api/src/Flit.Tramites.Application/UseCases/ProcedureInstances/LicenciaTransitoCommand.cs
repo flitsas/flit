@@ -81,9 +81,9 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         instance.Attachments.Add(attachment);
         repo.Add(attachment);
 
-        // Feature #10701 — adjuntar la LT cambia el contenido del expediente: invalida el
-        // consolidado maestro persistido para que el próximo "Ver consolidado" la incluya.
-        instance.ConsolidadoMaestroVigente = false;
+        // Feature #10701 / HU #10860 — adjuntar la LT cambia el contenido del expediente: invalida
+        // los consolidados persistidos (maestro y wizard) para que la próxima generación la incluya.
+        instance.InvalidarConsolidados();
 
         var evento = new ProcedureInstanceEvent
         {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Car, Check, Download, FileText, ShieldCheck, User } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
@@ -42,6 +42,11 @@ function D({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+/** Una parte es persona jurídica cuando su documento es NIT (HU #10856): valida el representante legal. */
+function esPersonaJuridica(actor: Actor | null | undefined): boolean {
+  return actor?.documentType === 'NIT';
+}
+
 function SectionTitle({ children }: { children: string }) {
   return (
     <div className="flex items-center gap-2 mb-2">
@@ -62,6 +67,17 @@ export default function ExpedienteVisor({
   orgTransito,
 }: Props) {
   const [mainTab, setMainTab] = useState<MainTab>('vehiculo');
+
+  // Caché del certificado de identidad por validación (HU #10861): se descarga una vez por parte y
+  // se conserva al cambiar de pestaña; los objectURL se liberan al desmontar el visor.
+  const certCache = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const cache = certCache.current;
+    return () => {
+      for (const url of cache.values()) URL.revokeObjectURL(url);
+      cache.clear();
+    };
+  }, []);
 
   const fv = useMemo(
     () => (key: string) => fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '',
@@ -198,9 +214,11 @@ export default function ExpedienteVisor({
               </div>
             </div>
 
+            {esPersonaJuridica(vendedor) && <RepresentanteLegalBlock bio={vendedorBio} />}
+
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={vendedorBio} />
+              <IdentidadBlock bio={vendedorBio} instanceId={instanceId} certCache={certCache} />
             </div>
           </>
         )}
@@ -220,9 +238,11 @@ export default function ExpedienteVisor({
               </div>
             </div>
 
+            {esPersonaJuridica(comprador) && <RepresentanteLegalBlock bio={compradorBio} />}
+
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={compradorBio} />
+              <IdentidadBlock bio={compradorBio} instanceId={instanceId} certCache={certCache} />
             </div>
 
             {(orgTransito?.nombre || orgTransito?.codigo) && (
@@ -251,8 +271,45 @@ export default function ExpedienteVisor({
   );
 }
 
-/** Bloque de estado de identidad (sin fotos: placeholder «Sin foto»). */
-function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
+/**
+ * Datos del representante legal de una persona jurídica (HU #10856): cuando la parte es jurídica (NIT),
+ * la validación de identidad la realiza el representante legal, así que se muestran sus datos (tomados de
+ * la validación biométrica) junto al certificado de validación (que aparece en el bloque de identidad).
+ */
+function RepresentanteLegalBlock({ bio }: { bio: BiometricValidation | null }) {
+  return (
+    <div>
+      <SectionTitle>Representante legal</SectionTitle>
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
+        style={{ borderColor: BORDER }}
+      >
+        <D label="Nombre" value={bio?.name} />
+        <D label="Tipo doc" value={bio?.documentType} />
+        <D label="Número" value={bio?.documentNumber} />
+        <D label="Email" value={bio?.email} />
+      </div>
+      <p className="text-[10px] opacity-60 mt-1">
+        La validación de identidad y su certificado corresponden al representante legal.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Bloque de estado de identidad (HU #10861): además del estado, muestra el certificado de validación
+ * de identidad del proveedor en un visor embebido, cargado de forma perezosa al abrir la pestaña. Si la
+ * validación no está aprobada, se muestra solo el estado (sin visor).
+ */
+function IdentidadBlock({
+  bio,
+  instanceId,
+  certCache,
+}: {
+  bio: BiometricValidation | null;
+  instanceId: string | null;
+  certCache: React.RefObject<Map<string, string>>;
+}) {
   const estado = bio?.status;
   const aprobado = estado === 'aprobado';
   const rechazado = estado === 'rechazado';
@@ -265,6 +322,42 @@ function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
       : pendiente
         ? { label: 'Pendiente', color: '#F9AC00' }
         : { label: 'Sin validación', color: '#9AA5B1' };
+
+  const validationId = bio?.id ?? null;
+  const [certUrl, setCertUrl] = useState<string | null>(
+    () => (validationId ? (certCache.current.get(validationId) ?? null) : null),
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aprobado || !validationId || !instanceId) return;
+
+    // Ya en caché (lo tomó el inicializador de useState al montar): no volver a descargar.
+    if (certCache.current.has(validationId)) return;
+
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { blob } = await tramitesClient.downloadBiometricCertificado(instanceId, validationId);
+        if (cancelled) return;
+        const objectUrl = URL.createObjectURL(blob);
+        certCache.current.set(validationId, objectUrl);
+        setCertUrl(objectUrl);
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudo cargar el certificado.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aprobado, validationId, instanceId, certCache]);
 
   return (
     <div className="p-3 rounded-xl border space-y-3" style={{ borderColor: BORDER }}>
@@ -286,20 +379,36 @@ function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
         </div>
       </div>
 
-      {/* Sin fotos por ahora (identidad/biométrica mock hasta acuerdo con proveedor). */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {['Selfie', 'Frente', 'Reverso'].map((slot) => (
-          <div key={slot} className="text-center">
+      {/* Certificado de validación de identidad (visor perezoso). Solo cuando la validación está aprobada. */}
+      {aprobado ? (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: BORDER }}>
+          {loading && (
             <div
-              className="aspect-[3/4] rounded-xl border grid place-items-center text-[9px] opacity-50"
-              style={{ borderColor: BORDER }}
+              className="h-[420px] grid place-items-center text-[11px] opacity-60 animate-pulse bg-[#F4F7FC] dark:bg-white/5"
+              data-testid="cert-loading"
             >
-              Sin foto
+              Cargando certificado de identidad…
             </div>
-            <p className="text-[8px] font-semibold opacity-60 mt-0.5 uppercase">{slot}</p>
-          </div>
-        ))}
-      </div>
+          )}
+          {!loading && error && (
+            <div className="p-3 text-[11px]" style={{ color: '#FF4E00' }} role="alert">
+              {error}
+            </div>
+          )}
+          {!loading && !error && certUrl && (
+            <iframe
+              src={certUrl}
+              title="Certificado de validación de identidad"
+              className="w-full h-[420px]"
+              data-testid="cert-iframe"
+            />
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] opacity-60">
+          El certificado de identidad estará disponible cuando la validación sea aprobada.
+        </p>
+      )}
     </div>
   );
 }

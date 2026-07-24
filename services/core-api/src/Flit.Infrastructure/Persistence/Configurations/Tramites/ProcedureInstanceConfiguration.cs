@@ -72,6 +72,15 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(false);
 
+        // HU #10860 (Feature #10852, ADR-0032) — vigencia del expediente derivado del wizard, espejo
+        // de consolidado_maestro_vigente. Columna agregada por migración SQL cruda (tabla
+        // ExcludeFromMigrations); aquí solo se mapea. La baja a false cualquier transición de estado,
+        // la decisión del OT o el adjuntar la LT; la sube a true la generación del consolidado.
+        builder.Property(x => x.ConsolidadoWizardVigente)
+            .HasColumnName("consolidado_wizard_vigente")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         // Feature #10587 / HU #10785 — sub-estado interno de placa, ortogonal al status global
         // (que permanece en 'entregado'). Columna agregada por migración SQL cruda (la tabla está
         // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Nullable: null = sin ruta de placa.
