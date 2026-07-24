@@ -13,13 +13,19 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// entrega al OT): <c>preasignado</c> (Flujo B), <c>asignado</c> (Flujo A) o <c>null</c> (ruta estándar).
 /// Ortogonal al status global. Se ignora fuera de <c>ToStatus == Entregado</c>.
 /// </param>
+/// <param name="MandateSignerId">
+/// ADR-0036 §D9 (HU #10916) — firmante del mandato elegido explícitamente por el aprobador, cuando hay
+/// varios mandatarios y el cotejo automático por usuario no fue único (subsana el 409
+/// <c>mandatario_requerido</c>). Se ignora fuera de <c>ToStatus == Aprobado</c>.
+/// </param>
 public sealed record TramiteTransitionCommand(
     Guid InstanceId,
     Guid TenantId,
     string ToStatus,
     string? Reason,
     Guid? ChangedByUserId,
-    string? PlateFlowStatus = null);
+    string? PlateFlowStatus = null,
+    Guid? MandateSignerId = null);
 
 /// <summary>
 /// Resultado de una transición. <c>ErrorCode</c> null = éxito. Los códigos son los de

@@ -73,6 +73,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("plate_flow_status")
             .HasMaxLength(20);
 
+        // ADR-0036 §D9 (HU #10916) — mandatario que firma el mandato, resuelto al aprobar. Columna
+        // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al
+        // modelo EF. La FK a admin.mandate_signers (ON DELETE SET NULL) se declara en el DDL, no en EF
+        // (evita que EF intente materializar una relación en una tabla excluida de migraciones).
+        builder.Property(x => x.MandateSignerId)
+            .HasColumnName("mandate_signer_id");
+
+        builder.HasIndex(x => x.MandateSignerId)
+            .HasDatabaseName("ix_procedure_instances_mandate_signer_id")
+            .HasFilter("mandate_signer_id IS NOT NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");

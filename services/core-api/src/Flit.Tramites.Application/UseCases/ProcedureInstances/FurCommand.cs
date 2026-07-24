@@ -44,7 +44,8 @@ public sealed class GenerarFurHandler(
     ISignatureVaultPolicy? vaultPolicy = null,
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
-    IMandateRequirementPolicy? mandatePolicy = null)
+    IMandateRequirementPolicy? mandatePolicy = null,
+    IMandateSignerDirectory? mandateDirectory = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
@@ -60,6 +61,10 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
+    // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
+    private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -133,7 +138,7 @@ public sealed class GenerarFurHandler(
         // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
         // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
         // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
-        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), ct);
+        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), instance.MandateSignerId, ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -490,7 +495,7 @@ public sealed class GenerarFurHandler(
     /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
     /// </summary>
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
-        FurDocumentData data, string? transitOfficeCode, CancellationToken ct)
+        FurDocumentData data, string? transitOfficeCode, Guid? mandateSignerId, CancellationToken ct)
     {
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
@@ -501,12 +506,22 @@ public sealed class GenerarFurHandler(
         if (!exigeMandato)
             return null;
 
+        // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
+        // PDF pinta placeholders y se regenera al aprobar. Sabaneta (institucional) no lleva firmante persona.
+        MandatarioFirmante? mandatario = null;
+        if (mandateSignerId is { } signerId)
+        {
+            var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
+            if (signer is not null)
+                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento);
+        }
+
         var mandatoData = new MandatoData(
             data,
             config?.TemplateCode ?? MandatoTemplateResolver.Generico,
             config?.InstitutionalMandataryName,
             config?.InstitutionalMandataryNit,
-            Mandatario: null);
+            mandatario);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

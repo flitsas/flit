@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -7,6 +8,7 @@ using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -33,8 +35,18 @@ public sealed class TramiteLifecycleService(
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
-    ISignatureVaultPolicy? vaultPolicy = null) : ITramiteLifecycleService
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null,
+    IMandateSignerDirectory? mandateDirectory = null) : ITramiteLifecycleService
 {
+    // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
+    // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // ADR-0036 §D9 (HU #10916) — directorio de mandatarios del OT para resolver el firmante al aprobar.
+    // Default seguro (NUNCA resuelve candidatos) en tests que no lo ejercitan.
+    private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
@@ -136,6 +148,17 @@ public sealed class TramiteLifecycleService(
                 return TramiteTransitionOutcome.Fail(code, detail);
         }
 
+        // ADR-0036 §D9 (HU #10916) — al APROBAR, resolver el mandatario que firma el mandato: automático
+        // si hay uno solo o el cotejo por usuario es único; explícito (mandateSignerId) si hay varios sin
+        // match ⇒ 409 mandatario_requerido. Fija instance.MandateSignerId en la MISMA unidad de trabajo;
+        // la regeneración del PDF del mandato con el firmante la dispara el handler tras el commit.
+        if (command.ToStatus == TramiteEstado.Aprobado)
+        {
+            var mandatoError = await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
+            if (mandatoError is not null)
+                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError));
+        }
+
         var now = DateTimeOffset.UtcNow;
         instance.Status = command.ToStatus;
         instance.UpdatedAt = now;
@@ -174,6 +197,69 @@ public sealed class TramiteLifecycleService(
 
         return TramiteTransitionOutcome.Ok(instance);
     }
+
+    /// <summary>
+    /// ADR-0036 §D9 (HU #10916) — resuelve el mandatario del mandato al aprobar. Devuelve el código de
+    /// error (<c>mandatario_requerido</c>) si hay varios mandatarios y ninguno cotejó; <c>null</c> si no
+    /// hay nada que resolver (el mandato no aplica, o el mandatario es institucional sin firmante persona)
+    /// o si el firmante quedó fijado en <c>instance.MandateSignerId</c>.
+    /// </summary>
+    private async Task<string?> ResolverMandatarioAlAprobarAsync(
+        ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
+    {
+        // ¿Exige mandato? Persona jurídica siempre; persona natural solo si el OT lo configura.
+        var comprador = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase));
+        var esJuridica = ActorPersonTypes.IsJuridical(comprador?.PersonType)
+            || string.Equals(comprador?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+
+        var code = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var config = string.IsNullOrWhiteSpace(code)
+            ? null
+            : await _mandatePolicy.ResolveAsync(code, ct).ConfigureAwait(false);
+
+        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
+        if (!exigeMandato)
+            return null;
+
+        // Sabaneta (mandatario institucional UT-SETSA): solo firma el mandante ⇒ no hay firmante persona
+        // que resolver. Cualquier otra plantilla (genérica/Bello) necesita un mandatario persona.
+        if (MandatoTemplateResolver.Resolve(config?.TemplateCode) == MandatoVariante.Sabaneta)
+            return null;
+
+        // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
+        if (instance.TransitOfficeId is not { } transitOfficeId)
+            return null;
+
+        var candidates = await _mandateDirectory
+            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .ConfigureAwait(false);
+
+        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, command.MandateSignerId);
+
+        switch (resolution.Status)
+        {
+            case MandateSignerResolutionStatus.Resolved:
+                instance.MandateSignerId = resolution.Signer!.Id;
+                return null;
+            case MandateSignerResolutionStatus.RequiereSeleccion:
+                return TramiteEstadoErrores.MandatarioRequerido;
+            default:
+                // NoConfigurado: el OT no tiene mandatarios; se aprueba sin firmante (el mandato queda con
+                // placeholder hasta que el OT registre uno y se regenere). No bloquea la aprobación.
+                return null;
+        }
+    }
+
+    /// <summary>Detalle del error de mandatario para el mensaje al usuario (ADR-0036 §D9).</summary>
+    private static string DetalleMandatario(string code) => code switch
+    {
+        TramiteEstadoErrores.MandatarioRequerido =>
+            "Hay varios mandatarios para la compañía en este organismo y ninguno corresponde a su usuario. " +
+            "Elija el mandatario que firma el mandato e intente aprobar de nuevo.",
+        _ => "No se pudo resolver el mandatario del mandato.",
+    };
 
     /// <summary>Causa exacta del gate de preparación (RF03) para el mensaje al usuario.</summary>
     private static string DetalleGatePreparacion(string code) => code switch

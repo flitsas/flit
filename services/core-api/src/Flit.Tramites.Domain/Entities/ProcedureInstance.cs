@@ -53,6 +53,16 @@ public sealed class ProcedureInstance
     /// </summary>
     public bool ConsolidadoMaestroVigente { get; set; }
 
+    /// <summary>
+    /// ADR-0036 §D9 (HU #10916) — mandatario (<c>admin.mandate_signers</c>) que firma el mandato de este
+    /// trámite, resuelto al APROBAR: automático si hay uno solo o el cotejo por usuario es único; elegido
+    /// explícitamente si hay varios sin match. <c>null</c> mientras no se aprueba, si el mandato no aplica,
+    /// o si el mandatario es institucional (Sabaneta UT-SETSA, sin firmante persona). <c>ON DELETE SET
+    /// NULL</c>. Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo
+    /// se mapea al modelo EF.
+    /// </summary>
+    public Guid? MandateSignerId { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }
