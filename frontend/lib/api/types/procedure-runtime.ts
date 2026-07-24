@@ -17,6 +17,13 @@ export type InstanceStatus =
   | 'aprobado'
   | 'rechazado';
 
+/**
+ * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
+ * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
+ * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
+ */
+export type PlateFlowStatus = 'preasignado' | 'asignado';
+
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
   id: string;
@@ -48,6 +55,8 @@ export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -66,6 +75,8 @@ export interface InstanceSummary {
   referenceNumber: string;
   modalidad: WizardModalidad;
   estado: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   placa: string | null;
   vin: string | null;
   vehiculoMarca: string | null;
@@ -137,6 +148,8 @@ export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
+  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
+  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -250,6 +263,19 @@ export interface RuntPersonLookupResult {
   nroPazYSalvo?: string | null;     // Número del paz y salvo
   hasActiveLicense?: boolean;       // true si tiene al menos 1 licencia ACTIVA
   licenseCategories?: string | null; // "B1" o "B1,C1"
+  // Detalle de comparendos del SIMIT (best-effort), presente cuando hasPendingFines=true y el SIMIT
+  // respondió. El RUNT conductor solo trae el flag; el detalle viene del SIMIT del mismo documento.
+  fines?: FineDetail[] | null;
+}
+
+// HU #10611 (Feature #10587) — validación en línea del SOAT (re-consulta RUNT) en estado 'asignado'.
+export type SoatEstado = 'vigente' | 'vencido' | 'unknown';
+export interface ValidateSoatResult {
+  vigente: boolean;
+  soatEstado: SoatEstado;
+  vencimiento: string | null;
+  aseguradora: string | null;
+  message: string;
 }
 
 // ── Autopopulado JURÍDICO desde RUES (persona jurídica / NIT) ───────
@@ -286,6 +312,20 @@ export interface PreflightAction {
   href?: string;
 }
 
+/**
+ * Detalle de un comparendo/multa pendiente, para listarlo bajo la advertencia de multas del
+ * pre-vuelo. Todos los campos son opcionales (cada fuente expone lo que trae). Nunca lleva datos del
+ * infractor (Habeas Data): solo información del comparendo.
+ */
+export interface FineDetail {
+  numero?: string | null;
+  fecha?: string | null;
+  valor?: number | null;
+  organismo?: string | null;
+  estado?: string | null;
+  infraccion?: string | null;
+}
+
 export interface PreflightCheck {
   key: string;
   label: string;
@@ -293,6 +333,8 @@ export interface PreflightCheck {
   source: string;
   message: string;
   action?: PreflightAction | null;
+  /** Detalle line-by-line del hallazgo (hoy: los comparendos de un check de multas). */
+  details?: FineDetail[] | null;
 }
 
 export interface PreflightSnapshot {
@@ -448,6 +490,12 @@ export interface WizardState {
    * wizard oculta el paso de identidad. Ausente/true ⇒ se exige (comportamiento por defecto).
    */
   identityValidationEnabled?: boolean;
+  /**
+   * FEATURE 05 — `true` si el RNMC aplica a este trámite (el OT destino lo exige y la compañía no lo
+   * inhabilitó para ese OT). Solo entonces el formulario de actores muestra la fecha de expedición del
+   * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
+   */
+  rnmcEnabled?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -788,6 +836,8 @@ export type EnsureIdentityOutcome =
   | 'ya_vigente'           // el trámite ya tiene una validación aprobada y vigente
   | 'en_proceso'           // ya hay una validación en curso
   | 'reusada'              // se clonó una validación vigente de la persona (identidad aprobada)
+  | 'firma_baul'           // HU #10646 — actor jurídico (NIT) con firma electrónica vigente en el baúl:
+                           // la identidad queda satisfecha server-side, sin biométrica (validationId null)
   | 'requiere_validacion'  // no hay vigente → el front dispara la validación automáticamente
   | 'sin_actor';           // la parte aún no tiene actor con documento
 

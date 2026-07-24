@@ -12,6 +12,19 @@ public sealed class ProcedureType
     public DateTimeOffset? PublishedAt { get; set; }
     public Guid? PublishedBy { get; set; }
     public string ExternalRefs { get; set; } = "{}";
+
+    /// <summary>
+    /// Versión semántica del tipo. Incrementa al publicar cambios de configuración.
+    /// Las instancias en curso usan <c>procedure_type_snapshots</c> para leer la
+    /// versión con la que fueron creadas (AC#5 / CFD-01).
+    /// </summary>
+    public int Version { get; set; } = 1;
+
+    /// <summary>
+    /// Perfil de conformación dinámico serializado como JSON (CFD-01).
+    /// Evaluado por <c>DynamicGateEvaluator</c> cuando el flag F08_DynamicProcedures está activo.
+    /// </summary>
+    public string GateProfile { get; set; } = "{}";
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }

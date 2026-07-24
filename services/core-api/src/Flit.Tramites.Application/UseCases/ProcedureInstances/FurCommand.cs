@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -34,10 +35,16 @@ public sealed class GenerarFurHandler(
     IFurDocumentGenerator generator,
     IKyverumCertificateClient certClient,
     IRuesCertificateGenerator ruesGenerator,
+    IRnmcCertificateGenerator rnmcGenerator,
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
-    ILogger<GenerarFurHandler> logger)
+    ILogger<GenerarFurHandler> logger,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
+    // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -55,7 +62,7 @@ public sealed class GenerarFurHandler(
         // actor), no una fila propia del trámite. Si falta, el FUR se genera con el sello "NO FIRMADO" y sin
         // certificado (no se declara "APROBADO" en falso). La RADICACIÓN sí sigue exigiendo identidad (#10459).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-            repo, instance, DateTimeOffset.UtcNow, ct);
+            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
         var identidadValidada = BiometriaGateOk(identidadAprobada, esTraspaso);
 
         var fv = instance.FieldValues
@@ -86,7 +93,12 @@ public sealed class GenerarFurHandler(
         var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
         var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda);
+        // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
+        // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
+        // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
+        var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -139,6 +151,30 @@ public sealed class GenerarFurHandler(
             // Sin actor NIT (o dejó de haberlo en una regeneración): retirar cualquier certificado RUES previo.
             foreach (var prev in instance.Attachments
                          .Where(a => string.Equals(a.Tipo, "certificado_rues", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
+
+        // HU #10762 — Certificado RNMC: si el preflight consultó el RNMC de alguna parte, emitir el
+        // certificado (PDF, Source=system) con el resultado por parte para que se descargue del trámite y
+        // se fusione en el consolidado. Best-effort: nunca bloquea el FUR.
+        var (certificadoRnmc, aplicaRnmc) = TryGenerateRnmcCertificate(instance);
+        if (certificadoRnmc is not null)
+        {
+            generated.Add(certificadoRnmc);
+        }
+        else if (!aplicaRnmc)
+        {
+            // Sin checks RNMC (o dejó de haberlos en una regeneración): retirar el certificado previo, para
+            // que el consolidado no arrastre un resultado RNMC obsoleto. Solo cuando el RNMC NO aplica: si
+            // aplicaba y la generación falló, se conserva el previo (borrarlo por un fallo transitorio
+            // perdería un certificado válido).
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "certificado_rnmc", StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -214,7 +250,9 @@ public sealed class GenerarFurHandler(
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
-        bool tienePrenda, string? acreedorPrenda)
+        bool tienePrenda, string? acreedorPrenda,
+        IReadOnlyDictionary<string, byte[]>? firmaImagenes,
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -230,9 +268,12 @@ public sealed class GenerarFurHandler(
             Marca: Get(fv, "vehicle_brand"),
             Linea: Get(fv, "vehicle_line"),
             Modelo: Get(fv, "vehicle_year"),
-            Color: Get(fv, "vehicle_color"),
+            // A4/B4 (HU #10673, ADR-0029) — los CAMPOS del vehículo del FUR (color/combustible) llevan el
+            // dato ORIGINAL del RUNT (snapshot *_runt); la transformación declarada viaja solo en las
+            // observaciones. Fallback al efectivo si no hay snapshot (trámites previos a la feature).
+            Color: RuntOrEffective(fv, "vehicle_color_runt", "vehicle_color"),
             Clase: Get(fv, "vehicle_class"),
-            Combustible: Get(fv, "vehicle_fuel"),
+            Combustible: RuntOrEffective(fv, "vehicle_fuel_runt", "vehicle_fuel"),
             Cilindraje: Get(fv, "vehicle_engine_displacement"),
             Vin: Get(fv, "vin"),
             Placa: Get(fv, "plate"),
@@ -263,11 +304,85 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            Observaciones: Get(fv, "fur_observations"),
+            // A4/B4 (HU #10673, ADR-0029) — anexa a las observaciones manuales el texto automático de las
+            // transformaciones de color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            Observaciones: FurTransformationObservations.Compose(
+                Get(fv, "fur_observations"),
+                Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
+            FirmaImagenes: firmaImagenes,
+            FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda);
+    }
+
+    /// <summary>
+    /// HU #10645 (ADR-0025 §4) — resuelve la IMAGEN de la firma del baúl por parte con actor JURÍDICO (NIT)
+    /// cubierto por una firma activa+vigente. Descarga el artefacto vía <see cref="IAttachmentStorage.OpenReadAsync"/>
+    /// (best-effort) y lo mapea por rol ("comprador"/"vendedor") para <see cref="FurDocumentData.FirmaImagenes"/>;
+    /// los metadatos del baúl (<see cref="FurDocumentData.FirmaBaulMetadatos"/>) se estampan a la derecha de la
+    /// imagen. NUNCA rompe el FUR: cualquier fallo de lectura se registra como warning y la parte cae al sello
+    /// de texto. Devuelve null en ambos diccionarios si ninguna parte tiene firma de baúl.
+    /// </summary>
+    private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
+        ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
+    {
+        var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        Dictionary<string, byte[]>? images = null;
+        Dictionary<string, FirmaBaulMetadata>? metadata = null;
+
+        foreach (var role in roles)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+            if (actor is null || !EsActorJuridico(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+                continue;
+
+            var match = await _vaultPolicy.ResolveAsync(instance.TenantId, actor.DocumentNumber.Trim(), ct);
+            if (match is null || string.IsNullOrWhiteSpace(match.StoragePath))
+                continue;
+
+            try
+            {
+                var stream = await storage.OpenReadAsync(match.StoragePath, ct);
+                if (stream is null)
+                    continue;
+
+                await using (stream.ConfigureAwait(false))
+                {
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms, ct);
+                    if (ms.Length == 0)
+                        continue;
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = ms.ToArray();
+                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[role] =
+                        new FirmaBaulMetadata(
+                            match.DocumentNumber,
+                            match.FullName,
+                            match.VigenciaDesde,
+                            match.VigenciaHasta,
+                            match.SignatureVaultId);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Best-effort (ADR-0025 §4): si el artefacto de firma no se puede leer, se omite la imagen y la
+                // parte cae al sello de texto. No se bloquea la generación del FUR.
+                GenerarFurLog.FirmaBaulNoDisponible(logger, ex, instance.Id);
+            }
+        }
+
+        return (images, metadata);
+    }
+
+    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
+    private static bool EsActorJuridico(string? documentType)
+    {
+        var t = documentType?.Trim();
+        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
@@ -343,6 +458,86 @@ public sealed class GenerarFurHandler(
 
         return ruesGenerator.GenerateRuesCertificate(data);
     }
+
+    /// <summary>
+    /// HU #10762 — Genera el certificado RNMC desde el ÚLTIMO snapshot de preflight (los checks
+    /// <c>rnmc_{rol}_*</c>), o <c>null</c> si no se ha corrido el preflight o no consultó el RNMC (p. ej.
+    /// todas las partes son personas jurídicas: el RNMC solo aplica a naturales).
+    /// <para>La fuente del dato es el SNAPSHOT, no field_values: la señal <c>rnmc_medida_pendiente</c> es un
+    /// booleano sin el detalle por parte que exige el certificado.</para>
+    /// <para>Best-effort: cualquier fallo se registra como warning y omite el certificado; nunca aborta el FUR.</para>
+    /// </summary>
+    /// <returns>
+    /// <c>Aplica</c> distingue "el RNMC no aplica a este trámite" (⇒ el caller retira el certificado previo)
+    /// de "aplicaba pero la generación falló" (⇒ se conserva el previo, que sigue siendo válido).
+    /// </returns>
+    private (GeneratedDocument? Doc, bool Aplica) TryGenerateRnmcCertificate(ProcedureInstance instance)
+    {
+        try
+        {
+            // FEATURE 05 — el resultado RNMC ya no vive en el snapshot del pre-vuelo, sino en el
+            // field_value `rnmc_checks` que escribe la consulta RNMC dedicada del paso final.
+            var fvRnmc = instance.FieldValues
+                .FirstOrDefault(f => string.Equals(f.FieldKey, RunRnmcConsultHandler.FieldRnmcChecks, StringComparison.Ordinal));
+
+            var checks = GetPreflightHandler.DeserializeChecks(fvRnmc?.ValueJson)
+                .Where(c => c.Key.EndsWith("medidas_correctivas", StringComparison.Ordinal))
+                .ToList();
+            if (checks.Count == 0)
+                return (null, false);
+
+            var entradas = new List<RnmcCertificateEntry>(checks.Count);
+            foreach (var check in checks)
+            {
+                var rol = RolFromCheckKey(check.Key);
+                var actor = instance.Actors.FirstOrDefault(a =>
+                    string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+                entradas.Add(new RnmcCertificateEntry(
+                    rol,
+                    actor?.FullName ?? string.Empty,
+                    actor?.DocumentNumber ?? string.Empty,
+                    EstadoRnmc(check.Status),
+                    check.Message));
+            }
+
+            var consultadoAt = fvRnmc?.UpdatedAt ?? fvRnmc?.CreatedAt ?? DateTimeOffset.UtcNow;
+            var data = new RnmcCertificateData(
+                instance.Id,
+                instance.ReferenceNumber,
+                consultadoAt,
+                entradas);
+
+            return (rnmcGenerator.GenerateRnmcCertificate(data), true);
+        }
+        catch (Exception ex)
+        {
+            GenerarFurLog.CertificadoRnmcFallo(logger, ex, instance.Id);
+            return (null, true);
+        }
+    }
+
+    /// <summary>
+    /// Rol del segmento intermedio de la key del check: <c>rnmc_{rol}_{keyDelMapper}</c> (p. ej.
+    /// <c>rnmc_comprador_medidas_correctivas</c>). Cubre también la key sin sufijo (<c>rnmc_{rol}</c>), que
+    /// el preflight emite cuando el provider RNMC no está disponible.
+    /// </summary>
+    private static string RolFromCheckKey(string key)
+    {
+        var parts = key.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? parts[1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Estado del check → texto del certificado. Deliberadamente NO expone el estado crudo del preflight
+    /// ni el proveedor: el certificado es un documento de cara al usuario / al OT.
+    /// </summary>
+    private static string EstadoRnmc(string? status) => status switch
+    {
+        "ok" => "SIN MEDIDAS CORRECTIVAS",
+        "warn" => "CON MEDIDAS CORRECTIVAS",
+        "unknown" => "SIN DATOS",
+        _ => "NO VERIFICABLE",
+    };
 
     /// <summary>
     /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
@@ -457,6 +652,14 @@ public sealed class GenerarFurHandler(
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
+
+    // Devuelve el snapshot RUNT si existe (no vacío); si no, cae al valor efectivo. Se usa para imprimir
+    // el dato original del vehículo en el FUR aunque exista una transformación declarada en el efectivo.
+    private static string? RuntOrEffective(Dictionary<string, string?> fv, string runtKey, string effectiveKey)
+    {
+        var runt = Get(fv, runtKey);
+        return string.IsNullOrWhiteSpace(runt) ? Get(fv, effectiveKey) : runt;
+    }
 }
 
 /// <summary>Logging source-generated (CA1848) de la generación del FUR. No incluye PII ni secretos.</summary>
@@ -469,4 +672,12 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo leer el artefacto de la firma del baúl (instancia {InstanceId}); la parte cae al sello de texto sin bloquear el FUR.")]
+    public static partial void FirmaBaulNoDisponible(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo generar el certificado RNMC (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
+    public static partial void CertificadoRnmcFallo(ILogger logger, Exception ex, Guid instanceId);
 }

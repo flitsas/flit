@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Domain.Auth;
@@ -12,12 +13,14 @@ public sealed class ChangePasswordHandlerTests
     private readonly IUserAccountRepository _repo = Substitute.For<IUserAccountRepository>();
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
     private readonly PasswordRecoveryOptions _options = new();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ChangePasswordHandler _handler;
     private readonly Guid _userId = Guid.NewGuid();
 
     public ChangePasswordHandlerTests()
     {
-        _handler = new ChangePasswordHandler(_repo, _hasher, _options);
+        _handler = new ChangePasswordHandler(_repo, _hasher, _options, _auditWriter, _auditContext);
     }
 
     [Fact]

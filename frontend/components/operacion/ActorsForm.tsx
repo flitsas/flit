@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { Search, UserRound } from 'lucide-react';
+import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
@@ -70,6 +71,12 @@ interface Props {
    * Sin documento: el campo sigue editable y no se dispara consulta.
    */
   autoConsultRunt?: boolean;
+  /**
+   * FEATURE 05 — `true` si el RNMC aplica a este trámite (el OT destino lo exige y no está
+   * inhabilitado para la compañía). Solo entonces se muestra la fecha de expedición del documento
+   * (necesaria para consultar el RNMC y generar el certificado). Ausente/false ⇒ el campo se oculta.
+   */
+  rnmcEnabled?: boolean;
 }
 
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
@@ -257,6 +264,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     layout,
     seedDocumentoFromOwner = false,
     autoConsultRunt = false,
+    rnmcEnabled = false,
   },
   ref,
 ) {
@@ -668,7 +676,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <span aria-hidden="true">✓</span>
               Empresa encontrada en RUES
             </p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
@@ -717,7 +725,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <span aria-hidden="true">✓</span>
               Persona encontrada en RUNT
             </p>
-            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
               <div>
                 <span className="opacity-60 font-normal">Nombres: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
@@ -765,10 +773,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
           </div>
 
-          {/* Card B — Multas */}
+          {/* Card B — Multas. Con multas pendientes, bajo la alerta se lista el detalle de cada
+              comparendo (SIMIT best-effort); si el detalle no llegó, se conserva solo la alerta. */}
           {r.hasPendingFines !== undefined && (
             <div
-              className="rounded-xl p-3 text-xs border flex items-center gap-2"
+              className="rounded-xl p-3 text-xs border"
               style={
                 r.hasPendingFines
                   ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
@@ -776,12 +785,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               }
               role="status"
             >
-              <span aria-hidden="true">{r.hasPendingFines ? '⚠' : '⊙'}</span>
-              <span className="font-semibold">
-                {r.hasPendingFines
-                  ? 'ALERTA: Comparendos/Multas pendientes'
-                  : `Sin multas ni comparendos pendientes${r.nroPazYSalvo ? ` · Paz y Salvo ${r.nroPazYSalvo}` : ''}`}
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true">{r.hasPendingFines ? '⚠' : '⊙'}</span>
+                <span className="font-semibold">
+                  {r.hasPendingFines
+                    ? 'ALERTA: Comparendos/Multas pendientes'
+                    : `Sin multas ni comparendos pendientes${r.nroPazYSalvo ? ` · Paz y Salvo ${r.nroPazYSalvo}` : ''}`}
+                </span>
               </span>
+              {r.hasPendingFines && r.fines && r.fines.length > 0 && (
+                <FineDetailList details={r.fines} />
+              )}
             </div>
           )}
         </div>
@@ -951,9 +965,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
 
   // ── Campo Fecha de expedición del documento (RNMC, solo persona natural) ───
-  // La consulta RNMC (medidas correctivas) del preflight la exige cuando el OT la requiere. Se
-  // captura aquí y se persiste como field value; RNMC no es bloqueante, por eso es opcional.
+  // FEATURE 05 — solo se muestra cuando el RNMC aplica al trámite (rnmcEnabled): el OT destino lo
+  // exige y la compañía no lo inhabilitó. Si el RNMC no aplica, no se pide la fecha (no se consulta
+  // el RNMC ni se genera el certificado). Solo persona natural; RNMC no es bloqueante (opcional).
   const issueDateField = (index: number) => {
+    if (!rnmcEnabled) return null;
     const actor = actors[index];
     if (isJuridical(actor)) return null;
     return (

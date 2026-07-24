@@ -129,7 +129,7 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     deleteRole.mockRejectedValue(new Error('409 Conflict: {"code":"ROLE_HAS_ACTIVE_USERS"}'));
     await openRolesTab();
 
-    const companyRow = (await screen.findByText("Supervisor de trámites")).closest("div.grid") as HTMLElement;
+    const companyRow = (await screen.findByText("Supervisor de trámites")).closest("tr") as HTMLElement;
     await user.click(within(companyRow).getByRole("button", { name: /eliminar rol/i }));
 
     expect(await screen.findByText(/tiene usuarios asignados y no puede eliminarse/i)).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     deactivateRole.mockResolvedValue(undefined);
     await openRolesTab();
 
-    const companyRow = (await screen.findByText("Supervisor de trámites")).closest("div.grid") as HTMLElement;
+    const companyRow = (await screen.findByText("Supervisor de trámites")).closest("tr") as HTMLElement;
     expect(within(companyRow).getByText("Activo")).toBeInTheDocument();
 
     await user.click(within(companyRow).getByRole("button", { name: /desactivar rol/i }));

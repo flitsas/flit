@@ -23,6 +23,7 @@ internal static class SettingsDiff
         AddBool(changes, "allow_misc_new_vehicles", previous.AllowMiscNewVehicles, updated.AllowMiscNewVehicles);
         AddBool(changes, "only_own_vehicles", previous.OnlyOwnVehicles, updated.OnlyOwnVehicles);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
+        AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
 
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);

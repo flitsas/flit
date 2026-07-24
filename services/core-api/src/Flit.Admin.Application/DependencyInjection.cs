@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing.GetAdminAuditLog;
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
@@ -13,13 +14,18 @@ using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficeTenants;
 using Flit.Admin.Application.Companies.TransitOffices.ListTransitOfficesOperationalStatus;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SearchTransitOffices;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.TransitOffices.SetTransitOfficeTenantStatus;
+using Flit.Admin.Application.Companies.TransitOffices.UpdateTransitOfficeQuipuxSettings;
 using Flit.Admin.Application.Companies.VehicleOwnership;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -113,6 +119,10 @@ public static class DependencyInjection
         // RF01 — estado operativo del catálogo OT (join catálogo + perfil + tenant).
         // ITransitOfficeOperationalStatusReader se registra en AddAdminInfrastructure.
         services.AddScoped<ListTransitOfficesOperationalStatusHandler>();
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas
+        // por familia de trámite). ITransitOfficeQuipuxSettingsWriter se registra en
+        // AddAdminInfrastructure.
+        services.AddScoped<UpdateTransitOfficeQuipuxSettingsHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
 
@@ -125,6 +135,21 @@ public static class DependencyInjection
         services.AddScoped<GetTransitGrantsHandler>();
         services.AddScoped<GetTenantAuditLogHandler>();
 
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        // IOtConsultationRestrictionRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<GetOtConsultationRestrictionsHandler>();
+        services.AddScoped<SetOtConsultationRestrictionHandler>();
+
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT.
+        // IOtBlockingPolicyRepository se registra en AddAdminInfrastructure.
+        services.AddScoped<GetOtBlockingPoliciesHandler>();
+        services.AddScoped<SetOtBlockingPolicyHandler>();
+
+        // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
+        // auditoría administrativa/seguridad. IAdminAuditLogRepository se registra en
+        // AddAdminInfrastructure.
+        services.AddScoped<GetAdminAuditLogHandler>();
+
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: CRUD (RF22–RF27), regla de
         // uso RF33 y vista consolidada RF34. IMandateSignerReader/Repository → AddAdminInfrastructure.
         services.AddScoped<CreateMandateSignerHandler>();
@@ -133,6 +158,13 @@ public static class DependencyInjection
         services.AddScoped<ReactivateMandateSignerHandler>();
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
+
+        // HU #10643 (ADR-0025) — baúl de firmas: CRUD SuperAdmin. ISignatureVaultReader/Repository
+        // e ISignatureVaultArtifactStorage se registran en AddAdminInfrastructure.
+        services.AddScoped<Companies.SignatureVault.CreateSignatureVault.CreateSignatureVaultHandler>();
+        services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
+        services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
+        services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.

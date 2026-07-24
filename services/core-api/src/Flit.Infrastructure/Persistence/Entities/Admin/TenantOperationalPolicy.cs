@@ -18,6 +18,9 @@ public sealed class TenantOperationalPolicy
 
     public bool SignatureVaultEnabled { get; set; }
 
+    /// <summary>Preasignación de placa activa (Feature #10587).</summary>
+    public bool PlatePreassignEnabled { get; set; }
+
     public string NotificationChannel { get; set; } = "flit_smtp";
 
     public string NotificationTarget { get; set; } = "submitter";

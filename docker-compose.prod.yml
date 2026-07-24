@@ -83,7 +83,23 @@ services:
       VERIFIK_CONDUCTOR_MODE: ${VERIFIK_CONDUCTOR_MODE:-mock}
       VERIFIK_SIMIT_MODE: ${VERIFIK_SIMIT_MODE:-mock}
       VERIFIK_RNMC_MODE: ${VERIFIK_RNMC_MODE:-mock}
+      VERIFIK_RUES_MODE: ${VERIFIK_RUES_MODE:-mock}
       INTEMPO_MODE: ${INTEMPO_MODE:-mock}
+      # Avalúo Fasecolda (Feature #10707). Mismo patrón CRUDO que Verifik/Kyverum:
+      # InfrastructureExtensions lee Environment.GetEnvironmentVariable("FASECOLDA_*");
+      # pasar `Fasecolda__*` NO funciona. Sin FASECOLDA_MODE el proveedor cae a mock y
+      # suggested-value responde "Sin valor de referencia mock para el VIN".
+      # Credenciales solo en el .env del VPS — NUNCA en el repo.
+      FASECOLDA_MODE: ${FASECOLDA_MODE:-mock}
+      FASECOLDA_API_USERNAME: ${FASECOLDA_API_USERNAME:-}
+      FASECOLDA_API_PASSWORD: ${FASECOLDA_API_PASSWORD:-}
+      FASECOLDA_BY_VIN_API_BASE_URL: ${FASECOLDA_BY_VIN_API_BASE_URL:-https://fasecoldaback.quantil.co}
+      FASECOLDA_BY_VIN_API_PATH: ${FASECOLDA_BY_VIN_API_PATH:-/api/busquedaVin}
+      FASECOLDA_API_BASE_URL: ${FASECOLDA_API_BASE_URL:-https://guiadevalores.fasecolda.com/apifasecolda}
+      FASECOLDA_AUTH_API_PATH: ${FASECOLDA_AUTH_API_PATH:-/token}
+      FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
+      FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
+      FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}

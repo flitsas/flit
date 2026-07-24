@@ -1,6 +1,8 @@
+using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
@@ -16,10 +18,12 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -43,6 +47,14 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
         services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
 
+        // HU #10678 — rastro de auditoría administrativa/seguridad transversal (usuarios,
+        // roles, permisos, autenticación) sobre el mismo scope independiente que AuditFailureWriter.
+        services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
+
+        // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
+        // auditoría administrativa/seguridad.
+        services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
+
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
@@ -56,6 +68,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        services.AddScoped<IOtConsultationRestrictionRepository, OtConsultationRestrictionRepository>();
+
         // Refactor adminOT — alta/listado de tenants Organismo de Tránsito (OT como
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
@@ -64,10 +79,24 @@ public static class AdminInfrastructureExtensions
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
 
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas).
+        // Escritura sobre el catálogo global catalogs.transit_offices (sin RLS), solo SuperAdmin.
+        services.AddScoped<ITransitOfficeQuipuxSettingsWriter, DbTransitOfficeQuipuxSettingsWriter>();
+
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+
+        // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
+        services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();
+        services.AddScoped<ISignatureVaultRepository, SignatureVaultRepository>();
+
+        // HU #10643 (ADR-0025) — custodia del artefacto de firma en storage (delega en
+        // IAttachmentStorage) + política de consumo que ACTIVA el flag inerte SignatureVaultEnabled.
+        services.AddScoped<Flit.Admin.Application.Companies.SignatureVault.ISignatureVaultArtifactStorage,
+            Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
+        services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
@@ -137,6 +166,18 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
+        // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
+        services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
+
+        // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
+        // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
+        services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
+
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
+        // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
+        services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
+
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
@@ -147,6 +188,9 @@ public static class AdminInfrastructureExtensions
 
         // HU #10466 — historial de improntas generadas (ADR-0022).
         services.AddScoped<IImprontaRepository, ImprontaRepository>();
+
+        // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
+        services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
         return services;
     }

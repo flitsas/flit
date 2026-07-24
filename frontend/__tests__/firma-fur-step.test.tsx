@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   submitInstance: vi.fn(),
   downloadAttachment: vi.fn(),
   listTransitOffices: vi.fn(),
+  runRnmc: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -44,6 +45,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     submitInstance: mocks.submitInstance,
     downloadAttachment: mocks.downloadAttachment,
     listTransitOffices: mocks.listTransitOffices,
+    runRnmc: mocks.runRnmc,
   },
 }));
 
@@ -132,6 +134,7 @@ beforeEach(() => {
   mocks.listBiometric.mockResolvedValue([]);
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
+  mocks.runRnmc.mockResolvedValue([]);
   mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'entregado' });
   mocks.downloadAttachment.mockResolvedValue({
     blob: new Blob(['x'], { type: 'text/plain' }),
@@ -308,7 +311,9 @@ describe('FirmaFurStep — generar FUR', () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
     await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
     await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/fur · fur.txt/)).toBeInTheDocument();
+    // El nombre amigable ('FUR') y el filename van en nodos separados; se valida el <p> contenedor.
+    const furFilename = await screen.findByText(/· fur\.txt/);
+    expect(furFilename.closest('p')).toHaveTextContent('FUR · fur.txt');
     expect(onRefresh).toHaveBeenCalled();
   });
 
@@ -332,6 +337,49 @@ describe('FirmaFurStep — generar FUR', () => {
     expect(
       await screen.findByText(/Selecciona el organismo de tránsito/),
     ).toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — consulta RNMC en el paso final (FEATURE 05)', () => {
+  const rnmcCheck = (key: string, status: 'ok' | 'warn', message: string) => ({
+    key,
+    label: 'Medidas correctivas (Policía)',
+    status,
+    source: 'verifik_rnmc',
+    message,
+    action: null,
+  });
+
+  it('con RNMC inactivo no consulta ni muestra la sección', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('region', { name: 'Generación del FUR' });
+    expect(mocks.runRnmc).not.toHaveBeenCalled();
+    expect(screen.queryByText('Consulta RNMC — Medidas correctivas')).not.toBeInTheDocument();
+  });
+
+  it('con RNMC activo auto-consulta y muestra comprador y vendedor (traspaso)', async () => {
+    mocks.runRnmc.mockResolvedValue([
+      rnmcCheck('rnmc_comprador_medidas_correctivas', 'ok', 'Sin medidas correctivas registradas en el RNMC'),
+      rnmcCheck('rnmc_vendedor_medidas_correctivas', 'warn', '1 medida correctiva pendiente'),
+    ]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" rnmcEnabled />);
+    expect(await screen.findByText('Consulta RNMC — Medidas correctivas')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.runRnmc).toHaveBeenCalledWith(INSTANCE));
+    const section = screen.getByRole('list', { name: 'Resultados RNMC por actor' });
+    expect(within(section).getByText(/\(comprador\)/)).toBeInTheDocument();
+    expect(within(section).getByText(/\(vendedor\)/)).toBeInTheDocument();
+    expect(within(section).getByText('Sin medidas correctivas registradas en el RNMC')).toBeInTheDocument();
+    expect(within(section).getByText('1 medida correctiva pendiente')).toBeInTheDocument();
+  });
+
+  it('en matrícula solo consulta/muestra el comprador', async () => {
+    mocks.runRnmc.mockResolvedValue([
+      rnmcCheck('rnmc_comprador_medidas_correctivas', 'ok', 'Sin medidas correctivas registradas en el RNMC'),
+    ]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" rnmcEnabled />);
+    const section = await screen.findByRole('list', { name: 'Resultados RNMC por actor' });
+    expect(within(section).getByText(/\(comprador\)/)).toBeInTheDocument();
+    expect(within(section).queryByText(/\(vendedor\)/)).not.toBeInTheDocument();
   });
 });
 

@@ -19,7 +19,8 @@ export function AuditLogTable({ entries, totalCount, page, pageSize, onPageChang
 
   return (
     <div className="flex flex-col">
-      <table className="w-full border-separate border-spacing-y-2 text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
             <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -61,6 +62,7 @@ export function AuditLogTable({ entries, totalCount, page, pageSize, onPageChang
           ))}
         </tbody>
       </table>
+      </div>
 
       <div className="mt-2 flex items-center justify-between pt-1 text-[11px]">
         <p className="opacity-60">{totalCount} registros</p>

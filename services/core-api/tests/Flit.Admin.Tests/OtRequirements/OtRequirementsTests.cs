@@ -1,5 +1,6 @@
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
 using Flit.Admin.Application.OtRequirements.UpdateOtRequirements;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -139,6 +140,55 @@ public sealed class OtRequirementsTests
             result.Requirements!.RequiresRnmc.Should().BeTrue();
             result.Requirements!.IdentityValidationEnabled.Should().BeFalse();
         }
+    }
+
+    [Fact] // Guarda anti-squat — un tenant sin perfil ni grant no puede escribir requisitos de OT.
+    public async Task SaveAsync_TenantSinPerfilNiGrant_LanzaScopeException()
+    {
+        var db = NewDbName();
+        await using var ctx = NewContext(db);
+
+        var act = async () => await new OtRequirementsRepository(ctx).SaveAsync(
+            OtTenant,
+            requiresRnmc: true,
+            allowPlatePreassign: true,
+            identityValidationEnabled: true,
+            changedBy: Admin,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<OtRequirementsScopeException>();
+    }
+
+    [Fact] // Guarda anti-colisión — la oficina ya la configuró otro tenant (unique global).
+    public async Task SaveAsync_OficinaOcupadaPorOtroTenant_LanzaScopeException()
+    {
+        var db = NewDbName();
+        var otherTenant = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+        await using (var seed = NewContext(db))
+        {
+            // Ambos OT apuntan (por perfil) a la MISMA oficina: el segundo choca con el primero.
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedOt(seed, otherTenant, TransitOffice);
+            await new OtRequirementsRepository(seed).SaveAsync(
+                OtTenant,
+                requiresRnmc: true,
+                allowPlatePreassign: false,
+                identityValidationEnabled: true,
+                changedBy: Admin,
+                cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var act = async () => await new OtRequirementsRepository(ctx).SaveAsync(
+            otherTenant,
+            requiresRnmc: false,
+            allowPlatePreassign: true,
+            identityValidationEnabled: true,
+            changedBy: Admin,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<OtRequirementsScopeException>();
     }
 
     private static void SeedOt(FlitDbContext ctx, Guid otTenantId, Guid transitOfficeId)

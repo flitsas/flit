@@ -17,6 +17,29 @@ public sealed class OtClientProcedure
 
     public string Status { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al <see cref="Status"/>
+    /// (que permanece en 'entregado'): <c>null</c> (sin ruta de placa), <c>preasignado</c> (esperando placa)
+    /// o <c>asignado</c> (placa registrada). Gobierna las acciones del OT (Asignar/Revocar placa).
+    /// </summary>
+    public string? PlateFlowStatus { get; init; }
+
+    /// <summary>
+    /// HU #10804 (Feature #10587) — estado del SOAT del vehículo (field_value <c>soat_estado</c>) en la
+    /// ruta de placa: <c>null</c>/<c>unknown</c>/<c>vencido</c> = sin evidencia; <c>vigente</c> = registrado.
+    /// Gobierna (junto con <see cref="PlateFlowStatus"/>) si el OT puede ver Aprobar/Rechazar: solo con la
+    /// placa <c>asignado</c> Y el SOAT <c>vigente</c>. El gate DURO de aprobación ya vive en el backend.
+    /// </summary>
+    public string? SoatEstado { get; init; }
+
+    /// <summary>
+    /// HU #10805 (Feature #10587) — dígito de preferencia de placa (field_value
+    /// <c>plate_preferred_last_digit</c>, un carácter 0-9) indicado por el gestor al radicar sin placa.
+    /// Es SOLO una guía para el OT al asignar: puede elegir una placa que termine en este dígito o
+    /// cualquier otra. <c>null</c> si el gestor no indicó preferencia.
+    /// </summary>
+    public string? PlatePreferredLastDigit { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

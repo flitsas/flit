@@ -302,6 +302,70 @@ public sealed class SubmitProcedureInstanceTests
         instance.Status.Should().Be(TramiteEstado.Entregado);
     }
 
+    [Theory] // AC4/AC5/AC6 (HU #10785) — el submit SIEMPRE deja el status en 'entregado'; lo que varía por
+             // ruta es el SUB-ESTADO interno de placa (Flujo A → asignado, Flujo B → preasignado, estándar → null).
+    [InlineData(PlateRouteDecision.Asignado, PlateFlowStatus.Asignado)]
+    [InlineData(PlateRouteDecision.Preasignado, PlateFlowStatus.Preasignado)]
+    [InlineData(PlateRouteDecision.Standard, null)]
+    public async Task HandleAsync_RutaDePlaca_QuedaEntregadoConSubEstado(
+        PlateRouteDecision decision, string? expectedSubStatus)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        Wire(instance, ct);
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var lifecycle = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
+        var handler = new SubmitProcedureInstanceHandler(lifecycle, _repo, new FakePlatePolicy(decision));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        instance.Status.Should().Be(TramiteEstado.Entregado);
+        instance.PlateFlowStatus.Should().Be(expectedSubStatus);
+    }
+
+    [Fact] // HU #10806 (AC4) — compañía con preasignación activa pero OT mal configurado: la radicación
+           // se BLOQUEA con plate_route_misconfigured, en vez de degradar a estándar en silencio.
+    public async Task HandleAsync_RutaMalConfigurada_BloqueaRadicacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        SeleccionarOt(instance, BogotaOfficeId);
+        Wire(instance, ct);
+        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var lifecycle = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
+        var handler = new SubmitProcedureInstanceHandler(lifecycle, _repo, new FakePlatePolicy(PlateRouteDecision.Blocked));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().Be("plate_route_misconfigured");
+        result.Should().BeNull();
+    }
+
+    private sealed class FakePlatePolicy(PlateRouteDecision decision) : IPlatePreassignPolicy
+    {
+        public Task<PlateRouteResult> DecideAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
+            Task.FromResult(decision switch
+            {
+                PlateRouteDecision.Asignado => PlateRouteResult.Reserved,
+                PlateRouteDecision.Preasignado => PlateRouteResult.NoPlate,
+                PlateRouteDecision.Blocked => PlateRouteResult.Misconfigured,
+                _ => PlateRouteResult.NotEnabled,
+            });
+    }
+
     [Fact]
     public async Task HandleAsync_DocumentosIncompletos_ReturnsGateError()
     {

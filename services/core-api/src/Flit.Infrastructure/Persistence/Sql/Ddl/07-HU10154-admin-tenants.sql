@@ -29,6 +29,7 @@ CREATE TABLE admin.tenant_operational_policies (
     allow_misc_new_vehicles boolean NOT NULL DEFAULT true,
     only_own_vehicles boolean NOT NULL DEFAULT false,
     signature_vault_enabled boolean NOT NULL DEFAULT false,
+    plate_preassign_enabled boolean NOT NULL DEFAULT false,
     notification_channel varchar(20) NOT NULL DEFAULT 'flit_smtp',
     notification_target varchar(20) NOT NULL DEFAULT 'submitter',
     payment_methods jsonb NOT NULL DEFAULT '[]',

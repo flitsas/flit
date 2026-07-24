@@ -46,7 +46,7 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
     <form
       onSubmit={handleSubmit}
       aria-label="Filtros de compañías"
-      className="grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 md:grid-cols-6 dark:bg-[#0B0F14]"
+      className="grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 dark:bg-[#0B0F14]"
     >
       <Field label="NIT" htmlFor="filter-nit">
         <input

@@ -12,7 +12,9 @@ public sealed class StateMachineTests
 {
     // ---- Máquina de estados de negocio N 03 (RF01–RF02, RF04 · ADR-0022) ----
 
-    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 6×6 es inválido.</summary>
+    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 6×6 es inválido.
+    /// La ruta de placa (Feature #10587 / HU #10785) NO añade estados de trámite: su progreso vive en el
+    /// sub-estado interno <see cref="PlateFlowStatus"/> (ver PlateFlowStateMachineTests).</summary>
     private static readonly (string From, string To)[] TransicionesValidas =
     [
         (TramiteEstado.Borrador, TramiteEstado.Anulado),
@@ -88,8 +90,9 @@ public sealed class StateMachineTests
     }
 
     [Fact]
-    public void Negocio_EsValidoReconoceSoloLosSeisEstados()
+    public void Negocio_EsValidoReconoceLosEstadosDelCicloDeVida()
     {
+        // 6 estados N 03 (la ruta de placa NO añade estados de trámite — HU #10785).
         TramiteEstado.Todos.Should().HaveCount(6);
         foreach (var estado in TramiteEstado.Todos)
             TramiteEstado.EsValido(estado).Should().BeTrue();

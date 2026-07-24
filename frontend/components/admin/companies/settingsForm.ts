@@ -112,6 +112,7 @@ export interface SettingsForm {
   allowMiscNewVehicles: boolean;
   onlyOwnVehicles: boolean;
   baulFirmasActivo: boolean;
+  preasignacionPlacaActiva: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
@@ -135,6 +136,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     allowMiscNewVehicles: settings.switchesMatricula.allowMiscNewVehicles,
     onlyOwnVehicles: settings.switchesMatricula.onlyOwnVehicles,
     baulFirmasActivo: settings.baulFirmasActivo,
+    preasignacionPlacaActiva: settings.preasignacionPlacaActiva,
     enrutamientoSMTP: settings.enrutamientoSMTP,
     notificationTarget: settings.notificationTarget,
     metodosRecaudo: [...settings.metodosRecaudo],
@@ -169,6 +171,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       onlyOwnVehicles: form.onlyOwnVehicles,
     },
     baulFirmasActivo: form.baulFirmasActivo,
+    preasignacionPlacaActiva: form.preasignacionPlacaActiva,
     enrutamientoSMTP: form.enrutamientoSMTP,
     notificationTarget: form.notificationTarget,
     metodosRecaudo: [...form.metodosRecaudo],
@@ -236,8 +239,14 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   {
     key: "baulFirmasActivo",
     module: "Configuración Empresa",
-    label: "Baúl de firmas activo",
+    label: "Firma precargada (baúl)",
     describe: (_i, c) => onOff(c.baulFirmasActivo),
+  },
+  {
+    key: "preasignacionPlacaActiva",
+    module: "Configuración Empresa",
+    label: "Preasignación de placa activa",
+    describe: (_i, c) => onOff(c.preasignacionPlacaActiva),
   },
   {
     key: "enrutamientoSMTP",

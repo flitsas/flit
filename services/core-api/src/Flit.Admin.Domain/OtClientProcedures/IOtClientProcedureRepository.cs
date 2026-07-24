@@ -65,4 +65,32 @@ public interface IOtClientProcedureRepository
         Guid? rejectedBy,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10654 / #10800 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c>
+    /// (Flujo B): reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la
+    /// registra como rango ad-hoc de 1 placa), la escribe en el trámite y avanza el sub-estado a
+    /// <c>asignado</c>. Devuelve <c>null</c> si el trámite no es accesible, no está en preasignado, o la
+    /// placa no está disponible / no se pudo registrar (formato inválido o ya registrada).
+    /// </summary>
+    Task<OtClientProcedure?> AssignPlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        bool outOfRange = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa
+    /// (preasignada→revocada) y devuelve el trámite a <c>preasignado</c> si estaba <c>asignado</c>.
+    /// </summary>
+    Task<OtClientProcedure?> RevokePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default);
 }

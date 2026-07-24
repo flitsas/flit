@@ -37,6 +37,7 @@ import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -254,6 +255,11 @@ export function TramiteWizard(props: Props) {
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
+  // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
+  // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
+  // propaga a BiometricStep para pintar el estado "cubierto por el baúl" (sin botones de biométrica).
+  const [vaultCoveredPartes, setVaultCoveredPartes] = useState<BiometricParte[]>([]);
   const { show } = useToast();
   // Guardar+continuar de los pasos con form embebido (actores y comercial): la
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
@@ -468,12 +474,24 @@ export function TramiteWizard(props: Props) {
       if (parteIdentidad && instanceId) {
         try {
           const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
-          if (ensured.outcome === 'requiere_validacion') {
-            const { provider } = await tramitesClient.getBiometricState(instanceId);
-            if (provider === 'kyverum') {
-              await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
-            } else {
-              await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+          // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
+          // El backend ya deja el paso de identidad completo y la parte aprobada; aquí solo registramos
+          // la cobertura por baúl para que BiometricStep muestre el estado "cubierto por el baúl".
+          if (ensured.outcome === 'firma_baul') {
+            setVaultCoveredPartes((prev) =>
+              prev.includes(parteIdentidad) ? prev : [...prev, parteIdentidad],
+            );
+          } else {
+            // Si la parte deja de estar cubierta (p.ej. se reemplazó el NIT por una persona natural),
+            // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
+            setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
+            if (ensured.outcome === 'requiere_validacion') {
+              const { provider } = await tramitesClient.getBiometricState(instanceId);
+              if (provider === 'kyverum') {
+                await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
+              } else {
+                await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+              }
             }
           }
         } catch (ensureErr) {
@@ -664,6 +682,8 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                vaultCoveredPartes={vaultCoveredPartes}
+                rnmcEnabled={wizard?.rnmcEnabled ?? false}
               />
             </div>
           )}
@@ -690,7 +710,7 @@ export function TramiteWizard(props: Props) {
           )}
 
           <div
-            className="flex items-center justify-between mt-6 pt-4 border-t"
+            className="flex flex-wrap gap-2 items-center justify-between mt-6 pt-4 border-t"
           >
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
@@ -1229,6 +1249,24 @@ function ConsultaStep({
     }
   };
 
+  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
+  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
+  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
+  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
+    if (!instanceId || items.length === 0) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(
+        instanceId,
+        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
+      );
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
   // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
@@ -1365,6 +1403,13 @@ function ConsultaStep({
 
       <VehicleDataCard fieldValues={fieldValues} />
 
+      <VehicleTransformationsCard
+        fieldValues={fieldValues}
+        readOnly={readOnly}
+        saving={atributosSaving}
+        onPatch={saveTransformacion}
+      />
+
       <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
         <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
         <p className="text-[11px] opacity-55 -mt-1.5">
@@ -1455,6 +1500,8 @@ function StepBody({
   stepFormRef,
   identityOperable = false,
   identityApproved = false,
+  vaultCoveredPartes = [],
+  rnmcEnabled = false,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
@@ -1464,6 +1511,8 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
+  rnmcEnabled?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -1473,6 +1522,9 @@ function StepBody({
   /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
    * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
   identityApproved?: boolean;
+  /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
+   * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
+  vaultCoveredPartes?: BiometricParte[];
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -1527,6 +1579,7 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1545,6 +1598,7 @@ function StepBody({
           // siembra su documento desde owner_document_* y consulta RUNT al llegar.
           seedDocumentoFromOwner
           autoConsultRunt
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1582,6 +1636,7 @@ function StepBody({
           modalidad={modalidad}
           onRefresh={onRefresh}
           hideIntro
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       // Borrador finalizado: reabre la captura SOLO para la biométrica (provider readOnly=false).
@@ -1602,6 +1657,7 @@ function StepBody({
           instanceId={instanceId}
           modalidad={modalidad}
           onRefresh={onRefresh}
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       return (
@@ -1638,6 +1694,7 @@ function StepBody({
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            rnmcEnabled={rnmcEnabled}
           />
         </div>
       );

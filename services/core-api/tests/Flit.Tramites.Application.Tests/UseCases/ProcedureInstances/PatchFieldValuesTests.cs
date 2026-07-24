@@ -87,6 +87,28 @@ public sealed class PatchFieldValuesTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
+    [Fact] // HU #10611 / #10785 (Feature #10587) — soat_estado es una clave escribible post-envío (ruta de
+           // placa). El comando la permite por CLAVE; la restricción por sub-estado la impone el trigger de BD.
+    public async Task HandleAsync_Entregado_SoatEstadoKey_Allowed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "soat_estado", "vigente", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "soat_estado" && f.ValueText == "vigente");
+        result.Should().NotBeNull();
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
     [Fact]
     public async Task HandleAsync_Draft_NewField_IsAdded()
     {

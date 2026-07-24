@@ -17,6 +17,8 @@ internal static class MatriculaConsolidadoOrdering
         "certificado_identidad",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
+        // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
+        "certificado_rnmc",
         "factura",
         "aduana",
         "impronta",

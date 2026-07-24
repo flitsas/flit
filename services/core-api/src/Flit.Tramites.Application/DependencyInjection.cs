@@ -27,7 +27,13 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureStepsHandler>();
         services.AddScoped<UpsertProcedureStepsHandler>();
         services.AddScoped<GetProcedureTypeConfigurationHandler>();
+        // FEATURE-08 / HU-BE-01 (CFD-01) — perfil de conformación (gate_profile) + snapshot por instancia.
+        services.AddScoped<GetConformationProfileHandler>();
+        services.AddScoped<UpdateConformationProfileHandler>();
+        // FEATURE-08 / HU-BE-08 (CFD-12) — listado de tipos publicados para el selector de operador.
+        services.AddScoped<GetPublishedProcedureTypesHandler>();
 
+        services.AddScoped<CaptureTypeSnapshotHandler>();
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
@@ -72,6 +78,10 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
+
+        // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
+        services.AddScoped<RunRnmcConsultHandler>();
+        services.AddScoped<GetRnmcHandler>();
         services.AddScoped<GetWizardStateHandler>();
         // HU #10478 — proveedor de consulta resuelto por tenant, para adaptar la UI del wizard.
         services.AddScoped<UseCases.Consultations.GetConsultationConfigHandler>();
@@ -149,6 +159,7 @@ public static class DependencyInjection
 
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
+        services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
         services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
 

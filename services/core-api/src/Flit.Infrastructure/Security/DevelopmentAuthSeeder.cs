@@ -59,6 +59,8 @@ public static class DevelopmentAuthSeeder
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
+        await SeedDetailedReportPermissionsAsync(db, cancellationToken);
+        await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -793,6 +795,160 @@ public static class DevelopmentAuthSeeder
                         PermissionId = a.Id,
                         CreatedAt = now,
                     }));
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #10813 — módulo dock "Reportes Detallados" + permisos de lectura y export.
+    /// Idempotente sobre BDs ya sembradas.
+    /// </summary>
+    private static async Task SeedDetailedReportPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "reportes-detallados",
+                Name = "Reportes Detallados",
+                SortOrder = 8,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("reportes.detallados.read",   "Ver reportes detallados",   "/api/v1/detailed-report/procedures",        "GET"),
+            ("reportes.detallados.export", "Exportar reportes detallados", "/api/v1/detailed-report/procedures/export", "GET"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length == 0)
+            return;
+
+        db.RbacActions.AddRange(newActions);
+        await db.SaveChangesAsync(ct);
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                db.RoleGrants.AddRange(newActions
+                    .Where(a => !existing.Contains(a.Id))
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    }));
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// LOG QX (HU #10794) — módulo <c>logqx</c> + permiso <c>logqx.read</c> que protege
+    /// <c>GET /api/v1/admin/log-qx</c>. Idempotente y separado de <see cref="SeedBaseModulesAsync"/>
+    /// (que hace early-return en BDs ya sembradas): crea el módulo y el permiso si faltan y concede el
+    /// permiso a SuperAdmin. SuperAdmin además bypassa por rol en runtime; el grant deja el permiso
+    /// asignado y visible para gestión RBAC (p. ej. para asignarlo luego a un rol de soporte). No se
+    /// concede a AdminCompany: el LOG QX es una herramienta de diagnóstico cross-tenant de
+    /// soporte/administración FLIT, no de administradores de compañía.
+    /// </summary>
+    private static async Task SeedLogQxPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "logqx" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "logqx",
+                Name = "LOG QX",
+                SortOrder = 8,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "logqx.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "logqx.read",
+                Name = "Ver LOG QX",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/admin/log-qx",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
             }
         }
 

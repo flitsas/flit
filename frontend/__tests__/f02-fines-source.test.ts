@@ -20,6 +20,7 @@ function baseSettings(overrides: Partial<TenantSettings> = {}): TenantSettings {
       onlyOwnVehicles: false,
     },
     baulFirmasActivo: false,
+    preasignacionPlacaActiva: false,
     enrutamientoSMTP: 'FLIT_SMTP',
     notificationTarget: 'RADICADOR',
     metodosRecaudo: [],

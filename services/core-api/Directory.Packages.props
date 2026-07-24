@@ -54,8 +54,13 @@
     <PackageVersion Include="DocumentFormat.OpenXml" Version="3.1.0" />
     <!-- Pin transitivo de DocumentFormat.OpenXml — corrige CVE en System.IO.Packaging 8.0.0 (GHSA-f32c-w444-8ppv). -->
     <PackageVersion Include="System.IO.Packaging" Version="10.0.1" />
-    <!-- Pin transitivo de PdfSharpCore/QuestPDF — corrige CVE en SixLabors.ImageSharp 1.0.4 -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <!-- Pin transitivo de PdfSharpCore (única fuente de ImageSharp en el árbol; QuestPDF 2024.x
+         ya no depende de ImageSharp). PdfSharpCore 1.3.65 fue compilado contra la API de ImageSharp
+         1.x/2.x (Image.Load(Stream, out IImageFormat)), método eliminado en 3.x → el overlay del FUR
+         lanzaba System.MissingMethodException al dibujar la firma (XImage.FromStream). Se fija a la
+         línea 2.x compatible: 2.1.11 es la última 2.x y parchea CVE-2025-54575 (GHSA-rxmq-m78w-7wmc,
+         DoS en decoder GIF) y los CVE previos de la 1.0.4. -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="2.1.11" />
 
     <!-- AWS Cognito Identity Provider (ADR-0006 Provider Pattern +
          ADR-0008 clarificacion 2026-05-21). AWSSDK 3.7+ es AOT-friendly

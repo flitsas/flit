@@ -7,17 +7,34 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "dashboard",
   "tramites",
   "reportes",
+  "reportes-detallados",
   "validaciones",
   "usuarios",
   "ayuda",
   "rbac",
+  "auditoria",
+  "log-qx",
 ];
 
 /**
- * Módulos de soporte universal: siempre navegables aunque RBAC no los incluya. "Ayuda"
- * no es una función con permiso; debe abrirse desde el dock en cualquier pantalla.
+ * Módulos "universales" para la resolución de `?m=` (NO confundir con acceso universal de
+ * datos): siempre se consideran un valor válido de módulo aunque el catálogo RBAC
+ * (`accessibleCodes`, GET /api/v1/security/modules) no los incluya, para que `parseModule`
+ * no rebote a "dashboard" tras `router.replace`. "Ayuda" es soporte real para cualquier
+ * usuario. "Auditoría" (HU #10680) es SuperAdmin-only: no existe como fila en el catálogo
+ * de módulos RBAC (a diferencia de "rbac", que sí la tiene) porque no se gobierna por
+ * permisos sino por el claim SuperAdmin del JWT — igual que su botón en el dock (Shell.tsx,
+ * bloque `currentUser?.isSuperAdmin`). Por eso el montaje real del componente en
+ * `app/page.tsx` sigue gateado explícitamente por `isSuperAdmin`, y el backend
+ * (`GET /api/v1/superadmin/audit`) exige `SuperAdminPolicy` de todos modos.
+ *
+ * "log-qx" (HU #10795) sigue el mismo patrón que "auditoria": el gate real es el permiso
+ * `logqx.read` (o SuperAdmin) evaluado en el dock y en el render de `app/page.tsx`
+ * (`canReadLogQx`), no el catálogo RBAC — el módulo backend se sembró con code `logqx`
+ * (sin guion), que NO casa con el id de ruta `log-qx`. Se lista aquí solo para que
+ * `parseModule` no rebote a "dashboard" tras `router.replace("/?m=log-qx")`.
  */
-export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda"];
+export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda", "auditoria", "log-qx"];
 
 /**
  * Construye la lista de módulos válidos para la SPA: los accesibles por RBAC más los

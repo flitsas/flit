@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Landmark } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
@@ -87,18 +88,14 @@ function AdminTransitOfficesPageInner() {
           title="Administración de organismos de tránsito"
           subtitle="Selecciona un OT para configurar trámites, integraciones, reglas y documentos."
         />
-        <button
-          type="button"
+        <CreateButton
+          label="Dar de alta Organismo de Tránsito"
+          icon={Landmark}
           onClick={() => {
             setCreateOfficeId(undefined);
             setCreateOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-sm"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Dar de alta Organismo de Tránsito
-        </button>
+        />
       </div>
 
       <div

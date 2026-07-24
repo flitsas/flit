@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
@@ -238,6 +239,156 @@ public sealed class CreateProcedureInstanceTests
                 i.TipologiaCodigo == "traspaso_standard"),
             Arg.Any<int>(),
             ct);
+    }
+
+    // ── FEATURE-08 / HU-BE-02 (CFD-03) — validaciones iniciales configurables ──
+
+    private static ProcedureType TypeWithGateProfile(string gateProfile) => new()
+    {
+        Id = Guid.NewGuid(),
+        Code = "X",
+        Name = "X",
+        Family = "matriculas",
+        PublicationStatus = PublicationStatus.Published,
+        GateProfile = gateProfile,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+
+    private static CreateProcedureInstanceRequest RequestWithOt(Guid typeId, Guid otId) =>
+        new(Guid.NewGuid(), typeId, Guid.NewGuid(), otId);
+
+    [Fact]
+    public async Task HandleAsync_ValidateCompanyRule_GrantDisabled_ReturnsCompanyRuleViolation()
+    {
+        // BE-02-AC-03
+        var ct = TestContext.Current.CancellationToken;
+        var pt = TypeWithGateProfile("{\"validateCompanyRule\":true}");
+        _typeRepo.GetByIdAsync(pt.Id, ct).Returns(pt);
+        var grant = Substitute.For<ITransitOfficeGrantGate>();
+        var otId = Guid.NewGuid();
+        grant.IsEnabledForTenantAsync(Arg.Any<Guid>(), otId, ct).Returns(false);
+        var sut = new CreateProcedureInstanceHandler(_repo, _typeRepo, null, null, grant);
+
+        var (result, error) = await sut.HandleAsync(RequestWithOt(pt.Id, otId), ct);
+
+        error.Should().Be("COMPANY_RULE_VIOLATION");
+        result.Should().BeNull();
+        await _repo.DidNotReceive().AddWithUniqueReferenceAsync(
+            Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidateOtOperability_NotOperable_ReturnsOtNotAuthorized()
+    {
+        // BE-02-AC-04
+        var ct = TestContext.Current.CancellationToken;
+        var pt = TypeWithGateProfile("{\"validateOtOperability\":true}");
+        _typeRepo.GetByIdAsync(pt.Id, ct).Returns(pt);
+        var operability = Substitute.For<IOtOperabilityGate>();
+        var otId = Guid.NewGuid();
+        operability.IsOperableAsync(otId, ct).Returns(false);
+        var sut = new CreateProcedureInstanceHandler(_repo, _typeRepo, null, operability, null);
+
+        var (result, error) = await sut.HandleAsync(RequestWithOt(pt.Id, otId), ct);
+
+        error.Should().Be("OT_NOT_AUTHORIZED_FOR_TYPE");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidationFlagsOn_ButNoTransitOffice_CreatesNormally()
+    {
+        // Sin OT en la creación las validaciones OT/compañía no son evaluables → no bloquean.
+        var ct = TestContext.Current.CancellationToken;
+        var pt = TypeWithGateProfile("{\"validateCompanyRule\":true,\"validateOtOperability\":true}");
+        _typeRepo.GetByIdAsync(pt.Id, ct).Returns(pt);
+        var grant = Substitute.For<ITransitOfficeGrantGate>();
+        var operability = Substitute.For<IOtOperabilityGate>();
+        StubReferenceGenerator();
+        var sut = new CreateProcedureInstanceHandler(_repo, _typeRepo, null, operability, grant);
+
+        // Request sin TransitOfficeId (null).
+        var request = new CreateProcedureInstanceRequest(Guid.NewGuid(), pt.Id, Guid.NewGuid(), null);
+        var (result, error) = await sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await grant.DidNotReceive().IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidateCompanyRule_GrantEnabled_CreatesNormally()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = TypeWithGateProfile("{\"validateCompanyRule\":true}");
+        _typeRepo.GetByIdAsync(pt.Id, ct).Returns(pt);
+        var grant = Substitute.For<ITransitOfficeGrantGate>();
+        var otId = Guid.NewGuid();
+        grant.IsEnabledForTenantAsync(Arg.Any<Guid>(), otId, ct).Returns(true);
+        StubReferenceGenerator();
+        var sut = new CreateProcedureInstanceHandler(_repo, _typeRepo, null, null, grant);
+
+        var (result, error) = await sut.HandleAsync(RequestWithOt(pt.Id, otId), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+    }
+
+    // ── FEATURE-08 / HU-BE-08 (CFD-12) — procedureTypeCode ─────────────────────
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_ResolvesPublishedTypeByCode()
+    {
+        // BE-08-AC-06
+        var ct = TestContext.Current.CancellationToken;
+        var pt = PublishedType("TRASPASO_SIMPLE", "traspaso");
+        _typeRepo.GetByCodePublishedAsync("TRASPASO_SIMPLE", ct).Returns(pt);
+        StubReferenceGenerator();
+
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), ProcedureTypeId: null, Guid.NewGuid(), null,
+            Modalidad: null, ProcedureTypeCode: "TRASPASO_SIMPLE");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
+        result!.ProcedureTypeId.Should().Be(pt.Id);
+        await _typeRepo.Received(1).GetByCodePublishedAsync("TRASPASO_SIMPLE", ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_UnknownOrUnpublished_ReturnsNotFound()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _typeRepo.GetByCodePublishedAsync("GHOST", ct).Returns((ProcedureType?)null);
+
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), null, Guid.NewGuid(), null, ProcedureTypeCode: "GHOST");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().Be("not_found");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ProcedureTypeCode_TakesPrecedenceOverModalidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pt = PublishedType("TRASPASO_SIMPLE", "traspaso");
+        _typeRepo.GetByCodePublishedAsync("TRASPASO_SIMPLE", ct).Returns(pt);
+        StubReferenceGenerator();
+
+        // Se envían ambos: el código tiene precedencia (no se llama la resolución por modalidad).
+        var request = new CreateProcedureInstanceRequest(
+            Guid.NewGuid(), null, Guid.NewGuid(), null,
+            Modalidad: "matricula_inicial", ProcedureTypeCode: "TRASPASO_SIMPLE");
+
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
+        result!.ProcedureTypeId.Should().Be(pt.Id);
+        await _typeRepo.DidNotReceive().GetByCodePublishedAsync("MATRICULA_NUEVA", ct);
     }
 
     [Fact]

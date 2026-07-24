@@ -76,7 +76,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
       >
         {/* Indicadores agregados del conjunto activo (AC2) */}
         <div
-          className="grid grid-cols-3 gap-3 mb-3"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3"
           aria-live="polite"
           aria-label={selected.size === 0 ? "Indicadores de todos los usuarios" : "Indicadores de los usuarios seleccionados"}
         >

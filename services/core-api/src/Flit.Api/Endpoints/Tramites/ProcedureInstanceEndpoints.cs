@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Middleware;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
@@ -80,6 +81,10 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile.
+                "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
+                "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
+                "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(statusCode: 409, title: "DUPLICATE_ACTIVE_PROCEDURE", detail: "Ya existe un trámite activo del mismo tipo para la placa/VIN."),
                 _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
             };
         }).WithName("CreateProcedureInstance");
@@ -273,6 +278,9 @@ internal static class ProcedureInstanceEndpoints
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de radicar."),
                 SubmitGate.ImprontaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.ImprontaRequerida, detail: "Debe generar o cargar la impronta antes de radicar."),
                 "organismo_no_habilitado" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito seleccionado no está habilitado para la compañía."),
+                // HU #10806 — compañía con preasignación activa pero OT mal configurado (grant/allow): se
+                // bloquea la radicación para que se corrija la configuración, en vez de degradar a estándar.
+                "plate_route_misconfigured" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La preasignación de placa está activa para tu compañía pero el organismo de tránsito no está habilitado (grant o allow_plate_preassign). Corrige la configuración antes de radicar."),
                 // HU #10518 — OT con grant pero desactivado/sin tenant a nivel plataforma.
                 "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
@@ -285,8 +293,9 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado) + reason (obligatorio para
-        // anulado/rechazado). Errores: ProblemDetails con title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado|preasignado|asignado) + reason
+        // (obligatorio para anulado/rechazado). preasignado/asignado = ruta de preasignación de placa
+        // (Feature #10587). Errores: ProblemDetails con title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -319,6 +328,52 @@ internal static class ProcedureInstanceEndpoints
                     detail: errorDetail ?? "La transición solicitada no es válida."),
             };
         }).WithName("TransitionProcedureInstance");
+
+        // Feature #10587 (P-10) — placas DISPONIBLES para la compañía en el OT elegido, para el
+        // selector del wizard de matrícula inicial. Company-facing: el tenant sale del JWT/header.
+        group.MapGet("/plate-preassign/available", async (
+            [FromQuery] Guid transitOfficeId,
+            HttpContext http,
+            IPlateRangeRepository plateRepo,
+            CancellationToken ct) =>
+        {
+            var (resolvedTenant, _) = ResolveTenantContext(http);
+            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "El usuario autenticado no tiene una compañía asignada.");
+
+            if (transitOfficeId == Guid.Empty)
+                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
+
+            var plates = await plateRepo
+                .ListDetailsAsync(tenantId, transitOfficeId, PlateState.Disponible, ct)
+                .ConfigureAwait(false);
+            return Results.Ok(plates);
+        }).WithName("ListAvailablePreassignPlates");
+
+        // HU #10806 (AC3) — ¿la ruta de preasignación de placa está ACTIVA para la compañía del
+        // radicador en el OT elegido? El wizard lo consulta para no mostrar el selector como si
+        // preasignara cuando en realidad el trámite se entregará de forma estándar. Reutiliza el
+        // mismo AND de tres flags que el submit (IsAssignmentAllowedAsync).
+        group.MapGet("/plate-preassign/status", async (
+            [FromQuery] Guid transitOfficeId,
+            HttpContext http,
+            IPlateRangeRepository plateRepo,
+            CancellationToken ct) =>
+        {
+            var (resolvedTenant, _) = ResolveTenantContext(http);
+            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "El usuario autenticado no tiene una compañía asignada.");
+
+            if (transitOfficeId == Guid.Empty)
+                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
+
+            var enabled = await plateRepo
+                .IsAssignmentAllowedAsync(tenantId, transitOfficeId, ct)
+                .ConfigureAwait(false);
+            return Results.Ok(new { enabled });
+        }).WithName("PlatePreassignStatus");
 
         return app;
     }

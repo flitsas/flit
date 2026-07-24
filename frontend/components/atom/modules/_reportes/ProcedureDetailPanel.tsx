@@ -123,7 +123,8 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
             emptyMessage="Sin trámites en el periodo seleccionado."
             skeletonRows={6}
           >
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-xs">
               <thead>
                 <tr className="text-[10px] uppercase text-left" style={{ color: "#162744" }}>
                   <th className="px-2 py-2 font-semibold">Referencia</th>
@@ -145,6 +146,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
                 ))}
               </tbody>
             </table>
+            </div>
           </UiStateBoundary>
         </div>
 

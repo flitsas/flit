@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Domain.Auth;
@@ -14,12 +15,15 @@ public sealed class ResetPasswordHandlerTests
     private readonly ISecureTokenGenerator _tokenGenerator = Substitute.For<ISecureTokenGenerator>();
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
     private readonly PasswordRecoveryOptions _options = new();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ResetPasswordHandler _handler;
 
     public ResetPasswordHandlerTests()
     {
         _handler = new ResetPasswordHandler(
-            _tokenRepository, _userAccountRepository, _tokenGenerator, _passwordHasher, _options);
+            _tokenRepository, _userAccountRepository, _tokenGenerator, _passwordHasher, _options,
+            _auditWriter, _auditContext);
     }
 
     [Fact]

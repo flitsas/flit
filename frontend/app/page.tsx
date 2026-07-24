@@ -6,20 +6,33 @@ import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
+import { ReportesDetallados } from "@/components/atom/modules/ReportesDetallados";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
 import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
+import { Auditoria } from "@/components/atom/modules/Auditoria";
+import { LogQx } from "@/components/atom/modules/LogQx";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { buildValidModules, parseModule } from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
+import { getToken } from "@/lib/api/client";
+import { canReadLogQx, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 
 function HomeContent() {
   const router = useRouter();
   const params = useSearchParams();
   const { authed, hydrated, logout } = useAuthGate();
   const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
+  // "Auditoría" (HU #10680) es SuperAdmin-only y no tiene fila en el catálogo RBAC de
+  // módulos (se gatea por el claim SuperAdmin del JWT, igual que su entrada en el dock —
+  // Shell.tsx, bloque `currentUser?.isSuperAdmin`), no por `accessibleCodes`. Se re-lee de
+  // forma perezosa (no reactiva) porque el JWT no cambia durante la sesión de la SPA.
+  const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  // LOG QX (HU #10795) — gate por permiso `logqx.read` (o SuperAdmin). Se re-lee de forma
+  // perezosa (no reactiva) igual que `isSuperAdminUser`: el JWT no cambia durante la sesión.
+  const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
   // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
@@ -68,10 +81,13 @@ function HomeContent() {
       {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
       {module === "tramites"     && <Tramites />}
       {module === "reportes"     && <Reportes />}
+      {module === "reportes-detallados" && <ReportesDetallados />}
       {module === "validaciones" && <Validaciones />}
       {module === "usuarios"     && <Usuarios />}
       {module === "ayuda"        && <Ayuda />}
       {module === "rbac"         && <RbacAdmin />}
+      {module === "auditoria"    && isSuperAdminUser && <Auditoria />}
+      {module === "log-qx"       && canLogQx && <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />}
     </Shell>
   );
 }

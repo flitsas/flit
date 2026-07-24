@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -108,6 +109,70 @@ public sealed class WizardStateHandlerTests
     private void Setup(ProcedureInstance instance) =>
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(),
             Arg.Any<CancellationToken>()).Returns(instance);
+
+    /// <summary>Stub de exigibilidad RNMC por OT (para probar el flag que muestra la fecha de expedición).</summary>
+    private sealed class StubRnmcPolicy(bool required) : IRnmcRequirementPolicy
+    {
+        public Task<bool> IsRnmcRequiredAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(required);
+    }
+
+    /// <summary>Stub de restricciones con ajustes explícitos por kind (para el opt-in RNMC de la compañía).</summary>
+    private sealed class StubRestrictionPolicy(params (string kind, bool enabled)[] settings) : IConsultationRestrictionPolicy
+    {
+        public Task<ConsultationRestrictions> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConsultationRestrictions.FromSettings(
+                settings.Select(s => new KeyValuePair<string, bool>(s.kind, s.enabled))));
+    }
+
+    // ── FEATURE 05 — RnmcEnabled controla la visibilidad de la fecha de expedición ──
+
+    [Fact] // El OT exige RNMC → RnmcEnabled=true (el frontend muestra la fecha de expedición).
+    public async Task Get_RnmcExigidoPorOt_RnmcEnabledTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(_repo, rnmcPolicy: new StubRnmcPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeTrue();
+    }
+
+    [Fact] // Default (OT no exige RNMC) → RnmcEnabled=false (la fecha de expedición se oculta).
+    public async Task Get_RnmcNoExigido_RnmcEnabledFalse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(_repo, rnmcPolicy: new StubRnmcPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeFalse();
+    }
+
+    [Fact] // FEATURE 05 — la compañía activa RNMC (opt-in) → RnmcEnabled=true aunque el OT no lo exija.
+    public async Task Get_RnmcActivadoPorCompania_RnmcEnabledTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            rnmcPolicy: new StubRnmcPolicy(required: false),
+            restrictionPolicy: new StubRestrictionPolicy((ConsultationRestrictionKinds.Rnmc, true)));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.RnmcEnabled.Should().BeTrue();
+    }
 
     // ── 404 ──────────────────────────────────────────────────────────────────
 
@@ -457,6 +522,9 @@ public sealed class WizardStateHandlerTests
     {
         // Bug #10728 (contraparte): cuando el check SIMIT ESPECÍFICO del comprador es fail (comparendos
         // reales), el paso 4 SÍ debe bloquearse con simit_multas. Preserva la detección real de multas.
+        // FEATURE 05 — este caso sobrevive como RETROCOMPATIBILIDAD: el mapper ya no emite "fail" para
+        // multas (ahora es "warn"), pero los snapshots persistidos antes del cambio son JSON inmutable
+        // y siguen diciendo "fail". El gate debe seguir leyéndolos bien.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
@@ -473,6 +541,76 @@ public sealed class WizardStateHandlerTests
         var paso4 = result!.Steps.Single(s => s.Index == 4);
         paso4.Status.Should().Be("incomplete");
         paso4.Reasons.Should().Contain("simit_multas");
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_SimitCompradorMultasWarn_SigueBloqueandoConSimitMultas()
+    {
+        // FEATURE 05 (AC2) — TEST DE AMARRE. Los comparendos pasaron de fail a warn para no bloquear
+        // la CREACIÓN del trámite, pero la RADICACIÓN al OT conserva su gate: el paso 4 debe seguir
+        // bloqueándose. Si este test cae, quitar el bloqueo de la creación se llevó por delante la
+        // radicación en silencio — que es el modo de fallo principal de esta HU.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("yellow",
+            "[{\"Key\":\"simit_comprador_multas\",\"Label\":\"Multas SIMIT\",\"Status\":\"warn\",\"Source\":\"verifik_simit\",\"Message\":\"2 multa(s) pendiente(s) por $500.000 COP\"}]"));
+        CompletarDocsTraspaso(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var paso4 = result!.Steps.Single(s => s.Index == 4);
+        paso4.Status.Should().Be("incomplete");
+        paso4.Reasons.Should().Contain("simit_multas");
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_SoloAcuerdoPagoWarn_NoBloqueaConSimitMultas()
+    {
+        // FEATURE 05 (AC3) — TEST DE AMARRE. simit_comprador_acuerdos_pago TAMBIÉN es warn y NO es un
+        // comparendo. Sin el guard del sufijo "_multas" en SimitOf, todo comprador con un acuerdo de
+        // pago activo dispararía un simit_multas falso y se le bloquearía la radicación sin motivo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("yellow",
+            "[{\"Key\":\"simit_comprador_multas\",\"Label\":\"Multas SIMIT\",\"Status\":\"ok\",\"Source\":\"verifik_simit\",\"Message\":null}," +
+            "{\"Key\":\"simit_comprador_acuerdos_pago\",\"Label\":\"Acuerdos de pago SIMIT\",\"Status\":\"warn\",\"Source\":\"verifik_simit\",\"Message\":\"1 acuerdo(s) activo(s) por $837.716 COP\"}]"));
+        CompletarDocsTraspaso(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        var paso4 = result!.Steps.Single(s => s.Index == 4);
+        paso4.Reasons.Should().NotContain("simit_multas");
+        paso4.Status.Should().Be("complete");
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_ComparendosWarn_NoAgregaBlockerPreflightRed()
+    {
+        // FEATURE 05 (AC1) — el criterio de negocio de la HU: con comparendos pendientes el pre-vuelo
+        // queda en amarillo, no se agrega el bloqueo preflight_red y el gestor NO necesita marcar
+        // "asumo el riesgo" para crear el trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("yellow",
+            "[{\"Key\":\"simit_comprador_multas\",\"Label\":\"Multas SIMIT\",\"Status\":\"warn\",\"Source\":\"verifik_simit\",\"Message\":\"2 multa(s) pendiente(s)\"}]"));
+        CompletarDocsTraspaso(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().NotContain("preflight_red");
+        result.Blockers.Should().NotContain("preflight_provider_error");
     }
 
     [Fact]
@@ -572,5 +710,72 @@ public sealed class WizardStateHandlerTests
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.CanSubmit.Should().BeFalse();
+    }
+
+    // ── HU #10645 (ADR-0025 §4) — baúl de firmas cuenta como identidad aprobada en el gate ──────
+
+    [Fact]
+    public async Task Get_Matricula_CompradorNitCubiertoPorBaul_IdentidadAprobadaSinBiometrica()
+    {
+        // Un comprador JURÍDICO (NIT) con firma de baúl activa+vigente cuenta como identidad APROBADA en
+        // el gate (IdentityApprovalResolver ruta per-instancia): el paso 4 queda complete SIN fila biométrica
+        // y el submit se habilita. Esto es lo que consumen SubmitGate y el gate del FUR.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(ActorNit("comprador"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var handler = new GetWizardStateHandler(_repo, vaultPolicy: new StubVaultPolicy(VaultMatch()));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("complete");
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.IdentidadNoAprobada);
+        result.CanSubmit.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Get_Matricula_CompradorNitSinBaul_IdentidadNoAprobada()
+    {
+        // Control negativo: el MISMO comprador NIT sin baúl (política nula por defecto) NO queda aprobado
+        // (no hay biométrica de una persona jurídica) → paso 4 incomplete y submit vetado. Prueba que es el
+        // baúl —y no otra cosa— quien habilita la identidad en el test anterior.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(ActorNit("comprador"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    private static ProcedureInstanceActor ActorNit(string actorType, string nit = "900123456") =>
+        new()
+        {
+            ActorType = actorType,
+            DocumentType = "NIT",
+            DocumentNumber = nit,
+            FullName = "Renting SAS",
+            Email = "renting@x.com",
+        };
+
+    private static SignatureVaultMatch VaultMatch() => new(
+        Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+        "900123456");
+
+    private sealed class StubVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
+    {
+        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+            => Task.FromResult(match);
     }
 }

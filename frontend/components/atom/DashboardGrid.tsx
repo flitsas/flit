@@ -94,7 +94,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
                       <button className="p-1.5 rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10"><MoreVertical className="h-4 w-4 text-[#162744]/60 dark:text-white/60" /></button>
                     </div>
                     {hover === r.id && (
-                      <div className="absolute right-4 top-12 z-20 bg-white dark:bg-[#162744] border border-[#dfe5ed] dark:border-white/10 rounded-xl p-1 w-56 shadow-xl">
+                      <div className="absolute right-4 top-12 z-20 bg-white dark:bg-[#162744] border border-[#dfe5ed] dark:border-white/10 rounded-xl p-1 w-56 max-w-[80vw] shadow-xl">
                         <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><Ban className="h-3.5 w-3.5" style={{ color: "#ff4e00" }} /> Solicitud de anulación</button>
                         <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><RefreshCw className="h-3.5 w-3.5" style={{ color: "#557eff" }} /> Cambio de estado manual</button>
                         <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><Eraser className="h-3.5 w-3.5" style={{ color: "#00dbd5" }} /> Limpiar consolidado</button>

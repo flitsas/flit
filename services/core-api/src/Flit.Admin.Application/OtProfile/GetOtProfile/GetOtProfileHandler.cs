@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.OtProfile;
+using DomainOtProfile = Flit.Admin.Domain.OtProfile.OtProfile;
 
 namespace Flit.Admin.Application.OtProfile.GetOtProfile;
 
@@ -21,33 +22,44 @@ public sealed class GetOtProfileHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        // SuperAdmin navegando el hub de una OT concreta: se LEE el perfil de esa oficina por
+        // transit_office_id, sin crear ni reasignar nada. Un GET no debe mutar; además, crear un
+        // perfil para el tenant del SuperAdmin apuntando a una oficina ajena violaría la unicidad
+        // uq_transit_office_profiles_transit_office_id (una oficina = un perfil). Si la oficina aún
+        // no tiene perfil, se devuelve uno por defecto (dashboard) SIN persistir.
+        if (query.TransitOfficeId is Guid officeId && officeId != Guid.Empty)
+        {
+            var byOffice = await _profileRepository
+                .GetByTransitOfficeAsync(officeId, cancellationToken)
+                .ConfigureAwait(false);
+
+            return OtProfileMapper.ToResponse(byOffice ?? DefaultProfileFor(officeId));
+        }
+
+        // ot_admin (o bootstrap): perfil del tenant autenticado; se crea por defecto si no existe.
         var profile = await _profileRepository
             .GetByTenantAsync(query.TenantId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (profile is null)
-        {
-            profile = await _profileRepository.SaveAsync(
-                query.TenantId,
-                OtOperationModes.Dashboard,
-                quipuxReadOnly: false,
-                changedBy: null,
-                transitOfficeId: query.TransitOfficeId,
-                cancellationToken).ConfigureAwait(false);
-        }
-        else if (query.TransitOfficeId is Guid officeId
-                 && officeId != Guid.Empty
-                 && profile.TransitOfficeId != officeId)
-        {
-            profile = await _profileRepository.SaveAsync(
-                query.TenantId,
-                profile.OperationMode,
-                profile.QuipuxReadOnly,
-                changedBy: null,
-                transitOfficeId: officeId,
-                cancellationToken).ConfigureAwait(false);
-        }
+        profile ??= await _profileRepository.SaveAsync(
+            query.TenantId,
+            OtOperationModes.Dashboard,
+            quipuxReadOnly: false,
+            changedBy: null,
+            transitOfficeId: null,
+            cancellationToken).ConfigureAwait(false);
 
         return OtProfileMapper.ToResponse(profile);
     }
+
+    /// <summary>Perfil por defecto (no persistido) para una oficina que aún no tiene fila.</summary>
+    private static DomainOtProfile DefaultProfileFor(Guid transitOfficeId) => new()
+    {
+        Id = Guid.Empty,
+        TenantId = Guid.Empty,
+        TransitOfficeId = transitOfficeId,
+        OperationMode = OtOperationModes.Dashboard,
+        QuipuxReadOnly = false,
+        FeatureFlags = [],
+    };
 }

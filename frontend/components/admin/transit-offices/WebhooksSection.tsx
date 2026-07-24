@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/admin-ot";
 import type { OtApiCallLog, OtWebhook } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTabBar } from "./OtTabBar";
 import { OtTablePagination } from "./OtTablePagination";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
@@ -146,6 +146,7 @@ export function WebhooksSection() {
             errorMessage="Error al cargar webhooks."
             onRetry={() => void loadWebhooks()}
           >
+            <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-y-2 text-xs">
               <thead>
                 <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
@@ -176,7 +177,7 @@ export function WebhooksSection() {
                       {maskTargetUrl(w.targetUrl)}
                     </td>
                     <td className="border-y px-4 py-3">
-                      <OtStatusBadge
+                      <StatusBadge
                         label={w.isActive ? "Activo" : "Inactivo"}
                         tone={w.isActive ? "success" : "danger"}
                       />
@@ -205,6 +206,7 @@ export function WebhooksSection() {
                 ))}
               </tbody>
             </table>
+            </div>
           </UiStateBoundary>
         </div>
       )}
@@ -279,7 +281,8 @@ export function WebhooksSection() {
             onRetry={() => void loadLogs()}
             skeletonRows={5}
           >
-            <table className="w-full border-separate border-spacing-y-2 text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
               <thead>
                 <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
                   <th className="rounded-l-xl px-4 py-2.5 bg-muted">
@@ -329,6 +332,7 @@ export function WebhooksSection() {
                 ))}
               </tbody>
             </table>
+            </div>
             <OtTablePagination
               totalCount={logTotal}
               page={logPage}

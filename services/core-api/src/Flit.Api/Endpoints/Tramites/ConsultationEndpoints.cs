@@ -59,6 +59,29 @@ internal static class ConsultationEndpoints
             };
         }).WithName("RuntPersonLookup");
 
+        // HU #10611 (Feature #10587) — la compañía valida el SOAT re-consultando el RUNT del vehículo
+        // con el trámite en 'asignado'. Marca soat_estado (vigente/vencido/unknown) sin cambiar de estado.
+        group.MapPost("/instances/{id:guid}/soat/validate-runt", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ValidateSoatViaRuntHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error switch
+            {
+                "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "invalid_state" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El SOAT solo se valida con el trámite en estado 'asignado'."),
+                "template_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Consultation template RUNT_VEHICLE not found."),
+                "provider_not_resolved" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El template RUNT_VEHICLE no declara un proveedor."),
+                "provider_not_found" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El proveedor RUNT del vehículo no está registrado."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("ValidateSoatViaRunt");
+
         // Lookup JURÍDICO en RUES por NIT (bifurcación del "Consultar RUNT" para persona jurídica).
         // NO persiste. found:false también responde 200 (el frontend cae al ingreso manual).
         group.MapPost("/instances/{id:guid}/rues-lookup", async (

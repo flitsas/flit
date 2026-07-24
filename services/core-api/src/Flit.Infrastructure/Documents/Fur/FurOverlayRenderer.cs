@@ -7,6 +7,14 @@ namespace Flit.Infrastructure.Documents.Fur;
 /// <summary>Superpone valores sobre plantillas PDF blank con PdfSharpCore.</summary>
 public static class FurOverlayRenderer
 {
+    /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
+    private const double SignatureImageMaxWidth = 115;
+
+    /// <summary>Separación entre imagen de firma y bloque de metadatos.</summary>
+    private const double SignatureSidecarGap = 6;
+
+    /// <summary>Tamaño de fuente del bloque de metadatos junto a la firma.</summary>
+    private const double SignatureSidecarFontSize = 3;
     public static byte[] RenderPage1(byte[] templatePdf, FurFieldManifest manifest, IReadOnlyDictionary<string, FurFieldValue> values)
     {
         ArgumentNullException.ThrowIfNull(templatePdf);
@@ -56,7 +64,7 @@ public static class FurOverlayRenderer
     {
         if (value.ImageBytes is { Length: > 0 })
         {
-            DrawImage(gfx, field, value.ImageBytes);
+            DrawSignatureImage(gfx, field, value.ImageBytes, value.ImageSidecarText);
             return;
         }
 
@@ -116,13 +124,80 @@ public static class FurOverlayRenderer
         }
     }
 
+    private static void DrawSignatureImage(
+        XGraphics gfx,
+        FurFieldDefinition field,
+        byte[] imageBytes,
+        string? sidecarText)
+    {
+        var fieldH = field.H > 0 ? field.H : 36;
+        var fieldW = field.W > 0 ? field.W : 120;
+        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.38);
+
+        DrawImage(gfx, field.X, field.Y, imageW, fieldH, imageBytes);
+
+        if (string.IsNullOrWhiteSpace(sidecarText))
+            return;
+
+        var sidecarX = field.X + imageW + SignatureSidecarGap;
+        var sidecarW = Math.Max(0, fieldW - imageW - SignatureSidecarGap);
+        if (sidecarW <= 0)
+            return;
+
+        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText);
+    }
+
+    private static void DrawSidecarText(
+        XGraphics gfx,
+        double x,
+        double y,
+        double w,
+        double h,
+        string text)
+    {
+        var font = CreateFont(SignatureSidecarFontSize, bold: false);
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var lineHeight = SignatureSidecarFontSize * 1.15;
+        var maxLines = Math.Max(1, (int)Math.Floor(h / lineHeight));
+
+        for (var i = 0; i < Math.Min(lines.Length, maxLines); i++)
+        {
+            var line = lines[i];
+            if (w > 0)
+            {
+                line = TruncateToWidth(gfx, line, font, w);
+            }
+
+            var yBaseline = y + i * lineHeight + SignatureSidecarFontSize * 0.82;
+            gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, yBaseline));
+        }
+    }
+
+    private static string TruncateToWidth(XGraphics gfx, string line, XFont font, double maxWidth)
+    {
+        if (gfx.MeasureString(line, font).Width <= maxWidth)
+            return line;
+
+        var ellipsis = "…";
+        var trimmed = line;
+        while (trimmed.Length > 1 && gfx.MeasureString(trimmed + ellipsis, font).Width > maxWidth)
+            trimmed = trimmed[..^1];
+
+        return trimmed + ellipsis;
+    }
+
     private static void DrawImage(XGraphics gfx, FurFieldDefinition field, byte[] imageBytes)
+    {
+        var h = field.H > 0 ? field.H : 36;
+        var w = field.W > 0 ? field.W : 120;
+        DrawImage(gfx, field.X, field.Y, w, h, imageBytes);
+    }
+
+    private static void DrawImage(XGraphics gfx, double x, double y, double w, double h, byte[] imageBytes)
     {
         using var ms = new MemoryStream(imageBytes);
         using var img = XImage.FromStream(() => ms);
-        var h = field.H > 0 ? field.H : 36;
-        var w = field.W > 0 ? field.W : 120;
-        gfx.DrawImage(img, field.X, field.Y, w, h);
+        gfx.DrawImage(img, x, y, w, h);
     }
 
     private static XFont CreateFont(double size, bool bold)

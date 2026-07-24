@@ -15,7 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { ModuleTitle } from './ModuleTitle';
-import { StatusBadge } from '@/components/atom/StatusBadge';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
   ValidacionesFilterToolbar,
   EMPTY_VALIDACIONES_FILTERS,
@@ -47,14 +47,14 @@ import type {
  * gestor pulse "Actualizar" (que sigue disponible). Pausa cuando la pestaña no está visible.
  */
 
-const ESTADO_META: Record<BiometricEstado, { label: string; color: string; bg: string; border: string }> = {
-  enviado: { label: 'Enviado', color: '#557EFF', bg: 'rgba(85,126,255,0.12)', border: 'rgba(85,126,255,0.3)' },
-  en_proceso: { label: 'En proceso', color: '#B26A00', bg: 'rgba(249,172,0,0.16)', border: 'rgba(249,172,0,0.35)' },
-  aprobado: { label: 'Aprobado', color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)', border: 'rgba(140,198,63,0.4)' },
-  rechazado: { label: 'Rechazado', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)', border: 'rgba(255,78,0,0.3)' },
-  expirado: { label: 'Expirado', color: '#6B7280', bg: 'rgba(154,165,177,0.18)', border: 'rgba(154,165,177,0.35)' },
-  pendiente_envio: { label: 'Pendiente de envío', color: '#557EFF', bg: 'rgba(85,126,255,0.12)', border: 'rgba(85,126,255,0.3)' },
-  error_envio: { label: 'Error de envío', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)', border: 'rgba(255,78,0,0.3)' },
+const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> = {
+  enviado: { label: 'Enviado', tone: 'info' },
+  en_proceso: { label: 'En proceso', tone: 'warning' },
+  aprobado: { label: 'Aprobado', tone: 'success' },
+  rechazado: { label: 'Rechazado', tone: 'danger' },
+  expirado: { label: 'Expirado', tone: 'neutral' },
+  pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
+  error_envio: { label: 'Error de envío', tone: 'danger' },
 };
 
 const MODALIDAD_LABEL: Record<string, string> = {
@@ -802,7 +802,7 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
           {maskDoc(r.documentType, r.documentNumber)}
         </div>
         <div className="min-w-0">
-          <StatusBadge label={meta.label} bg={meta.bg} color={meta.color} border={meta.border} ariaLabel={`Estado: ${meta.label}`} />
+          <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
           {r.status === 'rechazado' && r.rejectionReason && (
             <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
               {r.rejectionReason}

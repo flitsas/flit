@@ -26,6 +26,10 @@ internal sealed class ProcedureTypeConfiguration : IEntityTypeConfiguration<Proc
         builder.Property(x => x.PublicationStatus).HasMaxLength(20).IsRequired().HasDefaultValue("draft");
         builder.Property(x => x.ExternalRefs).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
 
+        // F08 Fase 2b: versión semántica + perfil de conformación (CFD-01)
+        builder.Property(x => x.Version).IsRequired().HasDefaultValue(1);
+        builder.Property(x => x.GateProfile).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 
