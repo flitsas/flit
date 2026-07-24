@@ -112,6 +112,10 @@ public static class DependencyInjection
         // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
         services.AddScoped<EnsureIdentityHandler>();
 
+        // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
+        // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
+        services.AddScoped<UseCases.Persons.IniciarPrevalidacionHandler>();
+
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();

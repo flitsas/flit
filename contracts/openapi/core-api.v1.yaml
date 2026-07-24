@@ -3109,6 +3109,50 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/tramites/biometric-validations:
+    post:
+      operationId: iniciarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Crear prevalidación de identidad standalone (sin trámite) — HU #10866, CF-01
+      description: >
+        Crea una validación biométrica de identidad sin trámite asociado (prevalidación standalone).
+        Hace upsert de la entidad persona en el tenant por (documentType, documentNumber) y luego
+        inicia la validación con el proveedor activo (Kyverum → captureUrl real; mock → magic-link).
+        Para persona jurídica (personType='juridical'), el sujeto que valida biométricamente es el
+        representante legal (legalRep*). Requiere X-Tenant-Id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IniciarPrevalidacionRequest"
+      responses:
+        "201":
+          description: Prevalidación creada. captureUrl listo para compartir.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarPrevalidacionResult"
+        "202":
+          description: Encolado (fallo transitorio del proveedor). Worker reintentará el envío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarPrevalidacionResult"
+        "400":
+          description: Datos inválidos o incompletos.
+        "409":
+          description: Ya existe una prevalidación activa o en proceso para este documento.
+        "502":
+          description: El proveedor rechazó la solicitud (error definitivo).
+        "503":
+          description: El proveedor no está disponible (error transitorio).
     get:
       operationId: listTenantBiometricValidations
       tags: [Tramites, Identidad]
@@ -7285,6 +7329,77 @@ components:
           default: false
           description: >
             true = el envío falló transitoriamente y quedó encolado para reintento (estado `pendiente_envio`).
+
+    IniciarPrevalidacionRequest:
+      type: object
+      required: [documentType, documentNumber, name, email]
+      description: >
+        Entrada para crear una prevalidación de identidad standalone (sin trámite) — HU #10866, CF-01.
+        Para persona jurídica (personType='juridical') se requieren los campos legalRep*.
+      properties:
+        documentType:
+          type: string
+          maxLength: 20
+          example: "CC"
+          description: Tipo de documento de la persona (CC, CE, NIT, PP…)
+        documentNumber:
+          type: string
+          maxLength: 40
+          example: "1234567890"
+        name:
+          type: string
+          maxLength: 200
+          description: Nombre completo de la persona (o razón social si es jurídica).
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          description: Correo al que se envía el enlace de captura.
+        personType:
+          type: string
+          enum: [natural, juridical]
+          default: natural
+          description: >
+            'natural' → valida al titular; 'juridical' → valida al representante legal
+            (campos legalRep* requeridos si personType='juridical').
+        legalRepDocumentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: Tipo de documento del representante legal.
+        legalRepDocumentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+        legalRepName:
+          type: string
+          maxLength: 200
+          nullable: true
+        legalRepEmail:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: Correo del RL. Si vacío se usa el email de la empresa.
+
+    IniciarPrevalidacionResult:
+      type: object
+      required: [validation, captureUrl]
+      description: Resultado de crear una prevalidación standalone — HU #10866, CF-01.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          description: >
+            URL de captura. Kyverum → URL real del proveedor. Mock → magic-link público.
+            Vacío si queued=true (fallo transitorio).
+        queued:
+          type: boolean
+          default: false
+          description: >
+            true = el proveedor Kyverum falló de forma transitoria y la validación quedó
+            encolada para reintento automático (estado pendiente_envio, HTTP 202).
     KyverumWebhookPayload:
       type: object
       required: [evento, data]
