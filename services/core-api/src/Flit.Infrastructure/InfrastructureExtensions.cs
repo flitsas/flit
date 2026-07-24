@@ -139,6 +139,8 @@ public static class InfrastructureExtensions
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
+        services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);

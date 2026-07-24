@@ -14,7 +14,12 @@ public sealed record DocumentParte(
     string? Phone = null,
     string? Address = null,
     string? City = null,
-    bool EsJuridica = false);
+    bool EsJuridica = false,
+    // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica): quien
+    // firma en representación de la empresa en la solicitud virtual y el mandato. Null si no aplica.
+    string? RepresentanteLegalNombre = null,
+    string? RepresentanteLegalTipoDoc = null,
+    string? RepresentanteLegalDocumento = null);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
@@ -85,10 +90,18 @@ public sealed record FurDocumentData(
     // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
     // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
     bool TienePrenda = false,
-    string? AcreedorPrenda = null)
+    string? AcreedorPrenda = null,
+    // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
+    // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
+    bool FirmasVisibles = true)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
+
+    /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
+    public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
+        string.Equals(p.Rol, "comprador", StringComparison.OrdinalIgnoreCase))
+        ?? (Partes.Count > 0 ? Partes[0] : null);
 }
 
 /// <summary>Un documento generado, listo para persistir vía IAttachmentStorage.</summary>
@@ -108,6 +121,18 @@ public interface IFurDocumentGenerator
 
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);
+}
+
+/// <summary>
+/// Contrato del generador de la <b>Solicitud de trámite de forma virtual</b> (ADR-0036, HU #10914).
+/// Aplica SIEMPRE (persona natural y jurídica); solo varía el firmante (persona natural a nombre
+/// propio; persona jurídica su representante legal). Implementación productiva vía QuestPDF (tipo
+/// <c>tramite_virtual</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES).
+/// </summary>
+public interface ISolicitudVirtualGenerator
+{
+    /// <summary>Genera la solicitud de trámite virtual (tipo <c>tramite_virtual</c>).</summary>
+    GeneratedDocument GenerateSolicitudVirtual(FurDocumentData data);
 }
 
 /// <summary>

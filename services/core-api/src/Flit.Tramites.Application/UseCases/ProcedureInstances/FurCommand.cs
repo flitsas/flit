@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -39,11 +40,16 @@ public sealed class GenerarFurHandler(
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    ISolicitudVirtualGenerator? solicitudVirtualGenerator = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // ADR-0036 (HU #10914) — Solicitud de trámite virtual (siempre). Opcional: los tests que no lo
+    // ejercitan construyen el handler sin él (no se genera el documento).
+    private readonly ISolicitudVirtualGenerator? _solicitudVirtualGenerator = solicitudVirtualGenerator;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -107,6 +113,11 @@ public sealed class GenerarFurHandler(
         var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
         if (esTraspaso)
             generated.Add(generator.GenerateCompraventa(data));
+
+        // ADR-0036 (HU #10914) — Solicitud de trámite virtual: SIEMPRE (persona natural y jurídica).
+        // Idempotente: el reemplazo por tipo (más abajo) sustituye el adjunto 'tramite_virtual' previo.
+        if (_solicitudVirtualGenerator is not null)
+            generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
         if (identidadValidada)
         {
@@ -315,7 +326,10 @@ public sealed class GenerarFurHandler(
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
-            AcreedorPrenda: acreedorPrenda);
+            AcreedorPrenda: acreedorPrenda,
+            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen en
+            // estado distinto de borrador (punto 18 del requerimiento).
+            FirmasVisibles: !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -606,7 +620,7 @@ public sealed class GenerarFurHandler(
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
-        var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        var (ciudad, direccion, rl) = ParseActorMetadata(a?.Metadata);
         // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
         var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
             || string.Equals(a?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
@@ -619,27 +633,36 @@ public sealed class GenerarFurHandler(
             string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
             direccion,
             ciudad,
-            esJuridica));
+            esJuridica,
+            // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica).
+            RepresentanteLegalNombre: Trim(rl?.NombreCompleto),
+            RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
+            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
     }
+
+    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);
 
-    private static (string? Ciudad, string? Direccion) ParseActorMetadata(string? metadata)
+    private static (string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal) ParseActorMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
-            return (null, null);
+            return (null, null, null);
         try
         {
             var m = JsonSerializer.Deserialize<ActorMetadataDto>(metadata, ActorMetadataJson);
-            return (m?.Ciudad, m?.Direccion);
+            return (m?.Ciudad, m?.Direccion, m?.RepresentanteLegal);
         }
         catch (JsonException)
         {
-            return (null, null);
+            return (null, null, null);
         }
     }
 
-    private sealed record ActorMetadataDto(string? Ciudad, string? Direccion);
+    private sealed record ActorMetadataDto(string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal);
+
+    /// <summary>Subconjunto del representante legal leído de <c>actor.metadata</c> (ADR-0036).</summary>
+    private sealed record ActorMetadataRl(string? TipoDocumento, string? NumeroDocumento, string? NombreCompleto);
 
     private static DateTime? ParseFechaTramite(string? raw)
     {
