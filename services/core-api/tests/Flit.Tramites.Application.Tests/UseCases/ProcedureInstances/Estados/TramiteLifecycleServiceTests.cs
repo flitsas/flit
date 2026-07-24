@@ -343,6 +343,60 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Borrador);
     }
 
+    // ── HU #10870 — subsanación sin volver a borrador ─────────────────────────────
+
+    [Theory]
+    [InlineData("entregado")]
+    [InlineData("rechazado")]
+    public async Task Ac1_EntregadoORechazado_PasaASubsanacion_SinMotivoObligatorio(string desde)
+    {
+        var i = Wire(desde);
+
+        var outcome = await Transition(i, TramiteEstado.Subsanacion);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Subsanacion);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == desde && r.ToStatus == TramiteEstado.Subsanacion);
+    }
+
+    [Fact]
+    public async Task Ac2_Subsanacion_ReRadica_ConservandoElHistorialPrevio()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+
+        // Primero pasa a subsanación (corrección post-entrega)...
+        var aSubsanacion = await Transition(i, TramiteEstado.Subsanacion);
+        aSubsanacion.Success.Should().BeTrue();
+
+        // ...y luego se re-radica: vuelve a 'entregado' SIN pasar por borrador/preparado.
+        var reRadicado = await Transition(i, TramiteEstado.Entregado);
+
+        reRadicado.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+        // AC2 — el historial conserva AMBAS transiciones (no se sobrescribe la anterior).
+        _recorder.Records.Should().HaveCount(2);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Entregado && r.ToStatus == TramiteEstado.Subsanacion);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Subsanacion && r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task Subsanacion_NoAdmiteVolverABorradorNiPreparado()
+    {
+        // Alcance de HU #10870: subsanacion SOLO re-radica (→ entregado); no bifurca a borrador ni
+        // preparado (eso seguiría el camino clásico rechazado→borrador si se necesitara).
+        var i = Wire(TramiteEstado.Subsanacion);
+
+        var aBorrador = await Transition(i, TramiteEstado.Borrador);
+        var aPreparado = await Transition(i, TramiteEstado.Preparado);
+
+        aBorrador.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        aPreparado.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        i.Status.Should().Be(TramiteEstado.Subsanacion);
+    }
+
     // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
     [Fact]
     public async Task Entrega_OtConGrantPeroNoOperable_BloqueaConOrganismoNoOperable()
