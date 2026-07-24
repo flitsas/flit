@@ -39,11 +39,16 @@ public sealed class GenerarFurHandler(
     IProcedureInstancePrendaRepository prendaRepo,
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IProcedureDeedResolver? deedResolver = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // HU #10926 (ADR-0033) — resolutor de escrituras vigentes de las compañías (NIT) de los actores,
+    // para adjuntarlas al consolidado. Default nulo (no resuelve) en tests que no lo ejercitan.
+    private readonly IProcedureDeedResolver _deedResolver = deedResolver ?? NullProcedureDeedResolver.Instance;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -181,6 +186,31 @@ public sealed class GenerarFurHandler(
                 instance.Attachments.Remove(prev);
                 repo.RemoveAttachment(prev);
             }
+        }
+
+        // HU #10926 — Escrituras: por cada actor persona jurídica (NIT) con una escritura activa y
+        // vigente en el directorio del tenant (#10899), adjuntar su PDF (Source=system, tipo 'escritura'
+        // para el vendedor/propietario y 'escritura_comprador' para el comprador) para que se fusione en
+        // el consolidado. Se resuelve en cualquier estado (documentación de soporte, no una firma).
+        var escrituras = await _deedResolver.ResolveForActorsAsync(tenantId, instance.Actors, ct);
+        var tiposEscritura = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var esc in escrituras)
+        {
+            generated.Add(new GeneratedDocument(esc.Tipo, esc.Filename, "application/pdf", esc.Content));
+            tiposEscritura.Add(esc.Tipo);
+        }
+        // Retirar escrituras previas cuyo tipo ya no aplica (regeneración): un actor que dejó de tener
+        // escritura vigente no debe arrastrar la anterior al consolidado. Los tipos que SÍ aplican los
+        // reemplaza idempotentemente el bucle de persistencia de abajo.
+        foreach (var prev in instance.Attachments
+                     .Where(a => (string.Equals(a.Tipo, "escritura", StringComparison.OrdinalIgnoreCase)
+                                  || string.Equals(a.Tipo, "escritura_comprador", StringComparison.OrdinalIgnoreCase))
+                                 && !tiposEscritura.Contains(a.Tipo))
+                     .ToList())
+        {
+            storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
         }
 
         foreach (var doc in generated)
