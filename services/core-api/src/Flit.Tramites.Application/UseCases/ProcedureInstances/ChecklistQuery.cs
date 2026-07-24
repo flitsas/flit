@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -46,8 +47,12 @@ public sealed class GetChecklistHandler(
     IProcedureInstanceRepository repo,
     IChecklistCompanyParamsProvider companyParams,
     IResolvedChecklistMatrixProvider? matrixProvider = null,
-    IDocumentTypeCatalog? documentTypes = null)
+    IDocumentTypeCatalog? documentTypes = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
+    private const string TransitOfficeCodeFieldKey = "transit_office_code";
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
     public async Task<(ChecklistResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -66,7 +71,16 @@ public sealed class GetChecklistHandler(
         // participantes) y sus reglas condicionales por tipología; RF31 — parámetros por gestora.
         // La supresión de cédula para persona natural (HU #10542) queda cubierta por la regla
         // condicional `pn_sin_cedula` (EsPersonaNatural ⇒ Hide cedulas), sin override aparte.
-        var context = TramiteDocumentContextMapper.From(instance);
+        // ADR-0036 (HU #10913) — configuración de mandato del OT por su código (field_values); null si
+        // el OT no la tiene ⇒ mandato solo para persona jurídica (default).
+        var otCode = instance.FieldValues?
+            .FirstOrDefault(f => string.Equals(f.FieldKey, TransitOfficeCodeFieldKey, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        var mandateConfig = string.IsNullOrWhiteSpace(otCode)
+            ? null
+            : await _mandatePolicy.ResolveAsync(otCode, ct);
+
+        var context = TramiteDocumentContextMapper.From(instance, mandateConfig);
         var rules = ConditionalDocumentRules.For(codigo);
         var parametros = await companyParams.GetForTenantAsync(tenantId, ct);
 
