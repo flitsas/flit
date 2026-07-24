@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
@@ -50,6 +51,52 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
         output.Save(result, false);
         return result.ToArray();
     }
+
+    public byte[] Compose(MergeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Parts is null || request.Parts.Count == 0)
+            throw new ArgumentException("Se requiere al menos una parte para componer el expediente.", nameof(request));
+
+        // Portada (HU #10857) antepuesta como primera página, en Carta con membrete FLIT (sin pie).
+        var parts = new List<byte[]>(request.Parts.Count + 1);
+        if (request.Cover is not null)
+            parts.Add(FlitCoverPageGenerator.Generate(ToCoverData(request.Cover)));
+
+        // HU #10858 — pie con el nombre del documento en cada parte antes de fusionar (se estampa
+        // por parte para que cada página lleve la descripción de SU documento).
+        foreach (var part in request.Parts)
+            parts.Add(string.IsNullOrWhiteSpace(part.DocumentName)
+                ? part.Pdf
+                : FlitPdfStamper.ApplyDocumentName(part.Pdf, part.DocumentName!));
+
+        var merged = Merge(parts);
+
+        // HU #10858 — marca de agua con el estado, salvo en estados finales (aprobado/entregado/preparado).
+        if (ShouldWatermark(request.EstadoTramite))
+            merged = FlitPdfStamper.ApplyWatermark(merged, request.EstadoTramite!.Trim().ToUpperInvariant());
+
+        return merged;
+    }
+
+    // Punto 5: la marca de agua aparece salvo cuando el trámite está en un estado "final".
+    private static readonly HashSet<string> EstadosSinMarcaAgua = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "aprobado",
+        "entregado",
+        "preparado",
+    };
+
+    private static bool ShouldWatermark(string? estado) =>
+        !string.IsNullOrWhiteSpace(estado) && !EstadosSinMarcaAgua.Contains(estado.Trim());
+
+    private static FlitCoverData ToCoverData(ExpedienteCoverInfo cover) =>
+        new(
+            CodigoTramite: cover.CodigoTramite ?? string.Empty,
+            Placa: cover.Placa ?? string.Empty,
+            TipoTramite: cover.TipoTramite ?? string.Empty,
+            SecretariaTransito: cover.SecretariaTransito ?? string.Empty,
+            CompaniaRadicadora: cover.CompaniaRadicadora ?? string.Empty);
 
     private static bool IsImageMime(string mimetype) =>
         string.Equals(mimetype, "image/jpeg", StringComparison.OrdinalIgnoreCase)
