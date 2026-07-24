@@ -16,9 +16,10 @@ import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
  * (la máquina de estados); los gates de cada transición los valida el POST /transition.
  *
  * Política de UI: `anulado` → "Anular trámite" (destructivo, motivo OBLIGATORIO);
- * `borrador` (desde rechazado) → "Volver a borrador" (motivo opcional). `preparado`/
- * `entregado` no tienen botón propio (flujo radicar del wizard) y `aprobado`/`rechazado`
- * son decisión del Organismo de Tránsito.
+ * `subsanacion` (desde rechazado) → "Subsanar" (HU #10870/#10872): reabre la edición COMPLETA
+ * en sitio (como borrador) SIN devolver el trámite a `borrador`; al terminar, el wizard lo
+ * re-radica directo a `entregado`. `preparado`/`entregado` no tienen botón propio (flujo
+ * radicar del wizard) y `aprobado`/`rechazado` son decisión del Organismo de Tránsito.
  */
 
 interface AccionConfig {
@@ -30,7 +31,9 @@ interface AccionConfig {
 
 const ACCIONES: AccionConfig[] = [
   { toStatus: 'anulado', label: 'Anular trámite', destructive: true, motivoRequerido: true },
-  { toStatus: 'borrador', label: 'Volver a borrador', destructive: false, motivoRequerido: false },
+  // HU #10870/#10872 — subsanación por el operador: reabre la edición en sitio (como borrador)
+  // sin pasar por `borrador`; el wizard cierra re-radicando directo a `entregado`.
+  { toStatus: 'subsanacion', label: 'Subsanar', destructive: false, motivoRequerido: false },
 ];
 
 export function EstadoAcciones({
