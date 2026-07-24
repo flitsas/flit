@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -104,6 +105,8 @@ internal static class BiometricaEndpoints
             [FromQuery] int? venceEnDias,
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
+            // HU #10867 — true = solo standalone; false = solo ligadas a trámite; omitido = todas.
+            [FromQuery] bool? standalone,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
@@ -129,7 +132,8 @@ internal static class BiometricaEndpoints
                 expiraHasta,
                 venceEnDias,
                 page ?? 1,
-                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize);
+                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
+                standalone);
 
             var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
             return error is not null
@@ -280,6 +284,44 @@ internal static class BiometricaEndpoints
         })
         .WithName("ReconciliarProcedureInstanceIdentity")
         .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK);
+
+        // POST crear prevalidación standalone (HU #10866, CF-01): crea una validación biométrica sin
+        // trámite previo. Hace upsert de la entidad Person por (tenant, docType, docNum) y delega
+        // la captura al proveedor activo (Kyverum → captureUrl real; mock → magic-link).
+        // 201 creada, 202 encolada (fallo transitorio Kyverum), 409 prevalidación activa existente.
+        group.MapPost("/biometric-validations", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] IniciarPrevalidacionRequest? body,
+            IniciarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, body, ct);
+            return error switch
+            {
+                "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "Completa tipo de documento, número de documento, nombre y correo."),
+                "datos_representante_requerido" => Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "Para persona jurídica se requieren tipo, número y nombre del representante legal."),
+                "prevalidacion_activa" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Ya existe una prevalidación activa para este documento."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ when result!.Queued => Results.Accepted(
+                    $"/api/v1/tramites/biometric-validations/{result.Validation.Id}", result),
+                _ => Results.Created(
+                    $"/api/v1/tramites/biometric-validations/{result!.Validation.Id}", result),
+            };
+        })
+        .WithName("IniciarPrevalidacionIdentidad")
+        .Produces<IniciarPrevalidacionResult>(StatusCodes.Status201Created)
+        .Produces<IniciarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.

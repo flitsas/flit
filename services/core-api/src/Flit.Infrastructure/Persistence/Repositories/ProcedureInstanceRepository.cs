@@ -283,8 +283,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.DocumentNumber == documento
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+                // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .OrderByDescending(v => v.ValidatedAt)
             .Take(10)
             .ToListAsync(ct);
@@ -311,8 +312,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.DocumentNumber != null
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+                // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
         foreach (var v in candidates)
@@ -360,9 +362,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Include(v => v.ProcedureInstance)
+            // HU #10867 — incluir prevalidaciones standalone (ProcedureInstanceId IS NULL) + las ligadas a instancias no eliminadas.
             .Where(v => v.TenantId == tenantId
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null);
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
 
     /// <summary>Carácter de escape para los patrones LIKE/ILIKE (saneo de búsqueda).</summary>
     private const string LikeEscapeChar = "\\";
@@ -494,6 +497,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(v =>
                 v.Status == BiometricEstados.Aprobado && v.ValidatedAt != null
                 && v.ValidatedAt > corteVigente && v.ValidatedAt <= corteVenceEn);
+        }
+
+        // HU #10867 — filtro standalone: true = solo prevalidaciones sin trámite; false = solo ligadas; null = todas.
+        if (filter.Standalone is { } standalone)
+        {
+            query = standalone
+                ? query.Where(v => v.ProcedureInstanceId == null)
+                : query.Where(v => v.ProcedureInstanceId != null);
         }
 
         // NOTA: el filtro `motivoRechazo` NO se aplica aquí. Detalle/ProviderPayload son columnas `jsonb`

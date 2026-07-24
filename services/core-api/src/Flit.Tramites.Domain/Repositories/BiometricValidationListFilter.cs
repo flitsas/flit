@@ -36,6 +36,11 @@ public sealed class BiometricValidationListFilter
     /// </summary>
     public int? VenceEnDias { get; init; }
 
+    /// <summary>
+    /// HU #10867 — true = solo prevalidaciones standalone (sin trámite); false = solo ligadas a trámite; null = todas.
+    /// </summary>
+    public bool? Standalone { get; init; }
+
     /// <summary>True si al menos un criterio de filtrado está informado.</summary>
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(ReferenceNumber)
@@ -54,5 +59,6 @@ public sealed class BiometricValidationListFilter
         || !string.IsNullOrWhiteSpace(VigenciaEstado)
         || ExpiraDesde is not null
         || ExpiraHasta is not null
-        || VenceEnDias is not null;
+        || VenceEnDias is not null
+        || Standalone is not null;
 }
