@@ -8,9 +8,26 @@ import {
   fetchDocumentRequirementOverrides,
   setDocumentRequirementOverride,
 } from "@/lib/api/admin-document-requirement-overrides";
+import { ApiError } from "@/lib/api/types";
 
 // Código del documento de inscripción/registro de prenda en el catálogo (seed HU #10520).
 const PLEDGE_DOCUMENT_CODE = "inscripcion_prenda";
+
+const DEFAULT_LOAD_ERROR = "No se pudo cargar la obligatoriedad del documento de prenda.";
+const DEFAULT_SAVE_ERROR = "No se pudo actualizar la obligatoriedad del documento de prenda.";
+const FORBIDDEN_OT_ERROR =
+  "No tienes permisos para gestionar el documento de prenda de este Organismo de Tránsito.";
+
+/**
+ * Traduce el 403 `TRANSIT_OFFICE_FORBIDDEN` (backend HU #10887: `ot_admin` solo puede
+ * gestionar overrides de su propia OT) a un mensaje entendible; el resto cae al genérico.
+ */
+function describePledgeError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status === 403) {
+    return FORBIDDEN_OT_ERROR;
+  }
+  return fallback;
+}
 
 export interface PledgeDocumentOverrideToggleProps {
   procedureTypeId: string;
@@ -19,6 +36,11 @@ export interface PledgeDocumentOverrideToggleProps {
 
 /**
  * Toggle dedicado "Documento de prenda obligatorio" (HU #10887).
+ *
+ * Componente autocontenido: se reutiliza tal cual desde dos puntos de entrada — la consola
+ * documental global (`OtOverridesTab`, con selector de trámite y OT) y el detalle del propio
+ * Organismo de Tránsito (`DocumentsSection` en `/admin/transit-offices/[id]/documents`, donde
+ * el `transitOfficeId` viene del hub). Ambos pegan al mismo endpoint y quedan sincronizados.
  *
  * AC1 — al activarlo, hace upsert (PUT) del override de obligatoriedad del documento
  * `inscripcion_prenda` a REQUIRED para el (tipo de trámite, OT) en curso, vía el endpoint
@@ -41,6 +63,7 @@ export function PledgeDocumentOverrideToggle({
   const [documentTypeId, setDocumentTypeId] = useState<string | null>(null);
   const [required, setRequired] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(DEFAULT_LOAD_ERROR);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -64,8 +87,11 @@ export function PledgeDocumentOverrideToggle({
         const override = overrides.find((o) => o.documentTypeId === pledge.documentTypeId);
         setRequired(override?.estado === "REQUIRED");
         setStatus("ready");
-      } catch {
-        if (!signal?.aborted) setStatus("error");
+      } catch (error) {
+        if (!signal?.aborted) {
+          setLoadError(describePledgeError(error, DEFAULT_LOAD_ERROR));
+          setStatus("error");
+        }
       }
     },
     [procedureTypeId, transitOfficeId],
@@ -96,9 +122,9 @@ export function PledgeDocumentOverrideToggle({
           : "El documento de prenda vuelve a heredar la obligatoriedad del trámite.",
         "success",
       );
-    } catch {
+    } catch (error) {
       setRequired(previous);
-      show("No se pudo actualizar la obligatoriedad del documento de prenda.", "error");
+      show(describePledgeError(error, DEFAULT_SAVE_ERROR), "error");
     } finally {
       setSaving(false);
     }
@@ -109,7 +135,7 @@ export function PledgeDocumentOverrideToggle({
       status={status}
       onRetry={() => void load()}
       emptyMessage="Este trámite no tiene asociado el documento de inscripción/registro de prenda; no admite override de obligatoriedad."
-      errorMessage="No se pudo cargar la obligatoriedad del documento de prenda."
+      errorMessage={loadError}
       skeletonRows={1}
     >
       <div className="flex items-start justify-between gap-4 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]">
