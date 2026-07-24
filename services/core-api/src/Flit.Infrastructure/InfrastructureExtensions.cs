@@ -141,6 +141,8 @@ public static class InfrastructureExtensions
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
         // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
         services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
+        // ADR-0036 (HU #10915) — Contrato Privado de Mandato (PDF real, condicional por OT/persona).
+        services.AddSingleton<IMandatoGenerator, Documents.MandatoPdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);

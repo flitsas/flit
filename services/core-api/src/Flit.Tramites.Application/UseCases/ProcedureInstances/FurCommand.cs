@@ -3,6 +3,7 @@ using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -41,7 +42,9 @@ public sealed class GenerarFurHandler(
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
     ISignatureVaultPolicy? vaultPolicy = null,
-    ISolicitudVirtualGenerator? solicitudVirtualGenerator = null)
+    ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
+    IMandatoGenerator? mandatoGenerator = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
@@ -50,6 +53,13 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10914) — Solicitud de trámite virtual (siempre). Opcional: los tests que no lo
     // ejercitan construyen el handler sin él (no se genera el documento).
     private readonly ISolicitudVirtualGenerator? _solicitudVirtualGenerator = solicitudVirtualGenerator;
+
+    // ADR-0036 (HU #10915) — Contrato de mandato (condicional). Opcional: sin el generador no se emite.
+    private readonly IMandatoGenerator? _mandatoGenerator = mandatoGenerator;
+
+    // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
+    // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -118,6 +128,27 @@ public sealed class GenerarFurHandler(
         // Idempotente: el reemplazo por tipo (más abajo) sustituye el adjunto 'tramite_virtual' previo.
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
+
+        // ADR-0036 (HU #10915) — Contrato de mandato: CONDICIONAL (persona jurídica siempre; persona
+        // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
+        // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
+        // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
+        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), ct);
+        if (mandato is not null)
+        {
+            generated.Add(mandato);
+        }
+        else
+        {
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
 
         if (identidadValidada)
         {
@@ -449,6 +480,35 @@ public sealed class GenerarFurHandler(
         var vence = v.ValidUntil is { } vu
             ? vu.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
+    }
+
+    /// <summary>
+    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato si el trámite lo EXIGE: persona jurídica
+    /// siempre; persona natural solo si el OT lo configura (<c>RequiresForNaturalPerson</c>). Resuelve la
+    /// config del OT por el <c>transit_office_code</c> del trámite; sin generador o sin exigencia devuelve
+    /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
+    /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
+    /// </summary>
+    private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
+        FurDocumentData data, string? transitOfficeCode, CancellationToken ct)
+    {
+        if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
+            return null;
+
+        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
+        var esJuridica = data.Radicador?.EsJuridica ?? false;
+        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
+        if (!exigeMandato)
+            return null;
+
+        var mandatoData = new MandatoData(
+            data,
+            config?.TemplateCode ?? MandatoTemplateResolver.Generico,
+            config?.InstitutionalMandataryName,
+            config?.InstitutionalMandataryNit,
+            Mandatario: null);
+
+        return _mandatoGenerator.GenerateMandato(mandatoData);
     }
 
     /// <summary>

@@ -136,6 +136,44 @@ public interface ISolicitudVirtualGenerator
 }
 
 /// <summary>
+/// Firmante del mandato (MANDATARIO) resuelto para el trámite (ADR-0036, HU #10915/#10916): el
+/// representante que el OT registró en <c>admin.mandate_signers</c> y firma en nombre de la compañía
+/// gestora. <c>null</c> mientras el trámite está en <i>preparado</i> y aún no se ha elegido/filtrado el
+/// firmante (se regenera al aprobar, HU #10916): el PDF pinta placeholders y no muestra el bloque de firmas.
+/// </summary>
+public sealed record MandatarioFirmante(string? Nombre, string? Documento);
+
+/// <summary>
+/// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
+/// radica (<see cref="FurDocumentData.Radicador"/>): persona natural a nombre propio, o el representante
+/// legal en nombre de la empresa. El MANDATARIO depende del OT: institucional fijo (Sabaneta UT-SETSA /
+/// Bello UT-MAB, tomado de <see cref="InstitutionalMandataryName"/>/<see cref="InstitutionalMandataryNit"/>)
+/// o el firmante persona (<see cref="Mandatario"/>) de la plantilla genérica/Bello.
+/// <para><b>Texto legal:</b> transcrito de las plantillas legacy de FLIT 1.0; queda marcado para
+/// revisión del PO (ADR-0036 §10.2) antes de considerar cerrada la HU.</para>
+/// </summary>
+public sealed record MandatoData(
+    FurDocumentData Tramite,
+    string TemplateCode,
+    string? InstitutionalMandataryName,
+    string? InstitutionalMandataryNit,
+    MandatarioFirmante? Mandatario);
+
+/// <summary>
+/// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica
+/// cuando el OT/persona exige mandato (<c>TramiteDocumentContext.ExigeMandato</c>: persona jurídica
+/// siempre; persona natural solo si el OT lo configura). Implementación productiva vía QuestPDF (tipo
+/// <c>mandato</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES/solicitud
+/// virtual). La variante de plantilla la decide <c>MandatoTemplateResolver</c> (dominio) por el
+/// <c>template_code</c> del OT.
+/// </summary>
+public interface IMandatoGenerator
+{
+    /// <summary>Genera el contrato de mandato (tipo <c>mandato</c>).</summary>
+    GeneratedDocument GenerateMandato(MandatoData data);
+}
+
+/// <summary>
 /// Datos para el Certificado de validación de identidad: comprador (nombre/doc) + resultado de la
 /// biométrica (score + estado APROBADO/RECHAZADO).
 /// </summary>
