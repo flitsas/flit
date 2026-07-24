@@ -29,7 +29,8 @@ public sealed record ActorInput(
     string? Direccion = null,
     string? PersonType = null,
     bool EsRepresentanteLegal = false,
-    ActorRepresentanteLegal? RepresentanteLegal = null);
+    ActorRepresentanteLegal? RepresentanteLegal = null,
+    ActorMandante? Mandante = null);
 
 public sealed record ActorDto(
     string Rol,
@@ -42,7 +43,8 @@ public sealed record ActorDto(
     string? Direccion = null,
     string? PersonType = null,
     bool EsRepresentanteLegal = false,
-    ActorRepresentanteLegal? RepresentanteLegal = null);
+    ActorRepresentanteLegal? RepresentanteLegal = null,
+    ActorMandante? Mandante = null);
 
 /// <summary>
 /// Representante legal / apoderado de una persona jurídica (persona natural). Datos capturados
@@ -55,6 +57,17 @@ public sealed record ActorRepresentanteLegal(
     string? NombreCompleto,
     string? Email,
     string? Telefono);
+
+/// <summary>
+/// Mandante / poderdante de una parte (contrato de integración con terceros: <c>principal_mandante</c>).
+/// Igual que el representante legal, es información de contacto embebida en <c>actor.metadata</c>
+/// (sin DDL): no participa en biométrica ni en los gates del wizard.
+/// </summary>
+public sealed record ActorMandante(
+    string? TipoDocumento,
+    string? NumeroDocumento,
+    string? NombreCompleto,
+    string? Email);
 
 public sealed record PutActorsRequest(IReadOnlyList<ActorInput> Actors);
 
@@ -211,7 +224,7 @@ public sealed class PutActorsHandler(
                 Phone = string.IsNullOrWhiteSpace(a.Telefono) ? null : a.Telefono.Trim(),
                 PersonType = ActorPersonTypes.Normalize(a.PersonType),
                 EsRepresentanteLegal = a.EsRepresentanteLegal,
-                Metadata = SerializeMetadata(a.Ciudad, a.Direccion, a.RepresentanteLegal),
+                Metadata = SerializeMetadata(a.Ciudad, a.Direccion, a.RepresentanteLegal, a.Mandante),
                 CreatedAt = now,
             };
             instance.Actors.Add(actor);
@@ -287,7 +300,7 @@ public sealed class PutActorsHandler(
         new(instance.Actors
             .Select(a =>
             {
-                var (ciudad, direccion, rl) = ParseMetadata(a.Metadata);
+                var (ciudad, direccion, rl, mandante) = ParseMetadata(a.Metadata);
                 return new ActorDto(
                     a.ActorType,
                     a.DocumentType,
@@ -299,7 +312,8 @@ public sealed class PutActorsHandler(
                     direccion,
                     a.PersonType,
                     a.EsRepresentanteLegal,
-                    rl);
+                    rl,
+                    mandante);
             })
             .ToList());
 
@@ -309,33 +323,53 @@ public sealed class PutActorsHandler(
     /// Serializa ciudad/dirección + representante legal al JSON de <c>actor.metadata</c>.
     /// Sin ningún dato → "{}".
     /// </summary>
-    private static string SerializeMetadata(string? ciudad, string? direccion, ActorRepresentanteLegal? rl)
+    private static string SerializeMetadata(
+        string? ciudad,
+        string? direccion,
+        ActorRepresentanteLegal? rl,
+        ActorMandante? mandante = null)
     {
         var c = string.IsNullOrWhiteSpace(ciudad) ? null : ciudad.Trim();
         var d = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim();
         var repLegal = NormalizeRepresentanteLegal(rl);
-        return c is null && d is null && repLegal is null
+        var mand = NormalizeMandante(mandante);
+        return c is null && d is null && repLegal is null && mand is null
             ? "{}"
-            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal), MetadataJson);
+            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal, mand), MetadataJson);
     }
 
     /// <summary>
     /// Lee ciudad/dirección + representante legal de <c>actor.metadata</c>. Robusto ante
     /// null/"{}"/JSON inválido.
     /// </summary>
-    private static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal) ParseMetadata(string? metadata)
+    private static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
-            return (null, null, null);
+            return (null, null, null, null);
         try
         {
             var m = JsonSerializer.Deserialize<ActorMetadata>(metadata, MetadataJson);
-            return (m?.Ciudad, m?.Direccion, NormalizeRepresentanteLegal(m?.RepresentanteLegal));
+            return (m?.Ciudad, m?.Direccion, NormalizeRepresentanteLegal(m?.RepresentanteLegal), NormalizeMandante(m?.Mandante));
         }
         catch (JsonException)
         {
-            return (null, null, null);
+            return (null, null, null, null);
         }
+    }
+
+    /// <summary>Trim + colapso a null si el mandante viene vacío en todos sus campos.</summary>
+    private static ActorMandante? NormalizeMandante(ActorMandante? mandante)
+    {
+        if (mandante is null)
+            return null;
+        string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        var tipo = Clean(mandante.TipoDocumento);
+        var numero = Clean(mandante.NumeroDocumento);
+        var nombre = Clean(mandante.NombreCompleto);
+        var email = Clean(mandante.Email);
+        return tipo is null && numero is null && nombre is null && email is null
+            ? null
+            : new ActorMandante(tipo, numero, nombre, email);
     }
 
     /// <summary>Trim + colapso a null si el representante legal viene vacío en todos sus campos.</summary>
@@ -357,7 +391,8 @@ public sealed class PutActorsHandler(
     private sealed record ActorMetadata(
         string? Ciudad,
         string? Direccion,
-        ActorRepresentanteLegal? RepresentanteLegal = null);
+        ActorRepresentanteLegal? RepresentanteLegal = null,
+        ActorMandante? Mandante = null);
 }
 
 /// <summary>GET de actores del set guardado.</summary>

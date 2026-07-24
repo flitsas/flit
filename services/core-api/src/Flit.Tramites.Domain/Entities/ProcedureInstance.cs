@@ -53,6 +53,18 @@ public sealed class ProcedureInstance
     /// </summary>
     public bool ConsolidadoMaestroVigente { get; set; }
 
+    /// <summary>
+    /// Origen del trámite y referencia externa del sistema originador. Para los trámites materializados
+    /// por la integración con terceros (ICT): <c>Origin='ict'</c> y <c>ExternalRef</c> = id del pre-trámite
+    /// (<c>ict.external_integration_master.id</c>). Sostienen la materialización IDEMPOTENTE: el índice
+    /// único parcial (tenant_id, external_ref) impide crear dos borradores para el mismo pre-trámite y el
+    /// guard de <c>CreateDraftFromIct</c> reusa el existente ante un reintento. Null para trámites de
+    /// plataforma. Columnas agregadas por migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapean.
+    /// </summary>
+    public string? Origin { get; set; }
+
+    public string? ExternalRef { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

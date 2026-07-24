@@ -203,10 +203,13 @@ app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 
-// Orquestación ICT (core-ict -> core-api). TODO(ICT-GRPC-AUTH): policy con service-token dedicado.
-app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>();
+// Orquestación ICT (core-ict -> core-api): exige el service-token (esquema/policy IctService) para que
+// solo core-ict autenticado como sistema pueda invocar la orquestación (no un tercero en el puerto interno).
+app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
+    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
 // Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
-app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>();
+app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
+    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
