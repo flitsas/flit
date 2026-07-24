@@ -69,6 +69,23 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
     public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
 
+    // ── Admin Compañías — representantes legales por compañía + escrituras (HU #10900, ADR-0033) ──
+    public DbSet<RepresentedCompanyEntity> RepresentedCompanies => Set<RepresentedCompanyEntity>();
+
+    public DbSet<CompanyLegalRepresentativeEntity> CompanyLegalRepresentatives =>
+        Set<CompanyLegalRepresentativeEntity>();
+
+    public DbSet<CompanyLegalRepresentativeProcedureTypeEntity> CompanyLegalRepresentativeProcedureTypes =>
+        Set<CompanyLegalRepresentativeProcedureTypeEntity>();
+
+    public DbSet<CompanyDeedEntity> CompanyDeeds => Set<CompanyDeedEntity>();
+
+    public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
+
+    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
+    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
+        Set<AdminIdentityValidationEntity>();
+
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────

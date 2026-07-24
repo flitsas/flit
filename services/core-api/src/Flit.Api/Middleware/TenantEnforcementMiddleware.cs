@@ -98,7 +98,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
         // y un company-user podía leer/reencolar las atascadas de otra compañía.
-        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase)
+        // HU #10903 — consumo del wizard (escrituras vigentes + lookup de representante por NIT): el
+        // operador de la compañía solo lee SU tenant. El tenant se impone desde el JWT (no del header),
+        // para que un company-user no consulte el directorio de otra compañía cambiando X-Tenant-Id.
+        || path.StartsWithSegments("/api/v1/tramites/deeds", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

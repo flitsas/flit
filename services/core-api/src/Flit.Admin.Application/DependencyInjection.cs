@@ -79,6 +79,7 @@ using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Admin.Application;
 
@@ -165,6 +166,45 @@ public static class DependencyInjection
         services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
         services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
+
+        // HU #10900 (ADR-0033) — resolutor de firma/identidad al guardar un representante legal
+        // (precedencia baúl > identidad). ISignatureVaultReader e IRepresentativeIdentityLookup se
+        // registran en AddAdminInfrastructure.
+        services.AddScoped<Companies.LegalRepresentatives.ILegalRepresentativeSignatureResolver,
+            Companies.LegalRepresentatives.LegalRepresentativeSignatureResolver>();
+
+        // HU #10901 (ADR-0033) — CRUD de representantes legales por compañía (API paginada). El writer
+        // comparte validación + upsert de compañía + resolución de firma/identidad + persistencia entre
+        // el alta y la edición. ILegalRepresentativeReader/Repository e IProcedureTypeCatalog se
+        // registran en AddAdminInfrastructure. TimeProvider ancla el "hoy" en Colombia para la vigencia.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<Companies.LegalRepresentatives.LegalRepresentativeWriter>();
+        services.AddScoped<Companies.LegalRepresentatives.CreateLegalRepresentative.CreateLegalRepresentativeHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.UpdateLegalRepresentative.UpdateLegalRepresentativeHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.ListLegalRepresentatives.ListLegalRepresentativesHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.GetLegalRepresentative.GetLegalRepresentativeByIdHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.DeleteLegalRepresentative.DeleteLegalRepresentativeHandler>();
+
+        // HU #10902 (ADR-0033) — gestión de escrituras (PDF) con vigencia por compañía: CRUD
+        // paginado SuperAdmin. IDeedReader/IDeedRepository e IDeedDocumentStorage se registran en
+        // AddAdminInfrastructure.
+        services.AddScoped<Companies.Deeds.CreateDeed.CreateDeedHandler>();
+        services.AddScoped<Companies.Deeds.UpdateDeed.UpdateDeedHandler>();
+        services.AddScoped<Companies.Deeds.ListDeeds.ListDeedsHandler>();
+        services.AddScoped<Companies.Deeds.GetDeed.GetDeedByIdHandler>();
+        services.AddScoped<Companies.Deeds.DeleteDeed.DeleteDeedHandler>();
+
+        // HU #10903 (ADR-0033 §5.4) — endpoints de CONSUMO del wizard (tenant-scoped por el JWT del
+        // operador): escrituras activas y vigentes del tenant + lookup de representante por NIT con
+        // banderas de firma/identidad vigentes (recalculadas). Readers/lookups se registran en
+        // AddAdminInfrastructure; el reloj se ancla a TimeProvider.System (hoy en Colombia).
+        services.AddScoped<Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler>();
+        services.AddScoped<Companies.LegalRepresentatives.FindByNit.FindRepresentativeByNitHandler>();
+
+        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
+        // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
+        // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).
+        services.AddScoped<Identity.IAdminIdentityValidationService, Identity.AdminIdentityValidationService>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
