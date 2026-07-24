@@ -40,7 +40,8 @@ public sealed class GenerarFurHandler(
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
     ISignatureVaultPolicy? vaultPolicy = null,
-    IFurTemplateResolver? templateResolver = null)
+    IFurTemplateResolver? templateResolver = null,
+    IProcedureDeedResolver? deedResolver = null)
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
@@ -49,6 +50,10 @@ public sealed class GenerarFurHandler(
     // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
     // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
     private readonly IFurTemplateResolver? _templateResolver = templateResolver;
+
+    // HU #10926 (ADR-0033) — resolutor de escrituras vigentes de las compañías (NIT) de los actores,
+    // para adjuntarlas al consolidado. Default nulo (no resuelve) en tests que no lo ejercitan.
+    private readonly IProcedureDeedResolver _deedResolver = deedResolver ?? NullProcedureDeedResolver.Instance;
 
     public async Task<(GenerarFurResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -191,6 +196,41 @@ public sealed class GenerarFurHandler(
                 instance.Attachments.Remove(prev);
                 repo.RemoveAttachment(prev);
             }
+        }
+
+        // HU #10926 — Escrituras: por cada actor persona jurídica (NIT) con una escritura activa y
+        // vigente en el directorio del tenant (#10899), adjuntar su PDF (Source=system, tipo 'escritura'
+        // para el vendedor/propietario y 'escritura_comprador' para el comprador) para que se fusione en
+        // el consolidado. Se resuelve en cualquier estado (documentación de soporte, no una firma).
+        var escrituras = await _deedResolver.ResolveForActorsAsync(tenantId, instance.Actors, ct);
+        var tiposEscritura = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var esc in escrituras)
+        {
+            generated.Add(new GeneratedDocument(esc.Tipo, esc.Filename, "application/pdf", esc.Content));
+            tiposEscritura.Add(esc.Tipo);
+        }
+        // Retirar escrituras previas cuyo tipo ya no aplica (regeneración): un actor que dejó de tener
+        // escritura vigente no debe arrastrar la anterior al consolidado. Los tipos que SÍ aplican los
+        // reemplaza idempotentemente el bucle de persistencia de abajo.
+        var escriturasHuerfanas = instance.Attachments
+            .Where(a => (string.Equals(a.Tipo, "escritura", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(a.Tipo, "escritura_comprador", StringComparison.OrdinalIgnoreCase))
+                        && !tiposEscritura.Contains(a.Tipo))
+            .ToList();
+        foreach (var prev in escriturasHuerfanas)
+        {
+            storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
+
+        // R1 (ADR-0033) — si cambian las escrituras del expediente (se adjunta una o se retira una
+        // huérfana), invalidar el consolidado maestro cacheado (#10701) para que su próxima vista lo
+        // regenere con la escritura correcta. El consolidado del wizard ya regenera siempre; el maestro
+        // cachea con este flag (se pone true al generarlo en ConsolidadoMaestroCommand).
+        if (tiposEscritura.Count > 0 || escriturasHuerfanas.Count > 0)
+        {
+            instance.ConsolidadoMaestroVigente = false;
         }
 
         foreach (var doc in generated)

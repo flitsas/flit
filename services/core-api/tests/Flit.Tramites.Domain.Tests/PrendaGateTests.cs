@@ -62,4 +62,37 @@ public sealed class PrendaGateTests
         PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, Prenda("sin_prenda"), docTipos: [])
             .Should().BeNull();
     }
+
+    // ── CF-06 (HU #10881) — override del OT, independiente del semáforo de gravámenes ───────────
+
+    [Fact]
+    public void OtOverride_Inactivo_NuncaBloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, docTipos: [])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void OtOverride_Activo_SinDocumento_Bloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Theory]
+    [InlineData("prenda_solicitud")]
+    [InlineData("prenda_registro")]
+    [InlineData("prenda_levantamiento")]
+    public void OtOverride_Activo_ConCualquierDocumentoDePrenda_Pasa(string docTipo)
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [docTipo])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void OtOverride_Activo_ConOtroDocumentoNoRelacionado_Bloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: ["soat", "rtm"])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
 }

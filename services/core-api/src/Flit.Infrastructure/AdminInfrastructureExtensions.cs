@@ -2,6 +2,7 @@ using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -97,6 +98,32 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.SignatureVault.ISignatureVaultArtifactStorage,
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
+
+        // HU #10900 (ADR-0033) — directorio de representantes legales por compañía + escrituras.
+        // Readers/repos tenant-scoped (RLS) + adaptador del puerto de identidad biométrica que
+        // consume el resolutor de firma/identidad (registrado en AddAdminApplication).
+        services.AddScoped<ILegalRepresentativeReader, DbLegalRepresentativeReader>();
+        services.AddScoped<ILegalRepresentativeRepository, LegalRepresentativeRepository>();
+        services.AddScoped<IDeedReader, DbDeedReader>();
+        services.AddScoped<IDeedRepository, DeedRepository>();
+
+        // HU #10902 (ADR-0033) — custodia del PDF de la escritura en storage (delega en
+        // IAttachmentStorage vía presigned URLs; el SHA-256 lo aporta el cliente).
+        services.AddScoped<Flit.Admin.Application.Companies.Deeds.IDeedDocumentStorage,
+            Flit.Infrastructure.Storage.DeedDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
+            RepresentativeIdentityLookup>();
+
+        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
+        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
+        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
+        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
+            AdminIdentityValidationRepository>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
+            AdminIdentitySubjectLinker>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
+            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();

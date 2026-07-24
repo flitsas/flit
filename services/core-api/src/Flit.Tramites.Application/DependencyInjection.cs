@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
         services.AddScoped<SetPriorityProcedureInstanceHandler>();
+        // HU #10879 — persistir el avance del borrador por pasos (autosave del paso actual del wizard).
+        services.AddScoped<SetCurrentStepProcedureInstanceHandler>();
 
         // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
         // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher
@@ -78,6 +80,13 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
+
+        // CF-02 (HU #10879/#10883) — consulta del paso 1 sin trámite creado y creación al avanzar al
+        // paso 2. El store es SINGLETON: custodia en memoria las consultas del paso 1 (minutos) para
+        // que crear el trámite no repita la llamada al proveedor externo.
+        services.AddSingleton<IPreflightPreviewStore, InMemoryPreflightPreviewStore>();
+        services.AddScoped<RunPreflightPreviewHandler>();
+        services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
@@ -158,6 +167,9 @@ public static class DependencyInjection
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
 
+        // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
+        // consultas externas, consumido por los 3 handlers de consulta de abajo.
+        services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();

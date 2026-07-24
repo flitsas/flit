@@ -85,6 +85,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     private static bool IsRuntimeScoped(PathString path) =>
         path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
+        // CF-02 (HU #10879) — consulta del paso 1 ANTES de crear el trámite: no lleva instancia en la
+        // ruta, pero es tan tenant-scoped como el resto del runtime (usa los proveedores de consulta de
+        // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
+        // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
+        || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
         // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
         // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
@@ -93,7 +98,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
         // y un company-user podía leer/reencolar las atascadas de otra compañía.
-        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase)
+        // HU #10903 — consumo del wizard (escrituras vigentes + lookup de representante por NIT): el
+        // operador de la compañía solo lee SU tenant. El tenant se impone desde el JWT (no del header),
+        // para que un company-user no consulte el directorio de otra compañía cambiando X-Tenant-Id.
+        || path.StartsWithSegments("/api/v1/tramites/deeds", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

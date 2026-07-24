@@ -69,6 +69,23 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
     public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
 
+    // ── Admin Compañías — representantes legales por compañía + escrituras (HU #10900, ADR-0033) ──
+    public DbSet<RepresentedCompanyEntity> RepresentedCompanies => Set<RepresentedCompanyEntity>();
+
+    public DbSet<CompanyLegalRepresentativeEntity> CompanyLegalRepresentatives =>
+        Set<CompanyLegalRepresentativeEntity>();
+
+    public DbSet<CompanyLegalRepresentativeProcedureTypeEntity> CompanyLegalRepresentativeProcedureTypes =>
+        Set<CompanyLegalRepresentativeProcedureTypeEntity>();
+
+    public DbSet<CompanyDeedEntity> CompanyDeeds => Set<CompanyDeedEntity>();
+
+    public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
+
+    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
+    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
+        Set<AdminIdentityValidationEntity>();
+
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
@@ -156,6 +173,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
+
+    // Trámites — caché cross-trámite de consultas externas + gate de consentimiento Habeas Data
+    // (HU #10878, Feature #10862, CF-04, ADR-0030/ADR-0031).
+    public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
+    public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
 
     // FEATURE-08 / Fase 2b — catálogo global de fuentes por tipo (CFD-04, ADR-0019 excepción A4/A20).
     public DbSet<ProcedureTypeSource> ProcedureTypeSources => Set<ProcedureTypeSource>();

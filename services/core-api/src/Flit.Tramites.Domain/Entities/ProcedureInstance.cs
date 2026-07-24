@@ -16,6 +16,17 @@ public sealed class ProcedureInstance
     public Guid? TransitOfficeId { get; set; }
 
     /// <summary>
+    /// HU #10879 — paso actual PERSISTIDO del wizard (autosave del avance por pasos). Guarda la
+    /// <c>Key</c> del paso del contrato del wizard (matrícula: <c>consulta_vin|documentos|comprador|
+    /// identidad|fur</c>; traspaso: <c>consulta|documentos|vendedor|comprador|comercial|fur</c>). Solo
+    /// se escribe en <c>borrador</c> y una vez que la consulta del vehículo está completa (AC1). Al
+    /// reabrir el borrador PRIMA como punto de retoma (AC2); mientras sea <c>null</c> el frontend cae al
+    /// paso DERIVADO de los gates (comportamiento previo, sin regresión). Columna agregada por migración
+    /// SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public string? CurrentStep { get; set; }
+
+    /// <summary>
     /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
     /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
     /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al

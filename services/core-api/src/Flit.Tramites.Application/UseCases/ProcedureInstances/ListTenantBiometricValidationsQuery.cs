@@ -30,7 +30,14 @@ public sealed record TenantBiometricValidationDto(
     // Vigencia de la identidad APROBADA (30 días calendario desde la aprobación): fecha de fin de
     // vigencia y días que le restan. Null cuando no hay aprobación (ValidatedAt) → no aplica vigencia.
     DateTimeOffset? ValidUntil,
-    int? DaysRemaining);
+    int? DaysRemaining,
+    // CF-05 (HU #10886, AC2) — enlace de captura VIGENTE, para reenviarlo por otros medios desde el
+    // submódulo de Validaciones de Identidad. Null cuando no hay nada que compartir: proveedor sin
+    // enlace (mock), validación en estado terminal (aprobado/rechazado/expirado) o enlace ya vencido.
+    string? CaptureUrl,
+    // Vencimiento del enlace de captura (distinto de ValidUntil, que es la vigencia de la identidad
+    // ya APROBADA). Se expone siempre que exista, para poder mostrar "vigente hasta …".
+    DateTimeOffset? LinkExpiresAt);
 
 /// <summary>KPIs del submódulo: totales por estado (exactos, sin el cap de filas de la tabla).</summary>
 public sealed record BiometricValidationStatsDto(
@@ -131,7 +138,27 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             // de la columna; los días restantes NO se persisten — se calculan al vuelo contra HOY, así que
             // siempre van frescos sin job ni columna materializada.
             v.ValidUntil,
-            BiometricRules.DiasRestantesVigencia(v, now));
+            BiometricRules.DiasRestantesVigencia(v, now),
+            EnlaceVigente(v, now),
+            v.ExpiresAt);
+
+    /// <summary>
+    /// CF-05 (HU #10886, AC2) — enlace de captura solo mientras SIRVE para algo: la validación sigue en
+    /// curso (pendiente de envío / enviada / en proceso) y el enlace no ha vencido. En estados terminales
+    /// (aprobado, rechazado, expirado) no se expone: no hay nada que reenviar y el enlace es un dato
+    /// sensible que no debe pasearse más allá de su utilidad.
+    /// </summary>
+    private static string? EnlaceVigente(ProcedureInstanceBiometricValidation v, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(v.CaptureUrl))
+            return null;
+
+        var enCurso = v.Status is BiometricEstados.PendienteEnvio
+            or BiometricEstados.Enviado
+            or BiometricEstados.EnProceso;
+
+        return enCurso && now <= v.ExpiresAt ? v.CaptureUrl : null;
+    }
 
     /// <summary>
     /// KPIs derivados de las filas ya materializadas (usado cuando el filtro de motivo se resuelve en

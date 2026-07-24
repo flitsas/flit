@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -33,7 +34,8 @@ public sealed class TramiteLifecycleService(
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
-    ISignatureVaultPolicy? vaultPolicy = null) : ITramiteLifecycleService
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null) : ITramiteLifecycleService
 {
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
@@ -51,6 +53,11 @@ public sealed class TramiteLifecycleService(
     // R10 (HU #10597) — repo de prenda para el gate de traspaso. Null en tests que no lo ejercitan
     // (el gate se omite de forma segura); en producción lo inyecta el contenedor.
     private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
+
+    // CF-06 (HU #10881) — override OT del documento de prenda, independiente del semáforo de
+    // gravámenes. Default permisivo (nunca exige) cuando no hay política cableada (tests).
+    private readonly IPrendaDocumentRequirementPolicy _prendaDocumentRequirementPolicy =
+        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
     public async Task<TramiteTransitionOutcome> TransitionAsync(
         TramiteTransitionCommand command,
@@ -86,6 +93,18 @@ public sealed class TramiteLifecycleService(
             return TramiteTransitionOutcome.Fail(
                 TramiteEstadoErrores.MotivoRequerido,
                 $"Debe indicar el motivo para pasar el trámite a '{command.ToStatus}'.");
+
+        // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado", SEGUNDO momento
+        // ("de nuevo al radicar", el estado pudo cambiar desde el preflight). SOLO Matrícula Inicial,
+        // SOLO fuente FLIT (bloqueo duro por repo, sin IO externo al RUNT en este gate — la fuente RUNT
+        // ya se validó de forma DURA en el preflight, AC1/AC3): si OTRO trámite del mismo VIN llegó a
+        // 'aprobado' mientras este seguía en curso, esta relectura lo atrapa antes de preparar/entregar.
+        if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado)
+        {
+            var vehicleStateDetail = await EvaluarEstadoVehiculoRegistralAsync(instance, ct).ConfigureAwait(false);
+            if (vehicleStateDetail is not null)
+                return TramiteTransitionOutcome.Fail(VehicleStatePolicy.ErrorCode, vehicleStateDetail);
+        }
 
         // RF03 — gate borrador→preparado: identidad aprobada/vigente + documentos obligatorios.
         if (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
@@ -325,6 +344,32 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
+    /// CF-03 (HU #10877) — re-evalúa la fuente FLIT del bloqueo registral "vehículo ya matriculado" al
+    /// preparar/entregar (segundo momento). SOLO Matrícula Inicial; sin VIN persistido (instancia sin
+    /// consulta de vehículo aún) es no-op. Devuelve el mensaje de bloqueo, o <c>null</c> si el VIN sigue
+    /// libre de una matrícula APROBADA de otro trámite.
+    /// </summary>
+    private async Task<string?> EvaluarEstadoVehiculoRegistralAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
+            return null;
+
+        var vin = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var vinNorm = VinNormalizer.Normalize(vin);
+        if (vinNorm is null)
+            return null;
+
+        var existentes = await repo.FindTramitesByVinAsync(instance.TenantId, vinNorm, instance.Id, ct)
+            .ConfigureAwait(false);
+        var conflicto = VinPolicyEvaluator.EvaluarConflicto(existentes);
+        if (conflicto?.Code != VinConflictCode.TramiteMatriculaCompletada)
+            return null;
+
+        return "El vehículo ya tiene una matrícula inicial APROBADA en FLIT para este VIN: no puede radicarse.";
+    }
+
+    /// <summary>
     /// R10 (HU #10597) — gate de prenda del traspaso. Solo aplica a traspaso con el semáforo de
     /// gravámenes en <c>warn</c>: exige una decisión de prenda vigente y, si la decisión requiere
     /// documento, su adjunto. <c>(null, null)</c> = puede prepararse. Se omite si no hay repo cableado.
@@ -333,15 +378,28 @@ public sealed class TramiteLifecycleService(
         ProcedureInstance instance,
         CancellationToken ct)
     {
-        if (_prendaRepo is null)
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
+        if (!esTraspaso)
             return (null, null);
 
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso || !HasGravamenWarn(instance))
+        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
+
+        // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): exige el
+        // documento de prenda. SNAPSHOT (AC2): solo overrides ya activos AL CREAR el trámite aplican.
+        var otRequiereDocumento = await _prendaDocumentRequirementPolicy
+            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .ConfigureAwait(false);
+        var otError = PrendaGate.EvaluateOtOverride(otRequiereDocumento, docTipos);
+        if (otError is not null)
+            return (otError,
+                "El organismo de tránsito exige el documento de prenda para este tipo de trámite.");
+
+        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda vigente), solo con
+        // el repo de prenda cableado.
+        if (_prendaRepo is null || !HasGravamenWarn(instance))
             return (null, null);
 
         var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
-        var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
         return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
         {

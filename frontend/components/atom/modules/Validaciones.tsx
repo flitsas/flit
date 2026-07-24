@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Copy,
   ExternalLink,
   RotateCcw,
   ScanFace,
@@ -723,7 +724,7 @@ function ValidacionesSkeleton() {
  * permite truncar el contenido dentro de cada celda del grid.
  */
 const GRID_COLS =
-  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr)';
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr)';
 
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
@@ -748,6 +749,7 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
           <div>Registro</div>
           <div>Aprobación</div>
           <div>Vigencia</div>
+          <div>Enlace</div>
         </div>
         <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
           {rows.map((r) => (
@@ -777,7 +779,9 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
     `. Abrir trámite.`;
 
   return (
-    <li>
+    // `relative`: el botón de copiar el enlace va SOBRE la fila, no dentro del <a> — un <button>
+    // anidado en un enlace es contenido interactivo inválido y confunde a los lectores de pantalla.
+    <li className="relative">
       <a
         href={`/tramites/${r.instanceId}`}
         aria-label={ariaLabel}
@@ -834,7 +838,72 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
             <span className="opacity-80">—</span>
           )}
         </div>
+        {/* Celda reservada para el enlace: mantiene la rejilla alineada con la cabecera. El control
+            real se pinta encima (fuera del <a>), o queda el guion cuando no hay enlace vigente. */}
+        <div className="min-w-0 text-[10px] opacity-80" aria-hidden="true">
+          {r.captureUrl ? '' : '—'}
+        </div>
       </a>
+      {r.captureUrl && (
+        <CopiarEnlaceValidacion
+          captureUrl={r.captureUrl}
+          expiresAt={r.linkExpiresAt}
+          persona={r.name}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * CF-05 (HU #10886, AC2) — enlace de captura vigente de una validación, para reenviarlo por otros
+ * medios (WhatsApp, llamada, etc.) cuando el correo no llega. Se posiciona sobre la última columna de
+ * la fila y vive FUERA del enlace al trámite, para no anidar controles interactivos.
+ */
+function CopiarEnlaceValidacion({
+  captureUrl,
+  expiresAt,
+  persona,
+}: {
+  captureUrl: string;
+  expiresAt: string | null;
+  persona: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(captureUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Sin permiso de portapapeles (o contexto no seguro): el enlace sigue visible en el title
+      // para copiarlo a mano, así que no se interrumpe al operador con un error.
+    }
+  };
+
+  return (
+    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-right">
+      <button
+        type="button"
+        onClick={() => void copiar()}
+        title={captureUrl}
+        aria-label={`Copiar enlace de validación de ${persona}`}
+        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: '#557EFF' }}
+      >
+        <Copy className="h-3 w-3" aria-hidden="true" />
+        {copied ? 'Copiado' : 'Copiar enlace'}
+      </button>
+      {expiresAt && (
+        <span className="mt-0.5 block text-[10px] opacity-60">
+          Vence {formatFechaCorta(expiresAt)}
+        </span>
+      )}
+      {/* Confirmación anunciada por lector de pantalla sin mover el foco (WCAG 2.1 AA). */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? 'Enlace copiado al portapapeles.' : ''}
+      </span>
+    </div>
   );
 }
