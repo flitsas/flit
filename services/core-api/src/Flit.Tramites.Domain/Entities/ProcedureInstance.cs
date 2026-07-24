@@ -53,6 +53,28 @@ public sealed class ProcedureInstance
     /// </summary>
     public bool ConsolidadoMaestroVigente { get; set; }
 
+    /// <summary>
+    /// Vigencia del expediente derivado del wizard (FUR + documentos en caliente + consolidado),
+    /// espejo de <see cref="ConsolidadoMaestroVigente"/> (HU #10860, Feature #10852, ADR-0032).
+    /// <c>true</c> = el consolidado persistido refleja el expediente actual (se sirve sin regenerar);
+    /// <c>false</c> = un cambio de estado, la decisión del OT o adjuntar la LT lo invalidó, y la
+    /// próxima generación regenera en cascada el FUR y sus documentos en caliente (con fecha vigente)
+    /// antes de consolidar. Default false. Columna agregada por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public bool ConsolidadoWizardVigente { get; set; }
+
+    /// <summary>
+    /// Invalida los consolidados persistidos (maestro y wizard) tras un cambio que altera el
+    /// expediente —transición de estado, decisión del OT o adjuntar la LT—: la próxima generación los
+    /// regenera. HU #10860 (ADR-0032) — un único punto que mantiene ambos flags consistentes.
+    /// </summary>
+    public void InvalidarConsolidados()
+    {
+        ConsolidadoMaestroVigente = false;
+        ConsolidadoWizardVigente = false;
+    }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

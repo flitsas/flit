@@ -30,6 +30,22 @@ public sealed class ConsolidadoHandlerTests
 
         public byte[] Merge(IReadOnlyList<byte[]> pdfParts) =>
             pdfParts.SelectMany(x => x).ToArray();
+
+        // La portada la ejercita el merger real (HU #10857); aquí solo concatenamos las partes en
+        // orden para preservar las aserciones de prelación.
+        public byte[] Compose(MergeRequest request) =>
+            Merge(request.Parts.Select(p => p.Pdf).ToList());
+    }
+
+    private sealed class FakeRegenerator : IExpedienteHotDocumentsRegenerator
+    {
+        public int Calls { get; private set; }
+
+        public Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<string?>(null);
+        }
     }
 
     private sealed class FakeStorage : IAttachmentStorage
@@ -277,6 +293,48 @@ public sealed class ConsolidadoHandlerTests
 
         result.Should().BeNull();
         error.Should().Be(SubmitGate.FurRequerido);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WizardVigente_DevuelveCacheadoSinRegenerar()
+    {
+        // HU #10860 (ADR-0032): con el expediente del wizard vigente y el consolidado presente, se
+        // sirve el PDF cacheado (Regenerado=false) sin regenerar ni persistir.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = true;
+        AddAttachment(instance, "consolidado", "consolidado.pdf", "%PDF-cons");
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeFalse();
+        _storage.Saved.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WizardInvalidado_RegeneraEnCascadaYMarcaVigente()
+    {
+        // HU #10860 (cascada β): al estar invalidado, se regeneran primero los documentos en caliente
+        // (FUR) y luego se consolida; el flag queda en true.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId); // ConsolidadoWizardVigente = false por defecto
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var regenerator = new FakeRegenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, regenerator);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        regenerator.Calls.Should().Be(1);
+        result!.Regenerado.Should().BeTrue();
+        instance.ConsolidadoWizardVigente.Should().BeTrue();
     }
 
     [Fact]

@@ -148,9 +148,10 @@ public sealed class TramiteLifecycleService(
             instance.PlateFlowStatus = command.PlateFlowStatus;
         }
 
-        // Feature #10701 — un cambio de estado invalida el consolidado maestro persistido: el
-        // expediente cambió, así que el próximo "Ver consolidado" debe regenerarlo antes de mostrarlo.
-        instance.ConsolidadoMaestroVigente = false;
+        // Feature #10701 / HU #10860 — un cambio de estado invalida los consolidados persistidos
+        // (maestro y wizard): el expediente cambió, así que la próxima generación debe regenerarlos
+        // (el wizard además regenera en cascada el FUR con fecha vigente).
+        instance.InvalidarConsolidados();
 
         var record = new TramiteTransitionRecord(
             command.TenantId,
