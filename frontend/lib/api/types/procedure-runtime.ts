@@ -900,6 +900,42 @@ export interface StuckIdentityValidationsResponse {
   maxDeliveryAttempts: number;
 }
 
+/**
+ * Categoría de alerta ACCIONABLE de una validación de identidad (HU #10873/#10875). Espejo de
+ * `IdentityValidationAlertKinds` del backend. `null` (fuera de este union) = sin alerta, solo puede
+ * traer recordatorio de reenvío (`RequiresResendReminder`).
+ */
+export type IdentityValidationAlertKind = 'rechazada' | 'expirada' | 'por_vencer' | 'atascada';
+
+/**
+ * Fila de alerta/recordatorio de validación de identidad (HU #10873, AC1/AC2). Espejo de
+ * `IdentityValidationAlertDto`. Consumida por la vista consolidada del trámite (HU #10875, POR PULL —
+ * sin campana ni push).
+ */
+export interface IdentityValidationAlert {
+  id: string;
+  instanceId: string;
+  referenceNumber: string;
+  recipientUserId: string;
+  // string (no BiometricParte): el DTO del backend no acota el rol a comprador/vendedor — futuro-proof.
+  partyRole: string | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+  status: BiometricEstado;
+  alertKind: IdentityValidationAlertKind | null;
+  requiresResendReminder: boolean;
+  daysRemainingVigencia: number | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** Respuesta de GET .../identity-validation/alerts (tenant o por instancia). Espejo de IdentityValidationAlertsResponse. */
+export interface IdentityValidationAlertsResponse {
+  alerts: IdentityValidationAlert[];
+  total: number;
+}
+
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */
 export interface BiometriaPublicView {
   estado: BiometricEstado;
