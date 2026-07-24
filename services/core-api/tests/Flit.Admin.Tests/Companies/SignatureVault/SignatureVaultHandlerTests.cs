@@ -79,7 +79,9 @@ public sealed class SignatureVaultHandlerTests
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Field == "documentNumber" && e.Code == "requerido");
-        result.Errors.Should().Contain(e => e.Field == "nitEmpresa" && e.Code == "requerido");
+        result.Errors.Should().Contain(e => e.Field == "fullName" && e.Code == "requerido");
+        // HU #10930: nitEmpresa ya NO es obligatorio — no debe reportarse como requerido.
+        result.Errors.Should().NotContain(e => e.Field == "nitEmpresa");
     }
 
     [Fact]
@@ -151,22 +153,81 @@ public sealed class SignatureVaultHandlerTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Create_WithoutNit_Succeeds()
+    {
+        // HU #10930: la firma es de la persona + tenant; el NIT dejó de ser obligatorio.
+        await using var ctx = NewContext();
+        var (create, list, _, _) = Handlers(ctx, out _);
+
+        var result = await create.HandleAsync(NewCreate(nit: null), Ct);
+
+        result.IsValid.Should().BeTrue();
+        result.SignatureVaultId.Should().NotBeNull();
+
+        var rows = await list.HandleAsync(new ListSignatureVaultQuery { TenantId = Tenant }, Ct);
+        rows.Should().ContainSingle();
+        rows[0].NitEmpresa.Should().BeNull();
+        rows[0].Estado.Should().Be("activa");
+    }
+
+    [Fact]
+    public async Task Create_PersistsAndPropagatesCodigoHash()
+    {
+        // HU #10930: codigo_hash es el código alfanumérico que digita el usuario (distinto del SHA-256).
+        await using var ctx = NewContext();
+        var (create, _, get, _) = Handlers(ctx, out _);
+
+        var created = await create.HandleAsync(NewCreate(codigoHash: "ABC-123-XYZ"), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var detail = await get.HandleAsync(
+            new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = created.SignatureVaultId!.Value }, Ct);
+
+        detail.Should().NotBeNull();
+        detail!.CodigoHash.Should().Be("ABC-123-XYZ");
+        detail.SignatureHash.Should().NotBe("ABC-123-XYZ"); // signature_hash es el SHA-256 del artefacto.
+    }
+
+    [Fact]
+    public async Task FindActiveByDocument_FindsByPerson_IgnoringNit()
+    {
+        // HU #10930: el consumo por persona resuelve la firma activa por (tenant, tipo + documento).
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var reader = new DbSignatureVaultReader(ctx);
+
+        await create.HandleAsync(NewCreate(nit: null, documentNumber: "555000111"), Ct);
+
+        var found = await reader.FindActiveByDocumentAsync(Tenant, "CC", "555000111", Ct);
+        found.Should().NotBeNull();
+        found!.DocumentNumber.Should().Be("555000111");
+        found.Estado.Should().Be(SignatureVaultEstado.Activa);
+
+        var missing = await reader.FindActiveByDocumentAsync(Tenant, "CC", "000000000", Ct);
+        missing.Should().BeNull();
+    }
+
     // ---------- Helpers ----------
 
     private static CreateSignatureVaultCommand NewCreate(
         string? artifact = PngBase64,
         DateOnly? desde = null,
-        DateOnly? hasta = null) =>
+        DateOnly? hasta = null,
+        string? nit = "900000000-1",
+        string? codigoHash = null,
+        string? documentNumber = "123456789") =>
         new()
         {
             TenantId = Tenant,
             DocumentType = "CC",
-            DocumentNumber = "123456789",
-            NitEmpresa = "900000000-1",
+            DocumentNumber = documentNumber,
+            NitEmpresa = nit,
             FullName = "Apoderada Renting S.A.S.",
             VigenciaDesde = desde ?? new DateOnly(2026, 1, 1),
             VigenciaHasta = hasta ?? new DateOnly(2026, 12, 31),
             ArtefactoFirmaBase64 = artifact,
+            CodigoHash = codigoHash,
         };
 
     private static RevokeSignatureVaultCommand NewRevoke(Guid id) =>

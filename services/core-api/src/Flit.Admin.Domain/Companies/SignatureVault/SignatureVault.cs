@@ -30,7 +30,7 @@ public sealed class SignatureVault
         Guid tenantId,
         string documentType,
         string documentNumber,
-        string nitEmpresa,
+        string? nitEmpresa,
         string fullName,
         string signatureHash,
         string storagePath,
@@ -38,7 +38,8 @@ public sealed class SignatureVault
         SignatureVaultEstado estado,
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
-        Guid? mandateSignerId)
+        Guid? mandateSignerId,
+        string? codigoHash)
     {
         Id = id;
         TenantId = tenantId;
@@ -53,6 +54,7 @@ public sealed class SignatureVault
         VigenciaDesde = vigenciaDesde;
         VigenciaHasta = vigenciaHasta;
         MandateSignerId = mandateSignerId;
+        CodigoHash = codigoHash;
     }
 
     public Guid Id { get; }
@@ -64,11 +66,21 @@ public sealed class SignatureVault
     /// <summary>PII (Ley 1581): no loguear ni exponer.</summary>
     public string DocumentNumber { get; }
 
-    public string NitEmpresa { get; }
+    /// <summary>
+    /// NIT de la compañía. DEPRECADO (HU #10930, Feature #10929): la firma es de la persona +
+    /// tenant; el NIT ya no es obligatorio ni participa en la unicidad de la firma activa.
+    /// </summary>
+    public string? NitEmpresa { get; }
 
     public string FullName { get; }
 
     public string SignatureHash { get; }
+
+    /// <summary>
+    /// Código alfanumérico que digita el usuario (HU #10930), DISTINTO de <see cref="SignatureHash"/>
+    /// (que es el SHA-256 calculado del artefacto). Opcional.
+    /// </summary>
+    public string? CodigoHash { get; }
 
     public string StoragePath { get; }
 
@@ -91,7 +103,7 @@ public sealed class SignatureVault
         Guid tenantId,
         string documentType,
         string documentNumber,
-        string nitEmpresa,
+        string? nitEmpresa,
         string fullName,
         string signatureHash,
         string storagePath,
@@ -99,11 +111,12 @@ public sealed class SignatureVault
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
         Guid? mandateSignerId = null,
+        string? codigoHash = null,
         Guid? id = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(nitEmpresa);
+        // nitEmpresa DEPRECADO (HU #10930): ya no es obligatorio; solo se normaliza si viene.
         ArgumentException.ThrowIfNullOrWhiteSpace(fullName);
         ArgumentException.ThrowIfNullOrWhiteSpace(signatureHash);
         ArgumentException.ThrowIfNullOrWhiteSpace(storagePath);
@@ -125,7 +138,7 @@ public sealed class SignatureVault
             tenantId,
             documentType.Trim(),
             documentNumber.Trim(),
-            nitEmpresa.Trim(),
+            nitEmpresa?.Trim(),
             fullName.Trim(),
             signatureHash.Trim(),
             storagePath.Trim(),
@@ -133,7 +146,8 @@ public sealed class SignatureVault
             SignatureVaultEstado.Activa,
             vigenciaDesde,
             vigenciaHasta,
-            mandateSignerId);
+            mandateSignerId,
+            codigoHash?.Trim());
     }
 
     /// <summary>
@@ -145,7 +159,7 @@ public sealed class SignatureVault
         Guid tenantId,
         string documentType,
         string documentNumber,
-        string nitEmpresa,
+        string? nitEmpresa,
         string fullName,
         string signatureHash,
         string storagePath,
@@ -153,9 +167,10 @@ public sealed class SignatureVault
         SignatureVaultEstado estado,
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
-        Guid? mandateSignerId) =>
+        Guid? mandateSignerId,
+        string? codigoHash) =>
         new(id, tenantId, documentType, documentNumber, nitEmpresa, fullName, signatureHash,
-            storagePath, storageSha256, estado, vigenciaDesde, vigenciaHasta, mandateSignerId);
+            storagePath, storageSha256, estado, vigenciaDesde, vigenciaHasta, mandateSignerId, codigoHash);
 
     /// <summary>
     /// Revoca la firma (baja lógica). Idempotente: revocar una firma ya revocada no cambia nada.

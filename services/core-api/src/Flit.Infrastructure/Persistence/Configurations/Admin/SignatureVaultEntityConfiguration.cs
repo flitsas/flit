@@ -31,9 +31,12 @@ internal sealed class SignatureVaultEntityConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.DocumentType).HasMaxLength(10).IsRequired();
         builder.Property(x => x.DocumentNumber).HasMaxLength(20).IsRequired();
-        builder.Property(x => x.NitEmpresa).HasMaxLength(20).IsRequired();
+        // NIT deprecado (HU #10930, Feature #10929): nullable, ya no obligatorio.
+        builder.Property(x => x.NitEmpresa).HasMaxLength(20);
         builder.Property(x => x.FullName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.SignatureHash).HasMaxLength(64).IsRequired();
+        // Código alfanumérico digitado por el usuario (distinto del SHA-256 del artefacto). Opcional.
+        builder.Property(x => x.CodigoHash).HasMaxLength(100);
         builder.Property(x => x.StoragePath).HasMaxLength(1000).IsRequired();
         builder.Property(x => x.StorageSha256).HasMaxLength(64).IsRequired();
         builder.Property(x => x.Estado).HasMaxLength(20).IsRequired().HasDefaultValue("activa");
@@ -42,12 +45,16 @@ internal sealed class SignatureVaultEntityConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 
-        // Consulta de consumo: firma vigente por (tenant, NIT) filtrando por estado.
+        // Consulta de consumo (deprecada) por NIT: se conserva durante la transición (HU #10930).
         builder.HasIndex(x => new { x.TenantId, x.NitEmpresa, x.Estado })
             .HasDatabaseName("ix_signature_vault_tenant_id_nit_empresa_estado");
 
-        // Invariante ADR-0025 §2: a lo sumo UNA firma 'activa' por (tenant, NIT, documento).
-        builder.HasIndex(x => new { x.TenantId, x.NitEmpresa, x.DocumentNumber })
+        // Consulta de consumo por persona: firma vigente por (tenant, documento) filtrando por estado.
+        builder.HasIndex(x => new { x.TenantId, x.DocumentNumber, x.Estado })
+            .HasDatabaseName("ix_signature_vault_tenant_document_estado");
+
+        // Invariante (HU #10930, Feature #10929): a lo sumo UNA firma 'activa' por (tenant, documento).
+        builder.HasIndex(x => new { x.TenantId, x.DocumentNumber })
             .IsUnique()
             .HasFilter("estado = 'activa'")
             .HasDatabaseName("uq_signature_vault_activa");
