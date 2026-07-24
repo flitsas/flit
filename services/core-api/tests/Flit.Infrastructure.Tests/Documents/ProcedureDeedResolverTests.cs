@@ -151,6 +151,10 @@ public sealed class ProcedureDeedResolverTests
             throw new NotSupportedException();
         public Task<LegalRepresentativeItem?> FindActiveByCompanyNitAsync(Guid tenantId, string companyNit, CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<IReadOnlyList<LegalRepresentativeItem>> ListActiveByCompanyNitAsync(Guid tenantId, string companyNit, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            throw new NotSupportedException();
         public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(Guid tenantId, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }

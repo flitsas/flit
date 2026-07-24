@@ -41,7 +41,8 @@ public sealed class CreateLegalRepresentativeHandler
                 command.City,
                 command.Phone,
                 command.ProcedureTypeIds,
-                command.ActorBy),
+                command.ActorBy,
+                command.Companies),
             cancellationToken);
     }
 }

@@ -44,6 +44,27 @@ public interface ILegalRepresentativeReader
         string companyNit,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// TODOS los representantes ACTIVOS del tenant por NIT de la compañía (HU #10932/#10937). Base del
+    /// selector cuando una compañía tiene más de un representante en el wizard. Cruza por el puente
+    /// <c>legal_representative_companies</c> (multiempresa). Lista vacía si no hay match.
+    /// </summary>
+    Task<IReadOnlyList<LegalRepresentativeItem>> ListActiveByCompanyNitAsync(
+        Guid tenantId,
+        string companyNit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Representante ACTIVO del tenant por documento de la persona (HU #10932). Base del "se crea una
+    /// sola vez": si ya existe la persona, el guardado le agrega compañías en vez de duplicarla.
+    /// <c>null</c> si no hay match.
+    /// </summary>
+    Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Compañías representadas del tenant (alimenta el multi-select de escrituras).</summary>
     Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(
         Guid tenantId,

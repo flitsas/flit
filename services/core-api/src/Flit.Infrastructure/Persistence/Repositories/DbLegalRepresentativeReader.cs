@@ -97,20 +97,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             tenantId,
             async () =>
             {
-                var row = await (
-                    from r in _context.CompanyLegalRepresentatives.AsNoTracking()
-                    join c in _context.RepresentedCompanies.AsNoTracking()
-                        on r.RepresentedCompanyId equals c.Id
-                    where r.TenantId == tenantId
-                        && r.IsActive
-                        && r.DocumentType == docType
-                        && r.DocumentNumber == doc
-                        && c.DocumentNumber == nit
-                    select r)
-                    .OrderByDescending(r => r.CreatedAt)
-                    .FirstOrDefaultAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                var row = reps.FirstOrDefault(r => r.DocumentType == docType && r.DocumentNumber == doc);
                 if (row is null)
                 {
                     return null;
@@ -135,14 +123,61 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             tenantId,
             async () =>
             {
-                var row = await (
-                    from r in _context.CompanyLegalRepresentatives.AsNoTracking()
-                    join c in _context.RepresentedCompanies.AsNoTracking()
-                        on r.RepresentedCompanyId equals c.Id
-                    where r.TenantId == tenantId
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                var row = reps.FirstOrDefault();
+                if (row is null)
+                {
+                    return null;
+                }
+
+                var items = await ProjectAsync([row], cancellationToken).ConfigureAwait(false);
+                return items.Count == 0 ? null : items[0];
+            },
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<LegalRepresentativeItem>> ListActiveByCompanyNitAsync(
+        Guid tenantId,
+        string companyNit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(companyNit);
+        var nit = companyNit.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                return await ProjectAsync(reps, cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+    }
+
+    public Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+
+        var docType = documentType.Trim();
+        var doc = documentNumber.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var row = await _context.CompanyLegalRepresentatives
+                    .AsNoTracking()
+                    .Where(r => r.TenantId == tenantId
                         && r.IsActive
-                        && c.DocumentNumber == nit
-                    select r)
+                        && r.DocumentType == docType
+                        && r.DocumentNumber == doc)
                     .OrderByDescending(r => r.CreatedAt)
                     .ThenByDescending(r => r.Id)
                     .FirstOrDefaultAsync(cancellationToken)
@@ -157,6 +192,45 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 return items.Count == 0 ? null : items[0];
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Representantes ACTIVOS del tenant asociados a un NIT, por el puente multiempresa (HU #10932) o
+    /// por la compañía primaria (compatibilidad). Ordenados por creación descendente.
+    /// </summary>
+    private async Task<List<CompanyLegalRepresentativeEntity>> ActiveRepsByNitAsync(
+        Guid tenantId,
+        string nit,
+        CancellationToken cancellationToken)
+    {
+        var companyIds = await _context.RepresentedCompanies
+            .AsNoTracking()
+            .Where(c => c.TenantId == tenantId && c.DocumentNumber == nit)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (companyIds.Count == 0)
+        {
+            return [];
+        }
+
+        var bridgeRepIds = await _context.LegalRepresentativeCompanies
+            .AsNoTracking()
+            .Where(l => companyIds.Contains(l.RepresentedCompanyId))
+            .Select(l => l.RepresentativeId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return await _context.CompanyLegalRepresentatives
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId
+                && r.IsActive
+                && (bridgeRepIds.Contains(r.Id) || companyIds.Contains(r.RepresentedCompanyId)))
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(
@@ -217,7 +291,23 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         }
 
         var repIds = rows.Select(r => r.Id).ToList();
-        var companyIds = rows.Select(r => r.RepresentedCompanyId).Distinct().ToList();
+
+        // Puente representante ↔ compañía (HU #10932): todas las compañías de cada representante.
+        var bridgeRows = await _context.LegalRepresentativeCompanies
+            .AsNoTracking()
+            .Where(l => repIds.Contains(l.RepresentativeId))
+            .Select(l => new { l.RepresentativeId, l.RepresentedCompanyId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var bridgeByRep = bridgeRows
+            .GroupBy(b => b.RepresentativeId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.RepresentedCompanyId).ToList());
+
+        var companyIds = rows.Select(r => r.RepresentedCompanyId)
+            .Concat(bridgeRows.Select(b => b.RepresentedCompanyId))
+            .Distinct()
+            .ToList();
 
         var companies = await _context.RepresentedCompanies
             .AsNoTracking()
@@ -240,6 +330,23 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         {
             companies.TryGetValue(r.RepresentedCompanyId, out var company);
             procedureTypesByRep.TryGetValue(r.Id, out var procedureTypeIds);
+
+            // Compañías del representante: del puente si hay, si no la primaria; la primaria va primero.
+            var repCompanyIds = bridgeByRep.TryGetValue(r.Id, out var linked) && linked.Count > 0
+                ? linked
+                : [r.RepresentedCompanyId];
+            IReadOnlyList<LegalRepresentativeCompanySummary> companySummaries =
+            [
+                .. repCompanyIds
+                    .OrderBy(cid => cid == r.RepresentedCompanyId ? 0 : 1)
+                    .Where(companies.ContainsKey)
+                    .Select(cid =>
+                    {
+                        var c = companies[cid];
+                        return new LegalRepresentativeCompanySummary(c.Id, c.DocumentNumber, c.Name);
+                    }),
+            ];
+
             return new LegalRepresentativeItem
             {
                 Id = r.Id,
@@ -259,6 +366,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 SignatureVaultId = r.SignatureVaultId,
                 IdentityValidationRef = r.IdentityValidationRef,
                 ProcedureTypeIds = procedureTypeIds ?? [],
+                Companies = companySummaries,
                 IsActive = r.IsActive,
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt,

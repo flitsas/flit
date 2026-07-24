@@ -51,6 +51,13 @@ public sealed class LegalRepresentativeItem
     /// <summary>Ids de los tipos de trámite que el representante puede firmar (puente M:N).</summary>
     public IReadOnlyList<Guid> ProcedureTypeIds { get; init; } = [];
 
+    /// <summary>
+    /// Compañías del representante (HU #10932): un representante-persona puede tener varias. La primera
+    /// es la compañía primaria (<see cref="RepresentedCompanyId"/>). Puente
+    /// <c>admin.legal_representative_companies</c>.
+    /// </summary>
+    public IReadOnlyList<LegalRepresentativeCompanySummary> Companies { get; init; } = [];
+
     public bool IsActive { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
@@ -58,6 +65,12 @@ public sealed class LegalRepresentativeItem
     /// <summary>¿Tiene firma del baúl o validación de identidad vinculada?</summary>
     public bool HasSignatureOrIdentity => SignatureVaultId is not null || IdentityValidationRef is not null;
 }
+
+/// <summary>
+/// Resumen de una compañía representada por un representante (HU #10932): id + NIT + razón social.
+/// Alimenta la vista representante-céntrica (empresas anidadas) y el consumo del wizard.
+/// </summary>
+public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, string Name);
 
 /// <summary>
 /// Read model de una escritura para el listado/detalle admin y el consumo del wizard — HU #10900.
