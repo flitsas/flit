@@ -144,6 +144,9 @@ public static class InfrastructureExtensions
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
+        // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
+        // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
+        services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
         // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.

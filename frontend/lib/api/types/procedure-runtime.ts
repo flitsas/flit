@@ -347,6 +347,49 @@ export interface RuesPersonLookupResult {
   mode: 'real' | 'mock' | 'cache';
 }
 
+// ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
+// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es una compañía
+// representada (NIT) cubierta por una escritura activa y VIGENTE del tenant, proyectada para el
+// collapse del primer paso del wizard: NIT + razón social + días restantes de vigencia.
+export interface ActiveDeed {
+  nit: string;
+  name: string;
+  diasRestantes: number;
+  /** Vigencia hasta (fecha ISO YYYY-MM-DD). */
+  vigenciaHasta: string;
+}
+
+/** Compañía representada precargada por NIT (razón social + contacto). */
+export interface LegalRepresentativeLookupCompany {
+  nit: string;
+  razonSocial: string;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+}
+
+/** Representante legal (persona natural) precargado por NIT. */
+export interface LegalRepresentativeLookupContact {
+  tipoDoc: string;
+  documento: string;
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+}
+
+// GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — precarga comprador/vendedor por NIT.
+// 200 con el match (compañía + representante + banderas de firma/identidad VIGENTES al momento) o
+// 404 → null (el FE cae a la consulta RUES/RUNT normal).
+export interface LegalRepresentativeLookupResult {
+  company: LegalRepresentativeLookupCompany;
+  representante: LegalRepresentativeLookupContact;
+  firmaVigente: boolean;
+  identidadVigente: boolean;
+}
+
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
 
 // 'error' = un proveedor no se pudo verificar (no-200/timeout): bloqueo DURO, no subsanable con

@@ -27,6 +27,7 @@ import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
+import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
@@ -1610,6 +1611,9 @@ function ConsultaStep({
 
   return (
     <div className="space-y-4">
+      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
+          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
+      <ActiveDeedsCollapse />
       {isVin ? (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"

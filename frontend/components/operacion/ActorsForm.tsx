@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { AlertTriangle, Search, UserRound } from 'lucide-react';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
 import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -26,6 +27,7 @@ import type {
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
+  LegalRepresentativeLookupResult,
   BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
@@ -233,8 +235,20 @@ type LookupState =
   | { status: 'loading' }
   | { status: 'found'; kind: 'runt'; result: RuntPersonLookupResult }
   | { status: 'found'; kind: 'rues'; result: RuesPersonLookupResult }
+  // HU #10906 — precarga desde el directorio del tenant por NIT (corta RUES/RUNT). El resultado
+  // trae la compañía representada + representante + banderas de firma/identidad vigentes.
+  | { status: 'found'; kind: 'preload'; result: LegalRepresentativeLookupResult }
   | { status: 'not_found' }
   | { status: 'error'; message: string };
+
+/** Nombre completo del representante legal a partir de sus partes (omite vacíos). */
+function repFullName(rep: LegalRepresentativeLookupResult['representante']): string {
+  return [rep.nombres, rep.primerApellido, rep.segundoApellido]
+    .map((s) => s?.trim() ?? '')
+    .filter((s) => s !== '')
+    .join(' ')
+    .trim();
+}
 
 /** Tipos de documento del representante legal: persona natural (excluye NIT). */
 const RL_DOC_OPTIONS = DOC_OPTIONS.filter((o) => o.value !== 'NIT');
@@ -490,6 +504,28 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setRuntFor(index, { status: 'loading' });
     try {
       if (isJuridical(actor)) {
+        // HU #10906 (R3) — precarga por NIT desde el directorio del tenant ANTES de consultar RUES:
+        // si el NIT coincide con un representante registrado del tenant, se precargan razón social +
+        // datos del representante legal y se CORTA la consulta externa (siempre que haya match, sin
+        // importar si es comprador o vendedor). Sin match (404 → null) ⇒ flujo RUES normal.
+        const preload = await tramitesClient.lookupLegalRepresentativeByNit(documentNumber);
+        if (preload) {
+          updateActor(index, {
+            nombreCompleto: preload.company.razonSocial,
+            tipoDocumento: 'NIT',
+            numeroDocumento: preload.company.nit || documentNumber,
+          });
+          updateRepLegal(index, {
+            tipoDocumento: (preload.representante.tipoDoc as ActorDocumentType) || 'CC',
+            numeroDocumento: preload.representante.documento,
+            nombreCompleto: repFullName(preload.representante),
+            email: preload.representante.email ?? undefined,
+            telefono: preload.representante.telefono ?? undefined,
+          });
+          setRuntFor(index, { status: 'found', kind: 'preload', result: preload });
+          return;
+        }
+
         const result = await tramitesClient.ruesPersonLookup(instanceId, {
           documentNumber,
         });
@@ -563,8 +599,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
-  // Paso vendedor: dispara la consulta RUNT en cuanto el documento está disponible
-  // (sembrado desde el paso 1 o rehidratado del backend), sin clic manual.
+  // Paso vendedor: dispara la consulta en cuanto el documento está disponible (sembrado desde el
+  // paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga por
+  // NIT vive dentro de handleIdentityLookup (rama jurídica): al delegar aquí, un vendedor con NIT en
+  // el directorio del tenant se precarga SIN consultar RUES/RUNT; uno natural cae a RUNT como antes.
   useEffect(() => {
     if (!autoConsultRunt || !instanceId || readOnly || !isSplit || actors.length !== 1) {
       return;
@@ -794,6 +832,54 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         <p className="text-xs opacity-70" role="status" aria-live="polite">
           Consultando RUNT…
         </p>
+      );
+    }
+    if (runtState.status === 'found' && runtState.kind === 'preload') {
+      // HU #10906 — precarga desde el directorio de la compañía (NO se consultó RUES/RUNT). Copy
+      // honesto + badges de firma/identidad vigentes con los tonos unificados de StatusBadge.
+      const { company, representante, firmaVigente, identidadVigente } = runtState.result;
+      return (
+        <div className="space-y-2" role="status" aria-live="polite">
+          <div
+            className="rounded-xl p-3 text-xs border"
+            style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
+          >
+            <p className="font-semibold mb-2 flex items-center gap-1.5" style={{ color: '#5a8a1f' }}>
+              <span aria-hidden="true">✓</span>
+              Precargado desde el directorio de la compañía
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+              <div className="col-span-2">
+                <span className="opacity-60 font-normal">Razón social: </span>
+                <span className="font-semibold" style={{ color: '#162744' }}>
+                  {company.razonSocial}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">NIT: </span>
+                <span className="font-semibold font-mono" style={{ color: '#162744' }}>
+                  {company.nit}
+                </span>
+              </div>
+              <div>
+                <span className="opacity-60 font-normal">Representante: </span>
+                <span className="font-semibold" style={{ color: '#162744' }}>
+                  {repFullName(representante) || '—'}
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <StatusBadge
+                tone={firmaVigente ? 'success' : 'neutral'}
+                label={firmaVigente ? 'Firma vigente' : 'Sin firma vigente'}
+              />
+              <StatusBadge
+                tone={identidadVigente ? 'success' : 'neutral'}
+                label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
+              />
+            </div>
+          </div>
+        </div>
       );
     }
     if (runtState.status === 'found' && runtState.kind === 'rues') {
