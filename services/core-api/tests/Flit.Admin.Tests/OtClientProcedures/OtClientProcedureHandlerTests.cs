@@ -132,6 +132,114 @@ public sealed class OtClientProcedureHandlerTests
         history.Reason.Should().Be(reason);
     }
 
+    // ---------- HU #10871 (AC1): observación subsanable del OT (entregado→subsanacion) ----------
+
+    [Fact] // AC1 — con ítems del checklist, la decisión OT observa (subsanacion) en vez de rechazar.
+    public async Task Ac1_Reject_ConItems_TransicionaASubsanacionConChecklistHibridoEnMetadata()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        const string reason = "Faltan documentos y la placa no coincide";
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new()
+            {
+                Reason = reason,
+                Items =
+                [
+                    new OtProcedureObservationItem { Campo = "factura", Detalle = "Falta la factura de compra" },
+                    new OtProcedureObservationItem { Campo = "plate", Detalle = "La placa no coincide con el RUNT" },
+                ],
+            },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Subsanacion);
+
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        history.FromStatus.Should().Be(TramiteEstado.Entregado);
+        history.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        history.Reason.Should().Be(reason);
+        history.Metadata.Should().Contain("factura").And.Contain("plate").And.Contain(OtTransitionSource.OtAdmin);
+    }
+
+    [Fact] // AC1 (regresión) — sin ítems, la decisión OT sigue siendo rechazo definitivo (comportamiento previo).
+    public async Task Ac1_Reject_SinItems_SigueTransicionandoARechazado()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        const string reason = "Documentacion incompleta";
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = reason, Items = [] },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Rechazado);
+    }
+
+    [Fact] // AC1 — el repositorio persiste el checklist HÍBRIDO (motivo + items) en metadata al observar.
+    public async Task Ac1_ObserveAsync_PersisteChecklistHibridoEnMetadata()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var updated = await repo.ObserveAsync(
+            OtTenant, procedureId, "Revisar el checklist",
+            [new OtProcedureObservationItem { Campo = "aduana", Detalle = "Documento vencido" }],
+            Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be(TramiteEstado.Subsanacion);
+
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        history.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        history.ChangedBy.Should().Be(Approver);
+        history.Metadata.Should().Contain("aduana").And.Contain("Documento vencido").And.Contain("Revisar el checklist");
+    }
+
     [Fact]
     public async Task AC4_GetById_ReturnsNotFoundForUnlinkedClient()
     {

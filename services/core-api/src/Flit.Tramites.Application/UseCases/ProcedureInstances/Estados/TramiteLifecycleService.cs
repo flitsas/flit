@@ -178,7 +178,8 @@ public sealed class TramiteLifecycleService(
             command.ToStatus,
             command.Reason,
             command.ChangedByUserId,
-            now);
+            now,
+            command.Metadata);
 
         // Historial (RF05) + publicación (RNF01) se ENCOLAN en la misma unidad de trabajo;
         // el commit único de abajo los persiste o descarta en bloque.

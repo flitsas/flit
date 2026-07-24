@@ -7,6 +7,7 @@ using Flit.Modules.Quipux.Domain.Puertos;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Quipux.Application.UseCases.ConsultarEstado;
@@ -14,7 +15,10 @@ namespace Flit.Modules.Quipux.Application.UseCases.ConsultarEstado;
 /// <summary>
 /// Sondea en Quipux el estado de una submission radicada y reconcilia el trámite:
 /// <c>estadoTramite.codigo = 2</c> ⇒ <c>entregado → aprobado</c>; <c>= 3</c> ⇒
-/// <c>entregado → rechazado</c> con el motivo de la secretaría.
+/// <c>entregado → subsanacion</c> (HU #10871 AC2) con el motivo de la secretaría en el checklist
+/// HÍBRIDO de <c>metadata</c> (sin ítems: Quipux no desglosa un checklist estructurado) — la
+/// secretaría rechazó, pero es una observación SUBSANABLE: el gestor corrige y vuelve a radicar sin
+/// perder el historial (antes de esta HU el destino era <c>rechazado</c>, terminal para este flujo).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -184,7 +188,7 @@ public sealed class ConsultarEstadoQuipuxHandler
         var codigo = QuipuxCodigos.TramiteAprobado;
 
         var (ok, error) = await TransicionarAsync(
-            submission, TramiteEstado.Aprobado, reason: null, cancellationToken);
+            submission, TramiteEstado.Aprobado, reason: null, metadata: null, cancellationToken);
 
         if (!ok)
         {
@@ -223,8 +227,13 @@ public sealed class ConsultarEstadoQuipuxHandler
             ? MotivoRechazoPorDefecto
             : consulta.EstadoTramiteDescripcion.Trim();
 
+        // HU #10871 (AC2) — checklist HÍBRIDO de metadata: solo `motivo` (Quipux no entrega un
+        // checklist estructurado por campo; `items` queda vacío). El destino es `subsanacion`, no
+        // `rechazado`: la secretaría observó, pero el trámite sigue vivo para corregirse.
+        var metadata = new SubsanacionObservation { Motivo = motivo }.ToJson();
+
         var (ok, error) = await TransicionarAsync(
-            submission, TramiteEstado.Rechazado, motivo, cancellationToken);
+            submission, TramiteEstado.Subsanacion, motivo, metadata, cancellationToken);
 
         if (!ok)
         {
@@ -316,6 +325,7 @@ public sealed class ConsultarEstadoQuipuxHandler
         QuipuxSubmission submission,
         string destino,
         string? reason,
+        string? metadata,
         CancellationToken cancellationToken)
     {
         var instance = await _instances.GetByIdAsync(
@@ -334,7 +344,7 @@ public sealed class ConsultarEstadoQuipuxHandler
         var outcome = await _lifecycle.TransitionAsync(
             new TramiteTransitionCommand(
                 submission.ProcedureInstanceId, submission.TenantId, destino, reason,
-                ChangedByUserId: null),
+                ChangedByUserId: null, PlateFlowStatus: null, Metadata: metadata),
             cancellationToken);
 
         return outcome.Success ? (true, null) : (false, outcome.ErrorCode);
@@ -372,8 +382,10 @@ internal static partial class ConsultarEstadoQuipuxLog
         Message = "Quipux: submission {SubmissionId} aprobada; trámite {InstanceId} → aprobado.")]
     public static partial void Aprobado(ILogger logger, Guid submissionId, Guid instanceId);
 
+    // HU #10871 (AC2) — el destino del trámite es 'subsanacion' (observación subsanable), no
+    // 'rechazado'; el nombre del método se conserva por lo que dijo Quipux (rechazo de secretaría).
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Quipux: submission {SubmissionId} rechazada; trámite {InstanceId} → rechazado con motivo.")]
+        Message = "Quipux: submission {SubmissionId} rechazada por la secretaría; trámite {InstanceId} → subsanacion con motivo.")]
     public static partial void Rechazado(ILogger logger, Guid submissionId, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning,

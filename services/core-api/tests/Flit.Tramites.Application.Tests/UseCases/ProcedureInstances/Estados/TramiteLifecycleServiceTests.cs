@@ -382,6 +382,33 @@ public sealed class TramiteLifecycleServiceTests
             r.FromStatus == TramiteEstado.Subsanacion && r.ToStatus == TramiteEstado.Entregado);
     }
 
+    [Fact] // HU #10871 — el servicio de ciclo de vida es agnóstico del shape: solo pasa el Metadata del
+           // command al recorder (el checklist HÍBRIDO lo arma el caller, p. ej. RejectOtClientProcedureHandler).
+    public async Task Ac1_Metadata_SePasaVerbatimAlRecorder()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+        const string metadata = "{\"motivo\":\"x\",\"items\":[{\"campo\":\"factura\",\"detalle\":\"falta\"}]}";
+
+        var outcome = await _sut.TransitionAsync(
+            new TramiteTransitionCommand(
+                i.Id, i.TenantId, TramiteEstado.Subsanacion, "x", null, Metadata: metadata),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        _recorder.Records.Should().ContainSingle(r => r.Metadata == metadata);
+    }
+
+    [Fact] // HU #10871 — sin Metadata, el command lo pasa como null (el recorder real degrada a '{}').
+    public async Task Metadata_PorDefecto_EsNull()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+
+        var outcome = await Transition(i, TramiteEstado.Subsanacion);
+
+        outcome.Success.Should().BeTrue();
+        _recorder.Records.Should().ContainSingle(r => r.Metadata == null);
+    }
+
     [Fact]
     public async Task Subsanacion_NoAdmiteVolverABorradorNiPreparado()
     {

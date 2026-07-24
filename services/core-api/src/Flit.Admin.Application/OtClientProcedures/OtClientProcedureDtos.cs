@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.OtClientProcedures;
+
 namespace Flit.Admin.Application.OtClientProcedures;
 
 public sealed class OtClientProcedureResponse
@@ -40,6 +42,13 @@ public sealed class OtClientProcedureResponse
 public sealed class RejectOtClientProcedureRequest
 {
     public string Reason { get; init; } = string.Empty;
+
+    /// <summary>
+    /// HU #10871 (AC1) — checklist de ítems subsanables (opcional). Con al menos un ítem, el trámite
+    /// pasa a <c>subsanacion</c> (observación) en vez de <c>rechazado</c> (rechazo definitivo, el
+    /// comportamiento previo a esta HU cuando no se envían ítems).
+    /// </summary>
+    public IReadOnlyList<OtProcedureObservationItem>? Items { get; init; }
 }
 
 internal static class OtClientProcedureMapper
