@@ -52,9 +52,14 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            // Columnas en snake_case SIN alias: el DbContext usa UseSnakeCaseNamingConvention(), así que
+            // SqlQueryRaw<T> mapea la propiedad Classification→columna 'classification' y TemplateFormat→
+            // 'template_format'. Aliasarlas a PascalCase (AS "TemplateFormat") hacía que EF buscara
+            // 'template_format' y no lo hallara → InvalidOperationException → catch → catálogo vacío →
+            // TODO caía a AUTOMOTOR (maquinaria/remolques incluidos). Sin alias, EF materializa las 96 filas.
             var rows = await db.Database
                 .SqlQueryRaw<VehicleClassificationFurRow>(
-                    "SELECT classification AS \"Classification\", template_format AS \"TemplateFormat\" "
+                    "SELECT classification, template_format "
                     + "FROM tramites.vehicle_classification_fur WHERE deleted_at IS NULL")
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
@@ -67,7 +72,13 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
                     dict[key] = fmt;
             }
 
-            _cache = dict; // se cachea solo cuando la lectura fue exitosa (una carrera es inocua: idempotente).
+            // Solo se cachea un catálogo NO vacío. Un resultado de 0 filas significa que el seed aún no
+            // llegó (p. ej. el proceso arrancó antes de aplicar la migración HU #10919): cachearlo dejaría
+            // TODO en AUTOMOTOR de por vida del proceso (maquinaria/remolques incluidos). Dejarlo sin cachear
+            // hace que reintente en la próxima consulta hasta que el catálogo esté disponible. Una carrera es
+            // inocua: idempotente.
+            if (dict.Count > 0)
+                _cache = dict;
             return dict;
         }
         catch (Exception ex)
