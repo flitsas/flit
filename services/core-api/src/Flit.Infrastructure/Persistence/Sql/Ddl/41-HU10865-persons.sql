@@ -107,6 +107,13 @@ ALTER TABLE tramites.procedure_instance_biometric_validations
         CONSTRAINT fk_procedure_instance_biometric_validations_persons
         REFERENCES tramites.persons(id) ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- 2a-bis) Fix: la tabla no tenía columnas de soft-delete, pero el índice 2f y el HasFilter del
+-- modelo referencian `deleted_at`. Se agregan aquí (idempotente) para que la migración sea
+-- autosuficiente en cualquier BD (antes fallaba con 42703 "no existe la columna deleted_at").
+ALTER TABLE tramites.procedure_instance_biometric_validations
+    ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+    ADD COLUMN IF NOT EXISTS deleted_by uuid;
+
 -- 2b) Hacer procedure_instance_id nullable (soporta prevalidaciones standalone)
 ALTER TABLE tramites.procedure_instance_biometric_validations
     ALTER COLUMN procedure_instance_id DROP NOT NULL;
