@@ -18,6 +18,12 @@ export interface DeedsFormPanelProps {
   editing: DeedItem | null;
   companies: RepresentedCompany[];
   companiesLoading: boolean;
+  /**
+   * Compañías preseleccionadas al abrir en modo alta (HU #10934): permite lanzar el panel desde la
+   * vista representante-céntrica con una empresa ya marcada. Se ignora al editar (ahí manda la
+   * escritura). Retrocompatible: sin la prop, el alta abre sin compañías marcadas.
+   */
+  presetCompanyIds?: string[];
   onClose: () => void;
   onSubmit: (input: DeedFormInput) => Promise<DeedSaved>;
   onSaved: (saved: DeedSaved) => void;
@@ -61,6 +67,7 @@ export function DeedsFormPanel({
   editing,
   companies,
   companiesLoading,
+  presetCompanyIds,
   onClose,
   onSubmit,
   onSaved,
@@ -74,13 +81,18 @@ export function DeedsFormPanel({
 
   useEffect(() => {
     if (!open) return;
-    // Reinicia el formulario al abrir (alta en blanco o edición precargada).
+    // Reinicia el formulario al abrir (alta en blanco o edición precargada). En alta se aplican las
+    // compañías preseleccionadas (vista representante-céntrica, HU #10934).
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el formulario al abrir el panel
-    setForm(editing ? fromItem(editing) : EMPTY);
+    setForm(
+      editing
+        ? fromItem(editing)
+        : { ...EMPTY, companyIds: presetCompanyIds ? [...presetCompanyIds] : [] },
+    );
     setFieldErrors({});
     setBanner(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [open, editing]);
+  }, [open, editing, presetCompanyIds]);
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 

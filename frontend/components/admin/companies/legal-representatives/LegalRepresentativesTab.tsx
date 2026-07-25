@@ -360,6 +360,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
       />
 
       <LegalRepresentativeDetailModal
+        tenantId={tenantId}
         item={detail}
         procedureTypes={procedureTypes}
         onClose={() => setDetail(null)}

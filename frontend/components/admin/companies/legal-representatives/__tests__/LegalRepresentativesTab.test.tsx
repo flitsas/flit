@@ -16,6 +16,7 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
   return {
     ...actual,
     fetchLegalRepresentatives: vi.fn(),
+    fetchLegalRepresentative: vi.fn(),
     fetchAssignableProcedureTypes: vi.fn(),
     createLegalRepresentative: vi.fn(),
     updateLegalRepresentative: vi.fn(),
@@ -24,9 +25,21 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
   };
 });
 
+// El detalle representante-céntrico resuelve el PDF de una escritura con el cliente de escrituras.
+vi.mock("@/lib/api/admin-deeds", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/admin-deeds")>();
+  return {
+    ...actual,
+    fetchDeedDetail: vi.fn(),
+    saveDeed: vi.fn(),
+  };
+});
+
 import {
+  createLegalRepresentative,
   deleteLegalRepresentative,
   fetchAssignableProcedureTypes,
+  fetchLegalRepresentative,
   fetchLegalRepresentatives,
   sendLegalRepresentativeIdentity,
   type AssignableProcedureType,
@@ -58,6 +71,7 @@ const ITEM: LegalRepresentativeItem = {
   identityValidationRef: null,
   hasSignatureOrIdentity: false,
   procedureTypeIds: ["019ef140-f24e-78e4-8e6d-97faa44ed7a8"],
+  companies: [{ id: "co-1", nit: "900123456-7", name: "Comercializadora XYZ", deeds: [] }],
   isActive: true,
   createdAt: "2026-06-01T00:00:00Z",
   updatedAt: null,
@@ -166,5 +180,95 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
     await waitFor(() => expect(deleteLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1"));
+  });
+
+  it("permite agregar/quitar empresas y envía companies[] al registrar (HU #10934)", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
+    vi.mocked(createLegalRepresentative).mockResolvedValue({ id: "rep-new", signals: [] });
+    renderTab();
+    await screen.findByText(/aún no tiene representantes legales registrados/i);
+
+    await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
+
+    // Datos del representante-persona (se captura una sola vez).
+    await userEvent.type(screen.getByLabelText(/^nombres$/i), "Ana");
+    await userEvent.type(screen.getByLabelText(/número de documento/i), "1098765432");
+    await userEvent.type(screen.getByLabelText(/primer apellido/i), "Gómez");
+
+    // Empresa primaria.
+    const nits = screen.getAllByLabelText(/nit de la compañía/i);
+    const names = screen.getAllByLabelText(/razón social/i);
+    await userEvent.type(nits[0], "900111111-1");
+    await userEvent.type(names[0], "Empresa Uno");
+
+    // Agrega una segunda empresa y luego una tercera que se quita.
+    await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
+    await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
+    let nitInputs = screen.getAllByLabelText(/nit de la compañía/i);
+    const nameInputs = screen.getAllByLabelText(/razón social/i);
+    expect(nitInputs).toHaveLength(3);
+    await userEvent.type(nitInputs[1], "900222222-2");
+    await userEvent.type(nameInputs[1], "Empresa Dos");
+
+    // Quita la tercera (vacía): queda con dos empresas.
+    await userEvent.click(screen.getByRole("button", { name: /quitar empresa 3/i }));
+    nitInputs = screen.getAllByLabelText(/nit de la compañía/i);
+    expect(nitInputs).toHaveLength(2);
+
+    await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
+
+    await waitFor(() => expect(createLegalRepresentative).toHaveBeenCalled());
+    const [, payload] = vi.mocked(createLegalRepresentative).mock.calls[0];
+    expect(payload.companies).toHaveLength(2);
+    expect(payload.companies[0]).toMatchObject({ nit: "900111111-1", name: "Empresa Uno" });
+    expect(payload.companies[1]).toMatchObject({ nit: "900222222-2", name: "Empresa Dos" });
+    // Retrocompatibilidad: la primera empresa también viaja en los campos planos.
+    expect(payload.companyNit).toBe("900111111-1");
+  });
+
+  it("el detalle muestra las escrituras por empresa con su estado (HU #10934)", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM,
+      companies: [
+        {
+          id: "co-1",
+          nit: "900123456-7",
+          name: "Comercializadora XYZ",
+          deeds: [
+            {
+              id: "deed-1",
+              description: "Escritura de constitución",
+              vigenciaDesde: "2020-01-01",
+              vigenciaHasta: "2999-12-31",
+              isActive: true,
+              estado: "vigente",
+            },
+            {
+              id: "deed-2",
+              description: "Poder revocado",
+              vigenciaDesde: "2019-01-01",
+              vigenciaHasta: "2020-01-01",
+              isActive: true,
+              estado: "vencida",
+            },
+          ],
+        },
+      ],
+    });
+    renderTab();
+    await screen.findByText("Ana Gómez Ruiz");
+
+    await userEvent.click(screen.getByRole("button", { name: /ver detalle de ana gómez ruiz/i }));
+
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Escritura de constitución")).toBeInTheDocument();
+    expect(within(dialog).getByText("Poder revocado")).toBeInTheDocument();
+    expect(within(dialog).getByText("Vigente")).toBeInTheDocument();
+    expect(within(dialog).getByText("Vencida")).toBeInTheDocument();
+    // Punto de entrada para asociar una escritura nueva a la empresa desde la misma vista.
+    expect(within(dialog).getByRole("button", { name: /asociar escritura/i })).toBeInTheDocument();
   });
 });
