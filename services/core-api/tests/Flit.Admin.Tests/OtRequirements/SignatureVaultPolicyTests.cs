@@ -10,14 +10,17 @@ using Xunit;
 namespace Flit.Admin.Tests.OtRequirements;
 
 /// <summary>
-/// Tests de la política de consumo del baúl (HU #10643, ADR-0025 §4): ACTIVA el flag
-/// <c>SignatureVaultEnabled</c>. Resuelve la firma activa por (tenant, NIT) solo si el baúl está
-/// habilitado y la firma está vigente hoy (Colombia UTC-5); nunca devuelve material de firma.
+/// Tests de la política de consumo del baúl (HU #10643/#10930/#10937, ADR-0025 §4): ACTIVA el flag
+/// <c>SignatureVaultEnabled</c>. Resuelve la firma activa de la PERSONA por (tenant, tipo+número de
+/// documento del representante) solo si el baúl está habilitado y la firma está vigente hoy (Colombia
+/// UTC-5); nunca devuelve material de firma.
 /// </summary>
 public sealed class SignatureVaultPolicyTests
 {
     private static readonly Guid Tenant = Guid.Parse("99999999-0000-4000-8000-000000000001");
     private const string Nit = "900000000-1";
+    private const string DocType = "CC";
+    private const string DocNumber = "123456789";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static DateOnly TodayColombia =>
@@ -30,7 +33,7 @@ public sealed class SignatureVaultPolicyTests
         SeedActiveVault(ctx, vigenciaHasta: TodayColombia.AddDays(30));
         var policy = new SignatureVaultPolicy(new FakeSettings(enabled: false), new DbSignatureVaultReader(ctx));
 
-        var match = await policy.ResolveAsync(Tenant, Nit, Ct);
+        var match = await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct);
 
         match.Should().BeNull();
     }
@@ -42,7 +45,7 @@ public sealed class SignatureVaultPolicyTests
         SeedActiveVault(ctx, vigenciaHasta: TodayColombia.AddDays(30));
         var policy = new SignatureVaultPolicy(new FakeSettings(settings: null), new DbSignatureVaultReader(ctx));
 
-        var match = await policy.ResolveAsync(Tenant, Nit, Ct);
+        var match = await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct);
 
         match.Should().BeNull();
     }
@@ -54,7 +57,7 @@ public sealed class SignatureVaultPolicyTests
         SeedActiveVault(ctx, vigenciaHasta: TodayColombia.AddDays(30));
         var policy = new SignatureVaultPolicy(new FakeSettings(enabled: true), new DbSignatureVaultReader(ctx));
 
-        var match = await policy.ResolveAsync(Tenant, Nit, Ct);
+        var match = await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct);
 
         match.Should().NotBeNull();
         match!.FullName.Should().Be("Apoderada Renting S.A.S.");
@@ -69,7 +72,7 @@ public sealed class SignatureVaultPolicyTests
         SeedActiveVault(ctx, vigenciaHasta: TodayColombia.AddDays(-1)); // venció ayer.
         var policy = new SignatureVaultPolicy(new FakeSettings(enabled: true), new DbSignatureVaultReader(ctx));
 
-        var match = await policy.ResolveAsync(Tenant, Nit, Ct);
+        var match = await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct);
 
         match.Should().BeNull();
     }
@@ -80,7 +83,7 @@ public sealed class SignatureVaultPolicyTests
         await using var ctx = NewContext(); // baúl vacío.
         var policy = new SignatureVaultPolicy(new FakeSettings(enabled: true), new DbSignatureVaultReader(ctx));
 
-        var match = await policy.ResolveAsync(Tenant, Nit, Ct);
+        var match = await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct);
 
         match.Should().BeNull();
     }

@@ -869,7 +869,8 @@ public sealed class WizardStateHandlerTests
 
     private sealed class StubVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
     {
-        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
             => Task.FromResult(match);
     }
 }

@@ -131,7 +131,7 @@ public sealed class ConsumptionHandlerTests
 
         result.Should().BeNull();
         // Sin match no se consultan las banderas de firma/identidad.
-        await signature.DidNotReceiveWithAnyArgs().FindActiveByNitAsync(default, default!, default);
+        await signature.DidNotReceiveWithAnyArgs().FindActiveByDocumentAsync(default, default!, default!, default);
     }
 
     [Fact]
@@ -141,7 +141,8 @@ public sealed class ConsumptionHandlerTests
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        // HU #10930/#10937 — la firma se resuelve por el DOCUMENTO del representante, no por el NIT.
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
             .Returns(VigenteSignature(document: "123456789"));
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -163,6 +164,10 @@ public sealed class ConsumptionHandlerTests
         result.Representante.PrimerApellido.Should().Be("Perez");
         result.FirmaVigente.Should().BeTrue();
         result.IdentidadVigente.Should().BeFalse();
+        // HU #10937 — la lista trae al representante con sus banderas por documento.
+        result.Representantes.Should().ContainSingle();
+        result.Representantes[0].Documento.Should().Be("123456789");
+        result.Representantes[0].FirmaVigente.Should().BeTrue();
     }
 
     [Fact]
@@ -172,7 +177,7 @@ public sealed class ConsumptionHandlerTests
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
             .Returns((SignatureVaultAggregate?)null);
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -190,15 +195,15 @@ public sealed class ConsumptionHandlerTests
     }
 
     [Fact]
-    public async Task Lookup_FirmaExpiradaOrOtherDocument_FlagsFirmaFalse()
+    public async Task Lookup_FirmaExpirada_FlagsFirmaFalse()
     {
         await using var ctx = NewContext();
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        // Firma vigente pero de OTRO documento de la misma compañía → no cuenta.
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
-            .Returns(VigenteSignature(document: "999999999"));
+        // Firma del representante pero VENCIDA → no cuenta (HU #10930: el baúl se resuelve por documento).
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
+            .Returns(ExpiredSignature(document: "123456789"));
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((Guid?)null);
@@ -231,6 +236,11 @@ public sealed class ConsumptionHandlerTests
         SignatureVaultAggregate.Create(
             Tenant, "CC", document, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
             new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+
+    private static SignatureVaultAggregate ExpiredSignature(string document) =>
+        SignatureVaultAggregate.Create(
+            Tenant, "CC", document, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
+            new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 30)); // venció antes de "hoy" (2026-07-23)
 
     /// <summary>TimeProvider fijo: ancla el "ahora" a un instante conocido (sin dependencias externas).</summary>
     private sealed class StubTimeProvider(DateTimeOffset now) : TimeProvider

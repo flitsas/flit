@@ -380,14 +380,36 @@ export interface LegalRepresentativeLookupContact {
   telefono?: string | null;
 }
 
+/**
+ * Un representante seleccionable de la compañía (HU #10937), con sus banderas de firma/identidad
+ * vigentes calculadas por su propio documento. Cuando la compañía tiene VARIOS, el FE muestra un
+ * selector; el elegido precarga sus datos y firma con su información (firma del baúl o validación de
+ * identidad por su documento). `documento` es PII (Ley 1581): no loguear.
+ */
+export interface LegalRepresentativeOption {
+  tipoDoc: string;
+  documento: string;
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  firmaVigente: boolean;
+  identidadVigente: boolean;
+}
+
 // GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — precarga comprador/vendedor por NIT.
-// 200 con el match (compañía + representante + banderas de firma/identidad VIGENTES al momento) o
-// 404 → null (el FE cae a la consulta RUES/RUNT normal).
+// 200 con el match (compañía + representante(s) + banderas de firma/identidad VIGENTES al momento) o
+// 404 → null (el FE cae a la consulta RUES/RUNT normal). HU #10937: `representantes` trae TODOS los
+// representantes activos de la compañía para el selector; `representante`/`firmaVigente`/
+// `identidadVigente` reflejan el primario (primero) por compatibilidad con el consumo previo.
 export interface LegalRepresentativeLookupResult {
   company: LegalRepresentativeLookupCompany;
   representante: LegalRepresentativeLookupContact;
   firmaVigente: boolean;
   identidadVigente: boolean;
+  /** HU #10937 — todos los representantes activos de la compañía (para elegir cuál firma). */
+  representantes: LegalRepresentativeOption[];
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────

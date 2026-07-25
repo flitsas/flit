@@ -451,10 +451,17 @@ public sealed class GenerarFurHandler(
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || !EsActorJuridico(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            if (actor is null || !EsActorJuridico(actor.DocumentType))
                 continue;
 
-            var match = await _vaultPolicy.ResolveAsync(instance.TenantId, actor.DocumentNumber.Trim(), ct);
+            // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
+            // REPRESENTANTE LEGAL seleccionado (sujeto de identidad del actor jurídico), no por el NIT.
+            var subject = IdentitySubjectResolver.For(actor);
+            if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+                continue;
+
+            var match = await _vaultPolicy.ResolveAsync(
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct);
             if (match is null || string.IsNullOrWhiteSpace(match.StoragePath))
                 continue;
 
