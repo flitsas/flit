@@ -6,8 +6,10 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// <summary>
 /// Gates del wizard de MATRÍCULA INICIAL (5 pasos, 1 actor = comprador), puros.
 /// Equivalente conceptual a <see cref="TraspasoGates"/> para la modalidad VIN-first.
-/// Johan no expone gates dedicados de matrícula; se derivan de la matriz de pasos
-/// (5 pasos: VIN, documentos, comprador, identidad, FUR).
+/// Johan no expone gates dedicados de matrícula; se derivan de la matriz de pasos.
+///
+/// <para>HU #10935 — orden del wizard: los documentos van DESPUÉS del actor
+/// (VIN, comprador, documentos, identidad, FUR).</para>
 /// </summary>
 public static class MatriculaGates
 {
@@ -32,6 +34,15 @@ public static class MatriculaGates
                 return GateResult.Allowed;
 
             case 2:
+                // HU #10935 — Paso 2 = Comprador (antes iba en el paso 3): parte + RUNT consultado.
+                if (!ParteCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
+                    return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
+                return GateResult.Allowed;
+
+            case 3:
+                // HU #10935 — Paso 3 = Documentos, DESPUÉS del actor (antes iba en el paso 2).
                 // Bloqueo DURO: si una consulta no se pudo verificar (proveedor caído/timeout), la
                 // información es vital y NO se puede continuar ni "aceptando el riesgo" ni forzando.
                 if (ctx.Preflight?.ProviderError == true)
@@ -40,13 +51,6 @@ public static class MatriculaGates
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos en los documentos. Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)
                     return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
-                return GateResult.Allowed;
-
-            case 3:
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
-                if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
-                    return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
                 return GateResult.Allowed;
 
             case 4:
