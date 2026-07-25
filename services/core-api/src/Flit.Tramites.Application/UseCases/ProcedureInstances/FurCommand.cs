@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -247,26 +248,41 @@ public sealed class GenerarFurHandler(
         // HU #10926 — Escrituras: por cada actor persona jurídica (NIT) con una escritura activa y
         // vigente en el directorio del tenant (#10899), adjuntar su PDF (Source=system, tipo 'escritura'
         // para el vendedor/propietario y 'escritura_comprador' para el comprador) para que se fusione en
-        // el consolidado. Se resuelve en cualquier estado (documentación de soporte, no una firma).
-        var escrituras = await _deedResolver.ResolveForActorsAsync(tenantId, instance.Actors, ct);
-        var tiposEscritura = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var esc in escrituras)
+        // el consolidado.
+        // HU #10936 — (1) selección: la más PRÓXIMA A VENCER por compañía (la decide el resolutor);
+        // (2) persistencia: se guarda la referencia de la escritura usada (source_deed_id) en el
+        // adjunto (deedIdPorTipo → bucle de persistencia); (3) CONGELADO tras entrega: una vez el
+        // trámite fue ENTREGADO (o pasó a un estado posterior), NO se re-resuelve ni se reemplaza la
+        // escritura — el adjunto vigente se conserva (no se trata como huérfano) para dejar fija la que
+        // entró al registro. En estados previos a la entrega (borrador/preparado) se re-resuelve normal.
+        // Si no hay escritura previa y el trámite ya está entregado, simplemente no se adjunta ninguna.
+        var tramiteYaEntregado =
+            !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(instance.Status, TramiteEstado.Preparado, StringComparison.OrdinalIgnoreCase);
+        var deedIdPorTipo = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        if (!tramiteYaEntregado)
         {
-            generated.Add(new GeneratedDocument(esc.Tipo, esc.Filename, "application/pdf", esc.Content));
-            tiposEscritura.Add(esc.Tipo);
-        }
-        // Retirar escrituras previas cuyo tipo ya no aplica (regeneración): un actor que dejó de tener
-        // escritura vigente no debe arrastrar la anterior al consolidado. Los tipos que SÍ aplican los
-        // reemplaza idempotentemente el bucle de persistencia de abajo.
-        foreach (var prev in instance.Attachments
-                     .Where(a => (string.Equals(a.Tipo, "escritura", StringComparison.OrdinalIgnoreCase)
-                                  || string.Equals(a.Tipo, "escritura_comprador", StringComparison.OrdinalIgnoreCase))
-                                 && !tiposEscritura.Contains(a.Tipo))
-                     .ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
+            var escrituras = await _deedResolver.ResolveForActorsAsync(tenantId, instance.Actors, ct);
+            var tiposEscritura = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var esc in escrituras)
+            {
+                generated.Add(new GeneratedDocument(esc.Tipo, esc.Filename, "application/pdf", esc.Content));
+                tiposEscritura.Add(esc.Tipo);
+                deedIdPorTipo[esc.Tipo] = esc.DeedId;
+            }
+            // Retirar escrituras previas cuyo tipo ya no aplica (regeneración): un actor que dejó de tener
+            // escritura vigente no debe arrastrar la anterior al consolidado. Los tipos que SÍ aplican los
+            // reemplaza idempotentemente el bucle de persistencia de abajo.
+            foreach (var prev in instance.Attachments
+                         .Where(a => (string.Equals(a.Tipo, "escritura", StringComparison.OrdinalIgnoreCase)
+                                      || string.Equals(a.Tipo, "escritura_comprador", StringComparison.OrdinalIgnoreCase))
+                                     && !tiposEscritura.Contains(a.Tipo))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
         }
 
         foreach (var doc in generated)
@@ -297,6 +313,8 @@ public sealed class GenerarFurHandler(
                 StoragePath = stored.StoragePath,
                 Source = "system",
                 UploadedAt = now,
+                // HU #10936 — traza la escritura usada en las escrituras de sistema; null en el resto.
+                SourceDeedId = deedIdPorTipo.TryGetValue(doc.Tipo, out var deedId) ? deedId : null,
             };
             instance.Attachments.Add(attachment);
             repo.Add(attachment);

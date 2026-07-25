@@ -11,8 +11,9 @@ namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
 /// Tests del resolutor de escrituras para el consolidado (<see cref="ProcedureDeedResolver"/>, HU
-/// #10926, ADR-0033): por cada actor persona jurídica (NIT) resuelve su escritura vigente de mayor
-/// vigencia y baja los bytes; tipo por rol (vendedor⇒escritura, comprador⇒escritura_comprador).
+/// #10926, ADR-0033): por cada actor persona jurídica (NIT) resuelve su escritura vigente MÁS PRÓXIMA
+/// A VENCER (menor VigenciaHasta, HU #10936) y baja los bytes; tipo por rol (vendedor⇒escritura,
+/// comprador⇒escritura_comprador), con la referencia (DeedId) de la escritura elegida.
 /// </summary>
 public sealed class ProcedureDeedResolverTests
 {
@@ -39,16 +40,17 @@ public sealed class ProcedureDeedResolverTests
         };
 
     [Fact]
-    public async Task Resolve_PerRole_CollapsesByVigencia_ReadsBytes()
+    public async Task Resolve_PerRole_CollapsesByProximaAVencer_ReadsBytes_AndDeedId()
     {
         var coVend = Guid.NewGuid();
         var coComp = Guid.NewGuid();
         var deedVend = Deed(Guid.NewGuid(), "path/vend.pdf", new DateOnly(2026, 12, 31), coVend);
-        // La compañía compradora tiene DOS vigentes: debe ganar la de mayor vigencia (2027 > 2026).
-        var deedCompCorta = Deed(Guid.NewGuid(), "path/comp-corta.pdf", new DateOnly(2026, 6, 30), coComp);
+        // La compañía compradora tiene DOS vigentes: HU #10936 gana la MÁS PRÓXIMA A VENCER (2026 < 2027).
+        var deedCompId = Guid.NewGuid();
+        var deedCompCorta = Deed(deedCompId, "path/comp-corta.pdf", new DateOnly(2026, 6, 30), coComp);
         var deedCompLarga = Deed(Guid.NewGuid(), "path/comp-larga.pdf", new DateOnly(2027, 6, 30), coComp);
 
-        var reader = new FakeDeedReader([deedVend, deedCompCorta, deedCompLarga]);
+        var reader = new FakeDeedReader([deedVend, deedCompLarga, deedCompCorta]);
         var reps = new FakeRepReader(new()
         {
             ["900000000-1"] = Company(coVend, "900000000-1"),
@@ -57,7 +59,7 @@ public sealed class ProcedureDeedResolverTests
         var storage = new FakeStorage(new()
         {
             ["path/vend.pdf"] = Encoding.UTF8.GetBytes("%PDF-VEND"),
-            ["path/comp-larga.pdf"] = Encoding.UTF8.GetBytes("%PDF-COMP"),
+            ["path/comp-corta.pdf"] = Encoding.UTF8.GetBytes("%PDF-COMP"),
         });
 
         var resolver = new ProcedureDeedResolver(reader, reps, storage, TimeProvider.System);
@@ -78,8 +80,35 @@ public sealed class ProcedureDeedResolverTests
 
         var comp = result.Single(r => r.Tipo == "escritura_comprador");
         comp.Nit.Should().Be("900000000-2");
-        // Colapso por mayor vigencia: se bajó la escritura larga, no la corta.
+        // Colapso por la más próxima a vencer: se bajó la escritura corta, no la larga.
         Encoding.UTF8.GetString(comp.Content).Should().Be("%PDF-COMP");
+        // Y se propaga la referencia (DeedId) de la escritura elegida (HU #10936).
+        comp.DeedId.Should().Be(deedCompId);
+    }
+
+    [Fact]
+    public async Task Resolve_TresVigentes_EligeMenorVigenciaHasta()
+    {
+        // HU #10936 — con 3 escrituras vigentes de la misma compañía gana la de menor VigenciaHasta.
+        var co = Guid.NewGuid();
+        var masProxima = Guid.NewGuid();
+        var deeds = new[]
+        {
+            Deed(Guid.NewGuid(), "path/c.pdf", new DateOnly(2027, 12, 31), co),
+            Deed(masProxima, "path/a.pdf", new DateOnly(2026, 3, 15), co),
+            Deed(Guid.NewGuid(), "path/b.pdf", new DateOnly(2026, 9, 30), co),
+        };
+        var reader = new FakeDeedReader(deeds);
+        var reps = new FakeRepReader(new() { ["900000000-3"] = Company(co, "900000000-3") });
+        var storage = new FakeStorage(new() { ["path/a.pdf"] = Encoding.UTF8.GetBytes("%PDF-A") });
+        var resolver = new ProcedureDeedResolver(reader, reps, storage, TimeProvider.System);
+
+        var result = await resolver.ResolveForActorsAsync(
+            Tenant, [Actor("vendedor", "NIT", "900000000-3")], CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].DeedId.Should().Be(masProxima);
+        Encoding.UTF8.GetString(result[0].Content).Should().Be("%PDF-A");
     }
 
     [Fact]

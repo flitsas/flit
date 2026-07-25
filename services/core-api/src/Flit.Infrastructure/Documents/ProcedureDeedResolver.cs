@@ -9,7 +9,7 @@ namespace Flit.Infrastructure.Documents;
 /// Implementación de <see cref="IProcedureDeedResolver"/> (HU #10926, ADR-0033). Por cada actor
 /// persona jurídica (NIT) del trámite, cruza su compañía representada del directorio del tenant
 /// (<see cref="ILegalRepresentativeReader.FindRepresentedCompanyByNitAsync"/>) con su escritura activa
-/// y vigente de MAYOR vigencia (<see cref="IDeedReader.ListActiveVigentesAsync"/>) y baja los bytes del
+/// y vigente MÁS PRÓXIMA A VENCER (menor VigenciaHasta, HU #10936; <see cref="IDeedReader.ListActiveVigentesAsync"/>) y baja los bytes del
 /// PDF vía <see cref="IAttachmentStorage.OpenReadAsync"/>. Vive en Infrastructure porque cruza el
 /// módulo Admin (directorio de escrituras) con el almacenamiento de adjuntos de Trámites, sin acoplar
 /// los módulos entre sí. Tipo por rol (D2): vendedor/propietario ⇒ 'escritura'; comprador ⇒
@@ -81,10 +81,13 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue;
             }
 
-            // Escritura de MAYOR vigencia de esa compañía (colapso por NIT, como el collapse del wizard).
+            // HU #10936 — entre las escrituras vigentes de la compañía se elige la MÁS PRÓXIMA A VENCER
+            // (menor VigenciaHasta); ThenBy(Id) desempata de forma estable. Antes ganaba la de mayor
+            // vigencia; ahora prima la que primero deja de servir (colapso por NIT, como el wizard).
             var deed = deeds
                 .Where(d => d.RepresentedCompanyIds.Contains(company.Id))
-                .OrderByDescending(d => d.VigenciaHasta)
+                .OrderBy(d => d.VigenciaHasta)
+                .ThenBy(d => d.Id)
                 .FirstOrDefault();
             if (deed is null)
             {
@@ -115,7 +118,8 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 $"{tipo}.pdf",
                 content,
                 company.DocumentNumber,
-                actor.ActorType ?? string.Empty));
+                actor.ActorType ?? string.Empty,
+                deed.Id));
         }
 
         return result;

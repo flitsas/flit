@@ -5,9 +5,11 @@ namespace Flit.Tramites.Application.Documents;
 /// <summary>
 /// Escritura ACTIVA y VIGENTE resuelta para un actor del trámite, lista para adjuntar al expediente
 /// (HU #10926, ADR-0033). <c>Content</c> son los bytes del PDF de la escritura (admin.company_deeds).
-/// <c>Nit</c> es PII (Ley 1581): no loguear.
+/// <c>Nit</c> es PII (Ley 1581): no loguear. <c>DeedId</c> es la referencia (admin.company_deeds.id) de
+/// la escritura que entró al registro; se persiste en el adjunto (<c>source_deed_id</c>) para trazar
+/// exactamente cuál se usó (HU #10936).
 /// </summary>
-public sealed record ResolvedDeedDocument(string Tipo, string Filename, byte[] Content, string Nit, string Rol);
+public sealed record ResolvedDeedDocument(string Tipo, string Filename, byte[] Content, string Nit, string Rol, Guid DeedId);
 
 /// <summary>
 /// Resuelve las escrituras ACTIVAS y VIGENTES de las compañías (NIT) de los actores de un trámite
@@ -20,7 +22,8 @@ public interface IProcedureDeedResolver
     /// <summary>
     /// Devuelve, por cada actor persona jurídica (NIT) con escritura vigente en el tenant, su PDF con
     /// tipo por rol ('escritura' para vendedor/propietario, 'escritura_comprador' para comprador — D2),
-    /// la de MAYOR vigencia por compañía. Vacío si no hay actores NIT o ninguna escritura vigente.
+    /// la MÁS PRÓXIMA A VENCER por compañía (menor VigenciaHasta entre las vigentes, HU #10936). Vacío
+    /// si no hay actores NIT o ninguna escritura vigente.
     /// </summary>
     Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
         Guid tenantId,
