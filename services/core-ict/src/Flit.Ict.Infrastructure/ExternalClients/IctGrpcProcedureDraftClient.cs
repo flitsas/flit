@@ -36,6 +36,17 @@ public sealed partial class IctGrpcProcedureDraftClient(
             ExternalRef = master.Id.ToString(),
         };
 
+        // Traspaso: el organismo de tránsito lo fija el RUNT (paridad v1), no el código del cliente. Se
+        // envía el nombre que capturó el orquestador de la consulta VEHICLE; core-api lo resuelve al
+        // transit_office_id del catálogo (grants del tenant). Matrícula (1/2) mantiene el comportamiento
+        // actual (transit_office_id vacío → el gestor asigna el OT).
+        // TODO(ICT-OT-MATRICULA): en matrícula, resolver el OT por el traffic_secretary_code del cliente.
+        var esTraspaso = procedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
+        if (esTraspaso && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
+        {
+            request.TransitOfficeName = master.RuntTransitOfficeName;
+        }
+
         if (!string.IsNullOrWhiteSpace(master.Vin))
         {
             request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = master.Vin });

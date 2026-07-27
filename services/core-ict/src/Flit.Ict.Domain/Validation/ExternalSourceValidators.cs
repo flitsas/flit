@@ -6,7 +6,8 @@ public sealed record ConsultationResult(
     string? RtmStatus = null,
     int? VehicleModelYear = null,
     bool HasActiveSanctions = false,
-    bool? PazYSalvo = null);
+    bool? PazYSalvo = null,
+    string? TransitOfficeName = null);
 
 /// <summary>
 /// Validadores de negocio externo portados de v1 (SOAT, RTM/antigüedad, RNMC, paz y salvo).

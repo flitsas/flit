@@ -45,6 +45,7 @@ public sealed class IctGrpcConsultationClient(IctConsultation.IctConsultationCli
             RtmStatus: string.IsNullOrEmpty(reply.RtmStatus) ? null : reply.RtmStatus,
             VehicleModelYear: reply.VehicleModelYear > 0 ? reply.VehicleModelYear : null,
             HasActiveSanctions: reply.HasActiveSanctions,
-            PazYSalvo: reply.PazYSalvoKnown ? reply.PazYSalvo : null);
+            PazYSalvo: reply.PazYSalvoKnown ? reply.PazYSalvo : null,
+            TransitOfficeName: string.IsNullOrEmpty(reply.TransitOfficeName) ? null : reply.TransitOfficeName);
     }
 }

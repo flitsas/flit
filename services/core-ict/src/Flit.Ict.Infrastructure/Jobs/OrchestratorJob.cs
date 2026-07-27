@@ -62,6 +62,15 @@ public sealed class OrchestratorJob(
                     await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
                     await MarkQueriedAsync(connection, q.Id, isValid, ct);
 
+                    // Traspaso: el organismo de matrícula lo fija el RUNT (paridad v1). Se captura de la
+                    // consulta VEHICLE y se guarda en el master; core-api lo resuelve al transit_office_id
+                    // del catálogo al materializar. En VIN/RNMC/DRIVER no viene organismo (queda null).
+                    if (string.Equals(q.QueryType, "VEHICLE", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(result.TransitOfficeName))
+                    {
+                        await UpdateTransitOfficeNameAsync(connection, q.MasterId, result.TransitOfficeName, ct);
+                    }
+
                     // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC): terminal, deja el master en ps=4.
                     if (!isValid)
                     {
@@ -142,6 +151,24 @@ public sealed class OrchestratorJob(
         AddParam(cmd, "id", queryId);
         AddParam(cmd, "tenant", tenantId);
         AddParam(cmd, "json", json);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Persiste el organismo de tránsito devuelto por el RUNT (consulta VEHICLE) en el master, para que la
+    /// materialización lo resuelva al <c>transit_office_id</c> del catálogo. Solo lo llama el orquestador
+    /// para consultas VEHICLE (traspaso); en el resto el campo queda null y el gestor asigna el OT.
+    /// </summary>
+    private static async Task UpdateTransitOfficeNameAsync(DbConnection connection, Guid masterId, string name, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE ict.external_integration_master
+            SET runt_transit_office_name = @name
+            WHERE id = @id
+            """;
+        AddParam(cmd, "id", masterId);
+        AddParam(cmd, "name", name);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

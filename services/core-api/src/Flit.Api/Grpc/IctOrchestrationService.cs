@@ -3,6 +3,7 @@ using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Google.Protobuf.WellKnownTypes;
@@ -26,6 +27,7 @@ public sealed class IctOrchestrationService(
     PutCommercialHandler commercialHandler,
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
+    ITransitOfficeResolver transitOfficeResolver,
     FlitDbContext db) : IctOrchestration.IctOrchestrationBase
 {
     public override async Task<DraftReply> CreateDraftFromIct(
@@ -66,7 +68,19 @@ public sealed class IctOrchestrationService(
         // es FK NOT NULL a identity.users, así que se resuelve (get-or-create) un usuario de servicio ICT
         // por tenant. Ignora request.CreatedByUserId salvo que sea un usuario real ya existente.
         var createdBy = await ResolveIctCreatorAsync(request.CreatedByUserId, tenantId, context.CancellationToken);
+
+        // Organismo de tránsito del borrador. Preferencia: un transit_office_id explícito; si no vino
+        // (caso ICT: el cliente NO lo manda) pero sí el NOMBRE del organismo del RUNT (traspaso), se
+        // resuelve al OT HABILITADO del tenant por nombre — el mismo resolver (grants + catálogo) que usa
+        // el preflight de traspaso. Si el nombre RUNT no casa con un OT habilitado, queda null y el gestor
+        // asigna el OT: no se inventa uno. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
         Guid? transitOfficeId = Guid.TryParse(request.TransitOfficeId, out var office) ? office : null;
+        if (transitOfficeId is null && !string.IsNullOrWhiteSpace(request.TransitOfficeName))
+        {
+            var resolvedOffice = await transitOfficeResolver.ResolveEnabledByNameAsync(
+                tenantId, request.TransitOfficeName.Trim(), context.CancellationToken);
+            transitOfficeId = resolvedOffice?.Id;
+        }
 
         var createRequest = new CreateProcedureInstanceRequest(
             TenantId: tenantId,

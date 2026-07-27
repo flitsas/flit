@@ -37,6 +37,7 @@ message CreateDraftFromIctRequest {
   repeated Actor actors            = 8;
   CommercialData commercial        = 9;
   repeated AttachmentRef attachments = 10;
+  string transit_office_name       = 11;  // organismo RUNT (traspaso): core-api lo resuelve a transit_office_id
 }
 
 message FieldValue {

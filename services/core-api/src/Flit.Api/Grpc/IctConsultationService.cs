@@ -22,6 +22,7 @@ public sealed class IctConsultationService(
     private const string CheckRtm = "tecnomecanica";
     private const string CheckRnmc = "medidas_correctivas";
     private const string FieldVehicleYear = "vehicle_year";
+    private const string FieldTransitOffice = "transit_office_name";
     private const string FieldPendingFines = "person_has_pending_fines";
     private const string RnmcProviderKey = "verifik_rnmc";
 
@@ -92,6 +93,14 @@ public sealed class IctConsultationService(
         if (int.TryParse(HydratedOf(result, FieldVehicleYear), out var year) && year > 0)
         {
             reply.VehicleModelYear = year;
+        }
+
+        // Organismo de matrícula del RUNT (nombre; el proveedor no entrega DIVIPOLA ni código). core-ict lo
+        // usa en TRASPASO para fijar el OT del borrador: v1 lo derivaba de aquí, no del código del cliente.
+        var transitOffice = HydratedOf(result, FieldTransitOffice);
+        if (!string.IsNullOrWhiteSpace(transitOffice))
+        {
+            reply.TransitOfficeName = transitOffice;
         }
     }
 

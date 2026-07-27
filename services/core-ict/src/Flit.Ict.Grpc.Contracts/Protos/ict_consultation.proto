@@ -30,4 +30,5 @@ message ConsultationReply {
   bool paz_y_salvo_known = 5;         // false => paz_y_salvo desconocido (no bloquea)
   bool paz_y_salvo = 6;
   string error_code = 7;              // "" en éxito; si viene, core-ict reintenta (no marca válido)
+  string transit_office_name = 8;     // organismo de matrícula del RUNT (solo VEHICLE); "" = desconocido
 }

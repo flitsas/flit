@@ -39,6 +39,13 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
 
     public string TrafficSecretaryCode { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Nombre del organismo de tránsito de matrícula devuelto por el RUNT (consulta VEHICLE). En traspaso
+    /// (3/4) el OT lo fija el RUNT, no el cliente (paridad v1): el orquestador lo captura y core-api lo
+    /// resuelve al <c>transit_office_id</c> del catálogo al materializar. Null hasta que se consulta.
+    /// </summary>
+    public string? RuntTransitOfficeName { get; set; }
+
     public string UrlWebHook { get; set; } = string.Empty;
 
     public bool ClosedDocument { get; set; }
