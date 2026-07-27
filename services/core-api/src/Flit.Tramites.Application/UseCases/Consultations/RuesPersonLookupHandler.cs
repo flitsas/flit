@@ -13,8 +13,16 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// Es el análogo jurídico de <see cref="RuntPersonLookupHandler"/> (conductor / persona natural).
 /// </summary>
 /// <remarks>
-/// HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031): mismo patrón de cache-aside que
-/// <see cref="RuntPersonLookupHandler"/>, fuente <c>RUES</c>, <c>documentType = "NIT"</c> implícito.
+/// <para>HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031): fuente <c>RUES</c>,
+/// <c>documentType = "NIT"</c> implícito.</para>
+/// <para><b>HU #10955 (AC1, extendido a RUES; revierte parcialmente HU #10878/ADR-0031):</b> igual
+/// que <see cref="RuntPersonLookupHandler"/>, la IDENTIDAD de un actor jurídico se consulta SIEMPRE
+/// en vivo contra el RUES. Este handler YA NO llama a
+/// <see cref="ExternalQueryCacheService.TryReusePersonAsync"/> antes de resolver el proveedor —
+/// nunca sirve un HIT cacheado, exista o no <c>PersonDataConsent</c> en <c>granted</c> para ese NIT.
+/// Sí se conserva <see cref="ExternalQueryCacheService.SavePersonResultAsync"/> al final: la caché se
+/// sigue escribiendo con el resultado fresco para no tocar otros consumidores del mismo mecanismo.
+/// <c>PersonDataConsent</c> NO se borra ni se toca: se conserva para auditoría.</para>
 /// </remarks>
 public sealed class RuesPersonLookupHandler(
     IProcedureInstanceRepository repo,
@@ -43,11 +51,10 @@ public sealed class RuesPersonLookupHandler(
         var nit = documentNumber.Trim();
         var now = DateTimeOffset.UtcNow;
 
-        // HU #10878 — cache-aside ANTES de resolver el proveedor (AC1).
-        var cacheLookup = await cacheService.TryReusePersonAsync(tenantId, RuesSourceCode, DocumentTypeNit, nit, now, ct);
-        if (cacheLookup.Hit)
-            return (BuildDtoFromFields(cacheLookup.Fields!, nit, "cache"), null);
-
+        // HU #10955 (AC1, extendido a RUES) — la identidad SIEMPRE se consulta en vivo: ya no se
+        // intenta un HIT de ExternalQueryCacheService.TryReusePersonAsync antes de resolver el
+        // proveedor (ver remarks de la clase). El resultado fresco SÍ se sigue cacheando al final
+        // (SavePersonResultAsync).
         var provider = registry.Resolve(RuesProviderKey);
         if (provider is null)
             return (null, "provider_not_found");
