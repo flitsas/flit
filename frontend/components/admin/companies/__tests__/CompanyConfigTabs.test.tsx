@@ -132,7 +132,7 @@ describe("CompanyConfigTabs (AC2)", () => {
     );
   });
 
-  it("HU #10934: el menú unifica representantes, escrituras y mantiene el Baúl accesible", async () => {
+  it("HU #10929: la pestaña Representantes agrupa el contenido y ya no hay pestañas Escrituras ni Baúl", async () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);
 
@@ -141,25 +141,16 @@ describe("CompanyConfigTabs (AC2)", () => {
         settings={settings}
         onSaveSettings={onSaveSettings}
         legalRepresentativesSlot={<div>slot representantes</div>}
-        deedsSlot={<div>slot escrituras</div>}
-        baulFirmasSlot={<div>slot baúl</div>}
       />,
     );
 
-    // El menú expone las tres pestañas (baulFirmasActivo=true en el fixture).
+    // Existe la pestaña de representantes; ya NO existen pestañas propias de Escrituras ni Baúl.
     const repTab = screen.getByRole("tab", { name: /representantes legales/i });
-    const deedsTab = screen.getByRole("tab", { name: /escrituras/i });
-    const baulTab = screen.getByRole("tab", { name: /baúl de firmas/i });
+    expect(screen.queryByRole("tab", { name: /escrituras/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /baúl de firmas/i })).not.toBeInTheDocument();
 
     await user.click(repTab);
     expect(screen.getByText("slot representantes")).toBeInTheDocument();
-
-    // El Baúl sigue accesible desde el mismo menú (no se rompió el puente "Registrar en baúl").
-    await user.click(baulTab);
-    expect(screen.getByText("slot baúl")).toBeInTheDocument();
-
-    await user.click(deedsTab);
-    expect(screen.getByText("slot escrituras")).toBeInTheDocument();
   });
 
   it("cancela la confirmación sin guardar", async () => {

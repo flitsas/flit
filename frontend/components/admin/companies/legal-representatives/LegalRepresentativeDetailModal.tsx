@@ -10,15 +10,15 @@ import {
   type AssignableProcedureType,
   type LegalRepresentativeCompanySummary,
   type LegalRepresentativeItem,
+  type RepresentativeDeed,
 } from "@/lib/api/admin-legal-representatives";
 import {
   fetchDeedDetail,
   saveDeed,
   type DeedFormInput,
   type DeedSaved,
-  type RepresentedCompany,
 } from "@/lib/api/admin-deeds";
-import { DeedsFormPanel } from "../deeds/DeedsFormPanel";
+import { DeedsFormPanel, type DeedEditingRef } from "../deeds/DeedsFormPanel";
 import {
   deedEstadoBadge,
   fullName,
@@ -52,8 +52,10 @@ export function LegalRepresentativeDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [viewingDeedId, setViewingDeedId] = useState<string | null>(null);
-  // Compañía para la que se está asociando una escritura nueva (abre DeedsFormPanel preseleccionado).
+  // Compañía FIJA para la que se está creando/editando una escritura (abre el DeedsFormPanel).
   const [deedFormCompany, setDeedFormCompany] = useState<LegalRepresentativeCompanySummary | null>(null);
+  // Escritura en edición dentro del panel; `null` = alta.
+  const [deedEditing, setDeedEditing] = useState<DeedEditingRef | null>(null);
 
   const load = useCallback(
     async (id: string, signal?: AbortSignal) => {
@@ -101,12 +103,36 @@ export function LegalRepresentativeDetailModal({
     }
   };
 
+  // Abre el panel para asociar (alta) una escritura a la compañía de la fila.
+  const openAssociateDeed = (company: LegalRepresentativeCompanySummary) => {
+    setDeedEditing(null);
+    setDeedFormCompany(company);
+  };
+
+  // Abre el panel para editar una escritura existente de la compañía de la fila.
+  const openEditDeed = (company: LegalRepresentativeCompanySummary, deed: RepresentativeDeed) => {
+    setDeedEditing({
+      id: deed.id,
+      description: deed.description,
+      vigenciaDesde: deed.vigenciaDesde,
+      vigenciaHasta: deed.vigenciaHasta,
+    });
+    setDeedFormCompany(company);
+  };
+
+  const closeDeedForm = () => {
+    setDeedFormCompany(null);
+    setDeedEditing(null);
+  };
+
   const handleDeedSubmit = (input: DeedFormInput): Promise<DeedSaved> =>
-    saveDeed(tenantId, null, input);
+    saveDeed(tenantId, deedEditing ? deedEditing.id : null, input);
 
   const handleDeedSaved = () => {
-    setDeedFormCompany(null);
-    show("Escritura asociada a la empresa.", "success");
+    const wasEditing = deedEditing !== null;
+    closeDeedForm();
+    show(wasEditing ? "Escritura actualizada." : "Escritura asociada a la empresa.", "success");
+    // Refresca el detalle para que la escritura nueva/editada aparezca bajo esa empresa.
     if (item) void load(item.id);
   };
 
@@ -115,11 +141,6 @@ export function LegalRepresentativeDetailModal({
   const status = signatureStatus(header.hasSignatureOrIdentity);
   const tramites = procedureTypeLabels(header.procedureTypeIds, procedureTypes);
   const companies = detail?.companies ?? item.companies ?? [];
-
-  // Compañía preseleccionada para el panel de escritura (mapeada al tipo del catálogo de escrituras).
-  const presetCompany: RepresentedCompany | null = deedFormCompany
-    ? { id: deedFormCompany.id, nit: deedFormCompany.nit, name: deedFormCompany.name }
-    : null;
 
   return (
     <>
@@ -188,7 +209,7 @@ export function LegalRepresentativeDetailModal({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setDeedFormCompany(company)}
+                    onClick={() => openAssociateDeed(company)}
                     className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
                     style={{ color: "#557EFF", borderColor: "#557EFF" }}
                   >
@@ -231,6 +252,14 @@ export function LegalRepresentativeDetailModal({
                               {viewingDeedId === deed.id && <Loader2 className="h-3 w-3 animate-spin" />}
                               Ver PDF
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditDeed(company, deed)}
+                              aria-label={`Editar ${deed.description}`}
+                              className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold"
+                            >
+                              Editar
+                            </button>
                           </div>
                         </li>
                       );
@@ -256,11 +285,16 @@ export function LegalRepresentativeDetailModal({
 
       <DeedsFormPanel
         open={deedFormCompany !== null}
-        editing={null}
-        companies={presetCompany ? [presetCompany] : []}
-        companiesLoading={false}
-        presetCompanyIds={presetCompany ? [presetCompany.id] : undefined}
-        onClose={() => setDeedFormCompany(null)}
+        editing={deedEditing}
+        company={
+          deedFormCompany
+            ? { id: deedFormCompany.id, name: deedFormCompany.name, nit: deedFormCompany.nit }
+            : null
+        }
+        // El panel se lanza desde el modal del representante (z-[100]); necesita un z mayor para no
+        // quedar oculto tras el overlay del modal (causa por la que "Asociar escritura" no abría).
+        zClassName="z-[120]"
+        onClose={closeDeedForm}
         onSubmit={handleDeedSubmit}
         onSaved={handleDeedSaved}
         onError={(message) => show(message, "error")}

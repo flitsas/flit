@@ -1,40 +1,59 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Loader2, UploadCloud } from "lucide-react";
+import { Building2, FileText, Loader2, UploadCloud } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
-import type {
-  DeedFormInput,
-  DeedItem,
-  DeedSaved,
-  RepresentedCompany,
-} from "@/lib/api/admin-deeds";
+import type { DeedFormInput, DeedSaved } from "@/lib/api/admin-deeds";
+
+/** Compañía fija (de contexto) para la que se crea/edita la escritura. Se muestra como dato de solo lectura. */
+export interface DeedFormCompany {
+  /** `representedCompanyId` que la escritura persiste en `representedCompanyIds`. */
+  id: string;
+  name: string;
+  /** NIT (PII, Ley 1581); opcional, solo para mostrar. */
+  nit?: string;
+}
+
+/**
+ * Escritura a editar (referencia ligera). Basta con los campos del formulario: la compañía llega por
+ * contexto (fija), así que no se necesita el `DeedItem` completo. Tanto `DeedItem` como
+ * `RepresentativeDeed` satisfacen esta forma estructuralmente.
+ */
+export interface DeedEditingRef {
+  id: string;
+  description: string;
+  /** Vigencia (YYYY-MM-DD). */
+  vigenciaDesde: string;
+  vigenciaHasta: string;
+}
 
 export interface DeedsFormPanelProps {
   open: boolean;
   /** Escritura a editar; `null` = alta. */
-  editing: DeedItem | null;
-  companies: RepresentedCompany[];
-  companiesLoading: boolean;
+  editing: DeedEditingRef | null;
   /**
-   * Compañías preseleccionadas al abrir en modo alta (HU #10934): permite lanzar el panel desde la
-   * vista representante-céntrica con una empresa ya marcada. Se ignora al editar (ahí manda la
-   * escritura). Retrocompatible: sin la prop, el alta abre sin compañías marcadas.
+   * Compañía FIJA para la que se crea/edita la escritura (HU #10929). Llega por contexto desde la
+   * pantalla del representante legal: la escritura se crea SIEMPRE para esta única compañía. No hay
+   * selector; el nombre se muestra como dato de solo lectura.
    */
-  presetCompanyIds?: string[];
+  company: DeedFormCompany | null;
   onClose: () => void;
   onSubmit: (input: DeedFormInput) => Promise<DeedSaved>;
   onSaved: (saved: DeedSaved) => void;
   onError: (message: string) => void;
+  /**
+   * z-index del overlay del panel. El panel se lanza desde el modal del representante (`Modal` en
+   * `z-[100]`), por lo que necesita un z mayor para no quedar oculto tras el overlay del modal.
+   */
+  zClassName?: string;
 }
 
 interface FormState {
   description: string;
   vigenciaDesde: string;
   vigenciaHasta: string;
-  companyIds: string[];
   file: File | null;
 }
 
@@ -42,36 +61,35 @@ const EMPTY: FormState = {
   description: "",
   vigenciaDesde: "",
   vigenciaHasta: "",
-  companyIds: [],
   file: null,
 };
 
-function fromItem(item: DeedItem): FormState {
+function fromEditing(item: DeedEditingRef): FormState {
   return {
     description: item.description,
     vigenciaDesde: item.vigenciaDesde,
     vigenciaHasta: item.vigenciaHasta,
-    companyIds: [...item.representedCompanyIds],
     file: null,
   };
 }
 
 /**
- * Panel de alta/edición de una escritura (HU #10905): descripción, carga del PDF, vigencia y
- * multi-selección de compañías registradas. En alta el PDF es obligatorio; en edición es opcional
- * (si no se elige uno nuevo, se conserva el custodiado). Los errores 422 del backend
- * (`description`/`vigenciaHasta`/`representedCompanyIds`) se muestran por campo.
+ * Panel de alta/edición de una escritura (HU #10905, ajustes HU #10929): descripción, carga del PDF y
+ * vigencia. La escritura aplica SIEMPRE a UNA compañía fija que llega por contexto (desde la pantalla
+ * del representante legal), mostrada como dato de solo lectura; al guardar se envía como el único
+ * elemento de `representedCompanyIds`. En alta el PDF es obligatorio; en edición es opcional (si no se
+ * elige uno nuevo, se conserva el custodiado). Los errores 422 del backend
+ * (`description`/`vigenciaHasta`) se muestran por campo.
  */
 export function DeedsFormPanel({
   open,
   editing,
-  companies,
-  companiesLoading,
-  presetCompanyIds,
+  company,
   onClose,
   onSubmit,
   onSaved,
   onError,
+  zClassName,
 }: DeedsFormPanelProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -81,40 +99,28 @@ export function DeedsFormPanel({
 
   useEffect(() => {
     if (!open) return;
-    // Reinicia el formulario al abrir (alta en blanco o edición precargada). En alta se aplican las
-    // compañías preseleccionadas (vista representante-céntrica, HU #10934).
+    // Reinicia el formulario al abrir (alta en blanco o edición precargada).
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el formulario al abrir el panel
-    setForm(
-      editing
-        ? fromItem(editing)
-        : { ...EMPTY, companyIds: presetCompanyIds ? [...presetCompanyIds] : [] },
-    );
+    setForm(editing ? fromEditing(editing) : EMPTY);
     setFieldErrors({});
     setBanner(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [open, editing, presetCompanyIds]);
+  }, [open, editing]);
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
-
-  const toggleCompany = (id: string) =>
-    setForm((f) => ({
-      ...f,
-      companyIds: f.companyIds.includes(id)
-        ? f.companyIds.filter((x) => x !== id)
-        : [...f.companyIds, id],
-    }));
 
   // Validación en cliente (los mismos requeridos que valida el backend). En alta, el PDF es obligatorio.
   const isValid =
     form.description.trim() !== "" &&
     form.vigenciaDesde !== "" &&
     form.vigenciaHasta !== "" &&
-    form.companyIds.length > 0 &&
+    company !== null &&
     (editing !== null || form.file !== null);
 
   const canSubmit = isValid && !submitting;
 
   const handleSubmit = async () => {
+    if (!company) return;
     setSubmitting(true);
     setBanner(null);
     setFieldErrors({});
@@ -123,7 +129,8 @@ export function DeedsFormPanel({
         description: form.description.trim(),
         vigenciaDesde: form.vigenciaDesde,
         vigenciaHasta: form.vigenciaHasta,
-        companyIds: form.companyIds,
+        // La escritura aplica SIEMPRE a la única compañía fija de contexto.
+        companyIds: [company.id],
         file: form.file,
       });
       onSaved(saved);
@@ -171,6 +178,7 @@ export function DeedsFormPanel({
       onClose={onClose}
       disabled={submitting}
       footer={footer}
+      zClassName={zClassName}
     >
       <div className="space-y-5">
         {banner && (
@@ -182,6 +190,21 @@ export function DeedsFormPanel({
             {banner}
           </p>
         )}
+
+        {/* Compañía fija (contexto del representante): dato de solo lectura, sin selector. */}
+        <div>
+          <span className="mb-1 block text-xs font-semibold">Compañía</span>
+          <div
+            className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs"
+            style={{ borderColor: "#DFE5ED" }}
+          >
+            <Building2 className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} />
+            <span className="min-w-0">
+              <span className="block truncate font-semibold">{company?.name ?? "—"}</span>
+              {company?.nit && <span className="block font-mono opacity-60">{company.nit}</span>}
+            </span>
+          </div>
+        </div>
 
         <Field id="deed-description" label="Descripción" error={fieldErrors.description}>
           <input
@@ -248,48 +271,6 @@ export function DeedsFormPanel({
             />
           </Field>
         </div>
-
-        <fieldset className="space-y-2">
-          <legend className="text-[11px] font-bold uppercase tracking-wide opacity-60">
-            Compañías a las que aplica
-          </legend>
-          {fieldErrors.representedCompanyIds && (
-            <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
-              {fieldErrors.representedCompanyIds}
-            </p>
-          )}
-          {companiesLoading ? (
-            <p className="text-[11px] opacity-60">Cargando compañías…</p>
-          ) : companies.length === 0 ? (
-            <p className="text-[11px] opacity-60">
-              No hay compañías registradas. Registra representantes legales para poder asociarlas.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2">
-              {companies.map((c) => {
-                const checked = form.companyIds.includes(c.id);
-                return (
-                  <label
-                    key={c.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
-                    style={checked ? { borderColor: "#557EFF" } : undefined}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleCompany(c.id)}
-                      className="h-3.5 w-3.5 accent-[#557EFF]"
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">{c.name}</span>
-                      <span className="block font-mono opacity-60">{c.nit}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </fieldset>
       </div>
     </OtSidePanel>
   );

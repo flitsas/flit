@@ -44,6 +44,7 @@ import {
   sendLegalRepresentativeIdentity,
   type AssignableProcedureType,
 } from "@/lib/api/admin-legal-representatives";
+import { saveDeed } from "@/lib/api/admin-deeds";
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 
@@ -270,5 +271,55 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(within(dialog).getByText("Vencida")).toBeInTheDocument();
     // Punto de entrada para asociar una escritura nueva a la empresa desde la misma vista.
     expect(within(dialog).getByRole("button", { name: /asociar escritura/i })).toBeInTheDocument();
+  });
+
+  it("'Asociar escritura' abre el panel con la compañía fija, guarda y refresca el detalle (HU #10929)", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM,
+      companies: [{ id: "co-1", nit: "900123456-7", name: "Comercializadora XYZ", deeds: [] }],
+    });
+    vi.mocked(saveDeed).mockResolvedValue({ id: "deed-new" });
+
+    renderTab();
+    await screen.findByText("Ana Gómez Ruiz");
+    await userEvent.click(screen.getByRole("button", { name: /ver detalle de ana gómez ruiz/i }));
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(1));
+
+    // Abre el panel de alta desde la empresa (antes NO abría por el z-index bajo el modal).
+    await userEvent.click(await screen.findByRole("button", { name: /asociar escritura/i }));
+
+    const panel = await screen.findByRole("dialog", { name: /registrar escritura/i });
+    // La compañía llega FIJA por contexto (dato de solo lectura) y no hay selector de compañías.
+    expect(within(panel).getByText("Comercializadora XYZ")).toBeInTheDocument();
+    expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
+
+    // Captura descripción + vigencia + PDF.
+    await userEvent.type(within(panel).getByLabelText(/descripción/i), "Poder general 2026");
+    const file = new File(["%PDF-1.4 test"], "poder.pdf", { type: "application/pdf" });
+    await userEvent.upload(
+      within(panel).getByLabelText(/selecciona el documento pdf de la escritura/i),
+      file,
+    );
+    // Los inputs de fecha se fijan directamente (userEvent.type es frágil con type="date").
+    await userEvent.click(within(panel).getByRole("button", { name: /registrar escritura/i }));
+
+    // Aún sin fechas el guardado no dispara: el botón exige vigencia.
+    expect(saveDeed).not.toHaveBeenCalled();
+
+    await userEvent.type(within(panel).getByLabelText(/vigencia desde/i), "2026-01-01");
+    await userEvent.type(within(panel).getByLabelText(/vigencia hasta/i), "2027-01-01");
+    await userEvent.click(within(panel).getByRole("button", { name: /registrar escritura/i }));
+
+    // Guarda para la ÚNICA compañía fija (alta → editingId null) y refresca el detalle.
+    await waitFor(() => expect(saveDeed).toHaveBeenCalledTimes(1));
+    const [tenantArg, editingArg, inputArg] = vi.mocked(saveDeed).mock.calls[0];
+    expect(tenantArg).toBe(TENANT);
+    expect(editingArg).toBeNull();
+    expect(inputArg.companyIds).toEqual(["co-1"]);
+    expect(inputArg.description).toBe("Poder general 2026");
+    expect(inputArg.file).toBe(file);
+    // El detalle se recarga tras guardar (fetchLegalRepresentative se vuelve a llamar).
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(2));
   });
 });
