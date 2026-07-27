@@ -24,8 +24,8 @@ const ITEM: SignatureVaultItem = {
   id: "sig-1",
   documentType: "CC",
   documentNumber: "1098765432",
-  nitEmpresa: "900123456-7",
   fullName: "Ana Gómez",
+  codigoHash: "AB12CD34",
   vigenciaDesde: "2026-01-01",
   vigenciaHasta: "2026-12-31",
   estado: "activa",
@@ -68,6 +68,9 @@ describe("SignatureVaultTab (HU #10644)", () => {
     expect(await screen.findByText("Ana Gómez")).toBeInTheDocument();
     expect(screen.getByText(/••••5432/)).toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
+    // El código hash se muestra; el NIT ya no es una columna del baúl.
+    expect(screen.getByText("AB12CD34")).toBeInTheDocument();
+    expect(screen.queryByText(/900123456/)).not.toBeInTheDocument();
     // El número completo del documento no debe renderizarse.
     expect(screen.queryByText(/1098765432/)).not.toBeInTheDocument();
   });

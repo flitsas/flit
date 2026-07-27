@@ -15,6 +15,12 @@ public sealed class CreateSignatureVaultCommand
     public DateOnly VigenciaDesde { get; init; }
     public DateOnly VigenciaHasta { get; init; }
     public string? ArtefactoFirmaBase64 { get; init; }
+
+    /// <summary>
+    /// Código alfanumérico que digita el usuario (HU #10930), DISTINTO del SHA-256 del artefacto.
+    /// </summary>
+    public string? CodigoHash { get; init; }
+
     public Guid? MandateSignerId { get; init; }
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }

@@ -41,10 +41,13 @@ internal sealed class CompanyLegalRepresentativeConfiguration
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 
-        // Unicidad del par (compañía, representante) POR TENANT (ADR-0033 D6).
-        builder.HasIndex(x => new { x.TenantId, x.RepresentedCompanyId, x.DocumentNumber })
+        // HU #10932: el representante es la PERSONA (única por tenant+documento entre los activos); las
+        // compañías se modelan en el puente legal_representative_companies. represented_company_id se
+        // conserva como compañía primaria (nullable, deprecado).
+        builder.HasIndex(x => new { x.TenantId, x.DocumentNumber })
             .IsUnique()
-            .HasDatabaseName("uq_company_legal_representatives_tenant_company_document");
+            .HasFilter("is_active")
+            .HasDatabaseName("uq_company_legal_representatives_tenant_document");
 
         builder.HasIndex(x => x.RepresentedCompanyId)
             .HasDatabaseName("ix_company_legal_representatives_represented_company_id");

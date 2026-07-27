@@ -33,12 +33,13 @@ internal sealed class DeedRepository : IDeedRepository
             {
                 var deed = Deed.Create(
                     data.TenantId, data.Description, data.StoragePath!, data.StorageSha256!,
-                    data.VigenciaDesde, data.VigenciaHasta);
+                    data.VigenciaDesde, data.VigenciaHasta, data.RepresentativeId);
 
                 var entity = new CompanyDeedEntity
                 {
                     Id = deed.Id,
                     TenantId = deed.TenantId,
+                    RepresentativeId = deed.RepresentativeId,
                     Description = deed.Description,
                     StoragePath = deed.StoragePath,
                     StorageSha256 = deed.StorageSha256,

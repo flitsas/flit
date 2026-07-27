@@ -118,7 +118,7 @@ public sealed class WizardFurStateTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-    /// <summary>Completa pasos 1-4 de matrícula (VIN, docs, comprador+RUNT, biométrica) → FUR (5) alcanzable.</summary>
+    /// <summary>Completa pasos 1-4 de matrícula (VIN, comprador+RUNT, docs, biométrica) → FUR (5) alcanzable.</summary>
     private static void CompletarHastaFurMatricula(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
@@ -129,11 +129,11 @@ public sealed class WizardFurStateTests
         instance.BiometricValidations.Add(Bio("comprador")); // identidad (4) completa
     }
 
-    /// <summary>Completa pasos 1-5 de traspaso (placa, documentos, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, documentos, preflight, comercial) → FUR (6) alcanzable.</summary>
     private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
-        CompletarDocsTraspaso(instance); // los documentos gobiernan el paso 2; sin ellos FUR queda locked.
+        CompletarDocsTraspaso(instance); // HU #10935: documentos en el paso 4 (tras los actores); sin ellos FUR queda locked.
         instance.Actors.Add(Vendedor());
         instance.Actors.Add(Comprador("666"));
         instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot { Id = Guid.NewGuid(), Overall = "green", Checks = "[]", CreatedAt = DateTimeOffset.UtcNow });

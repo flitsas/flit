@@ -12,6 +12,12 @@ export interface OtSidePanelProps {
   children: ReactNode;
   footer?: ReactNode;
   disabled?: boolean;
+  /**
+   * Clase de z-index del overlay (literal para el JIT de Tailwind). Por defecto `z-50`. Se sobreescribe
+   * cuando el panel se lanza DESDE un modal (`Modal` se portaliza a body con `z-[100]`): sin un z mayor,
+   * el panel quedaría por detrás del overlay del modal y parecería que "no abre".
+   */
+  zClassName?: string;
 }
 
 export function OtSidePanel({
@@ -22,13 +28,14 @@ export function OtSidePanel({
   children,
   footer,
   disabled = false,
+  zClassName = "z-50",
 }: OtSidePanelProps) {
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className={`fixed inset-0 ${zClassName} flex justify-end`}>
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"

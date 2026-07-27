@@ -63,8 +63,8 @@ describe('ActiveDeedsCollapse — collapse contraído + carga perezosa', () => {
 
   it('lista NIT, nombre y badge de vigencia con el tono por umbral', async () => {
     const deeds: ActiveDeed[] = [
-      { nit: '900111222', name: 'Transportes Andinos SAS', diasRestantes: 120, vigenciaHasta: '2026-11-20' },
-      { nit: '901333444', name: 'Logística del Café SAS', diasRestantes: 5, vigenciaHasta: '2026-07-28' },
+      { id: 'deed-1', nit: '900111222', name: 'Transportes Andinos SAS', diasRestantes: 120, vigenciaHasta: '2026-11-20' },
+      { id: 'deed-2', nit: '901333444', name: 'Logística del Café SAS', diasRestantes: 5, vigenciaHasta: '2026-07-28' },
     ];
     mocks.fetchActiveDeeds.mockResolvedValue(deeds);
 
@@ -84,6 +84,43 @@ describe('ActiveDeedsCollapse — collapse contraído + carga perezosa', () => {
     expect(porVencer).toHaveTextContent('5 días');
     expect(vigente).toHaveStyle({ color: 'var(--badge-success-fg)' });
     expect(porVencer).toHaveStyle({ color: 'var(--badge-danger-fg)' });
+  });
+
+  it('lista VARIAS escrituras del MISMO NIT (una fila por escritura) con su descripción', async () => {
+    // Feature #10929: dos escrituras vigentes de la misma compañía → dos filas, distinguidas por
+    // la descripción; la llave por deed.id evita colisiones de key en React.
+    const deeds: ActiveDeed[] = [
+      {
+        id: 'deed-a',
+        nit: '900111222',
+        name: 'Transportes Andinos SAS',
+        diasRestantes: 40,
+        vigenciaHasta: '2026-09-01',
+        description: 'Escritura 1234 Notaría 5',
+      },
+      {
+        id: 'deed-b',
+        nit: '900111222',
+        name: 'Transportes Andinos SAS',
+        diasRestantes: 120,
+        vigenciaHasta: '2026-11-20',
+        description: 'Escritura 5678 Notaría 9',
+      },
+    ];
+    mocks.fetchActiveDeeds.mockResolvedValue(deeds);
+
+    render(<ActiveDeedsCollapse />);
+    await userEvent.setup().click(
+      screen.getByRole('button', { name: /Escrituras vigentes de la compañía/i }),
+    );
+
+    // Ambas escrituras del mismo NIT se renderizan (no se colapsan a una).
+    expect(await screen.findByText('Escritura 1234 Notaría 5')).toBeInTheDocument();
+    expect(screen.getByText('Escritura 5678 Notaría 9')).toBeInTheDocument();
+    // El nombre de la compañía aparece una vez por fila.
+    expect(screen.getAllByText('Transportes Andinos SAS')).toHaveLength(2);
+    // Dos ítems de escritura en la lista.
+    expect(screen.getByLabelText('Escrituras vigentes').querySelectorAll('li')).toHaveLength(2);
   });
 
   it('muestra estado vacío cuando no hay escrituras vigentes', async () => {

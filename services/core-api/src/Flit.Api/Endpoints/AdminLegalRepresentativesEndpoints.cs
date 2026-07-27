@@ -148,6 +148,7 @@ public static class AdminLegalRepresentativesEndpoints
             City = request.City,
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
+            Companies = request.Companies,
             ActorBy = ResolveUserId(httpContext.User),
         };
 
@@ -193,6 +194,7 @@ public static class AdminLegalRepresentativesEndpoints
             City = request.City,
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
+            Companies = request.Companies,
             ActorBy = ResolveUserId(httpContext.User),
         };
 

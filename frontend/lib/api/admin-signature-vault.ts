@@ -14,8 +14,11 @@ export interface SignatureVaultItem {
   id: string;
   documentType: string;
   documentNumber: string;
-  nitEmpresa: string;
+  /** NIT de la empresa: deprecado desde la HU #10930 (la firma es de la persona). */
+  nitEmpresa?: string | null;
   fullName: string;
+  /** Código hash alfanumérico digitado por el usuario (opcional). */
+  codigoHash?: string | null;
   /** Vigencia (YYYY-MM-DD). */
   vigenciaDesde: string;
   vigenciaHasta: string;
@@ -32,8 +35,11 @@ export interface SignatureVaultItem {
 export interface SignatureVaultInput {
   documentType: string;
   documentNumber: string;
-  nitEmpresa: string;
+  /** NIT de la empresa: opcional/deprecado desde la HU #10930 (la firma es de la persona). */
+  nitEmpresa?: string | null;
   fullName: string;
+  /** Código hash alfanumérico digitado por el usuario (opcional). */
+  codigoHash?: string | null;
   vigenciaDesde: string;
   vigenciaHasta: string;
   artefactoFirmaBase64: string;

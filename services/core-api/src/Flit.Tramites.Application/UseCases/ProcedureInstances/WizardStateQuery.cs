@@ -78,7 +78,8 @@ public sealed record WizardStateDto(
 /// cuando el actor tiene documento; el RUNT vive en field_values, sin entidad propia en este slice);
 /// último preflight → <see cref="PreflightSnapshot"/> (Overall);
 /// comercial → ValorVenta;
-/// checklist (<see cref="ChecklistEngine"/> sobre adjuntos) → completitud de documentos del paso 2;
+/// checklist (<see cref="ChecklistEngine"/> sobre adjuntos) → completitud del paso de documentos
+/// (HU #10935: paso 4 en traspaso, paso 3 en matrícula — después de los actores);
 /// biométrica → <c>null</c> (diferida, slice 6) → los pasos finales se marcan incomplete con
 /// reason explícita ("pendiente_biometria"/"pendiente_firma"), NO se bloquean con error.</para>
 /// </summary>
@@ -563,9 +564,9 @@ public sealed class GetWizardStateHandler(
             else if (p == 6)
             {
                 // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + FUR generado. Los
-                // documentos ya se exigen en el paso 2 (paridad con matrícula); aquí NO se listan
-                // como reason. El faltante de docs sigue vetando el submit vía el blocker global
-                // documentos_incompletos.
+                // documentos ya se exigen en el paso 4 (HU #10935, después de los actores); aquí NO
+                // se listan como reason. El faltante de docs sigue vetando el submit vía el blocker
+                // global documentos_incompletos.
                 //
                 // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
                 // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
@@ -928,14 +929,18 @@ public sealed class GetWizardStateHandler(
         return keys;
     }
 
+    // HU #10935 — orden del wizard: los documentos van DESPUÉS de la información del comprador y/o
+    // vendedor (traspaso: consulta → vendedor → comprador → documentos → comercial → fur;
+    // matrícula: consulta_vin → comprador → documentos → identidad → fur). Este mapeo índice→key
+    // debe seguir el MISMO orden que la cascada de gates (TraspasoGates/MatriculaGates.PasoCompleto).
     private static string StepKey(bool traspaso, int index) =>
         traspaso
             ? index switch
             {
                 1 => "consulta",
-                2 => "documentos",
-                3 => "vendedor",
-                4 => "comprador",
+                2 => "vendedor",
+                3 => "comprador",
+                4 => "documentos",
                 5 => "comercial",
                 6 => "fur",
                 _ => $"paso_{index}",
@@ -943,8 +948,8 @@ public sealed class GetWizardStateHandler(
             : index switch
             {
                 1 => "consulta_vin",
-                2 => "documentos",
-                3 => "comprador",
+                2 => "comprador",
+                3 => "documentos",
                 4 => "identidad",
                 5 => "fur",
                 _ => $"paso_{index}",

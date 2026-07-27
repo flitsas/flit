@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 
 namespace Flit.Infrastructure.Documents;
@@ -9,7 +10,7 @@ namespace Flit.Infrastructure.Documents;
 /// Implementación de <see cref="IProcedureDeedResolver"/> (HU #10926, ADR-0033). Por cada actor
 /// persona jurídica (NIT) del trámite, cruza su compañía representada del directorio del tenant
 /// (<see cref="ILegalRepresentativeReader.FindRepresentedCompanyByNitAsync"/>) con su escritura activa
-/// y vigente de MAYOR vigencia (<see cref="IDeedReader.ListActiveVigentesAsync"/>) y baja los bytes del
+/// y vigente MÁS PRÓXIMA A VENCER (menor VigenciaHasta, HU #10936; <see cref="IDeedReader.ListActiveVigentesAsync"/>) y baja los bytes del
 /// PDF vía <see cref="IAttachmentStorage.OpenReadAsync"/>. Vive en Infrastructure porque cruza el
 /// módulo Admin (directorio de escrituras) con el almacenamiento de adjuntos de Trámites, sin acoplar
 /// los módulos entre sí. Tipo por rol (D2): vendedor/propietario ⇒ 'escritura'; comprador ⇒
@@ -81,10 +82,31 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue;
             }
 
-            // Escritura de MAYOR vigencia de esa compañía (colapso por NIT, como el collapse del wizard).
+            // Feature #10929 — la escritura es DEL representante seleccionado. Se resuelve su id por el
+            // documento del sujeto de identidad (el RL embebido en el actor jurídico) y se filtran las
+            // escrituras de la compañía a las que ÉL asoció (RepresentativeId). Si no se resuelve el
+            // representante (sin documento del RL o no está en el directorio), se mantiene el
+            // comportamiento por compañía (compat), incluidas las escrituras legadas sin representante.
+            var subject = IdentitySubjectResolver.For(actor);
+            Guid? representativeId = null;
+            if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
+                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            {
+                var representative = await _representativeReader
+                    .FindActiveByDocumentAsync(
+                        tenantId, subject.TipoDocumento!.Trim(), subject.NumeroDocumento!.Trim(), ct)
+                    .ConfigureAwait(false);
+                representativeId = representative?.Id;
+            }
+
+            // HU #10936 — entre las escrituras vigentes (de la compañía y, si se resolvió, del
+            // representante) se elige la MÁS PRÓXIMA A VENCER (menor VigenciaHasta); ThenBy(Id) desempata
+            // de forma estable. Antes ganaba la de mayor vigencia; ahora prima la que primero deja de servir.
             var deed = deeds
-                .Where(d => d.RepresentedCompanyIds.Contains(company.Id))
-                .OrderByDescending(d => d.VigenciaHasta)
+                .Where(d => d.RepresentedCompanyIds.Contains(company.Id)
+                    && (representativeId is null || d.RepresentativeId == representativeId))
+                .OrderBy(d => d.VigenciaHasta)
+                .ThenBy(d => d.Id)
                 .FirstOrDefault();
             if (deed is null)
             {
@@ -115,7 +137,8 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 $"{tipo}.pdf",
                 content,
                 company.DocumentNumber,
-                actor.ActorType ?? string.Empty));
+                actor.ActorType ?? string.Empty,
+                deed.Id));
         }
 
         return result;

@@ -143,13 +143,22 @@ public static class FurFieldMapper
             if (!metadata.TryGetValue(key, out var meta))
                 continue;
 
-            return string.Join('\n',
-            [
+            var lines = new List<string>
+            {
                 $"Doc. {meta.DocumentNumber}",
                 meta.FullName,
                 $"Vig. {meta.VigenciaDesde:dd/MM/yyyy} — {meta.VigenciaHasta:dd/MM/yyyy}",
-                $"Hash: {meta.SignatureVaultId:D}",
-            ]);
+            };
+
+            // HU #10930 (Feature #10929): se estampa el codigo_hash digitado en el baúl (meta.Hash), NO el
+            // UUID de la fila. Si el baúl no trae código (firmas previas / null), se OMITE la línea "Hash"
+            // en vez de imprimir el GUID (que confundía al operador).
+            if (!string.IsNullOrWhiteSpace(meta.Hash))
+            {
+                lines.Add($"Hash: {meta.Hash}");
+            }
+
+            return string.Join('\n', lines);
         }
 
         return null;

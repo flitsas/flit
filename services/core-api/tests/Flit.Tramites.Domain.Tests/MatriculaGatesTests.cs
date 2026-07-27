@@ -17,46 +17,46 @@ public sealed class MatriculaGatesTests
         DocumentosObligatoriosCompletos = true,
     };
 
-    [Fact]
-    public void Paso2_DocumentosIncompletos_Bloquea()
+    [Fact] // HU #10935 — documentos ahora es el paso 3 (después del comprador).
+    public void Paso3_DocumentosIncompletos_Bloquea()
     {
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
-        TraspasoGatesShared(ctx, 2, "documentos_incompletos");
+        TraspasoGatesShared(ctx, 3, "documentos_incompletos");
     }
 
     [Fact]
-    public void Paso2_DocumentosCompletos_Avanza()
+    public void Paso3_DocumentosCompletos_Avanza()
     {
-        MatriculaGates.PasoCompleto(2, BaseCtx()).Ok.Should().BeTrue();
+        MatriculaGates.PasoCompleto(3, BaseCtx()).Ok.Should().BeTrue();
     }
 
     [Fact]
-    public void Paso2_DocumentosIncompletos_ForzarNoBypass()
+    public void Paso3_DocumentosIncompletos_ForzarNoBypass()
     {
         // Gating ESTRICTO: forzar no omite documentos obligatorios.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false, ForzarContinuar = true };
-        var r = MatriculaGates.PasoCompleto(2, ctx);
+        var r = MatriculaGates.PasoCompleto(3, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("documentos_incompletos");
     }
 
     [Fact]
-    public void Paso2_PreflightRed_Bloquea()
+    public void Paso3_PreflightRed_Bloquea()
     {
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false) };
-        TraspasoGatesShared(ctx, 2, "preflight_red");
+        TraspasoGatesShared(ctx, 3, "preflight_red");
     }
 
     [Fact]
-    public void Paso2_RiesgoPreflightAceptado_BypassPreflightRed()
+    public void Paso3_RiesgoPreflightAceptado_BypassPreflightRed()
     {
-        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso 2.
+        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso de documentos.
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), RiesgoPreflightAceptado = true };
-        MatriculaGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+        MatriculaGates.PasoCompleto(3, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]
-    public void Paso2_PreflightProviderError_BloqueaDuroNoSubsanable()
+    public void Paso3_PreflightProviderError_BloqueaDuroNoSubsanable()
     {
         // Consulta no verificable (error de proveedor) = bloqueo DURO: ni "aceptar riesgo" ni
         // forzar lo levantan. Hay que reejecutar la consulta.
@@ -66,11 +66,11 @@ public sealed class MatriculaGatesTests
             RiesgoPreflightAceptado = true,
             ForzarContinuar = true,
         };
-        TraspasoGatesShared(ctx, 2, "preflight_provider_error");
+        TraspasoGatesShared(ctx, 3, "preflight_provider_error");
     }
 
     [Fact]
-    public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
+    public void Paso3_RiesgoPreflightAceptado_AunExigeDocumentos()
     {
         // El riesgo NO afloja el gating de documentos obligatorios.
         var ctx = BaseCtx() with
@@ -79,7 +79,7 @@ public sealed class MatriculaGatesTests
             RiesgoPreflightAceptado = true,
             DocumentosObligatoriosCompletos = false,
         };
-        TraspasoGatesShared(ctx, 2, "documentos_incompletos");
+        TraspasoGatesShared(ctx, 3, "documentos_incompletos");
     }
 
     [Fact]
@@ -112,11 +112,11 @@ public sealed class MatriculaGatesTests
         TraspasoGatesShared(ctx, 1, "preflight_provider_error");
     }
 
-    [Fact]
-    public void Paso3_CompradorIncompleto_Bloquea()
+    [Fact] // HU #10935 — el comprador ahora es el paso 2 (antes del de documentos).
+    public void Paso2_CompradorIncompleto_Bloquea()
     {
         var ctx = BaseCtx() with { Comprador = new ParteDatos("C", "", "c@x.co") };
-        TraspasoGatesShared(ctx, 3, "comprador_incompleto");
+        TraspasoGatesShared(ctx, 2, "comprador_incompleto");
     }
 
     [Fact]

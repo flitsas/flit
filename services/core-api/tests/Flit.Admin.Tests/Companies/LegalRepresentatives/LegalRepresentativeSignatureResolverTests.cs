@@ -34,7 +34,7 @@ public sealed class LegalRepresentativeSignatureResolverTests
         var firma = SignatureVaultAggregate.Create(
             Tenant, TipoDoc, DocRep, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
             new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
-        _signatureReader.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>()).Returns(firma);
+        _signatureReader.FindActiveByDocumentAsync(Tenant, TipoDoc, DocRep, Arg.Any<CancellationToken>()).Returns(firma);
 
         var result = await NewResolver().ResolveAsync(Tenant, Nit, TipoDoc, DocRep, Today, Ct);
 
@@ -49,7 +49,7 @@ public sealed class LegalRepresentativeSignatureResolverTests
     [Fact]
     public async Task Resolve_IdentidadVigente_WhenNoBaul_LinksIdentity()
     {
-        _signatureReader.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        _signatureReader.FindActiveByDocumentAsync(Tenant, TipoDoc, DocRep, Arg.Any<CancellationToken>())
             .Returns((SignatureVaultAggregate?)null);
         var validationId = Guid.NewGuid();
         _identityLookup.FindVigenteIdentityRefAsync(
@@ -66,7 +66,7 @@ public sealed class LegalRepresentativeSignatureResolverTests
     [Fact]
     public async Task Resolve_None_WhenNeitherVigente()
     {
-        _signatureReader.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        _signatureReader.FindActiveByDocumentAsync(Tenant, TipoDoc, DocRep, Arg.Any<CancellationToken>())
             .Returns((SignatureVaultAggregate?)null);
         _identityLookup.FindVigenteIdentityRefAsync(
                 Tenant, TipoDoc, DocRep, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -87,7 +87,7 @@ public sealed class LegalRepresentativeSignatureResolverTests
         var firma = SignatureVaultAggregate.Create(
             Tenant, TipoDoc, DocRep, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
             new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 30));
-        _signatureReader.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>()).Returns(firma);
+        _signatureReader.FindActiveByDocumentAsync(Tenant, TipoDoc, DocRep, Arg.Any<CancellationToken>()).Returns(firma);
         var validationId = Guid.NewGuid();
         _identityLookup.FindVigenteIdentityRefAsync(
                 Tenant, TipoDoc, DocRep, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -100,13 +100,12 @@ public sealed class LegalRepresentativeSignatureResolverTests
     }
 
     [Fact]
-    public async Task Resolve_BaulOtroDocumento_NoLinks_FallsBackToIdentity()
+    public async Task Resolve_SinFirmaDelDocumento_FallsBackToIdentity()
     {
-        // La firma del baúl del NIT pertenece a OTRO representante (documento distinto): no se vincula.
-        var firma = SignatureVaultAggregate.Create(
-            Tenant, TipoDoc, "999999999", Nit, "Otro Apoderado", "sha", "path", "sha256",
-            new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
-        _signatureReader.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>()).Returns(firma);
+        // HU #10932: la firma del baúl es de la PERSONA (por documento). Si no hay firma para ESTE
+        // documento, se cae a identidad; si tampoco hay, no se vincula nada.
+        _signatureReader.FindActiveByDocumentAsync(Tenant, TipoDoc, DocRep, Arg.Any<CancellationToken>())
+            .Returns((SignatureVaultAggregate?)null);
         _identityLookup.FindVigenteIdentityRefAsync(
                 Tenant, TipoDoc, DocRep, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((Guid?)null);

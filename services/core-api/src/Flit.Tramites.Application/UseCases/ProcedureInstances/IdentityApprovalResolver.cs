@@ -29,14 +29,18 @@ internal static class IdentityApprovalResolver
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
-            var (tipoDoc, documento) = ActorDoc(instance, parte);
+            var actor = ActorFor(instance, parte);
+            var (tipoDoc, documento) = ActorDoc(actor);
 
-            // 0) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14): un actor JURÍDICO (NIT) cubierto por una
-            // firma de baúl ACTIVA+VIGENTE cuenta como identidad APROBADA — así el SubmitGate y el gate del
-            // FUR lo tratan como validado sin exigir biométrica. Precedencia D8: el baúl va PRIMERO. Solo NIT;
-            // las personas naturales caen a los pasos 1/2. Null-safe: sin baúl habilitado devuelve null.
-            if (EsActorJuridico(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
-                && await vault.ResolveAsync(instance.TenantId, documento.Trim(), ct) is not null)
+            // 0) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14): un actor JURÍDICO cubierto por una firma de
+            // baúl ACTIVA+VIGENTE cuenta como identidad APROBADA — así el SubmitGate y el gate del FUR lo
+            // tratan como validado sin exigir biométrica. Precedencia D8: el baúl va PRIMERO. HU #10930/#10937:
+            // la firma se resuelve por el documento del REPRESENTANTE LEGAL seleccionado (el sujeto de
+            // identidad = tipoDoc/documento), no por el NIT. Solo actores jurídicos; las personas naturales
+            // caen a los pasos 1/2. Null-safe: sin baúl habilitado devuelve null.
+            if (actor is not null && EsActorJuridico(actor.DocumentType)
+                && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
+                && await vault.ResolveAsync(instance.TenantId, tipoDoc.Trim(), documento.Trim(), ct) is not null)
             {
                 approved.Add(parte);
                 continue;
@@ -81,7 +85,7 @@ internal static class IdentityApprovalResolver
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
-            var (tipoDoc, documento) = ActorDoc(instance, parte);
+            var (tipoDoc, documento) = ActorDoc(ActorFor(instance, parte));
 
             if (HasLocalVigente(instance, parte, tipoDoc, documento, now))
             {
@@ -107,14 +111,17 @@ internal static class IdentityApprovalResolver
             || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Actor de la parte (comprador/vendedor) del trámite, o <c>null</c> si no existe.</summary>
+    private static ProcedureInstanceActor? ActorFor(ProcedureInstance instance, string parte) =>
+        instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
     /// Tipo+número de documento del SUJETO de identidad de la parte (HU #10688): el actor si es natural, el
-    /// representante legal si es jurídico. Nulls si no hay actor o al sujeto le falta documento.
+    /// representante legal seleccionado si es jurídico. Nulls si no hay actor o al sujeto le falta documento.
     /// </summary>
-    private static (string? TipoDoc, string? Documento) ActorDoc(ProcedureInstance instance, string parte)
+    private static (string? TipoDoc, string? Documento) ActorDoc(ProcedureInstanceActor? actor)
     {
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         if (actor is null)
             return (null, null);
         var subject = IdentitySubjectResolver.For(actor);

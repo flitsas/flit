@@ -132,6 +132,27 @@ describe("CompanyConfigTabs (AC2)", () => {
     );
   });
 
+  it("HU #10929: la pestaña Representantes agrupa el contenido y ya no hay pestañas Escrituras ni Baúl", async () => {
+    const user = userEvent.setup();
+    const onSaveSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <CompanyConfigTabs
+        settings={settings}
+        onSaveSettings={onSaveSettings}
+        legalRepresentativesSlot={<div>slot representantes</div>}
+      />,
+    );
+
+    // Existe la pestaña de representantes; ya NO existen pestañas propias de Escrituras ni Baúl.
+    const repTab = screen.getByRole("tab", { name: /representantes legales/i });
+    expect(screen.queryByRole("tab", { name: /escrituras/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /baúl de firmas/i })).not.toBeInTheDocument();
+
+    await user.click(repTab);
+    expect(screen.getByText("slot representantes")).toBeInTheDocument();
+  });
+
   it("cancela la confirmación sin guardar", async () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);

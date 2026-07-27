@@ -17,7 +17,8 @@ public sealed class Deed
         string storageSha256,
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
-        bool isActive)
+        bool isActive,
+        Guid? representativeId)
     {
         Id = id;
         TenantId = tenantId;
@@ -27,11 +28,18 @@ public sealed class Deed
         VigenciaDesde = vigenciaDesde;
         VigenciaHasta = vigenciaHasta;
         IsActive = isActive;
+        RepresentativeId = representativeId;
     }
 
     public Guid Id { get; }
 
     public Guid TenantId { get; }
+
+    /// <summary>
+    /// Representante que asoció la escritura (Feature #10929). <c>null</c> en escrituras legadas. Se fija
+    /// en el alta y NO cambia en la edición.
+    /// </summary>
+    public Guid? RepresentativeId { get; }
 
     public string Description { get; private set; }
 
@@ -53,6 +61,7 @@ public sealed class Deed
         string storageSha256,
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
+        Guid? representativeId = null,
         Guid? id = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
@@ -78,7 +87,8 @@ public sealed class Deed
             storageSha256.Trim(),
             vigenciaDesde,
             vigenciaHasta,
-            isActive: true);
+            isActive: true,
+            representativeId);
     }
 
     /// <summary>Rehidrata el agregado desde persistencia (sin aplicar invariantes de alta).</summary>
@@ -90,8 +100,9 @@ public sealed class Deed
         string storageSha256,
         DateOnly vigenciaDesde,
         DateOnly vigenciaHasta,
-        bool isActive) =>
-        new(id, tenantId, description, storagePath, storageSha256, vigenciaDesde, vigenciaHasta, isActive);
+        bool isActive,
+        Guid? representativeId = null) =>
+        new(id, tenantId, description, storagePath, storageSha256, vigenciaDesde, vigenciaHasta, isActive, representativeId);
 
     /// <summary>Actualiza descripción y vigencia (edición). Valida el rango de vigencia.</summary>
     public void UpdateDetails(string description, DateOnly vigenciaDesde, DateOnly vigenciaHasta)

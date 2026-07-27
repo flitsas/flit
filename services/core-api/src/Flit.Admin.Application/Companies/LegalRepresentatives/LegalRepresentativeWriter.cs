@@ -50,40 +50,77 @@ public sealed class LegalRepresentativeWriter
             return LegalRepresentativeWriteResult.Invalid(errors);
         }
 
-        // Edición: el representante debe existir en el tenant (404 en vez de crear uno nuevo).
-        if (input.Id is { } editId)
+        // Edición explícita: el representante debe existir en el tenant (404 en vez de crear uno nuevo).
+        Guid? editId = input.Id;
+        if (editId is { } explicitId)
         {
             var existing = await _reader
-                .GetByIdAsync(input.TenantId, editId, cancellationToken).ConfigureAwait(false);
+                .GetByIdAsync(input.TenantId, explicitId, cancellationToken).ConfigureAwait(false);
             if (existing is null)
             {
                 return LegalRepresentativeWriteResult.NotFoundResult();
             }
         }
 
-        var companyNit = input.CompanyNit!.Trim();
         var documentType = input.DocumentType!.Trim();
         var documentNumber = input.DocumentNumber!.Trim();
 
-        // Upsert de la compañía representada por (tenant, NIT): reutiliza la dimensión si ya existe.
-        var representedCompanyId = await _repository
-            .UpsertRepresentedCompanyAsync(
-                new UpsertRepresentedCompanyData(
-                    input.TenantId,
-                    companyNit,
-                    input.CompanyName!.Trim(),
-                    Normalize(input.CompanyEmail),
-                    Normalize(input.CompanyAddress),
-                    Normalize(input.CompanyCity),
-                    Normalize(input.CompanyPhone),
-                    input.ActorBy),
-                cancellationToken)
-            .ConfigureAwait(false);
+        // "Se crea una sola vez" (HU #10932): en alta, si ya existe la persona activa por documento en
+        // el tenant, se le agregan compañías en vez de duplicarla.
+        LegalRepresentativeItem? samePerson = null;
+        if (editId is null)
+        {
+            samePerson = await _reader
+                .FindActiveByDocumentAsync(input.TenantId, documentType, documentNumber, cancellationToken)
+                .ConfigureAwait(false);
+            if (samePerson is not null)
+            {
+                editId = samePerson.Id;
+            }
+        }
 
-        // Resolución de firma/identidad vigente al guardar (precedencia baúl > identidad).
+        // Upsert de CADA compañía del representante (HU #10932). La primera es la primaria.
+        var effectiveCompanies = EffectiveCompanies(input);
+        var companyIds = new List<Guid>();
+        foreach (var company in effectiveCompanies)
+        {
+            var companyId = await _repository
+                .UpsertRepresentedCompanyAsync(
+                    new UpsertRepresentedCompanyData(
+                        input.TenantId,
+                        company.Nit!.Trim(),
+                        company.Name!.Trim(),
+                        Normalize(company.Email),
+                        Normalize(company.Address),
+                        Normalize(company.City),
+                        Normalize(company.Phone),
+                        input.ActorBy),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!companyIds.Contains(companyId))
+            {
+                companyIds.Add(companyId);
+            }
+        }
+
+        // Create-once: no perder las compañías ya asociadas a la persona existente (unión).
+        if (input.Id is null && samePerson is not null)
+        {
+            foreach (var existingCompanyId in samePerson.Companies.Select(c => c.Id))
+            {
+                if (!companyIds.Contains(existingCompanyId))
+                {
+                    companyIds.Add(existingCompanyId);
+                }
+            }
+        }
+
+        var primaryNit = effectiveCompanies[0].Nit!.Trim();
+
+        // Resolución de firma/identidad vigente al guardar, a nivel PERSONA (por documento — HU #10932).
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
         var resolution = await _signatureResolver
-            .ResolveAsync(input.TenantId, companyNit, documentType, documentNumber, today, cancellationToken)
+            .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
             .ConfigureAwait(false);
 
         var distinctProcedureTypeIds = input.ProcedureTypeIds.Distinct().ToArray();
@@ -91,8 +128,8 @@ public sealed class LegalRepresentativeWriter
         var id = await _repository.SaveAsync(
             new SaveLegalRepresentativeData(
                 input.TenantId,
-                input.Id,
-                representedCompanyId,
+                editId,
+                companyIds[0],
                 documentType,
                 documentNumber,
                 input.FirstLastName!.Trim(),
@@ -105,7 +142,8 @@ public sealed class LegalRepresentativeWriter
                 resolution.SignatureVaultId,
                 resolution.IdentityValidationRef,
                 distinctProcedureTypeIds,
-                input.ActorBy),
+                input.ActorBy,
+                companyIds),
             cancellationToken).ConfigureAwait(false);
 
         // Señal (no bloqueante) cuando no hubo firma ni identidad vigente al guardar.
@@ -122,8 +160,21 @@ public sealed class LegalRepresentativeWriter
     {
         var errors = new List<LegalRepresentativeValidationError>();
 
-        Require(errors, "companyNit", input.CompanyNit);
-        Require(errors, "companyName", input.CompanyName);
+        // Compañías (HU #10932): lista anidada si viene; si no, la compañía única de los campos Company*.
+        if (input.Companies is { Count: > 0 } companies)
+        {
+            foreach (var company in companies)
+            {
+                Require(errors, "companies", company.Nit);
+                Require(errors, "companies", company.Name);
+            }
+        }
+        else
+        {
+            Require(errors, "companyNit", input.CompanyNit);
+            Require(errors, "companyName", input.CompanyName);
+        }
+
         Require(errors, "documentType", input.DocumentType);
         Require(errors, "documentNumber", input.DocumentNumber);
         Require(errors, "firstLastName", input.FirstLastName);
@@ -163,4 +214,16 @@ public sealed class LegalRepresentativeWriter
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Compañías efectivas del representante (HU #10932): la lista anidada <c>Companies</c> si viene, o la
+    /// compañía única de los campos <c>Company*</c> (compatibilidad con el contrato previo).
+    /// </summary>
+    private static IReadOnlyList<LegalRepresentativeCompanyInput> EffectiveCompanies(
+        LegalRepresentativeWriteInput input) =>
+        input.Companies is { Count: > 0 } companies
+            ? companies
+            : [new LegalRepresentativeCompanyInput(
+                input.CompanyNit, input.CompanyName, input.CompanyEmail,
+                input.CompanyAddress, input.CompanyCity, input.CompanyPhone)];
 }
