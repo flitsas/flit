@@ -51,8 +51,28 @@ public sealed class MandateSignerUsageAndViewTests
         var view = await companies.HandleAsync(
             new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
 
-        view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSignerName
-            .Should().Be("Samuel Cárdenas");
+        view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners
+            .Should().ContainSingle(s => s.FullName == "Samuel Cárdenas");
+    }
+
+    [Fact]
+    public async Task ListOtCompanies_ADR0036_Multiplicity_ReturnsAllSignersPerCompany_WithoutThrowing()
+    {
+        await using var ctx = Scenario.NewSeededContext();
+        var (create, companies) = Handlers(ctx);
+
+        // Dos mandatarios distintos, ambos asignados a la MISMA compañía (multiplicidad ADR-0036).
+        await create.HandleAsync(Scenario.NewCreate("Samuel Cárdenas", "111", [Scenario.CompanyA]), Scenario.Ct);
+        await create.HandleAsync(Scenario.NewCreate("Laura Ríos", "222", [Scenario.CompanyA]), Scenario.Ct);
+
+        // Antes: ToDictionary por CompanyTenantId lanzaba ArgumentException (clave duplicada). Ahora agrupa.
+        var view = await companies.HandleAsync(
+            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
+
+        view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners
+            .Should().HaveCount(2)
+            .And.Contain(s => s.FullName == "Samuel Cárdenas")
+            .And.Contain(s => s.FullName == "Laura Ríos");
     }
 
     [Fact]
@@ -67,9 +87,9 @@ public sealed class MandateSignerUsageAndViewTests
             new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
 
         // B y C no tienen mandatario (RF26: se advertirá al generar su mandato).
-        view.Single(c => c.CompanyTenantId == Scenario.CompanyB).AssignedSignerId.Should().BeNull();
-        view.Single(c => c.CompanyTenantId == Scenario.CompanyC).AssignedSignerId.Should().BeNull();
-        view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSignerId.Should().NotBeNull();
+        view.Single(c => c.CompanyTenantId == Scenario.CompanyB).AssignedSigners.Should().BeEmpty();
+        view.Single(c => c.CompanyTenantId == Scenario.CompanyC).AssignedSigners.Should().BeEmpty();
+        view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners.Should().NotBeEmpty();
     }
 
     private static (CreateMandateSignerHandler Create, ListOtCompaniesHandler Companies) Handlers(

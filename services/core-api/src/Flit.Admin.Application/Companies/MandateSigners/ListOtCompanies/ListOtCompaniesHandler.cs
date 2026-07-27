@@ -3,9 +3,10 @@ using Flit.Admin.Domain.Companies.MandateSigners;
 namespace Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 
 /// <summary>
-/// Lista las compañías del OT con su mandatario activo resuelto (RF34). El multiselect del
-/// formulario usa <c>AssignedSigner*</c> para deshabilitar y etiquetar las compañías ya
-/// tomadas por otro mandatario; las de mandatario nulo son las advertidas por RF26.
+/// Lista las compañías del OT con sus mandatarios activos resueltos (RF34, ADR-0036). Con la
+/// MULTIPLICIDAD una compañía puede tener VARIOS mandatarios: se agrupan por compañía en
+/// <c>AssignedSigners</c> (informativo para el multiselect; ya no se deshabilita por exclusividad).
+/// Las compañías sin mandatario (lista vacía) son las advertidas por RF26.
 /// </summary>
 public sealed class ListOtCompaniesHandler
 {
@@ -28,22 +29,24 @@ public sealed class ListOtCompaniesHandler
             .ListActiveCompanyResolutionsAsync(query.TransitOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
-        var resolutionByCompany = resolutions.ToDictionary(r => r.CompanyTenantId);
+        // ADR-0036 — MULTIPLICIDAD: una compañía puede tener VARIOS mandatarios activos. Se AGRUPA por
+        // compañía (antes un ToDictionary por CompanyTenantId reventaba con clave duplicada en cuanto una
+        // compañía tenía 2+ mandatarios).
+        var signersByCompany = resolutions
+            .GroupBy(r => r.CompanyTenantId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<AssignedSignerDto>)
+                    [.. g.Select(r => new AssignedSignerDto(r.MandateSignerId, r.FullName, r.IntegrityHash))]);
 
         return
         [
-            .. companies.Select(c =>
-            {
-                var resolution = resolutionByCompany.GetValueOrDefault(c.CompanyTenantId);
-                return new OtCompanyResponse(
-                    c.CompanyTenantId,
-                    c.LegalName,
-                    c.IsActive,
-                    c.IsEnabled,
-                    resolution?.MandateSignerId,
-                    resolution?.FullName,
-                    resolution?.IntegrityHash);
-            }),
+            .. companies.Select(c => new OtCompanyResponse(
+                c.CompanyTenantId,
+                c.LegalName,
+                c.IsActive,
+                c.IsEnabled,
+                signersByCompany.GetValueOrDefault(c.CompanyTenantId, []))),
         ];
     }
 }
