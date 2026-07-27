@@ -23,6 +23,13 @@ import { TramitesApiError } from '@/lib/api/tramites-client';
 export interface PrevalidacionFormProps {
   onClose: () => void;
   onSuccess: (result: IniciarPrevalidacionResult) => void;
+  /**
+   * HU #10944 (CF-03, D9/borde) — precarga documento/nombre al ofrecer "Nueva prevalidación" para
+   * la misma persona desde un registro `aprobado` y vencido (revalidar exige un registro nuevo, no
+   * reenviar el viejo). El correo NO se precarga (no viaja en el listado ni en las respuestas de
+   * error); el operador lo escribe de nuevo.
+   */
+  initialValues?: Partial<Pick<FormValues, 'documentType' | 'documentNumber' | 'name' | 'personType'>>;
 }
 
 const DOCUMENT_TYPES = [
@@ -66,8 +73,8 @@ function validEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
-export function PrevalidacionForm({ onClose, onSuccess }: PrevalidacionFormProps) {
-  const [values, setValues] = useState<FormValues>(EMPTY_FORM);
+export function PrevalidacionForm({ onClose, onSuccess, initialValues }: PrevalidacionFormProps) {
+  const [values, setValues] = useState<FormValues>(() => ({ ...EMPTY_FORM, ...initialValues }));
   const [touched, setTouched] = useState<Partial<Record<keyof FormValues, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);

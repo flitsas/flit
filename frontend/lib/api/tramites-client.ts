@@ -18,6 +18,9 @@ import type {
   CreateInstanceRequest,
   PreflightPreviewResult,
   DocumentOcrResult,
+  EditarPrevalidacionRequest,
+  EditarPrevalidacionResult,
+  ReenviarPrevalidacionResult,
   EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
@@ -1134,6 +1137,41 @@ export const tramitesClient = {
         method: 'POST',
         headers: tenantHeader(tenantId),
         body: JSON.stringify(body),
+      },
+    ),
+
+  // HU #10944 (Feature #10864, CF-03, HU backend hermana #10943) — PATCH editar nombre/correo
+  // (titular) y nombre/correo del RL de una prevalidación standalone. El documento NUNCA se envía
+  // desde aquí (D7, no editable). Un cambio de correo dispara el reenvío automático en la misma
+  // transacción (D8) — la respuesta trae `resent` y, si aplica, el nuevo `captureUrl`.
+  // 403 no_editable · 404 not_found · 409 identidad_aprobada/referenciada_por_tramite ·
+  // 422 documento_no_editable · 429 reenvio_en_cooldown/tope_reenvios · 502/503 proveedor.
+  editPrevalidacion: (
+    id: string,
+    body: EditarPrevalidacionRequest,
+    tenantId?: string,
+  ): Promise<EditarPrevalidacionResult> =>
+    request<EditarPrevalidacionResult>(
+      `/api/v1/tramites/biometric-validations/${id}`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
+    ),
+
+  // HU #10944 (CF-03, D8) — POST reenvío manual sobre el MISMO registro: nuevo enlace, TTL 24h,
+  // intentos/sondeos reiniciados en 0. 200 = envío completado; 202 = encolada (falla transitoria
+  // del proveedor, ya consumió cupo del tope D10). Mismos guards/errores que editPrevalidacion.
+  resendPrevalidacion: (
+    id: string,
+    tenantId?: string,
+  ): Promise<ReenviarPrevalidacionResult> =>
+    request<ReenviarPrevalidacionResult>(
+      `/api/v1/tramites/biometric-validations/${id}/resend`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
       },
     ),
 

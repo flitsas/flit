@@ -1242,6 +1242,43 @@ export interface IniciarPrevalidacionResult {
   enqueued?: boolean;
 }
 
+// ── HU #10944 (Feature #10864, CF-03) — editar y reenviar prevalidación ─────
+
+/**
+ * Cuerpo del PATCH /api/v1/tramites/biometric-validations/{id} — HU #10943/#10944, D7.
+ * Todos los campos son opcionales: solo se envían los que el operador cambió. El tipo/número
+ * de documento (titular o RL) NUNCA se envían desde esta pantalla — no son editables (D7); el
+ * backend los acepta solo para DETECTAR un intento de cambio (422 documento_no_editable).
+ */
+export interface EditarPrevalidacionRequest {
+  name?: string;
+  email?: string;
+  legalRepName?: string;
+  legalRepEmail?: string;
+}
+
+/**
+ * Resultado del PATCH — espejo de EditarPrevalidacionResult del contrato OpenAPI.
+ * `resent=true` ⟺ el cambio de correo disparó el reenvío automático (D8); `captureUrl` solo viene
+ * poblado si `resent=true` y el envío no quedó encolado (fallo transitorio del proveedor).
+ */
+export interface EditarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string | null;
+  resent: boolean;
+}
+
+/**
+ * Resultado del POST .../resend (reenvío manual) — espejo de ReenviarPrevalidacionResult del
+ * contrato OpenAPI. `queued=true` (HTTP 202) ⟺ el proveedor falló transitoriamente; el reenvío
+ * YA consumió cupo del tope (D10) aunque el envío no se completó.
+ */
+export interface ReenviarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  queued?: boolean;
+}
+
 // ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────
 
 /** Fila del historial de transiciones (GET /instances/{id}/status-history). */
