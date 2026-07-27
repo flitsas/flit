@@ -28,7 +28,12 @@ public static class IdentityValidationAlertKinds
 /// </summary>
 public sealed record IdentityValidationAlertDto(
     Guid Id,
-    Guid InstanceId,
+    // NULLABLE desde la integración con el Feature #10864 (HU #10865): una validación puede ser una
+    // PREVALIDACIÓN STANDALONE, sin trámite (ProcedureInstanceId IS NULL). La vista de tenant
+    // (HandleTenantAsync) las incluye, y son igual de accionables (rechazada/expirada/por_vencer) que
+    // las de un trámite. Se reporta null en vez de Guid.Empty para no fabricar un id de trámite
+    // inexistente — mismo criterio que ReferenceNumber/RecipientUserId, que ya degradan a vacío.
+    Guid? InstanceId,
     string ReferenceNumber,
     Guid RecipientUserId,
     string? PartyRole,

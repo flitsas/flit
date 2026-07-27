@@ -54,6 +54,9 @@ public static class DependencyInjection
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
+        // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
+        // dirección/teléfono) de una persona, sin gate de consentimiento.
+        services.AddScoped<ActorContactLookupHandler>();
         // HU #10520 — validación de carga por tipo (MIME/tamaño) con respaldo global. El catálogo
         // (IDocumentTypeCatalog) se registra en Infraestructura; aquí solo el validador que lo consume.
         services.AddScoped<AttachmentValidator>();
@@ -111,6 +114,14 @@ public static class DependencyInjection
         services.AddScoped<SimularBiometriaHandler>();
         // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
         services.AddScoped<EnsureIdentityHandler>();
+
+        // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
+        // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
+        services.AddScoped<UseCases.Persons.IniciarPrevalidacionHandler>();
+        // HU #10943 (CF-03, Feature #10864) — editar datos de contacto (reenvío automático si cambia
+        // el correo) y reenviar manualmente una prevalidación standalone.
+        services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
+        services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.

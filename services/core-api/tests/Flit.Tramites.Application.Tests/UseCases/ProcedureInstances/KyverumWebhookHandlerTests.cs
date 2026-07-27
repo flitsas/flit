@@ -304,4 +304,39 @@ public sealed class KyverumWebhookHandlerTests
         // Fallo transitorio del proveedor ⇒ pide reintento (503) para que Kyverum reintente el webhook.
         error.Should().Be("reintentar");
     }
+
+    // ── HU #10943 (CF-03, AC10/AC12) — idempotencia con Kyverum tras un reenvío ──
+    //
+    // El reenvío (EditarPrevalidacionHandler/ReenviarPrevalidacionHandler) opera sobre la MISMA fila y
+    // llama de nuevo a StartVerificationAsync, que devuelve un secreto de webhook NUEVO — se sobrescribe
+    // `WebhookSecretEncrypted`. Un webhook TARDÍO de la verificación ANTERIOR llega a la MISMA URL (el
+    // correlationId/webhookUrl no cambia) pero viene firmado con el secreto VIEJO: al verificar la firma
+    // contra el secreto VIGENTE (el nuevo), no coincide → firma_invalida (401), sin tocar estado ni
+    // intentos. No requiere cambiar el contrato/mapper de Kyverum (fuera de alcance de CF-03).
+    [Fact]
+    public async Task Webhook_FromPreviousVerification_AfterResendRotatesSecret_IsDiscarded_StateUnchanged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string OldSecret = "whsec_old_verification";
+        var v = Seed(); // en_proceso, WebhookSecretEncrypted = protect(Secret="whsec_abc")
+
+        // El webhook VIEJO fue firmado con el secreto de la verificación ANTERIOR...
+        var staleBody = Body(aprobado: true);
+        var staleSignature = "sha256=" + KyverumWebhookVerifier.ComputeHmac(staleBody, OldSecret);
+
+        // ...pero el reenvío YA rotó el secreto de la fila a uno NUEVO (simulando lo que hace
+        // PrevalidacionResendService.ResendKyverumAsync tras StartVerificationAsync).
+        v.KyverumVerificationId = "kyv_new_after_resend";
+        v.WebhookSecretEncrypted = _protector.Protect("whsec_new_verification");
+        var attemptsBefore = v.Attempts;
+        var statusBefore = v.Status;
+
+        var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, staleBody, staleSignature), ct);
+
+        error.Should().Be("firma_invalida", "el webhook de la verificación anterior no coincide con el secreto vigente de la fila");
+        v.Status.Should().Be(statusBefore, "el estado no se altera");
+        v.Attempts.Should().Be(attemptsBefore, "los intentos no se alteran");
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

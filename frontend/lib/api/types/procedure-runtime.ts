@@ -279,13 +279,31 @@ export interface ProcedureActor {
   /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
   representanteLegal?: RepresentanteLegal;
   /**
-   * HU #10885 (Feature #10862, CF-04, Habeas Data) — autorización explícita de esta persona para
-   * que sus datos se reutilicen en futuros trámites del mismo tenant (gate de
-   * `tramites.person_data_consents`, ver ADR-0031). Se envía en el PUT de actores; `true` → el
-   * backend registra el consentimiento (`AutorizaReutilizacionDatos`). Ausente/`false` ⇒ no se
-   * toca ningún consentimiento previo (fail-safe: nunca degrada un `granted` existente).
+   * @deprecated HU #10956 revierte el check de consentimiento Habeas Data de HU #10885: el
+   * formulario ya NO ofrece esta opción (la identidad de un actor se consulta SIEMPRE en vivo,
+   * ver ADR-0031 actualizado). El campo se mantiene tipado solo porque el backend puede devolver
+   * actores persistidos ANTES de esta HU con un valor previo en `GET actors`; `normalizeActors`
+   * lo descarta explícitamente antes de cada guardado — nunca vuelve a viajar en el PUT.
    */
   autorizaReutilizacionDatos?: boolean;
+}
+
+// ── Precarga de datos de CONTACTO ya conocidos (HU #10956, revierte parcialmente HU #10885) ──────
+// GET /api/v1/tramites/actors/contact-lookup?tipoDocumento=..&numeroDocumento=..  (header
+// X-Tenant-Id). Se dispara tras resolver la IDENTIDAD del actor en vivo (RUNT/RUES/directorio):
+// NUNCA incluye nombre ni documento (esos siempre vienen de esa consulta) ni requiere consentimiento
+// previo — el contacto es un dato que la propia compañía ya capturó, no una consulta a un tercero.
+// Sin antecedentes, responde 200 con los 4 campos en null (AC4), nunca 404.
+export interface ActorContactLookupInput {
+  tipoDocumento: ActorDocumentType;
+  numeroDocumento: string;
+}
+
+export interface ActorContactLookupResult {
+  ciudad: string | null;
+  email: string | null;
+  direccion: string | null;
+  telefono: string | null;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -852,12 +870,19 @@ export interface BiometricValidationsResponse {
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
  * captureUrl (vista de monitoreo, no de gestión de la captura).
+ *
+ * HU #10869 — Feature #10864: instanceId, referenceNumber y modalidad son nullable para soportar
+ * prevalidaciones standalone (sin trámite asociado). Los campos null se muestran como "—" en la
+ * tabla y la navegación al trámite se condiciona a instanceId != null.
  */
 export interface TenantBiometricValidation {
   id: string;
-  instanceId: string;
-  referenceNumber: string;
-  modalidad: string;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  instanceId: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  referenceNumber: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  modalidad: string | null;
   partyRole: BiometricParte | null;
   name: string;
   documentType: string;
@@ -985,7 +1010,8 @@ export type IdentityValidationAlertKind = 'rechazada' | 'expirada' | 'por_vencer
  */
 export interface IdentityValidationAlert {
   id: string;
-  instanceId: string;
+  /** null en prevalidaciones standalone (Feature #10864): la validación no cuelga de ningún trámite. */
+  instanceId: string | null;
   referenceNumber: string;
   recipientUserId: string;
   // string (no BiometricParte): el DTO del backend no acota el rol a comprador/vendedor — futuro-proof.
@@ -1279,6 +1305,82 @@ export interface PortalFirmaUrl {
 /** Resultado de finalizar la participación. */
 export interface FinalizarPortalResult {
   completedAt: string;
+}
+
+// ── Prevalidación de identidad standalone (Feature #10864 — HU #10868) ──────
+// POST /api/v1/tramites/biometric-validations (sin instanceId)
+// Crea una validación biométrica sin trámite previo. El enlace de captura
+// se devuelve en captureUrl para que el operador lo comparta.
+
+/**
+ * Tipo de persona para prevalidación standalone. 'natural' → valida al titular;
+ * 'juridical' → valida al representante legal (datos legalRep* requeridos).
+ */
+export type PrevalidacionPersonType = 'natural' | 'juridical';
+
+/**
+ * Cuerpo del POST /api/v1/tramites/biometric-validations (sin trámite).
+ * Espejo de IniciarPrevalidacionRequest del contrato OpenAPI (§5.2 del diseño).
+ */
+export interface IniciarPrevalidacionRequest {
+  documentType: string;
+  documentNumber: string;
+  name: string;
+  email: string;
+  personType?: PrevalidacionPersonType;
+  legalRepDocumentType?: string | null;
+  legalRepDocumentNumber?: string | null;
+  legalRepName?: string | null;
+  legalRepEmail?: string | null;
+}
+
+/**
+ * Resultado del POST /api/v1/tramites/biometric-validations (201/202).
+ * Espejo de IniciarKyverumVerifyResult del contrato OpenAPI (§5.1 del diseño).
+ */
+export interface IniciarPrevalidacionResult {
+  validationId: string;
+  captureUrl: string | null;
+  status: BiometricEstado;
+  /** 201 = creada de inmediato; 202 = encolada (fallo transitorio del proveedor). */
+  enqueued?: boolean;
+}
+
+// ── HU #10944 (Feature #10864, CF-03) — editar y reenviar prevalidación ─────
+
+/**
+ * Cuerpo del PATCH /api/v1/tramites/biometric-validations/{id} — HU #10943/#10944, D7.
+ * Todos los campos son opcionales: solo se envían los que el operador cambió. El tipo/número
+ * de documento (titular o RL) NUNCA se envían desde esta pantalla — no son editables (D7); el
+ * backend los acepta solo para DETECTAR un intento de cambio (422 documento_no_editable).
+ */
+export interface EditarPrevalidacionRequest {
+  name?: string;
+  email?: string;
+  legalRepName?: string;
+  legalRepEmail?: string;
+}
+
+/**
+ * Resultado del PATCH — espejo de EditarPrevalidacionResult del contrato OpenAPI.
+ * `resent=true` ⟺ el cambio de correo disparó el reenvío automático (D8); `captureUrl` solo viene
+ * poblado si `resent=true` y el envío no quedó encolado (fallo transitorio del proveedor).
+ */
+export interface EditarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string | null;
+  resent: boolean;
+}
+
+/**
+ * Resultado del POST .../resend (reenvío manual) — espejo de ReenviarPrevalidacionResult del
+ * contrato OpenAPI. `queued=true` (HTTP 202) ⟺ el proveedor falló transitoriamente; el reenvío
+ * YA consumió cupo del tope (D10) aunque el envío no se completó.
+ */
+export interface ReenviarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  queued?: boolean;
 }
 
 // ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────

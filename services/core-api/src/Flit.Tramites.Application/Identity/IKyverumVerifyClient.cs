@@ -12,7 +12,8 @@ namespace Flit.Tramites.Application.Identity;
 /// <param name="Documento">Número de documento.</param>
 /// <param name="Email">Correo de la persona: Kyverum lo usa para notificarle el enlace de captura.</param>
 public sealed record KyverumVerifyStartRequest(
-    Guid ProcedureInstanceId,
+    /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
+    Guid? ProcedureInstanceId,
     Guid CorrelationId,
     string? Parte,
     string Nombre,

@@ -9,9 +9,20 @@ public sealed class ProcedureInstanceBiometricValidation
 {
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
-    public Guid ProcedureInstanceId { get; set; }
 
-    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial (única parte = comprador).</summary>
+    /// <summary>
+    /// HU #10865 — nullable para soportar prevalidaciones standalone (sin trámite).
+    /// Invariante: <c>ProcedureInstanceId IS NOT NULL OR PersonId IS NOT NULL</c> (CHECK en BD).
+    /// </summary>
+    public Guid? ProcedureInstanceId { get; set; }
+
+    /// <summary>
+    /// HU #10865 — FK a <see cref="Person"/>. Null en validaciones históricas (backcompat);
+    /// NOT NULL en filas nuevas (tanto standalone como ligadas a trámite).
+    /// </summary>
+    public Guid? PersonId { get; set; }
+
+    /// <summary>'comprador' | 'vendedor'. Null en matrícula inicial o en prevalidación standalone.</summary>
     public string? PartyRole { get; set; }
 
     public string Name { get; set; } = string.Empty;
@@ -100,7 +111,24 @@ public sealed class ProcedureInstanceBiometricValidation
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
+    /// <summary>
+    /// HU #10943 (CF-03) — cuántas veces se reenvió esta validación (manual o automático por cambio de
+    /// correo). Tope de <see cref="BiometricRules.MaxReenvios"/>; al alcanzarlo, editar/reenviar responde
+    /// <c>tope_reenvios</c> (429).
+    /// </summary>
+    public int ResendCount { get; set; }
+
+    /// <summary>
+    /// HU #10943 (CF-03) — momento del ÚLTIMO reenvío (manual o por cambio de correo). Alimenta el
+    /// cooldown de <see cref="BiometricRules.ReenvioCooldownMinutos"/> minutos entre reenvíos. Null si
+    /// nunca se ha reenviado.
+    /// </summary>
+    public DateTimeOffset? LastResentAt { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
+
+    /// <summary>HU #10865 — navegación a la entidad persona del tenant.</summary>
+    public Person? Person { get; set; }
 
     /// <summary>
     /// Marca la validación como APROBADA en <paramref name="now"/>: setea estado + fecha de aprobación y
@@ -188,6 +216,20 @@ public static class BiometricRules
 
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
+
+    /// <summary>
+    /// HU #10943 (CF-03, D10) — máximo de reenvíos (manuales o por cambio de correo) por prevalidación
+    /// standalone. Al alcanzarlo, editar/reenviar responde <c>tope_reenvios</c> (429); el operador debe
+    /// anular el registro y crear una prevalidación nueva.
+    /// </summary>
+    public const int MaxReenvios = 3;
+
+    /// <summary>
+    /// HU #10943 (CF-03, D10) — minutos de espera obligatorios entre dos reenvíos consecutivos de la
+    /// misma prevalidación standalone. Antes de cumplirse, editar (con cambio de correo) o reenviar
+    /// responde <c>reenvio_en_cooldown</c> (429).
+    /// </summary>
+    public const int ReenvioCooldownMinutos = 5;
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";

@@ -1,6 +1,8 @@
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
   AceptarConsentimientoResult,
+  ActorContactLookupInput,
+  ActorContactLookupResult,
   ActorsResponse,
   AttachmentsResponse,
   BiometriaPublicView,
@@ -18,6 +20,9 @@ import type {
   CreateInstanceRequest,
   PreflightPreviewResult,
   DocumentOcrResult,
+  EditarPrevalidacionRequest,
+  EditarPrevalidacionResult,
+  ReenviarPrevalidacionResult,
   EnsureIdentityResult,
   FieldValueInput,
   FinalizarPortalResult,
@@ -27,6 +32,8 @@ import type {
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
   IdentityValidationAlertsResponse,
+  IniciarPrevalidacionRequest,
+  IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
   InstanceSummary,
@@ -530,6 +537,20 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(input),
       },
+    ),
+
+  // HU #10956 (revierte parcialmente HU #10885/#10878, AC2/AC3/AC4/AC5) — precarga SOLO datos de
+  // CONTACTO (ciudad/correo/dirección/teléfono) de una persona ya conocida en el tenant, tras
+  // resolver su identidad en vivo (RUNT/RUES/directorio). No es un lookup por instancia (no lleva
+  // `instanceId` en la ruta): el actor más reciente de esa persona puede venir de CUALQUIER trámite
+  // del tenant. Siempre 200; sin antecedentes responde los 4 campos en null (AC4), nunca 404.
+  actorContactLookup: (
+    input: ActorContactLookupInput,
+    tenantId?: string,
+  ) =>
+    request<ActorContactLookupResult>(
+      `/api/v1/tramites/actors/contact-lookup?tipoDocumento=${encodeURIComponent(input.tipoDocumento)}&numeroDocumento=${encodeURIComponent(input.numeroDocumento)}`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // HU #10903/#10906 — escrituras activas y VIGENTES del tenant, para el collapse del primer paso del
@@ -1116,6 +1137,60 @@ export const tramitesClient = {
     request<{ requeued: number }>(
       '/api/v1/tramites/identity-validation/stuck/requeue-all',
       { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #10868 (Feature #10864, CF-01) — crea una prevalidación de identidad standalone (sin trámite).
+  // POST /api/v1/tramites/biometric-validations. El backend encuentra o crea la entidad persona en el
+  // tenant por (documentType, documentNumber), luego inicia la validación con el proveedor activo.
+  // Contrato-first: el endpoint aún puede no estar mergeado en develop; el cliente está listo para
+  // consumirlo en cuanto el backend (HU #10866) lo exponga.
+  // 201 = creada; 202 = encolada (fallo transitorio del proveedor); 409 = ya existe prevalidación activa.
+  createPrevalidacion: (
+    body: IniciarPrevalidacionRequest,
+    tenantId?: string,
+  ): Promise<IniciarPrevalidacionResult> =>
+    request<IniciarPrevalidacionResult>(
+      '/api/v1/tramites/biometric-validations',
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
+    ),
+
+  // HU #10944 (Feature #10864, CF-03, HU backend hermana #10943) — PATCH editar nombre/correo
+  // (titular) y nombre/correo del RL de una prevalidación standalone. El documento NUNCA se envía
+  // desde aquí (D7, no editable). Un cambio de correo dispara el reenvío automático en la misma
+  // transacción (D8) — la respuesta trae `resent` y, si aplica, el nuevo `captureUrl`.
+  // 403 no_editable · 404 not_found · 409 identidad_aprobada/referenciada_por_tramite ·
+  // 422 documento_no_editable · 429 reenvio_en_cooldown/tope_reenvios · 502/503 proveedor.
+  editPrevalidacion: (
+    id: string,
+    body: EditarPrevalidacionRequest,
+    tenantId?: string,
+  ): Promise<EditarPrevalidacionResult> =>
+    request<EditarPrevalidacionResult>(
+      `/api/v1/tramites/biometric-validations/${id}`,
+      {
+        method: 'PATCH',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
+    ),
+
+  // HU #10944 (CF-03, D8) — POST reenvío manual sobre el MISMO registro: nuevo enlace, TTL 24h,
+  // intentos/sondeos reiniciados en 0. 200 = envío completado; 202 = encolada (falla transitoria
+  // del proveedor, ya consumió cupo del tope D10). Mismos guards/errores que editPrevalidacion.
+  resendPrevalidacion: (
+    id: string,
+    tenantId?: string,
+  ): Promise<ReenviarPrevalidacionResult> =>
+    request<ReenviarPrevalidacionResult>(
+      `/api/v1/tramites/biometric-validations/${id}/resend`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+      },
     ),
 
   // HU #10875 (AC1/AC2) — alertas/recordatorios de validación de identidad de UN trámite: mismo

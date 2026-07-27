@@ -57,6 +57,30 @@ internal static class ActorEndpoints
             };
         }).WithName("PutProcedureInstanceActors");
 
+        // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de CONTACTO ya conocidos de una persona
+        // (ciudad/email/dirección/teléfono), sin nombre ni documento (esos vienen SIEMPRE del RUNT).
+        // Sin instancia en la ruta (no es de un trámite en particular): tenant-scoped explícito, por
+        // eso "actors" está en TenantEnforcementMiddleware.IsRuntimeScoped. Sin gate de consentimiento
+        // (AC4). Sin antecedentes -> 200 con los 4 campos vacíos, NUNCA 404 (AC3).
+        group.MapGet("/actors/contact-lookup", async (
+            [FromQuery(Name = "tipoDocumento")] string? tipoDocumento,
+            [FromQuery(Name = "numeroDocumento")] string? numeroDocumento,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ActorContactLookupHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, tipoDocumento, numeroDocumento, ct);
+            return error switch
+            {
+                "invalid_document_type" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipoDocumento inválido (use CC|CE|NIT|PAS|TI)."),
+                "missing_document_number" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "numeroDocumento es obligatorio."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("ActorContactLookup");
+
         return app;
     }
 }

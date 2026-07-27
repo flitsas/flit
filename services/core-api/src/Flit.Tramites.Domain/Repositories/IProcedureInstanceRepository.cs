@@ -170,6 +170,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #10943 (CF-03) — resuelve una validación biométrica por id, aislada por tenant y TRACKEADA
+    /// (para editar/reenviar), incluyendo su <see cref="Person"/> (necesaria para
+    /// <c>IniciarPrevalidacionHandler.ResolveSubject</c>). Devuelve null si no existe o no pertenece al
+    /// tenant. Aplica tanto a validaciones standalone como ligadas a trámite (el handler decide
+    /// editabilidad con <c>ProcedureInstanceId</c>/<c>PersonId</c>).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
     /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
     /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.
@@ -298,6 +308,18 @@ public interface IProcedureInstanceRepository
     /// subsanación (fail-safe del caller: re-evalúa todos los gates).
     /// </summary>
     Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10955 (AC2/AC3/AC5) — actor MÁS RECIENTE (por <c>CreatedAt</c>) de esa persona
+    /// (<paramref name="documentType"/> + <paramref name="documentNumber"/>) en CUALQUIER trámite NO
+    /// eliminado del tenant, para precargar sus datos de CONTACTO (ciudad, email, dirección, teléfono)
+    /// en el paso de actores. Aislamiento por tenant explícito en el <c>WHERE</c> (AC5), como el resto
+    /// del repositorio. Devuelve <c>null</c> si la persona nunca ha sido actor de un trámite del
+    /// tenant — el caller responde 200 con los campos vacíos, NUNCA 404 (AC3). Solo lectura
+    /// (AsNoTracking).
+    /// </summary>
+    Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
+        Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
 }
 
 /// <summary>

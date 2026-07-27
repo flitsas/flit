@@ -183,6 +183,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
     public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
 
+    // Trámites — entidad persona/sujeto a nivel tenant para prevalidaciones de identidad
+    // (HU #10865, Feature #10864, CF-00, ADR-0030).
+    public DbSet<Person> Persons => Set<Person>();
+
     // FEATURE-08 / Fase 2b — catálogo global de fuentes por tipo (CFD-04, ADR-0019 excepción A4/A20).
     public DbSet<ProcedureTypeSource> ProcedureTypeSources => Set<ProcedureTypeSource>();
 

@@ -26,7 +26,9 @@ public sealed record TenantBiometricValidationListQuery(
     DateTimeOffset? ExpiraHasta = null,
     int? VenceEnDias = null,
     int Page = 1,
-    int PageSize = 20)
+    int PageSize = 20,
+    /// <summary>HU #10867 — true = solo standalone (sin trámite); false = solo ligadas; null = todas.</summary>
+    bool? Standalone = null)
 {
     /// <summary>Filas por página: el cliente elige de 10 en 10 hasta 50 (HU #10347 — paginación).</summary>
     public const int MinPageSize = 10;
@@ -129,6 +131,7 @@ public sealed record TenantBiometricValidationListQuery(
         ExpiraDesde = ExpiraDesde,
         ExpiraHasta = ExpiraHasta,
         VenceEnDias = VenceEnDias,
+        Standalone = Standalone,
     };
 
     private static string? Trim(string? value) =>
