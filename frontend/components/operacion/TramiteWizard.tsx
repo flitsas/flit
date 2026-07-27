@@ -1287,7 +1287,13 @@ function ConsultaStep({
   // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
   // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
   const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
-  const hideOwnerDocType = !isVin && platePrimaryProvider === 'kyverum_runt';
+  // HU #10478 (novedad maquinaria/remolques) — con Kyverum como primario el tipo de documento del
+  // propietario se oculta (Kyverum lo resuelve por placa). Pero maquinaria y remolques NO están en el RUNT
+  // de Kyverum: el backend cae a Verifik, que SÍ exige el tipo real del dueño para hallar el vehículo. Si la
+  // consulta devuelve "vehículo no encontrado", este flag revela el selector para corregir el tipo (p. ej. NIT).
+  const [ownerDocTypeSuggested, setOwnerDocTypeSuggested] = useState(false);
+  const hideOwnerDocType =
+    !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
 
   // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
   // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
@@ -1350,6 +1356,19 @@ function ConsultaStep({
     setOwnerDocType('NIT');
     setOwnerDocNumber(tenantNitDigits);
   }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
+
+  // HU #10478 (novedad maquinaria/remolques) — revela el selector de tipo de documento del propietario
+  // cuando una consulta por placa (Kyverum primario) devuelve "vehículo no encontrado" (check 'vehiculo' en
+  // fail). Probablemente es maquinaria/remolque, fuera del RUNT de Kyverum; el fallback a Verifik solo lo
+  // halla con el tipo correcto del dueño (p. ej. NIT). Sticky: una vez revelado, permanece visible.
+  useEffect(() => {
+    if (isVin || platePrimaryProvider !== 'kyverum_runt' || ownerDocTypeSuggested) return;
+    const pf = deferred ? previewSnapshot : preflight;
+    const noEncontrado = (pf?.checks ?? []).some(
+      (c) => c.key === 'vehiculo' && c.status === 'fail',
+    );
+    if (noEncontrado) setOwnerDocTypeSuggested(true);
+  }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
@@ -1731,6 +1750,12 @@ function ConsultaStep({
                     </option>
                   ))}
                 </select>
+                {ownerDocTypeSuggested && (
+                  <p className="mt-1 text-[11px] leading-tight opacity-70">
+                    No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
+                    documento del propietario (p. ej. NIT) y vuelve a consultar.
+                  </p>
+                )}
               </div>
             )}
             <div className="sm:col-span-2">

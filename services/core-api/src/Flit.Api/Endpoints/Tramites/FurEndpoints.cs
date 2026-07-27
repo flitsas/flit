@@ -37,6 +37,25 @@ internal static class FurEndpoints
             };
         }).WithName("GenerarProcedureInstanceFur");
 
+        // GET formato de FUR que aplica según la clasificación del vehículo (HU #10924). El backend es la
+        // fuente de verdad; el frontend lo muestra. -> 200 { format, vehicleClass }
+        group.MapGet("/instances/{id:guid}/fur/template-format", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetFurTemplateFormatHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("GetProcedureInstanceFurTemplateFormat");
+
         return app;
     }
 }

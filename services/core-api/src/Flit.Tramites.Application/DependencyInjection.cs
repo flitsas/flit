@@ -145,6 +145,7 @@ public static class DependencyInjection
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();

@@ -1112,6 +1112,15 @@ export interface GenerarFurResult {
   documents: FurDocument[];
 }
 
+/**
+ * Respuesta de GET /instances/{id}/fur/template-format (HU #10924): plantilla de FUR que aplica según
+ * la clasificación del vehículo. `format` ∈ 'AUTOMOTOR' | 'MAQUINARIA' | 'REMOLQUES'.
+ */
+export interface FurTemplateFormatResult {
+  format: string;
+  vehicleClass: string | null;
+}
+
 // ── Impronta integrada al trámite (paso FUR) ─────────────────────────
 // POST /api/v1/tramites/instances/{id}/attachments/generate-impronta -> GenerarImprontaAttachmentResult (201)
 // Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y lo

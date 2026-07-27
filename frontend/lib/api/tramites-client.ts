@@ -22,6 +22,7 @@ import type {
   FieldValueInput,
   FinalizarPortalResult,
   GenerarFurResult,
+  FurTemplateFormatResult,
   GenerarConsolidadoResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
@@ -1261,6 +1262,14 @@ export const tramitesClient = {
         method: 'POST',
         headers: tenantHeader(tenantId),
       },
+    ),
+
+  // GET formato de FUR que aplica según la clasificación del vehículo (HU #10924). Backend = fuente de
+  // verdad; la UI solo lo muestra.
+  getFurTemplateFormat: (instanceId: string, tenantId?: string) =>
+    request<FurTemplateFormatResult>(
+      `/api/v1/tramites/instances/${instanceId}/fur/template-format`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.

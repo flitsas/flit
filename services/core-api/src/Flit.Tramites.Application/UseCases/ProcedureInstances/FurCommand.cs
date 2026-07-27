@@ -44,12 +44,17 @@ public sealed class GenerarFurHandler(
     ISignatureVaultPolicy? vaultPolicy = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
+    IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
+    // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
+    private readonly IFurTemplateResolver? _templateResolver = templateResolver;
 
     // HU #10926 (ADR-0033) — resolutor de escrituras vigentes de las compañías (NIT) de los actores,
     // para adjuntarlas al consolidado. Default nulo (no resuelve) en tests que no lo ejercitan.
@@ -120,7 +125,12 @@ public sealed class GenerarFurHandler(
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
         var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos);
+        // HU #10920 — plantilla de FUR según la clasificación del vehículo (vehicle_class). Sin resolver → AUTOMOTOR.
+        var templateFormat = _templateResolver is not null
+            ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
+            : FurTemplateFormat.Automotor;
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos, templateFormat);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -285,6 +295,14 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // (Re)generar el FUR SIEMPRE reemplaza el adjunto 'fur' (y, en traspaso, la compraventa) y puede
+        // cambiar certificados/escrituras del expediente. Como el consolidado maestro (#10701) cachea su
+        // copia con este flag (se pone true al generarlo en ConsolidadoMaestroCommand), hay que invalidarlo
+        // en CUALQUIER regeneración para que su próxima vista lo refunda con el FUR/escrituras vigentes; si
+        // no, seguiría sirviendo el consolidado con el FUR viejo (el del wizard ya regenera siempre; solo el
+        // maestro cachea). R1 (ADR-0033) cubría solo el cambio de escrituras; aquí se generaliza al FUR.
+        instance.ConsolidadoMaestroVigente = false;
+
         foreach (var doc in generated)
         {
             // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo GENERADO por el sistema.
@@ -366,7 +384,8 @@ public sealed class GenerarFurHandler(
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
         bool tienePrenda, string? acreedorPrenda,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
-        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos)
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
+        FurTemplateFormat templateFormat)
     {
         var partes = new List<DocumentParte>(2);
         AddParte(partes, instance, "comprador");
@@ -429,7 +448,8 @@ public sealed class GenerarFurHandler(
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
-            AcreedorPrenda: acreedorPrenda);
+            AcreedorPrenda: acreedorPrenda,
+            TemplateFormat: templateFormat);
     }
 
     /// <summary>
