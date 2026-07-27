@@ -20,6 +20,7 @@ public static class AnalyticsSchedulingServiceCollectionExtensions
         services.AddScoped<UpdateAlertRuleHandler>();
         services.AddScoped<DeleteAlertRuleHandler>();
         services.AddScoped<ListAlertEventsHandler>();
+        services.AddScoped<AckAlertEventsHandler>();
         return services;
     }
 }

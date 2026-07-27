@@ -202,6 +202,10 @@ internal static class SchedulingTenantResolver
         Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found",
             detail: "La regla de alerta no existe.");
 
+    public static IResult AlertEventNotFound() =>
+        Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found",
+            detail: "El disparo de alerta no existe.");
+
     private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
     {
         var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
