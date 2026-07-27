@@ -35,4 +35,17 @@ public interface IPreTramiteRepository
         string mail,
         string company,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Emite un evento al timeline de negocio (<c>ict.pretramite_events</c>) vía la función
+    /// <c>ict.record_pretramite_event</c>. <paramref name="detailJson"/> ya viene SANITIZADO (allowlist,
+    /// sin PII). Best-effort desde el punto de vista del llamador.
+    /// </summary>
+    Task RecordTimelineEventAsync(
+        Guid masterId,
+        Guid tenantId,
+        string stage,
+        string outcome,
+        string? detailJson,
+        CancellationToken ct = default);
 }

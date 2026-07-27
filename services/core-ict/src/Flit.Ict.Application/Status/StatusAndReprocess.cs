@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Ict.Domain.Abstractions;
 
 namespace Flit.Ict.Application.Status;
@@ -36,6 +37,9 @@ public sealed class ReprocessHandler(IPreTramiteRepository repository, ICurrentT
         master.ExternalCommentsValidation = string.Empty;
         master.UpdatedBy = currentTenant.IntegrationClientId;
         await repository.SaveAsync(tenantId.Value, ct);
+
+        var detail = JsonSerializer.Serialize(new { manager_id_transaction = managerIdTransaction });
+        await repository.RecordTimelineEventAsync(master.Id, tenantId.Value, "reprocesado", "ok", detail, ct);
         return (true, null);
     }
 }

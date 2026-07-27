@@ -26,6 +26,8 @@ public sealed class IctDbContext(DbContextOptions<IctDbContext> options) : DbCon
 
     public DbSet<IntegrationLog> IntegrationLogs => Set<IntegrationLog>();
 
+    public DbSet<PretramiteEvent> PretramiteEvents => Set<PretramiteEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

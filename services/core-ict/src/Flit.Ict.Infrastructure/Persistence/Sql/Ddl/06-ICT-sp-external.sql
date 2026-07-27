@@ -76,6 +76,10 @@ BEGIN
 
         PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2, 'IDENTIFICADAS FUENTES',
             rec.manager_user, rec.manager_mail, rec.company_manager_document);
+
+        PERFORM ict.record_pretramite_event(rec.id_master, rec.tenant_id,
+            'en_validacion_externa', 'ok',
+            jsonb_build_object('transaction_type', rec.transaction_type));
     END LOOP;
 END;
 $BODY$;

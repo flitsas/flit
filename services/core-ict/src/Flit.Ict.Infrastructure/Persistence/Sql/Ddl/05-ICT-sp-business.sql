@@ -220,6 +220,10 @@ BEGIN
             PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 2,
                 'REGLAS DE NEGOCIO VALIDADAS SATISFACTORIAMENTE',
                 rec.manager_user, rec.manager_mail, rec.company_manager_document);
+
+            PERFORM ict.record_pretramite_event(rec.id_master, rec.tenant_id,
+                'en_validacion_negocio', 'ok',
+                jsonb_build_object('transaction_type', rec.transaction_type));
         ELSE
             UPDATE ict.external_integration_master
             SET business_validation = 2, business_date_validation = now(), process_status_id = 4
@@ -234,6 +238,10 @@ BEGIN
             PERFORM ict.record_process_status(rec.id_master, rec.tenant_id, 4,
                 'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: ' || resultcomments,
                 rec.manager_user, rec.manager_mail, rec.company_manager_document);
+
+            PERFORM ict.record_pretramite_event(rec.id_master, rec.tenant_id,
+                'en_validacion_negocio', 'con_novedades',
+                jsonb_build_object('comments', resultcomments));
         END IF;
     END LOOP;
 END;

@@ -26,6 +26,14 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
                 SELECT ict.record_process_status({master.Id}, {tenantId}, 1, 'REGISTRADO',
                     {master.ManagerUser}, {master.ManagerMail}, {master.CompanyManagerDocument}, '', '')
                 """, ct);
+
+            // Timeline de negocio: pre-trámite recibido (detail por allowlist, sin PII).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                SELECT ict.record_pretramite_event({master.Id}, {tenantId}, 'recibido', 'ok',
+                    jsonb_build_object('transaction_type', {master.TransactionType},
+                                       'manager_id_transaction', {master.ManagerIdTransaction},
+                                       'traffic_secretary_code', {master.TrafficSecretaryCode}))
+                """, ct);
             return master.Id;
         }, ct);
     }
@@ -81,6 +89,26 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
                 WHERE id = {masterId} AND tenant_id = {tenantId};
                 SELECT ict.record_process_status({masterId}, {tenantId}, 6, 'ANULADO',
                     {user}, {mail}, {company}, {observation}, 'integration')
+                """, ct);
+
+            // Timeline: anulado. NO se incluye la observation (texto libre del cliente → riesgo PII).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                SELECT ict.record_pretramite_event({masterId}, {tenantId}, 'anulado', 'ok')
+                """, ct);
+            return 0;
+        }, ct);
+
+    public Task RecordTimelineEventAsync(
+        Guid masterId,
+        Guid tenantId,
+        string stage,
+        string outcome,
+        string? detailJson,
+        CancellationToken ct = default) =>
+        InTenantTransactionAsync(tenantId, async () =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                SELECT ict.record_pretramite_event({masterId}, {tenantId}, {stage}, {outcome}, {detailJson}::jsonb)
                 """, ct);
             return 0;
         }, ct);

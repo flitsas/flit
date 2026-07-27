@@ -16,3 +16,16 @@ internal sealed class IntegrationLogConfiguration : IEntityTypeConfiguration<Int
         builder.HasIndex(x => new { x.TenantId, x.CreatedAt });
     }
 }
+
+internal sealed class PretramiteEventConfiguration : IEntityTypeConfiguration<PretramiteEvent>
+{
+    public void Configure(EntityTypeBuilder<PretramiteEvent> builder)
+    {
+        builder.ToTable("pretramite_events", SchemaNames.Ict, t => t.ExcludeFromMigrations());
+        builder.HasKey(x => x.Id);
+        // uuidv7 lo genera la BD (id time-ordered): no usar Guid.NewGuid client-side.
+        builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
+        builder.Property(x => x.Detail).HasColumnType("jsonb");
+        builder.HasIndex(x => new { x.MasterId, x.CreatedAt });
+    }
+}

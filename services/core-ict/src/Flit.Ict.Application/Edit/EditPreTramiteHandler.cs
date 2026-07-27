@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Ict.Domain.Abstractions;
 
 namespace Flit.Ict.Application.Edit;
@@ -45,39 +46,48 @@ public sealed class EditPreTramiteHandler(IPreTramiteRepository repository, ICur
         }
 
         var validationAffectingChanged = false;
+        // Solo NOMBRES de campos cambiados para el timeline (nunca los valores nuevos: manager_mail
+        // y delivery_address son PII).
+        var changedFields = new List<string>();
 
         if (command.DeliveryAddress is not null)
         {
             master.DeliveryAddress = command.DeliveryAddress.Trim();
+            changedFields.Add("delivery_address");
         }
 
         if (command.ManagerMail is not null)
         {
             master.ManagerMail = command.ManagerMail.Trim();
+            changedFields.Add("manager_mail");
         }
 
         if (command.SellingDate is not null && command.SellingDate.Trim() != master.SellingDate)
         {
             master.SellingDate = command.SellingDate.Trim();
             validationAffectingChanged = true;
+            changedFields.Add("selling_date");
         }
 
         if (command.SellingPrice is { } price && price != master.SellingPrice)
         {
             master.SellingPrice = price;
             validationAffectingChanged = true;
+            changedFields.Add("selling_price");
         }
 
         if (command.TrafficSecretaryCode is not null && command.TrafficSecretaryCode.Trim() != master.TrafficSecretaryCode)
         {
             master.TrafficSecretaryCode = command.TrafficSecretaryCode.Trim();
             validationAffectingChanged = true;
+            changedFields.Add("traffic_secretary_code");
         }
 
         if (command.ProcessWithoutAttachedDocuments is { } flag && flag != master.ProcessWithoutAttachedDocuments)
         {
             master.ProcessWithoutAttachedDocuments = flag;
             validationAffectingChanged = true;
+            changedFields.Add("process_without_attached_documents");
         }
 
         if (validationAffectingChanged)
@@ -99,6 +109,13 @@ public sealed class EditPreTramiteHandler(IPreTramiteRepository repository, ICur
         {
             return (null, "stale");
         }
+
+        var detail = JsonSerializer.Serialize(new
+        {
+            changed_fields = changedFields,
+            validation_affecting = validationAffectingChanged,
+        });
+        await repository.RecordTimelineEventAsync(master.Id, tenantId.Value, "editado", "ok", detail, ct);
 
         return (new EditPreTramiteResult(master.Id, validationAffectingChanged), null);
     }

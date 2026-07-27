@@ -168,7 +168,10 @@ public sealed class OrchestratorJob(
         cmd.CommandText = """
             UPDATE ict.external_integration_master
             SET external_comments_validation = external_comments_validation || @msg
-            WHERE id = @id
+            WHERE id = @id;
+            SELECT ict.record_pretramite_event(m.id, m.tenant_id, 'en_validacion_externa', 'advertencia',
+                       jsonb_build_object('warnings', @msg))
+            FROM ict.external_integration_master m WHERE m.id = @id
             """;
         AddParam(cmd, "id", masterId);
         AddParam(cmd, "msg", " " + message + ";");
@@ -205,6 +208,9 @@ public sealed class OrchestratorJob(
                  message_validation, ict_estado, target_url)
             SELECT m.id, m.tenant_id, m.manager_id_transaction, m.transaction_type, 4,
                    'CON NOVEDADES EN FUENTES EXTERNAS:' || @msg, 'con_novedades', m.url_web_hook
+            FROM ict.external_integration_master m WHERE m.id = @id;
+            SELECT ict.record_pretramite_event(m.id, m.tenant_id, 'con_novedades', 'con_novedades',
+                       jsonb_build_object('issues', @msg))
             FROM ict.external_integration_master m WHERE m.id = @id
             """;
         AddParam(cmd, "id", masterId);

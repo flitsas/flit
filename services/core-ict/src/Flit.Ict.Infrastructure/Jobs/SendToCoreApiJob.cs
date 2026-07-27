@@ -85,8 +85,10 @@ public sealed class SendToCoreApiJob(
 
                 // Histórico v1: el trámite pasa por Procesado (3) y luego Borrador (5).
                 await RecordStatusAsync(db, master, 3, "PROCESADO SATISFACTORIAMENTE", ct);
+                await RecordEventAsync(db, master, "procesado", "ok", null, ct);
                 await RecordStatusAsync(db, master, 5, "BORRADOR CREADO EN LA PLATAFORMA", ct);
                 await EnqueueWebhookAsync(db, master, 5, "borrador_creado", "BORRADOR CREADO", ct);
+                await RecordEventAsync(db, master, "borrador_creado", "ok", null, ct);
             }
             else
             {
@@ -149,6 +151,7 @@ public sealed class SendToCoreApiJob(
         await db.SaveChangesAsync(ct);
         await RecordStatusAsync(db, master, 4, "CON NOVEDADES: " + message, ct);
         await EnqueueWebhookAsync(db, master, 4, "con_novedades", "CON NOVEDADES: " + message, ct);
+        await RecordEventAsync(db, master, "con_novedades", "con_novedades", message, ct);
     }
 
     /// <summary>Registra una transición de estado en el histórico v1 (colapsa sub-pasos por estado).</summary>
@@ -176,5 +179,20 @@ public sealed class SendToCoreApiJob(
                  message_validation, ict_estado, target_url)
             VALUES ({master.Id}, {master.TenantId}, {master.ManagerIdTransaction}, {master.TransactionType},
                  {statusValidation}, {message}, {ictEstado}, {master.UrlWebHook})
+            """, ct);
+
+    /// <summary>Emite un evento al timeline de negocio (ict.pretramite_events). detail por allowlist.</summary>
+    private static Task<int> RecordEventAsync(
+        IctDbContext db,
+        ExternalIntegrationMaster master,
+        string stage,
+        string outcome,
+        string? message,
+        CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT ict.record_pretramite_event({master.Id}, {master.TenantId}, {stage}, {outcome},
+                jsonb_build_object('transaction_type', {master.TransactionType},
+                                   'procedure_instance_id', {master.ProcedureInstanceId},
+                                   'message', {message}))
             """, ct);
 }
