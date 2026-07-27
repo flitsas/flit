@@ -7,7 +7,7 @@ namespace Flit.Ict.Api.Endpoints;
 
 /// <summary>
 /// Adjuntos. Se conservan los PATHS y contrato v1 (<c>/api/v1/transact-attachments/*</c>, multipart)
-/// para no romper clientes. Se mantiene el flujo v2 presign→register en <c>/api/ict/pretramites/*</c>.
+/// para no romper clientes. Se mantiene el flujo v2 presign→register en <c>/api/v1/pretramites/*</c>.
 /// </summary>
 public static class IctAttachmentEndpoints
 {
@@ -114,10 +114,10 @@ public static class IctAttachmentEndpoints
         group.MapPost("/associate-file", () => Results.Ok(new { Status = 1, Message = "OK" }));
     }
 
-    // ---- v2: /api/ict/pretramites/{id}/attachments/* (flujo presign→register) ----
+    // ---- v2: /api/v1/pretramites/{id}/attachments/* (flujo presign→register) ----
     private static void MapV2PreTramiteAttachments(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/ict/pretramites/{id:guid}/attachments")
+        var group = app.MapGroup("/api/v1/pretramites/{id:guid}/attachments")
             .RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
 
         group.MapPost("/presign", async (Guid id, PresignRequest body, PresignAttachmentHandler handler, CancellationToken ct) =>

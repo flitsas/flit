@@ -27,7 +27,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Logging de requests entrantes a /api/ict/** (redactado, en scope propio). Tras la auth para
+// Logging de requests entrantes de cliente ICT (rutas v1, redactado, en scope propio). Tras la auth para
 // resolver el tenant del token ICT.
 app.UseMiddleware<Flit.Ict.Api.Middleware.IctRequestLoggingMiddleware>();
 

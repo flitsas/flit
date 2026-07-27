@@ -7,7 +7,7 @@ namespace Flit.Ict.Api.Endpoints;
 /// <summary>
 /// Secretarías de tránsito activas (servicio v1 #9). Se conserva el path v1
 /// <c>GET /api/v1/secretaries</c> y la forma de respuesta <c>{ data: [ { Code, Name } ] }</c>
-/// (claves PascalCase EXACTAS) para no romper clientes. Alias de desarrollo <c>/api/ict/secretaries</c>.
+/// (claves PascalCase EXACTAS) para no romper clientes.
 /// </summary>
 public static class IctSecretariesEndpoints
 {
@@ -16,7 +16,7 @@ public static class IctSecretariesEndpoints
         [property: JsonPropertyName("Code")] string Code,
         [property: JsonPropertyName("Name")] string Name);
 
-    private static readonly string[] Paths = ["/api/v1/secretaries", "/api/ict/secretaries"];
+    private static readonly string[] Paths = ["/api/v1/secretaries"];
 
     public static IEndpointRouteBuilder MapIctSecretariesEndpoints(this IEndpointRouteBuilder app)
     {

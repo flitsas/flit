@@ -7,7 +7,7 @@ namespace Flit.Ict.Api.Endpoints;
 /// Ciclo de vida del trámite ya materializado (servicios v1 #10 pauseDraftProcess / #11 abortProcess).
 /// Se conservan los PATHS v1 (<c>PUT /api/v1/external-transaction/{abortProcess|pauseDraftProcess}/{id}</c>)
 /// y la forma de respuesta v1 <c>{ success, message, data }</c>. El <c>{id}</c> es el manager_id_transaction
-/// (TransactionFlit), igual que en estado/reproceso. Alias de desarrollo <c>/api/ict/*</c>.
+/// (TransactionFlit), igual que en estado/reproceso.
 /// </summary>
 public static class IctLifecycleEndpoints
 {
@@ -23,13 +23,11 @@ public static class IctLifecycleEndpoints
     private static readonly string[] AbortPaths =
     [
         "/api/v1/external-transaction/abortProcess/{id}",
-        "/api/ict/abortProcess/{id}",
     ];
 
     private static readonly string[] PausePaths =
     [
         "/api/v1/external-transaction/pauseDraftProcess/{id}",
-        "/api/ict/pauseDraftProcess/{id}",
     ];
 
     public static IEndpointRouteBuilder MapIctLifecycleEndpoints(this IEndpointRouteBuilder app)

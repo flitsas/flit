@@ -3,7 +3,7 @@ using Flit.Ict.Application.Edit;
 
 namespace Flit.Ict.Api.Endpoints;
 
-/// <summary>Endpoints de gestión del pre-trámite (edición) — <c>/api/ict/pretramites</c>.</summary>
+/// <summary>Endpoints de gestión del pre-trámite (edición) — <c>/api/v1/pretramites</c>.</summary>
 public static class IctPreTramiteEndpoints
 {
     /// <summary>Body de edición parcial (v2, camelCase). rowVersion es obligatorio (concurrencia).</summary>
@@ -18,7 +18,7 @@ public static class IctPreTramiteEndpoints
 
     public static IEndpointRouteBuilder MapIctPreTramiteEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/ict/pretramites").RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
+        var group = app.MapGroup("/api/v1/pretramites").RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
 
         group.MapPatch("/{id:guid}", async (
             Guid id,

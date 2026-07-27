@@ -8,7 +8,7 @@ namespace Flit.Ict.Api.Endpoints;
 /// Estado y reproceso de un trámite. Se conservan los PATHS y la FORMA de respuesta de v1 para no
 /// romper clientes existentes: <c>GET /api/v1/status-process/byId/{id}</c> devuelve el histórico
 /// (statusProcess[]) con códigos numéricos. El id es el TransactionFlit (manager_id_transaction) que
-/// devuelve el registro. Se mantienen alias /api/ict/* usados durante el desarrollo.
+/// devuelve el registro.
 /// </summary>
 public static class IctStatusEndpoints
 {
@@ -17,13 +17,11 @@ public static class IctStatusEndpoints
         "/api/v1/status-process/byId/{id}",
         "/api/v1/status-process/transaction/{id}",
         "/api/v1/status-process/{id}",
-        "/api/ict/status/{id}",
     ];
 
     private static readonly string[] ReprocessPaths =
     [
         "/api/v1/transactions/reprocess/{id}",
-        "/api/ict/reprocess/{id}",
     ];
 
     public static IEndpointRouteBuilder MapIctStatusEndpoints(this IEndpointRouteBuilder app)

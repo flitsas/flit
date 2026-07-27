@@ -4,14 +4,14 @@ namespace Flit.Ict.Api.Endpoints;
 
 /// <summary>
 /// Login ICT independiente. Se conserva el path v1 <c>POST /api/v1/auth/login</c> para no romper
-/// clientes existentes; se mantiene el alias <c>/api/ict/auth/login</c> usado en desarrollo.
+/// clientes existentes. El tráfico ICT se distingue del de plataforma por host (ict.*) en el Gateway.
 /// </summary>
 public static class IctAuthEndpoints
 {
     /// <summary>Body del login. <c>companyManagerId</c> se acepta por compat v1 y se ignora.</summary>
     public sealed record LoginRequest(string Username, string Password, long? CompanyManagerId);
 
-    private static readonly string[] LoginPaths = ["/api/v1/auth/login", "/api/ict/auth/login"];
+    private static readonly string[] LoginPaths = ["/api/v1/auth/login"];
 
     public static IEndpointRouteBuilder MapIctAuthEndpoints(this IEndpointRouteBuilder app)
     {
