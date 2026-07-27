@@ -189,10 +189,12 @@ public sealed class SendToCoreApiJob(
         string outcome,
         string? message,
         CancellationToken ct) =>
+        // Cast explícito de los params nullable: un NULL sin tipo dentro de jsonb_build_object hace
+        // que Postgres no pueda inferir el tipo del parámetro (42P18).
         db.Database.ExecuteSqlInterpolatedAsync($"""
             SELECT ict.record_pretramite_event({master.Id}, {master.TenantId}, {stage}, {outcome},
                 jsonb_build_object('transaction_type', {master.TransactionType},
-                                   'procedure_instance_id', {master.ProcedureInstanceId},
-                                   'message', {message}))
+                                   'procedure_instance_id', {master.ProcedureInstanceId}::uuid,
+                                   'message', {message}::text))
             """, ct);
 }
