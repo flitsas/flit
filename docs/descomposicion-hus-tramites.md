@@ -1,6 +1,6 @@
 # Descomposición en HUs — Features de Trámites (#10862 / #10863 / #10864)
 
-> **Estado:** CREADAS en Azure DevOps (Sprint 2) — #10864: HUs #10865–#10869 · #10863: HUs #10870–#10875 · #10862: HUs #10876–#10887 (23 en total).
+> **Estado:** CREADAS en Azure DevOps (Sprint 2) — #10864: HUs #10865–#10869 **+ #10943/#10944 (ampliación CF-03)** · #10863: HUs #10870–#10875 · #10862: HUs #10876–#10887 (25 en total).
 > **Convención:** HUs por capa `[BACKEND]` / `[FRONTEND]` · Story Points Fibonacci (1/2/3/5/8) · máx. 8 HUs por Feature · assignee humano · Sprint 2.
 > **Fecha:** 2026-07-22
 
@@ -70,6 +70,18 @@
 | FE-02 | [FRONTEND] Vista transversal tolera validaciones sin trámite (columnas Trámite/Modalidad nullable) | CF-02 | 2 | BE-03 |
 
 **Total: 5 HUs · ~23 SP** ✅ (≤8)
+
+### Ampliación CF-03 — edición y reenvío (2026-07-27) · ✅ CREADAS en ADO
+
+> Criterio CF-03 añadido al Feature #10864 (rev 5) y 2 HUs hijas creadas en Sprint 2, estado `New`.
+> Detalle y AC en Gherkin: [feature-prevalidacion-identidad.md §4 y §9](feature-prevalidacion-identidad.md).
+
+| HU | ADO | Título | CF | SP | Depende |
+|----|-----|--------|----|----|---------|
+| BE-04 | **#10943** | [BACKEND] – Identidad – Editar prevalidación y reenviar validación (`PATCH` y `POST /resend`, tope 3 + cooldown 5 min, migración `resend_count`/`last_resent_at`, auditoría PII) | CF-03 | 5 | #10866 |
+| FE-03 | **#10944** | [FRONTEND] – Identidad – Editar y reenviar prevalidación desde el módulo (documento bloqueado, aviso de invalidación del enlace, cooldown y tope en UI) | CF-03 | 3 | #10943, #10868 |
+
+**Total con CF-03: 7 HUs · ~31 SP** ✅ (≤8)
 
 ---
 
