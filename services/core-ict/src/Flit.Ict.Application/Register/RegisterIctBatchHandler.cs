@@ -73,6 +73,10 @@ public sealed class RegisterIctBatchHandler(
             }
 
             var master = IctPayloadNormalizer.ToMaster(row, tenantId.Value);
+            // created_at explícito: sin esto la entidad queda en DateTime.MinValue y Npgsql lo envía
+            // como -infinity (pisa el DEFAULT now() del DDL), lo que rompe las métricas ICT y la
+            // retención, que filtran por created_at.
+            master.CreatedAt = DateTime.UtcNow;
             master.CreatedBy = currentTenant.IntegrationClientId;
             await repository.AddAsync(master, tenantId.Value, ct);
             processed++;
