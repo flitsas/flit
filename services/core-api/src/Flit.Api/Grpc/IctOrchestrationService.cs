@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -13,15 +14,16 @@ namespace Flit.Api.Grpc;
 /// <summary>
 /// Servidor gRPC de orquestación invocado por core-ict (ICT). Adaptador delgado sobre los casos de
 /// uso existentes de trámites: crea el borrador y siembra los field_values (vin/plate). NO reimplementa
-/// reglas — reutiliza CreateProcedureInstanceHandler + PatchFieldValuesHandler (igual que la
-/// importación masiva). El tenant viaja explícito en el mensaje (autorizado por el service-token).
-/// TODO(ICT-HU4-ACTORS): mapear actores/comercial/adjuntos (UpsertActors/PatchCommercial/RegisterAttachment).
+/// reglas — reutiliza CreateProcedureInstanceHandler + PatchFieldValuesHandler + PutActorsHandler +
+/// PutCommercialHandler + RegisterIntegrationAttachmentHandler (igual que la importación masiva y el
+/// wizard). El tenant viaja explícito en el mensaje (autorizado por el service-token).
 /// TODO(ICT-HU4-REVERSE): persistir origin/external_ref y empujar cambios de estado de vuelta a core-ict.
 /// </summary>
 public sealed class IctOrchestrationService(
     CreateProcedureInstanceHandler createHandler,
     PatchFieldValuesHandler patchHandler,
     PutActorsHandler actorsHandler,
+    PutCommercialHandler commercialHandler,
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
     FlitDbContext db) : IctOrchestration.IctOrchestrationBase
@@ -98,6 +100,16 @@ public sealed class IctOrchestrationService(
             .Select(f => new FieldValueInput(null, f.FieldKey, f.ValueText, null))
             .ToList();
         fieldItems.AddRange(MapLesseeFieldValues(request.Actors, request.ProcedureTypeCode));
+
+        // Fecha de venta del traspaso (contrato v1): v2 NO la modela en el comercial
+        // (procedure_instance_commercial no tiene columna de fecha) ni hay form_field para ella, así que
+        // se preserva como valor "loose" para no perder el dato. El valor de venta / causal sí van al
+        // comercial (más abajo). TODO(ICT-SELLING-DATE-UI): el front aún no renderiza selling_date.
+        if (request.Commercial is { SellingDate: var sellingDate } && !string.IsNullOrWhiteSpace(sellingDate))
+        {
+            fieldItems.Add(new FieldValueInput(null, "selling_date", sellingDate.Trim(), null));
+        }
+
         if (fieldItems.Count > 0)
         {
             var (_, patchError) = await patchHandler.HandleAsync(
@@ -122,6 +134,34 @@ public sealed class IctOrchestrationService(
             if (actorsError is not null)
             {
                 AppendWarning(reply, "actors_warning:" + actorsError);
+            }
+        }
+
+        // Datos comerciales del traspaso (valor de venta / causal / método de pago). core-ict los envía en
+        // request.Commercial SOLO para traspaso (tipo 3); en el resto de trámites llega null. Se reutiliza
+        // PutCommercialHandler (el MISMO escritor que el paso 5 del wizard) para que el valor de venta
+        // aparezca en el borrador y el gestor lo vea. El handler exige una causal del catálogo cerrado; el
+        // contrato v1 no la trae, así que se usa COMPRAVENTA por defecto (la causal dominante del traspaso
+        // y la primera del selector del front) y el gestor puede cambiarla. Fallo NO fatal: el borrador ya
+        // existe y se reporta como warning acumulado.
+        if (request.Commercial is { } commercial
+            && decimal.TryParse(commercial.ValorVenta, NumberStyles.Any, CultureInfo.InvariantCulture, out var valorVenta)
+            && valorVenta > 0)
+        {
+            var causal = string.IsNullOrWhiteSpace(commercial.Causal)
+                ? "COMPRAVENTA"
+                : commercial.Causal.Trim().ToUpperInvariant();
+            var commercialDto = new CommercialDto(
+                ValorVenta: valorVenta,
+                Causal: causal,
+                TasaImpuesto: null,
+                Derechos: null,
+                MetodoPago: string.IsNullOrWhiteSpace(commercial.MetodoPago) ? null : commercial.MetodoPago.Trim());
+            var (_, commercialError) = await commercialHandler.HandleAsync(
+                summary.Id, tenantId, commercialDto, context.CancellationToken);
+            if (commercialError is not null)
+            {
+                AppendWarning(reply, "commercial_warning:" + commercialError);
             }
         }
 
