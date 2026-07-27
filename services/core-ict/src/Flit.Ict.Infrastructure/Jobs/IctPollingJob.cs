@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using Flit.Ict.Domain.Jobs;
+using Flit.Ict.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -28,6 +31,19 @@ public sealed class IctJobOptions
     public int SendPollSeconds { get; init; } = 20;
 
     public int WebhookPollSeconds { get; init; } = 10;
+
+    // Retención/purga (HU5): corre 24/7 (sin ventana horaria), cadencia en horas.
+    public bool RetentionEnabled { get; init; } = true;
+
+    public int IntegrationLogRetentionDays { get; init; } = 90;
+
+    public int PretramiteEventsRetentionDays { get; init; } = 365;
+
+    public int JobRunsRetentionDays { get; init; } = 90;
+
+    public int RetentionIntervalHours { get; init; } = 24;
+
+    public int RetentionBatchSize { get; init; } = 5000;
 }
 
 /// <summary>
@@ -71,7 +87,22 @@ public abstract class IctPollingJob(
                 if (IctWindowEvaluator.IsWithinWindow(DateTime.UtcNow, Options.WindowStartHour, Options.WindowEndHour))
                 {
                     using var scope = scopeFactory.CreateScope();
-                    await RunCycleAsync(scope, stoppingToken);
+                    var startedAt = DateTime.UtcNow;
+                    var stopwatch = Stopwatch.StartNew();
+                    try
+                    {
+                        await RunCycleAsync(scope, stoppingToken);
+                        stopwatch.Stop();
+                        await RecordRunAsync(startedAt, stopwatch.Elapsed, "ok", null, stoppingToken);
+                    }
+                    catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                    {
+                        stopwatch.Stop();
+                        // Registrar la corrida fallida con un token no cancelado (el ciclo ya se abortó);
+                        // luego relanzar para que el catch externo la loguee (CycleError).
+                        await RecordRunAsync(startedAt, stopwatch.Elapsed, "error", ex.Message, CancellationToken.None);
+                        throw;
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -95,6 +126,42 @@ public abstract class IctPollingJob(
             }
         }
     }
+
+    /// <summary>
+    /// Registra el ciclo en <c>ict.job_runs</c> (auditoría + SLA de la métrica ict_jobs_out_of_sla).
+    /// Best-effort en scope propio: un fallo de auditoría NUNCA rompe el job.
+    /// SLA incumplido = el ciclo falló, o su duración superó su propio <see cref="PollInterval"/>
+    /// (el job no alcanza a seguir su cadencia → backpressure).
+    /// </summary>
+    private async Task RecordRunAsync(
+        DateTime startedAt, TimeSpan duration, string outcome, string? error, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
+
+            var durationMs = (int)Math.Min(duration.TotalMilliseconds, int.MaxValue);
+            var breachedSla = outcome == "error" || duration > PollInterval;
+            var finishedAt = startedAt.Add(duration);
+            var errorMessage = error is { Length: > 2000 } ? error[..2000] : error;
+
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO ict.job_runs
+                    (job_name, started_at, finished_at, duration_ms, outcome, breached_sla, error_message)
+                VALUES
+                    ({JobName}, {startedAt}, {finishedAt}, {durationMs}, {outcome}, {breachedSla}, {errorMessage})
+                """,
+                ct).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // la auditoría de jobs nunca debe romper el ciclo
+        catch (Exception ex)
+        {
+            IctJobLog.JobRunRecordError(logger, ex, JobName);
+        }
+#pragma warning restore CA1031
+    }
 }
 
 internal static partial class IctJobLog
@@ -104,4 +171,7 @@ internal static partial class IctJobLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "ICT job {JobName}: {Count} elementos procesados.")]
     public static partial void CycleDone(ILogger logger, string jobName, int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT job {JobName}: no se pudo registrar la corrida en job_runs (se ignora).")]
+    public static partial void JobRunRecordError(ILogger logger, Exception ex, string jobName);
 }

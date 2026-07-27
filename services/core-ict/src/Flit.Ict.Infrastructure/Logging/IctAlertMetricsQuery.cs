@@ -7,7 +7,7 @@ namespace Flit.Ict.Infrastructure.Logging;
 /// <summary>
 /// Calcula las métricas de alerta ICT sobre el schema ict. Comparte Postgres con core-api, por lo
 /// que el AnalyticsSchedulerProcessor de core-api puede evaluar estas mismas métricas cross-schema
-/// (ver plan §A.10). TODO(ICT-JOBS-SLA): tabla ict.job_runs para jobs_out_of_sla.
+/// (ver plan §A.10). jobs_out_of_sla se deriva de ict.job_runs (registro que escribe IctPollingJob).
 /// </summary>
 public sealed class IctAlertMetricsQuery(IctDbContext db) : IIctAlertMetricsQuery
 {
@@ -43,6 +43,15 @@ public sealed class IctAlertMetricsQuery(IctDbContext db) : IIctAlertMetricsQuer
                 """)
             .FirstAsync(ct);
 
-        return new IctAlertMetrics(stuck, noveltyRate, webhookFailures, JobsOutOfSla: 0);
+        // job_runs es GLOBAL (jobs cross-tenant): la métrica de SLA es platform-wide, no por tenant.
+        var jobsOutOfSla = await db.Database
+            .SqlQuery<long>($"""
+                SELECT count(*)::bigint AS "Value"
+                FROM ict.job_runs
+                WHERE breached_sla = true AND started_at >= {since}
+                """)
+            .FirstAsync(ct);
+
+        return new IctAlertMetrics(stuck, noveltyRate, webhookFailures, jobsOutOfSla);
     }
 }

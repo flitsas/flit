@@ -74,6 +74,8 @@ public static class IctInfrastructureExtensions
         services.AddHostedService<OrchestratorJob>();
         services.AddHostedService<SendToCoreApiJob>();
         services.AddHostedService<WebhookNotificationJob>();
+        // Purga de observabilidad (logs/eventos/job_runs) — corre 24/7, fuera de la ventana del pipeline.
+        services.AddHostedService<RetentionJob>();
 
         // Service-token gRPC este-oeste (core-ict → core-api): JWT de sistema que autentica que la
         // llamada la hace core-ict (no un tercero que alcance el puerto interno). Secreto compartido (HMAC).
