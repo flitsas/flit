@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -14,7 +16,15 @@ public sealed record ProcedureInstanceStatusHistoryDto(
     string? FromStatus,
     string ToStatus,
     DateTimeOffset ChangedAt,
-    string? Reason);
+    string? Reason,
+    // HU #10871 — checklist HÍBRIDO de la observación de subsanación (motivo + items), RECORTADO del
+    // metadata jsonb que persiste OtClientProcedureRepository.BuildStatusHistoryMetadata (HU #10871/
+    // #10872): NUNCA se expone fieldSnapshot ni ot_tenant_id/approver_tenant_id al cliente (plomería
+    // interna / posible PII del snapshot de field_values). Serializado como JSON string
+    // `{"motivo":...,"items":[{"campo":...,"detalle":...}]}` — mismo shape que
+    // `frontend/lib/tramites/subsanacion.ts` (`parseSubsanacionObservation`) espera en `metadata`. Null
+    // si la entrada no trae observación (transición sin checklist, p. ej. aprobar/rechazar).
+    string? Metadata = null);
 
 public sealed record ProcedureInstanceActorDto(
     string ActorType,
@@ -80,7 +90,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.StatusHistory
                 .OrderBy(h => h.ChangedAt)
                 .ThenBy(h => h.Id)
-                .Select(h => new ProcedureInstanceStatusHistoryDto(h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason))
+                .Select(h => new ProcedureInstanceStatusHistoryDto(
+                    h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason, BuildObservationMetadata(h.Metadata)))
                 .ToList(),
             e.Actors
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName))
@@ -88,4 +99,26 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.DraftFinalizedAt,
             e.PlateFlowStatus,
             e.CurrentStep);
+
+    /// <summary>
+    /// HU #10871 — recorta el metadata jsonb persistido en <c>procedure_instance_status_history</c> al
+    /// checklist HÍBRIDO (<c>motivo</c> + <c>items</c>) que el frontend necesita para pintar el panel de
+    /// subsanación (<c>SubsanacionObservation</c>, HU #10871/#10872). Deliberadamente NO reenvía
+    /// <c>FieldSnapshot</c> (baseline interno de re-radicación) ni <c>ot_tenant_id</c>/
+    /// <c>approver_tenant_id</c> (plomería de auditoría cross-tenant) — esas claves quedan solo en la
+    /// persistencia. Devuelve <c>null</c> cuando la entrada no trae observación (transiciones sin
+    /// checklist, p. ej. aprobar/rechazar sin subsanación) para no ensuciar el contrato con JSON vacío.
+    /// </summary>
+    private static string? BuildObservationMetadata(string? metadataJson)
+    {
+        var observation = SubsanacionObservation.FromJson(metadataJson);
+        if (observation is null || (observation.Motivo is null && observation.Items.Count == 0))
+            return null;
+
+        return JsonSerializer.Serialize(new
+        {
+            motivo = observation.Motivo,
+            items = observation.Items.Select(i => new { campo = i.Campo, detalle = i.Detalle }),
+        });
+    }
 }

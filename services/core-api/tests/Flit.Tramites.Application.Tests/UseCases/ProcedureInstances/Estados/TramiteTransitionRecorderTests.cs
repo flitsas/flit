@@ -113,4 +113,35 @@ public sealed class TramiteTransitionRecorderTests
 
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceStatusHistory>(h => h.Reason == null));
     }
+
+    // ── HU #10871 — checklist HÍBRIDO de subsanación en metadata (jsonb genérico, existía sin usar) ──
+
+    [Fact]
+    public async Task RecordAsync_NullMetadata_PersistsEmptyJsonObject()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await _recorder.RecordAsync(
+            new TramiteTransitionRecord(
+                TenantId, InstanceId, TramiteEstado.Entregado, TramiteEstado.Subsanacion,
+                "motivo x", null, ChangedAt, Metadata: null),
+            ct);
+
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceStatusHistory>(h => h.Metadata == "{}"));
+    }
+
+    [Fact]
+    public async Task RecordAsync_WithMetadata_PersistsItVerbatim()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string metadata = "{\"motivo\":\"x\",\"items\":[{\"campo\":\"factura\",\"detalle\":\"falta\"}]}";
+
+        await _recorder.RecordAsync(
+            new TramiteTransitionRecord(
+                TenantId, InstanceId, TramiteEstado.Entregado, TramiteEstado.Subsanacion,
+                "motivo x", null, ChangedAt, Metadata: metadata),
+            ct);
+
+        _repo.Received(1).Add(Arg.Is<ProcedureInstanceStatusHistory>(h => h.Metadata == metadata));
+    }
 }

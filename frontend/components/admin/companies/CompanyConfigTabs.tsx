@@ -74,11 +74,10 @@ export interface CompanyConfigTabsProps {
   /** Persiste la configuración. Debe lanzar ApiValidationError (con `errors[]`) en 422. */
   onSaveSettings: (update: TenantSettingsUpdate) => Promise<void>;
   whitelistSlot?: ReactNode;
+  /** Tabla consolidada de Organismos de Tránsito: grant + bloqueos + restricciones de
+   *  consulta scoped por OT (HU #10194 — consolidación; endpoints propios, fuera del PUT
+   *  atómico de settings). */
   otSlot?: ReactNode;
-  /** HU #10761 — restricciones de consulta por OT (endpoint propio, fuera del PUT atómico). */
-  otRestrictionsSlot?: ReactNode;
-  /** FEATURE 05 — criterios de bloqueo del preflight por OT (endpoint propio). */
-  otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
   /** Panel del Baúl de Firmas (HU #10644). Solo se muestra si `baulFirmasActivo` está activo. */
@@ -96,8 +95,6 @@ export function CompanyConfigTabs({
   onSaveSettings,
   whitelistSlot,
   otSlot,
-  otRestrictionsSlot,
-  otBlockingSlot,
   auditSlot,
   documentosSlot,
   baulFirmasSlot,
@@ -214,8 +211,6 @@ export function CompanyConfigTabs({
             form={form}
             onChange={patch}
             otSlot={otSlot}
-            otRestrictionsSlot={otRestrictionsSlot}
-            otBlockingSlot={otBlockingSlot}
             fieldErrors={fieldErrors}
           />
         )}

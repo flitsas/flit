@@ -37,22 +37,47 @@ beforeEach(() => {
 });
 
 describe('EstadoAcciones — el backend manda', () => {
-  it('borrador: chip "Borrador" + botón Anular; sin botón Volver a borrador', async () => {
+  it('borrador: chip "Borrador" + botón Anular; sin botón Subsanar', async () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('borrador', ['anulado', 'preparado']));
     render(<EstadoAcciones instanceId="inst-1" />);
 
     expect(await screen.findByText('Borrador')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Anular trámite' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Volver a borrador' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subsanar' })).not.toBeInTheDocument();
   });
 
-  it('rechazado: ofrece Anular y Volver a borrador', async () => {
-    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['borrador', 'anulado']));
+  it('rechazado: ofrece Anular y Subsanar (subsanación por el operador, sin volver a borrador)', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
     render(<EstadoAcciones instanceId="inst-1" />);
 
     expect(await screen.findByText('Rechazado')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Anular trámite' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Volver a borrador' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Subsanar' })).toBeInTheDocument();
+    // La subsanación reemplaza a "Volver a borrador": ya no se ofrece esa vuelta.
+    expect(screen.queryByRole('button', { name: 'Volver a borrador' })).not.toBeInTheDocument();
+  });
+
+  it('subsanar: acción DIRECTA — transiciona a subsanacion sin pedir motivo, con motivo por defecto', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
+    mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'subsanacion' });
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+    render(<EstadoAcciones instanceId="inst-1" onChanged={onChanged} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
+
+    // No abre el panel de motivo: transiciona directo con el motivo por defecto por debajo.
+    await waitFor(() =>
+      expect(mocks.transitionInstance).toHaveBeenCalledWith(
+        'inst-1',
+        'subsanacion',
+        'Subsanación iniciada por el operador',
+      ),
+    );
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('button', { name: /Confirmar: Subsanar/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('estado final (aprobado, sin transiciones): no pinta ningún botón de acción', async () => {
@@ -61,7 +86,7 @@ describe('EstadoAcciones — el backend manda', () => {
 
     expect(await screen.findByText('Aprobado')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Anular trámite' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Volver a borrador' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subsanar' })).not.toBeInTheDocument();
   });
 
   it('anular sin motivo NO llama al API y muestra el error; con motivo transiciona y notifica', async () => {
@@ -90,16 +115,16 @@ describe('EstadoAcciones — el backend manda', () => {
   });
 
   it('un error del API (p. ej. conflicto de concurrencia) se muestra como alerta', async () => {
-    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['borrador', 'anulado']));
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
     mocks.transitionInstance.mockRejectedValue(
       new Error('El trámite fue modificado por otro usuario, recarga e intenta de nuevo.'),
     );
     const user = userEvent.setup();
     render(<EstadoAcciones instanceId="inst-1" />);
 
-    await user.click(await screen.findByRole('button', { name: 'Volver a borrador' }));
-    await user.click(screen.getByRole('button', { name: /Confirmar: Volver a borrador/ }));
+    await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
 
+    // Acción directa: el error del API se muestra sin pasar por el panel de confirmación.
     expect(await screen.findByRole('alert')).toHaveTextContent(/modificado por otro usuario/i);
   });
 });

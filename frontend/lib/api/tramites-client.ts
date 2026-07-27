@@ -25,6 +25,7 @@ import type {
   GenerarConsolidadoResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
+  IdentityValidationAlertsResponse,
   PrendaData,
   PrendaInput,
   InstanceSummary,
@@ -1115,6 +1116,20 @@ export const tramitesClient = {
       '/api/v1/tramites/identity-validation/stuck/requeue-all',
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  // HU #10875 (AC1/AC2) — alertas/recordatorios de validación de identidad de UN trámite: mismo
+  // clasificador del backend (HU #10873) acotado a las partes de esta instancia. Entrega POR PULL (sin
+  // campana ni push); alimenta el panel consolidado de identidad del detalle del trámite.
+  getInstanceIdentityValidationAlerts: async (
+    instanceId: string,
+    tenantId?: string,
+  ): Promise<IdentityValidationAlertsResponse> => {
+    const res = await request<IdentityValidationAlertsResponse>(
+      `/api/v1/tramites/instances/${instanceId}/identity-validation/alerts`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return res ?? { alerts: [], total: 0 };
+  },
 
   // GET estado biométrico completo (validaciones + proveedor configurado). El `provider` permite que
   // el botón "Validar identidad" sea provider-aware (kyverum → validación real; mock → simular).

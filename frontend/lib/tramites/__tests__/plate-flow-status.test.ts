@@ -16,7 +16,8 @@ describe('plate-flow status (HU #10785)', () => {
   it('preasignado/asignado NO son estados del trámite', () => {
     expect(ESTADOS_TRAMITE).not.toContain('preasignado' as never);
     expect(ESTADOS_TRAMITE).not.toContain('asignado' as never);
-    expect(ESTADOS_TRAMITE).toHaveLength(6);
+    // HU #10870/#10874 — 'subsanacion' se sumó a los 6 estados de negocio de N 03/ADR-0022.
+    expect(ESTADOS_TRAMITE).toHaveLength(7);
   });
 
   // AC1/AC2 — vocabulario del sub-estado.

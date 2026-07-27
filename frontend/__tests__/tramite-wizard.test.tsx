@@ -54,6 +54,9 @@ const mocks = vi.hoisted(() => ({
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
   ensureIdentity: vi.fn(),
+  // HU #10875 — panel consolidado de identidad (IdentityStatusPanel), montado por el wizard siempre
+  // que hay instanceId.
+  getInstanceIdentityValidationAlerts: vi.fn(),
   // dependencias del paso FUR (FirmaFurStep)
   listBiometric: vi.fn(),
   listFirmas: vi.fn(),
@@ -218,6 +221,7 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
+  mocks.getInstanceIdentityValidationAlerts.mockResolvedValue({ alerts: [], total: 0 });
   mocks.simulateBiometric.mockResolvedValue({ id: 'bio-1', status: 'aprobado' });
   mocks.iniciarBiometric.mockResolvedValue({ validation: { id: 'bio-1', status: 'en_proceso' } });
   mocks.listBiometric.mockResolvedValue([]);

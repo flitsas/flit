@@ -185,6 +185,43 @@ internal static class BiometricaEndpoints
             return Results.Ok(new { requeued = count });
         }).WithName("RequeueAllStuckIdentityValidations");
 
+        // GET alertas/recordatorios de validación de identidad del TENANT (HU #10873, AC1/AC2): clasifica
+        // cada validación en rechazada|expirada|por_vencer|atascada y marca la que amerita recordatorio de
+        // reenvío (pendiente|por_vencer). Entrega POR PULL — consumida por el submódulo de Validaciones
+        // (HU #10875); NO hay push/notificación in-app (ver nota de alcance en el handler).
+        group.MapGet("/identity-validation/alerts", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListIdentityValidationAlertsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleTenantAsync(tenantId.Value, ct);
+            return Results.Ok(result);
+        })
+        .WithName("ListIdentityValidationAlerts")
+        .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
+
+        // GET alertas/recordatorios de validación de identidad de UN trámite puntual (HU #10873): misma
+        // clasificación que el endpoint del tenant, acotada a las partes de esta instancia.
+        group.MapGet("/instances/{id:guid}/identity-validation/alerts", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListIdentityValidationAlertsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleInstanceAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        })
+        .WithName("ListProcedureInstanceIdentityValidationAlerts")
+        .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
+
         // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.
         group.MapPost("/instances/{id:guid}/biometric/simulate", async (
             Guid id,
