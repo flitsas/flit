@@ -106,6 +106,30 @@ public static class IctPayloadNormalizer
         }
     }
 
+    /// <summary>
+    /// Normaliza un NIT para compararlo de forma TOLERANTE entre el payload y el token: descarta el
+    /// dígito de verificación (lo que va tras el primer '-', p. ej. <c>"900123456-1" → "900123456"</c>) y
+    /// los separadores de miles (puntos y espacios). Así <c>"900123456"</c>, <c>"900.123.456"</c> y
+    /// <c>"900123456-1"</c> se consideran la MISMA compañía. Devuelve solo los dígitos de la base
+    /// (<c>"900.123.456-1" → "900123456"</c>). Cadena vacía/espacios → <c>string.Empty</c>.
+    /// </summary>
+    public static string NormalizeNit(string? nit)
+    {
+        if (string.IsNullOrWhiteSpace(nit))
+        {
+            return string.Empty;
+        }
+
+        var value = nit.Trim();
+        var dashIndex = value.IndexOf('-');
+        if (dashIndex >= 0)
+        {
+            value = value[..dashIndex];
+        }
+
+        return new string(value.Where(char.IsAsciiDigit).ToArray());
+    }
+
     /// <summary>Clave de deduplicación intra-lote por tipo de trámite (v1 findDuplicatesInBatch, extendida a 5-16).</summary>
     public static string DedupKey(RegisterRowInput row)
     {

@@ -49,8 +49,13 @@ public sealed class RegisterIctBatchHandler(
             var flit = row.ManagerIdTransaction ?? string.Empty;
 
             // Multi-tenant: el company_manager_document del payload debe coincidir con el NIT del token.
+            // La comparación es TOLERANTE al formato (ignora puntos, espacios y el dígito de verificación
+            // tras '-'): "900123456", "900.123.456" y "900123456-1" cuentan como la misma compañía.
             if (!string.IsNullOrWhiteSpace(row.CompanyManagerDocument)
-                && !string.Equals(row.CompanyManagerDocument.Trim(), currentTenant.CompanyNit, StringComparison.Ordinal))
+                && !string.Equals(
+                    IctPayloadNormalizer.NormalizeNit(row.CompanyManagerDocument),
+                    IctPayloadNormalizer.NormalizeNit(currentTenant.CompanyNit),
+                    StringComparison.Ordinal))
             {
                 details.Add(new RegisterDetail(plateLabel, 2,
                     "company_manager_document no corresponde a la compañía autenticada", flit));

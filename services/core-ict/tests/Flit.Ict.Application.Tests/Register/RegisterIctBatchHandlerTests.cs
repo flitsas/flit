@@ -64,6 +64,36 @@ public sealed class RegisterIctBatchHandlerTests
         result.Detail[1].Status.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData("901698038")]      // exacto
+    [InlineData("901698038-3")]    // con dígito de verificación
+    [InlineData("901.698.038")]    // con separadores de miles
+    [InlineData("901.698.038-3")]  // formato completo
+    [InlineData(" 901698038 ")]    // con espacios
+    public async Task Row_with_same_nit_in_any_format_is_accepted(string doc)
+    {
+        // El token es NIT "901698038" (sin dígito de verificación); el payload puede traerlo formateado.
+        var rows = new List<RegisterRowInput> { ValidTraspaso("FMT001", doc: doc) };
+
+        var (result, error) = await CreateHandler().HandleAsync(new RegisterBatchCommand(rows), Ct);
+
+        error.Should().BeNull();
+        result!.TotalRowsProcessed.Should().Be(1);
+        result.Detail[0].Status.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("900123456-1", "900123456")]
+    [InlineData("900.123.456-1", "900123456")]
+    [InlineData("  900123456  ", "900123456")]
+    [InlineData("901698038", "901698038")]
+    [InlineData(null, "")]
+    [InlineData("   ", "")]
+    public void NormalizeNit_drops_verification_digit_and_separators(string? input, string expected)
+    {
+        IctPayloadNormalizer.NormalizeNit(input).Should().Be(expected);
+    }
+
     [Fact]
     public async Task Intra_batch_duplicate_by_plate_is_flagged()
     {
