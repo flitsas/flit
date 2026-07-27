@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   saveActors: vi.fn(),
   ensureIdentity: vi.fn(),
   getBiometricState: vi.fn(),
+  // HU #10875 — panel consolidado de identidad (IdentityStatusPanel), montado por el wizard siempre
+  // que hay instanceId.
+  getInstanceIdentityValidationAlerts: vi.fn(),
   simulateBiometric: vi.fn(),
   iniciarBiometric: vi.fn(),
   getConsultationConfig: vi.fn(),
@@ -89,6 +92,7 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.ensureIdentity.mockResolvedValue({ outcome: 'ya_vigente' });
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
+  mocks.getInstanceIdentityValidationAlerts.mockResolvedValue({ alerts: [], total: 0 });
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.getPreflight.mockResolvedValue(null);
   mocks.listTransitOffices.mockResolvedValue([]);

@@ -707,4 +707,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct) =>
         db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
+
+    // HU #10872 (AC1) — field values lean para callers que transicionan a subsanación sin cargar el
+    // grafo completo del wizard (p. ej. ConsultarEstadoQuipuxHandler).
+    public async Task<IReadOnlyList<ProcedureInstanceFieldValue>> GetFieldValuesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct) =>
+        await db.ProcedureInstanceFieldValues.AsNoTracking()
+            .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId)
+            .ToListAsync(ct);
+
+    // HU #10872 (AC1) — snapshot baseline (metadata del hito MÁS RECIENTE a 'subsanacion') para el
+    // diff que TramiteLifecycleService computa al re-radicar. Mismo patrón de orden que
+    // GetStatusHistoryPageAsync (changed_at desc, desempate por Id).
+    public Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstanceStatusHistories.AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == instanceId
+                && h.TenantId == tenantId
+                && h.ToStatus == TramiteEstado.Subsanacion)
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .Select(h => h.Metadata)
+            .FirstOrDefaultAsync(ct);
 }

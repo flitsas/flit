@@ -22,8 +22,12 @@ public sealed class StateMachineTests
         (TramiteEstado.Preparado, TramiteEstado.Entregado),
         (TramiteEstado.Entregado, TramiteEstado.Aprobado),
         (TramiteEstado.Entregado, TramiteEstado.Rechazado),
+        (TramiteEstado.Entregado, TramiteEstado.Subsanacion),
         (TramiteEstado.Rechazado, TramiteEstado.Borrador),
         (TramiteEstado.Rechazado, TramiteEstado.Anulado),
+        (TramiteEstado.Rechazado, TramiteEstado.Subsanacion),
+        // HU #10870 (AC2) — re-radicar: subsanacion → entregado, sin pasar por borrador/preparado.
+        (TramiteEstado.Subsanacion, TramiteEstado.Entregado),
     ];
 
     [Theory]
@@ -32,8 +36,11 @@ public sealed class StateMachineTests
     [InlineData("preparado", "entregado")]
     [InlineData("entregado", "aprobado")]
     [InlineData("entregado", "rechazado")]
+    [InlineData("entregado", "subsanacion")]
     [InlineData("rechazado", "borrador")]
     [InlineData("rechazado", "anulado")]
+    [InlineData("rechazado", "subsanacion")]
+    [InlineData("subsanacion", "entregado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {
         TramiteStateMachine.IsValidTransition(from, to).Should().BeTrue();
@@ -92,8 +99,9 @@ public sealed class StateMachineTests
     [Fact]
     public void Negocio_EsValidoReconoceLosEstadosDelCicloDeVida()
     {
-        // 6 estados N 03 (la ruta de placa NO añade estados de trámite — HU #10785).
-        TramiteEstado.Todos.Should().HaveCount(6);
+        // 7 estados N 03 (la ruta de placa NO añade estados de trámite — HU #10785; subsanacion se
+        // suma en HU #10870 sin bifurcar la máquina, solo reabre la edición post-envío).
+        TramiteEstado.Todos.Should().HaveCount(7);
         foreach (var estado in TramiteEstado.Todos)
             TramiteEstado.EsValido(estado).Should().BeTrue();
         TramiteEstado.EsValido("draft").Should().BeFalse();

@@ -15,7 +15,10 @@ export type InstanceStatus =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
+  // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
+  | 'subsanacion';
 
 /**
  * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
@@ -165,6 +168,15 @@ export interface StatusHistory {
   toStatus: InstanceStatus;
   changedAt: string;
   reason: string | null;
+  /**
+   * HU #10871/#10872 (backend) — observación de subsanación serializada como JSON en
+   * `procedure_instance_status_history.metadata`. `GetProcedureInstanceHandler.ToDetail`
+   * (commit f3b64f5e) la expone filtrada a `{motivo, items:[{campo,detalle}]}`; por
+   * seguridad/Habeas Data NO incluye `fieldSnapshot` ni los tenant ids. Llega `null` en
+   * entradas sin observación (p. ej. aprobar/rechazar); `lib/tramites/subsanacion.ts` degrada
+   * entonces al `reason` plano (ver SubsanacionPanel).
+   */
+  metadata?: string | null;
 }
 
 export interface Actor {
@@ -957,6 +969,42 @@ export interface StuckIdentityValidationsResponse {
   stuck: StuckIdentityValidation[];
   total: number;
   maxDeliveryAttempts: number;
+}
+
+/**
+ * Categoría de alerta ACCIONABLE de una validación de identidad (HU #10873/#10875). Espejo de
+ * `IdentityValidationAlertKinds` del backend. `null` (fuera de este union) = sin alerta, solo puede
+ * traer recordatorio de reenvío (`RequiresResendReminder`).
+ */
+export type IdentityValidationAlertKind = 'rechazada' | 'expirada' | 'por_vencer' | 'atascada';
+
+/**
+ * Fila de alerta/recordatorio de validación de identidad (HU #10873, AC1/AC2). Espejo de
+ * `IdentityValidationAlertDto`. Consumida por la vista consolidada del trámite (HU #10875, POR PULL —
+ * sin campana ni push).
+ */
+export interface IdentityValidationAlert {
+  id: string;
+  instanceId: string;
+  referenceNumber: string;
+  recipientUserId: string;
+  // string (no BiometricParte): el DTO del backend no acota el rol a comprador/vendedor — futuro-proof.
+  partyRole: string | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+  status: BiometricEstado;
+  alertKind: IdentityValidationAlertKind | null;
+  requiresResendReminder: boolean;
+  daysRemainingVigencia: number | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** Respuesta de GET .../identity-validation/alerts (tenant o por instancia). Espejo de IdentityValidationAlertsResponse. */
+export interface IdentityValidationAlertsResponse {
+  alerts: IdentityValidationAlert[];
+  total: number;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

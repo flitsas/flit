@@ -67,6 +67,21 @@ public interface IOtClientProcedureRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// HU #10871 (AC1) — observación subsanable del OT: transiciona <c>entregado → subsanacion</c>
+    /// (en vez de <c>entregado → rechazado</c>) con un checklist HÍBRIDO (motivo + ítems) persistido
+    /// en <c>procedure_instance_status_history.metadata</c>. Misma máquina de estados (N 03 /
+    /// HU #10870: <c>entregado</c> ya admite <c>subsanacion</c> directamente).
+    /// </summary>
+    Task<OtClientProcedure?> ObserveAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        IReadOnlyList<OtProcedureObservationItem> items,
+        Guid? observedBy,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// HU #10654 / #10800 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c>
     /// (Flujo B): reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la
     /// registra como rango ad-hoc de 1 placa), la escribe en el trámite y avanza el sub-estado a

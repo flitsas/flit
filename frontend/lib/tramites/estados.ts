@@ -10,7 +10,9 @@ export type EstadoTramite =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // HU #10870/#10874 — reabre la edición de un entregado/rechazado sin volver a borrador.
+  | 'subsanacion';
 
 export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'borrador',
@@ -19,6 +21,7 @@ export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'entregado',
   'aprobado',
   'rechazado',
+  'subsanacion',
 ] as const;
 
 /** Estados finales (RF04): sin transiciones posteriores ni edición. */
@@ -31,6 +34,7 @@ export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   entregado: 'Entregado',
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
+  subsanacion: 'En subsanación',
 };
 
 export interface EstadoChipStyle {
@@ -70,6 +74,13 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     bg: 'rgba(100,116,139,0.12)',
     color: '#475569',
     border: 'rgba(100,116,139,0.3)',
+  },
+  // Mismo ámbar de aviso (#F9AC00) que usan los banners de "requiere atención" del wizard
+  // (draftFinalized, blockers): consistente con el resto de la UI de trámites.
+  subsanacion: {
+    bg: 'rgba(249,172,0,0.12)',
+    color: '#B45309',
+    border: 'rgba(249,172,0,0.3)',
   },
 };
 

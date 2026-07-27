@@ -323,9 +323,12 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado|preasignado|asignado) + reason
-        // (obligatorio para anulado/rechazado). preasignado/asignado = ruta de preasignación de placa
-        // (Feature #10587). Errores: ProblemDetails con title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado|subsanacion|preasignado|asignado)
+        // + reason (obligatorio para anulado/rechazado). subsanacion (HU #10870): entregado/rechazado
+        // → subsanacion reabre la edición sin volver a borrador; el re-radicado (subsanacion→entregado)
+        // usa este mismo endpoint o POST /submit (ambos delegan en TramiteLifecycleService). preasignado/
+        // asignado = ruta de preasignación de placa (Feature #10587). Errores: ProblemDetails con
+        // title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
