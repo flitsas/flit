@@ -279,13 +279,31 @@ export interface ProcedureActor {
   /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
   representanteLegal?: RepresentanteLegal;
   /**
-   * HU #10885 (Feature #10862, CF-04, Habeas Data) — autorización explícita de esta persona para
-   * que sus datos se reutilicen en futuros trámites del mismo tenant (gate de
-   * `tramites.person_data_consents`, ver ADR-0031). Se envía en el PUT de actores; `true` → el
-   * backend registra el consentimiento (`AutorizaReutilizacionDatos`). Ausente/`false` ⇒ no se
-   * toca ningún consentimiento previo (fail-safe: nunca degrada un `granted` existente).
+   * @deprecated HU #10956 revierte el check de consentimiento Habeas Data de HU #10885: el
+   * formulario ya NO ofrece esta opción (la identidad de un actor se consulta SIEMPRE en vivo,
+   * ver ADR-0031 actualizado). El campo se mantiene tipado solo porque el backend puede devolver
+   * actores persistidos ANTES de esta HU con un valor previo en `GET actors`; `normalizeActors`
+   * lo descarta explícitamente antes de cada guardado — nunca vuelve a viajar en el PUT.
    */
   autorizaReutilizacionDatos?: boolean;
+}
+
+// ── Precarga de datos de CONTACTO ya conocidos (HU #10956, revierte parcialmente HU #10885) ──────
+// GET /api/v1/tramites/actors/contact-lookup?tipoDocumento=..&numeroDocumento=..  (header
+// X-Tenant-Id). Se dispara tras resolver la IDENTIDAD del actor en vivo (RUNT/RUES/directorio):
+// NUNCA incluye nombre ni documento (esos siempre vienen de esa consulta) ni requiere consentimiento
+// previo — el contacto es un dato que la propia compañía ya capturó, no una consulta a un tercero.
+// Sin antecedentes, responde 200 con los 4 campos en null (AC4), nunca 404.
+export interface ActorContactLookupInput {
+  tipoDocumento: ActorDocumentType;
+  numeroDocumento: string;
+}
+
+export interface ActorContactLookupResult {
+  ciudad: string | null;
+  email: string | null;
+  direccion: string | null;
+  telefono: string | null;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */

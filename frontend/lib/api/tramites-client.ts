@@ -1,6 +1,8 @@
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
   AceptarConsentimientoResult,
+  ActorContactLookupInput,
+  ActorContactLookupResult,
   ActorsResponse,
   AttachmentsResponse,
   BiometriaPublicView,
@@ -534,6 +536,20 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
         body: JSON.stringify(input),
       },
+    ),
+
+  // HU #10956 (revierte parcialmente HU #10885/#10878, AC2/AC3/AC4/AC5) — precarga SOLO datos de
+  // CONTACTO (ciudad/correo/dirección/teléfono) de una persona ya conocida en el tenant, tras
+  // resolver su identidad en vivo (RUNT/RUES/directorio). No es un lookup por instancia (no lleva
+  // `instanceId` en la ruta): el actor más reciente de esa persona puede venir de CUALQUIER trámite
+  // del tenant. Siempre 200; sin antecedentes responde los 4 campos en null (AC4), nunca 404.
+  actorContactLookup: (
+    input: ActorContactLookupInput,
+    tenantId?: string,
+  ) =>
+    request<ActorContactLookupResult>(
+      `/api/v1/tramites/actors/contact-lookup?tipoDocumento=${encodeURIComponent(input.tipoDocumento)}&numeroDocumento=${encodeURIComponent(input.numeroDocumento)}`,
+      { headers: tenantHeader(tenantId) },
     ),
 
   // HU #10903/#10906 — escrituras activas y VIGENTES del tenant, para el collapse del primer paso del
