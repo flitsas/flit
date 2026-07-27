@@ -324,12 +324,14 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
 
     // Guarda para la ÚNICA compañía fija (alta → editingId null) y refresca el detalle.
     await waitFor(() => expect(saveDeed).toHaveBeenCalledTimes(1));
-    const [tenantArg, editingArg, inputArg] = vi.mocked(saveDeed).mock.calls[0];
+    const [tenantArg, editingArg, inputArg, representativeArg] = vi.mocked(saveDeed).mock.calls[0];
     expect(tenantArg).toBe(TENANT);
     expect(editingArg).toBeNull();
     expect(inputArg.companyIds).toEqual(["co-1"]);
     expect(inputArg.description).toBe("Poder general 2026");
     expect(inputArg.file).toBe(file);
+    // Feature #10929: en el alta la escritura se asocia al representante del detalle (item.id).
+    expect(representativeArg).toBe("rep-1");
     // El detalle se recarga tras guardar (fetchLegalRepresentative se vuelve a llamar).
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(2));
   });

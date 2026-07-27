@@ -132,6 +132,7 @@ public static class AdminDeedsEndpoints
                     VigenciaHasta = request.VigenciaHasta,
                     Sha256 = request.Sha256,
                     RepresentedCompanyIds = request.RepresentedCompanyIds,
+                    RepresentativeId = request.RepresentativeId,
                     CreatedBy = ResolveUserId(httpContext.User),
                 },
                 cancellationToken)

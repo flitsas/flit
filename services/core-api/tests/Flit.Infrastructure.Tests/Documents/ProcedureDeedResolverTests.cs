@@ -19,13 +19,33 @@ public sealed class ProcedureDeedResolverTests
 {
     private static readonly Guid Tenant = Guid.Parse("77777777-0000-4000-8000-0000000000d1");
 
-    private static ProcedureInstanceActor Actor(string rol, string docType, string doc) =>
-        new() { Id = Guid.NewGuid(), TenantId = Tenant, ActorType = rol, DocumentType = docType, DocumentNumber = doc, FullName = "ACME" };
+    private static ProcedureInstanceActor Actor(
+        string rol, string docType, string doc, string? personType = null, string? metadata = null) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ActorType = rol,
+            DocumentType = docType,
+            DocumentNumber = doc,
+            FullName = "ACME",
+            PersonType = personType,
+            Metadata = metadata ?? "{}",
+        };
+
+    /// <summary>Actor persona jurídica cuyo representante legal (embebido en metadata) valida identidad.</summary>
+    private static ProcedureInstanceActor JuridicalActor(string rol, string nit, string rlDocType, string rlDoc) =>
+        Actor(
+            rol, "NIT", nit, "juridical",
+            $"{{\"representanteLegal\":{{\"tipoDocumento\":\"{rlDocType}\",\"numeroDocumento\":\"{rlDoc}\"}}}}");
 
     private static RepresentedCompanyItem Company(Guid id, string nit) =>
         new() { Id = id, TenantId = Tenant, DocumentType = "NIT", DocumentNumber = nit, Name = "ACME S.A.S." };
 
-    private static DeedItem Deed(Guid id, string path, DateOnly hasta, params Guid[] companies) =>
+    private static LegalRepresentativeItem Representative(Guid id, string docType, string doc) =>
+        new() { Id = id, TenantId = Tenant, DocumentType = docType, DocumentNumber = doc, Name = "RL" };
+
+    private static DeedItem Deed(Guid id, string path, DateOnly hasta, Guid[] companies, Guid? representativeId = null) =>
         new()
         {
             Id = id,
@@ -36,6 +56,7 @@ public sealed class ProcedureDeedResolverTests
             VigenciaDesde = new DateOnly(2026, 1, 1),
             VigenciaHasta = hasta,
             IsActive = true,
+            RepresentativeId = representativeId,
             RepresentedCompanyIds = companies,
         };
 
@@ -44,11 +65,11 @@ public sealed class ProcedureDeedResolverTests
     {
         var coVend = Guid.NewGuid();
         var coComp = Guid.NewGuid();
-        var deedVend = Deed(Guid.NewGuid(), "path/vend.pdf", new DateOnly(2026, 12, 31), coVend);
+        var deedVend = Deed(Guid.NewGuid(), "path/vend.pdf", new DateOnly(2026, 12, 31), [coVend]);
         // La compañía compradora tiene DOS vigentes: HU #10936 gana la MÁS PRÓXIMA A VENCER (2026 < 2027).
         var deedCompId = Guid.NewGuid();
-        var deedCompCorta = Deed(deedCompId, "path/comp-corta.pdf", new DateOnly(2026, 6, 30), coComp);
-        var deedCompLarga = Deed(Guid.NewGuid(), "path/comp-larga.pdf", new DateOnly(2027, 6, 30), coComp);
+        var deedCompCorta = Deed(deedCompId, "path/comp-corta.pdf", new DateOnly(2026, 6, 30), [coComp]);
+        var deedCompLarga = Deed(Guid.NewGuid(), "path/comp-larga.pdf", new DateOnly(2027, 6, 30), [coComp]);
 
         var reader = new FakeDeedReader([deedVend, deedCompLarga, deedCompCorta]);
         var reps = new FakeRepReader(new()
@@ -94,9 +115,9 @@ public sealed class ProcedureDeedResolverTests
         var masProxima = Guid.NewGuid();
         var deeds = new[]
         {
-            Deed(Guid.NewGuid(), "path/c.pdf", new DateOnly(2027, 12, 31), co),
-            Deed(masProxima, "path/a.pdf", new DateOnly(2026, 3, 15), co),
-            Deed(Guid.NewGuid(), "path/b.pdf", new DateOnly(2026, 9, 30), co),
+            Deed(Guid.NewGuid(), "path/c.pdf", new DateOnly(2027, 12, 31), [co]),
+            Deed(masProxima, "path/a.pdf", new DateOnly(2026, 3, 15), [co]),
+            Deed(Guid.NewGuid(), "path/b.pdf", new DateOnly(2026, 9, 30), [co]),
         };
         var reader = new FakeDeedReader(deeds);
         var reps = new FakeRepReader(new() { ["900000000-3"] = Company(co, "900000000-3") });
@@ -127,7 +148,7 @@ public sealed class ProcedureDeedResolverTests
     public async Task Resolve_CompanyNotInDirectory_Skips()
     {
         var co = Guid.NewGuid();
-        var reader = new FakeDeedReader([Deed(Guid.NewGuid(), "p.pdf", new DateOnly(2026, 12, 31), co)]);
+        var reader = new FakeDeedReader([Deed(Guid.NewGuid(), "p.pdf", new DateOnly(2026, 12, 31), [co])]);
         var resolver = new ProcedureDeedResolver(
             reader, new FakeRepReader(new()), new FakeStorage(new()), TimeProvider.System);
 
@@ -143,12 +164,60 @@ public sealed class ProcedureDeedResolverTests
         var coVend = Guid.NewGuid();
         var otra = Guid.NewGuid();
         // Hay escrituras vigentes, pero NINGUNA cubre la compañía del actor.
-        var reader = new FakeDeedReader([Deed(Guid.NewGuid(), "p.pdf", new DateOnly(2026, 12, 31), otra)]);
+        var reader = new FakeDeedReader([Deed(Guid.NewGuid(), "p.pdf", new DateOnly(2026, 12, 31), [otra])]);
         var reps = new FakeRepReader(new() { ["900000000-1"] = Company(coVend, "900000000-1") });
         var resolver = new ProcedureDeedResolver(reader, reps, new FakeStorage(new()), TimeProvider.System);
 
         var result = await resolver.ResolveForActorsAsync(
             Tenant, [Actor("vendedor", "NIT", "900000000-1")], CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Resolve_TwoDeedsSameCompanyDifferentRepresentatives_UsesSelectedRepresentativeDeed()
+    {
+        // Feature #10929 — dos escrituras VIGENTES de la MISMA compañía pero de representantes distintos.
+        // El trámite del representante A (RL embebido en metadata) debe usar la escritura de A, aunque la
+        // de B esté más próxima a vencer (el filtro por representante manda sobre el colapso por vigencia).
+        var co = Guid.NewGuid();
+        var repA = Guid.NewGuid();
+        var repB = Guid.NewGuid();
+        var deedA = Deed(Guid.NewGuid(), "path/a.pdf", new DateOnly(2026, 12, 31), [co], repA);
+        var deedB = Deed(Guid.NewGuid(), "path/b.pdf", new DateOnly(2026, 6, 30), [co], repB); // más próxima
+
+        var reader = new FakeDeedReader([deedA, deedB]);
+        var reps = new FakeRepReader(
+            new() { ["900000000-1"] = Company(co, "900000000-1") },
+            new() { ["111"] = Representative(repA, "CC", "111") });
+        var storage = new FakeStorage(new() { ["path/a.pdf"] = Encoding.UTF8.GetBytes("%PDF-A") });
+        var resolver = new ProcedureDeedResolver(reader, reps, storage, TimeProvider.System);
+
+        var result = await resolver.ResolveForActorsAsync(
+            Tenant, [JuridicalActor("vendedor", "900000000-1", "CC", "111")], CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].DeedId.Should().Be(deedA.Id);
+        Encoding.UTF8.GetString(result[0].Content).Should().Be("%PDF-A");
+    }
+
+    [Fact]
+    public async Task Resolve_RepresentativeResolved_LegacyDeedWithoutRepresentative_IsSkipped()
+    {
+        // Feature #10929 — si el representante se resuelve, las escrituras LEGADAS (RepresentativeId null)
+        // NO se usan: pertenecen a la empresa, no al representante. Sin escritura del representante ⇒ skip.
+        var co = Guid.NewGuid();
+        var repA = Guid.NewGuid();
+        var legacy = Deed(Guid.NewGuid(), "path/legacy.pdf", new DateOnly(2026, 12, 31), [co]); // sin representante
+
+        var reader = new FakeDeedReader([legacy]);
+        var reps = new FakeRepReader(
+            new() { ["900000000-1"] = Company(co, "900000000-1") },
+            new() { ["111"] = Representative(repA, "CC", "111") });
+        var resolver = new ProcedureDeedResolver(reader, reps, new FakeStorage(new()), TimeProvider.System);
+
+        var result = await resolver.ResolveForActorsAsync(
+            Tenant, [JuridicalActor("vendedor", "900000000-1", "CC", "111")], CancellationToken.None);
 
         result.Should().BeEmpty();
     }
@@ -167,10 +236,17 @@ public sealed class ProcedureDeedResolverTests
             Task.FromResult(vigentes);
     }
 
-    private sealed class FakeRepReader(Dictionary<string, RepresentedCompanyItem> byNit) : ILegalRepresentativeReader
+    private sealed class FakeRepReader(
+        Dictionary<string, RepresentedCompanyItem> byNit,
+        Dictionary<string, LegalRepresentativeItem>? byDoc = null) : ILegalRepresentativeReader
     {
         public Task<RepresentedCompanyItem?> FindRepresentedCompanyByNitAsync(Guid tenantId, string documentNumber, CancellationToken ct = default) =>
             Task.FromResult(byNit.TryGetValue(documentNumber, out var c) ? c : null);
+
+        // Feature #10929: el resolutor resuelve el representante por el documento del RL. Sin match
+        // (byDoc null o clave ausente) → null → compat: el resolutor filtra solo por compañía.
+        public Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            Task.FromResult(byDoc is not null && byDoc.TryGetValue(documentNumber, out var r) ? r : null);
 
         public Task<PagedResult<LegalRepresentativeItem>> ListPagedAsync(Guid tenantId, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -181,8 +257,6 @@ public sealed class ProcedureDeedResolverTests
         public Task<LegalRepresentativeItem?> FindActiveByCompanyNitAsync(Guid tenantId, string companyNit, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<IReadOnlyList<LegalRepresentativeItem>> ListActiveByCompanyNitAsync(Guid tenantId, string companyNit, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-        public Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(Guid tenantId, CancellationToken ct = default) =>
             throw new NotSupportedException();

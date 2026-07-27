@@ -138,6 +138,13 @@ public sealed class DeedItem
     public DateOnly VigenciaHasta { get; init; }
     public bool IsActive { get; init; }
 
+    /// <summary>
+    /// Representante que asoció la escritura (Feature #10929). <c>null</c> en escrituras legadas
+    /// (asociadas solo a la empresa). El detalle del representante filtra por este id; el trámite usa la
+    /// escritura del representante seleccionado.
+    /// </summary>
+    public Guid? RepresentativeId { get; init; }
+
     /// <summary>Ids de las compañías representadas a las que aplica la escritura (puente M:N).</summary>
     public IReadOnlyList<Guid> RepresentedCompanyIds { get; init; } = [];
 

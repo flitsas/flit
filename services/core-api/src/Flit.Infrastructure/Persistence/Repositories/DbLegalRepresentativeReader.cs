@@ -340,11 +340,13 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             .GroupBy(p => p.RepresentativeId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(x => x.ProcedureTypeId)]);
 
-        // Historial de escrituras por compañía (solo en el detalle). Una escritura puede cubrir varias
-        // compañías (M:N) → aparece en cada una. Se ordena por VigenciaHasta desc y se anota el estado
-        // contra "hoy" en Colombia. Dos consultas en lote (puente + escrituras), sin N+1.
+        // Historial de escrituras por compañía (solo en el detalle, que proyecta un ÚNICO representante:
+        // rows[0]). Feature #10929: la escritura es DEL representante, así que se filtran a las que ÉL
+        // asoció (RepresentativeId == rows[0].Id); las legadas (RepresentativeId null) NO aparecen en el
+        // detalle de ningún representante. Una escritura puede cubrir varias compañías (M:N) → aparece en
+        // cada una. Se ordena por VigenciaHasta desc y se anota el estado contra "hoy" en Colombia.
         IReadOnlyDictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>> deedsByCompany = includeDeeds
-            ? await LoadDeedsByCompanyAsync(rows[0].TenantId, companyIds, cancellationToken).ConfigureAwait(false)
+            ? await LoadDeedsByCompanyAsync(rows[0].TenantId, rows[0].Id, companyIds, cancellationToken).ConfigureAwait(false)
             : new Dictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>();
 
         return [.. rows.Select(r =>
@@ -399,14 +401,17 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
     }
 
     /// <summary>
-    /// Carga el historial de escrituras (activas y vencidas) de un conjunto de compañías del tenant y lo
-    /// agrupa por compañía (HU #10933). Cruza <c>company_deed_companies</c> → <c>company_deeds</c> en dos
-    /// consultas en lote. Cada escritura se anota con su estado contra "hoy" en Colombia (UTC-5) y las
-    /// listas quedan ordenadas por <c>VigenciaHasta</c> descendente. Una escritura compartida por varias
-    /// compañías aparece en la lista de cada una.
+    /// Carga el historial de escrituras (activas y vencidas) de un conjunto de compañías del tenant,
+    /// filtradas a las que asoció el representante <paramref name="representativeId"/> (Feature #10929), y
+    /// lo agrupa por compañía. Cruza <c>company_deed_companies</c> → <c>company_deeds</c> en dos consultas
+    /// en lote. Las escrituras legadas (<c>representative_id</c> null) NO se incluyen: pertenecen a la
+    /// empresa, no a un representante. Cada escritura se anota con su estado contra "hoy" en Colombia
+    /// (UTC-5) y las listas quedan ordenadas por <c>VigenciaHasta</c> descendente. Una escritura del
+    /// representante compartida por varias compañías aparece en la lista de cada una.
     /// </summary>
     private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>> LoadDeedsByCompanyAsync(
         Guid tenantId,
+        Guid representativeId,
         List<Guid> companyIds,
         CancellationToken cancellationToken)
     {
@@ -430,7 +435,9 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var deedIds = bridgeRows.Select(b => b.DeedId).Distinct().ToList();
         var deeds = await _context.CompanyDeeds
             .AsNoTracking()
-            .Where(d => d.TenantId == tenantId && deedIds.Contains(d.Id))
+            .Where(d => d.TenantId == tenantId
+                && deedIds.Contains(d.Id)
+                && d.RepresentativeId == representativeId)
             .ToDictionaryAsync(d => d.Id, cancellationToken)
             .ConfigureAwait(false);
 

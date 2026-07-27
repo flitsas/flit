@@ -40,9 +40,9 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         var companyA = await CompanyIdAsync(ctx, repId, NitA);
 
         // Historial de la compañía A: vigente, vencida y futura.
-        var vigente = await SeedDeedAsync(ctx, "Poder vigente", new(2026, 1, 1), new(2026, 12, 31), [companyA]);
-        var vencida = await SeedDeedAsync(ctx, "Poder vencido", new(2025, 1, 1), new(2025, 12, 31), [companyA]);
-        var futura = await SeedDeedAsync(ctx, "Poder futuro", new(2027, 1, 1), new(2027, 12, 31), [companyA]);
+        var vigente = await SeedDeedAsync(ctx, "Poder vigente", new(2026, 1, 1), new(2026, 12, 31), [companyA], repId);
+        var vencida = await SeedDeedAsync(ctx, "Poder vencido", new(2025, 1, 1), new(2025, 12, 31), [companyA], repId);
+        var futura = await SeedDeedAsync(ctx, "Poder futuro", new(2027, 1, 1), new(2027, 12, 31), [companyA], repId);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
         var item = await reader.GetByIdAsync(Tenant, repId, Ct);
@@ -68,8 +68,8 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         var companyA = await CompanyIdAsync(ctx, repId, NitA);
         var companyB = await CompanyIdAsync(ctx, repId, NitB);
 
-        var deedA = await SeedDeedAsync(ctx, "Escritura A", new(2026, 1, 1), new(2026, 12, 31), [companyA]);
-        var deedB = await SeedDeedAsync(ctx, "Escritura B", new(2026, 1, 1), new(2026, 12, 31), [companyB]);
+        var deedA = await SeedDeedAsync(ctx, "Escritura A", new(2026, 1, 1), new(2026, 12, 31), [companyA], repId);
+        var deedB = await SeedDeedAsync(ctx, "Escritura B", new(2026, 1, 1), new(2026, 12, 31), [companyB], repId);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
         var item = await reader.GetByIdAsync(Tenant, repId, Ct);
@@ -91,7 +91,7 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         var companyB = await CompanyIdAsync(ctx, repId, NitB);
 
         // Una sola escritura que cubre A y B (puente M:N).
-        var shared = await SeedDeedAsync(ctx, "Poder conjunto", new(2026, 1, 1), new(2026, 12, 31), [companyA, companyB]);
+        var shared = await SeedDeedAsync(ctx, "Poder conjunto", new(2026, 1, 1), new(2026, 12, 31), [companyA, companyB], repId);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
         var item = await reader.GetByIdAsync(Tenant, repId, Ct);
@@ -110,7 +110,7 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         var companyA = await CompanyIdAsync(ctx, repId, NitA);
 
         // Vigencia que contiene "hoy" pero dada de baja → prevalece "inactiva".
-        var deedId = await SeedDeedAsync(ctx, "Poder revocado", new(2026, 1, 1), new(2026, 12, 31), [companyA]);
+        var deedId = await SeedDeedAsync(ctx, "Poder revocado", new(2026, 1, 1), new(2026, 12, 31), [companyA], repId);
         await new DeedRepository(ctx).DeactivateAsync(Tenant, deedId, changedBy: null, Ct);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
@@ -122,12 +122,38 @@ public sealed class LegalRepresentativeDeedsHistoryTests
     }
 
     [Fact]
+    public async Task GetById_TwoRepsSharingCompany_EachSeesOnlyOwnDeed_LegacyExcluded()
+    {
+        // Feature #10929 — dos representantes que COMPARTEN la empresa A, cada uno con su propia
+        // escritura. El detalle de cada uno debe mostrar SOLO la suya; una escritura legada
+        // (representative_id null) NO aparece en el detalle de ninguno.
+        await using var ctx = NewContext();
+        var repA = await SeedRepAsync(ctx, [NitA], doc: "111");
+        var repB = await SeedRepAsync(ctx, [NitA], doc: "222");
+        var companyA = await CompanyIdAsync(ctx, repA, NitA); // misma compañía (upsert por NIT).
+
+        var deedA = await SeedDeedAsync(ctx, "Escritura de A", new(2026, 1, 1), new(2026, 12, 31), [companyA], repA);
+        var deedB = await SeedDeedAsync(ctx, "Escritura de B", new(2026, 1, 1), new(2026, 12, 31), [companyA], repB);
+        await SeedDeedAsync(ctx, "Escritura legada", new(2026, 1, 1), new(2026, 12, 31), [companyA], representativeId: null);
+
+        var reader = new DbLegalRepresentativeReader(ctx, Clock);
+        var detailA = await reader.GetByIdAsync(Tenant, repA, Ct);
+        var detailB = await reader.GetByIdAsync(Tenant, repB, Ct);
+
+        // A ve solo la suya; B ve solo la suya. La legada no aparece en ninguno.
+        detailA!.Companies.Single(c => c.Nit == NitA).Deeds
+            .Should().ContainSingle().Which.Id.Should().Be(deedA);
+        detailB!.Companies.Single(c => c.Nit == NitA).Deeds
+            .Should().ContainSingle().Which.Id.Should().Be(deedB);
+    }
+
+    [Fact]
     public async Task ListPaged_DoesNotLoadDeeds_KeepsLightweightContract()
     {
         await using var ctx = NewContext();
         var repId = await SeedRepAsync(ctx, [NitA]);
         var companyA = await CompanyIdAsync(ctx, repId, NitA);
-        await SeedDeedAsync(ctx, "Escritura", new(2026, 1, 1), new(2026, 12, 31), [companyA]);
+        await SeedDeedAsync(ctx, "Escritura", new(2026, 1, 1), new(2026, 12, 31), [companyA], repId);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
         var page = await reader.ListPagedAsync(Tenant, 1, 50, Ct);
@@ -140,7 +166,7 @@ public sealed class LegalRepresentativeDeedsHistoryTests
     // ---------- Seeding helpers ----------
 
     /// <summary>Crea el representante (y sus compañías) vía el handler real; devuelve su id.</summary>
-    private static async Task<Guid> SeedRepAsync(FlitDbContext ctx, IReadOnlyList<string> nits)
+    private static async Task<Guid> SeedRepAsync(FlitDbContext ctx, IReadOnlyList<string> nits, string? doc = null)
     {
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
         var repo = new LegalRepresentativeRepository(ctx);
@@ -154,7 +180,7 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         {
             TenantId = Tenant,
             DocumentType = "CC",
-            DocumentNumber = DocRep,
+            DocumentNumber = doc ?? DocRep,
             FirstLastName = "Perez",
             Name = "Juan Perez",
             Companies = [.. nits.Select(n => new LegalRepresentativeCompanyInput(n, $"Empresa {n}", null, null, null, null))],
@@ -171,13 +197,18 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         return item!.Companies.Single(c => c.Nit == nit).Id;
     }
 
-    /// <summary>Crea una escritura activa vinculada a las compañías dadas; devuelve su id.</summary>
+    /// <summary>
+    /// Crea una escritura activa vinculada a las compañías dadas y al representante
+    /// <paramref name="representativeId"/> (Feature #10929); devuelve su id. <c>null</c> = escritura
+    /// legada (sin representante), que NO debe aparecer en el detalle de ningún representante.
+    /// </summary>
     private static Task<Guid> SeedDeedAsync(
         FlitDbContext ctx,
         string description,
         DateOnly desde,
         DateOnly hasta,
-        IReadOnlyList<Guid> companyIds) =>
+        IReadOnlyList<Guid> companyIds,
+        Guid? representativeId) =>
         new DeedRepository(ctx).CreateAsync(
             new SaveDeedData(
                 TenantId: Tenant,
@@ -188,7 +219,8 @@ public sealed class LegalRepresentativeDeedsHistoryTests
                 VigenciaDesde: desde,
                 VigenciaHasta: hasta,
                 RepresentedCompanyIds: companyIds,
-                ActorBy: null),
+                ActorBy: null,
+                RepresentativeId: representativeId),
             Ct);
 
     private static FlitDbContext NewContext() =>

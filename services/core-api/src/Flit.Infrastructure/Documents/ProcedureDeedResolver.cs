@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 
 namespace Flit.Infrastructure.Documents;
@@ -81,11 +82,29 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue;
             }
 
-            // HU #10936 — entre las escrituras vigentes de la compañía se elige la MÁS PRÓXIMA A VENCER
-            // (menor VigenciaHasta); ThenBy(Id) desempata de forma estable. Antes ganaba la de mayor
-            // vigencia; ahora prima la que primero deja de servir (colapso por NIT, como el wizard).
+            // Feature #10929 — la escritura es DEL representante seleccionado. Se resuelve su id por el
+            // documento del sujeto de identidad (el RL embebido en el actor jurídico) y se filtran las
+            // escrituras de la compañía a las que ÉL asoció (RepresentativeId). Si no se resuelve el
+            // representante (sin documento del RL o no está en el directorio), se mantiene el
+            // comportamiento por compañía (compat), incluidas las escrituras legadas sin representante.
+            var subject = IdentitySubjectResolver.For(actor);
+            Guid? representativeId = null;
+            if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
+                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            {
+                var representative = await _representativeReader
+                    .FindActiveByDocumentAsync(
+                        tenantId, subject.TipoDocumento!.Trim(), subject.NumeroDocumento!.Trim(), ct)
+                    .ConfigureAwait(false);
+                representativeId = representative?.Id;
+            }
+
+            // HU #10936 — entre las escrituras vigentes (de la compañía y, si se resolvió, del
+            // representante) se elige la MÁS PRÓXIMA A VENCER (menor VigenciaHasta); ThenBy(Id) desempata
+            // de forma estable. Antes ganaba la de mayor vigencia; ahora prima la que primero deja de servir.
             var deed = deeds
-                .Where(d => d.RepresentedCompanyIds.Contains(company.Id))
+                .Where(d => d.RepresentedCompanyIds.Contains(company.Id)
+                    && (representativeId is null || d.RepresentativeId == representativeId))
                 .OrderBy(d => d.VigenciaHasta)
                 .ThenBy(d => d.Id)
                 .FirstOrDefault();

@@ -56,6 +56,22 @@ public sealed class DeedHandlerTests
     }
 
     [Fact]
+    public async Task Create_FromRepresentativeDetail_PersistsRepresentativeId()
+    {
+        // Feature #10929 — el alta desde el detalle del representante guarda su id en la escritura.
+        await using var ctx = NewContext();
+        var (create, _, get, _, _) = Handlers(ctx, out _);
+        var representativeId = Guid.Parse("33333333-0000-4000-8000-000000000003");
+
+        var created = await create.HandleAsync(NewCreate(representativeId: representativeId), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var detail = await get.HandleAsync(
+            new GetDeedByIdQuery { TenantId = Tenant, Id = created.DeedId!.Value }, Ct);
+        detail!.Deed.RepresentativeId.Should().Be(representativeId);
+    }
+
+    [Fact]
     public async Task Create_VigenciaInvertida_Returns422()
     {
         await using var ctx = NewContext();
@@ -260,7 +276,8 @@ public sealed class DeedHandlerTests
         string? sha256 = "deadbeef",
         DateOnly? desde = null,
         DateOnly? hasta = null,
-        IReadOnlyList<Guid>? companies = null) =>
+        IReadOnlyList<Guid>? companies = null,
+        Guid? representativeId = null) =>
         new()
         {
             TenantId = Tenant,
@@ -269,6 +286,7 @@ public sealed class DeedHandlerTests
             VigenciaHasta = hasta ?? new DateOnly(2026, 12, 31),
             Sha256 = sha256,
             RepresentedCompanyIds = companies ?? [CompanyA, CompanyB],
+            RepresentativeId = representativeId,
         };
 
     private static (

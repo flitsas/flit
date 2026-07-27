@@ -125,8 +125,10 @@ export function LegalRepresentativeDetailModal({
     setDeedEditing(null);
   };
 
+  // Feature #10929: en el ALTA la escritura se asocia al representante del detalle (item.id); en la
+  // edición no se envía el representante (el backend conserva el actual).
   const handleDeedSubmit = (input: DeedFormInput): Promise<DeedSaved> =>
-    saveDeed(tenantId, deedEditing ? deedEditing.id : null, input);
+    saveDeed(tenantId, deedEditing ? deedEditing.id : null, input, deedEditing ? undefined : item?.id);
 
   const handleDeedSaved = () => {
     const wasEditing = deedEditing !== null;
