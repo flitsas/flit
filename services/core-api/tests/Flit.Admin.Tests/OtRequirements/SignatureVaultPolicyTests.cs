@@ -63,6 +63,8 @@ public sealed class SignatureVaultPolicyTests
         match!.FullName.Should().Be("Apoderada Renting S.A.S.");
         match.StoragePath.Should().Be("fm-file-abc");
         match.SignatureHash.Should().Be("sha-256-hex");
+        // HU #10930 (Feature #10929): la política expone el codigo_hash digitado en el baúl (para el FUR).
+        match.CodigoHash.Should().Be("ABC-123-XYZ");
     }
 
     [Fact]
@@ -103,6 +105,7 @@ public sealed class SignatureVaultPolicyTests
             SignatureHash = "sha-256-hex",
             StoragePath = "fm-file-abc",
             StorageSha256 = "sha-256-hex",
+            CodigoHash = "ABC-123-XYZ",
             Estado = "activa",
             VigenciaDesde = TodayColombia.AddDays(-10),
             VigenciaHasta = vigenciaHasta,

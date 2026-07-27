@@ -15,7 +15,10 @@ public sealed record SignatureVaultMatch(
     string StorageSha256,
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
-    string DocumentNumber);
+    string DocumentNumber,
+    // HU #10930 (Feature #10929): código alfanumérico que el usuario digitó al custodiar la firma en el
+    // baúl. Es lo que se estampa como "Hash" en el FUR (NO el UUID de la fila). null si la firma no lo trae.
+    string? CodigoHash = null);
 
 /// <summary>
 /// Puerto para resolver la firma precargada del baúl aplicable a un actor jurídico, según la

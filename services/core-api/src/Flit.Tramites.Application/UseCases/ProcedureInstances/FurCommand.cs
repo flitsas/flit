@@ -484,7 +484,8 @@ public sealed class GenerarFurHandler(
                             match.FullName,
                             match.VigenciaDesde,
                             match.VigenciaHasta,
-                            match.SignatureVaultId);
+                            match.SignatureVaultId,
+                            match.CodigoHash);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

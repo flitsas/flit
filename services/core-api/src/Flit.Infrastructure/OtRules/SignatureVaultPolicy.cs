@@ -72,6 +72,7 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
             vault.StorageSha256,
             vault.VigenciaDesde,
             vault.VigenciaHasta,
-            vault.DocumentNumber);
+            vault.DocumentNumber,
+            vault.CodigoHash);
     }
 }
