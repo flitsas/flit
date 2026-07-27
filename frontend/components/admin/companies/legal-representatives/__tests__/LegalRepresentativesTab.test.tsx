@@ -125,6 +125,17 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(screen.queryByText(/1098765432/)).not.toBeInTheDocument();
   });
 
+  it("no muestra la columna Compañía en la tabla (razón social / NIT ocultos)", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
+    renderTab();
+    await screen.findByText("Ana Gómez Ruiz");
+    // El encabezado de columna "Compañía" ya no existe.
+    expect(screen.queryByRole("columnheader", { name: /^compañía$/i })).not.toBeInTheDocument();
+    // Ni la razón social ni el NIT de la compañía se pintan en la fila.
+    expect(screen.queryByText("Comercializadora XYZ")).not.toBeInTheDocument();
+    expect(screen.queryByText("900123456-7")).not.toBeInTheDocument();
+  });
+
   it("envía el correo de validación de identidad", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
     vi.mocked(sendLegalRepresentativeIdentity).mockResolvedValue({
