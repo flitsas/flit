@@ -4861,6 +4861,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/alert-events/{id}/ack:
+    post:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertEventsAck
+      summary: Marca un disparo de alerta como reconocido (set-once)
+      description: >
+        Reportes 2.0 (HU-D) / HU5 (observabilidad ICT). Requiere policy AdminCompany. Reconoce un
+        disparo de `analytics.alert_events` de forma idempotente set-once (conserva el primer
+        reconocimiento). Un id de otro tenant "no existe" (404). SuperAdmin DEBE indicar `tenantId`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id del disparo (alert_event).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "200":
+          description: Disparo reconocido; devuelve el evento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEventDto"
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El disparo de alerta no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/improntas/generate:
     post:
       tags: [Admin · Improntas]
@@ -8016,7 +8066,7 @@ components:
         name: { type: string, maxLength: 120, example: Rechazo OT alto }
         metric:
           type: string
-          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, ict_webhook_delivery_failures, ict_jobs_out_of_sla]
         operator:
           type: string
           enum: [gt, gte, lt, lte]
@@ -8049,7 +8099,7 @@ components:
         name: { type: string, maxLength: 120 }
         metric:
           type: string
-          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, ict_webhook_delivery_failures, ict_jobs_out_of_sla]
         operator:
           type: string
           enum: [gt, gte, lt, lte]
@@ -8087,7 +8137,17 @@ components:
           type: boolean
           description: true si el correo a los destinatarios se envió (best-effort).
         message: { type: string, nullable: true }
-      required: [id, alertRuleId, ruleName, triggeredAt, metricValue, threshold, notified, message]
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Momento del reconocimiento (null = sin reconocer).
+        acknowledgedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario (claim sub) que reconoció el disparo.
+      required: [id, alertRuleId, ruleName, triggeredAt, metricValue, threshold, notified, message, acknowledgedAt, acknowledgedBy]
 
     AlertEventsPageResponse:
       type: object
