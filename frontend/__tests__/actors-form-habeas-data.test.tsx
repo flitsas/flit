@@ -30,10 +30,19 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 import { ActorsForm } from '@/components/operacion/ActorsForm';
+import type { ActorContactLookupResult } from '@/lib/api/types/procedure-runtime';
 
 const INSTANCE = 'inst-1';
 
-const EMPTY_CONTACT = { ciudad: null, email: null, direccion: null, telefono: null };
+// Anotado con el tipo del contrato, NO inferido: sin la anotación TypeScript deduce los campos
+// como el literal `null`, y `typeof EMPTY_CONTACT` rechaza cualquier string en los tests que
+// resuelven el lookup con datos reales.
+const EMPTY_CONTACT: ActorContactLookupResult = {
+  ciudad: null,
+  email: null,
+  direccion: null,
+  telefono: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -240,7 +249,7 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
       hasPendingFines: false,
       hasActiveLicense: true,
     });
-    let resolveContact!: (v: typeof EMPTY_CONTACT) => void;
+    let resolveContact!: (v: ActorContactLookupResult) => void;
     mocks.actorContactLookup.mockReturnValue(
       new Promise((resolve) => {
         resolveContact = resolve;
