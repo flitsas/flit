@@ -354,7 +354,8 @@ public sealed class ReenviarPrevalidacionHandler(
     IKyverumVerifyClient kyverum,
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IIdentityValidationEventPublisher events,
+    IIdentityValidationAuditLog audit)
 {
     private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
 
@@ -383,6 +384,17 @@ public sealed class ReenviarPrevalidacionHandler(
 
         validation.Name = subject.Nombre;
         validation.Email = subject.Email;
+
+        // Habeas Data — el reenvío manual también deja traza (stage Resend), con el correo destino
+        // ENMASCARADO. Sin esto, POST /resend era la única acción sobre PII sin bitácora.
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.Resend,
+            IdentityValidationAuditOutcomes.Ok,
+            TenantId: tenantId,
+            ValidationId: validation.Id,
+            Message: $"Reenvío manual de la prevalidación a {EditarPrevalidacionHandler.MaskEmail(subject.Email)}.",
+            Detail: $"correo_destino={EditarPrevalidacionHandler.MaskEmail(subject.Email)}; "
+                + $"reenvios_acumulados={validation.ResendCount}; encolado={queued}"), ct);
 
         await repo.SaveChangesAsync(ct);
 

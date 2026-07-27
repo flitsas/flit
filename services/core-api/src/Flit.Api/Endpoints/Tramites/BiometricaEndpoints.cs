@@ -347,6 +347,9 @@ internal static class BiometricaEndpoints
                     detail: "Esta validación pertenece a un trámite; edítala desde el trámite."),
                 "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                // D11 — RESERVADO, hoy inalcanzable: el reuso del CF-02 solo toma validaciones aprobadas
+                // y vigentes, que ya quedan bloqueadas por el guard D9 (identidad_aprobada). Se mantiene
+                // el mapeo para no cambiar el contrato si el guard llega a implementarse por separado.
                 "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Esta prevalidación ya está referenciada por un trámite."),
                 "documento_no_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
@@ -385,6 +388,9 @@ internal static class BiometricaEndpoints
                     detail: "Esta validación pertenece a un trámite; reenvíala desde el trámite."),
                 "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                // D11 — RESERVADO, hoy inalcanzable: el reuso del CF-02 solo toma validaciones aprobadas
+                // y vigentes, que ya quedan bloqueadas por el guard D9 (identidad_aprobada). Se mantiene
+                // el mapeo para no cambiar el contrato si el guard llega a implementarse por separado.
                 "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Esta prevalidación ya está referenciada por un trámite."),
                 "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",

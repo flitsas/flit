@@ -14,7 +14,8 @@ namespace Flit.Tramites.Application.Tests.UseCases.Persons;
 
 /// <summary>
 /// Tests unitarios de <see cref="ReenviarPrevalidacionHandler"/> — HU #10943 (CF-03, Feature #10864).
-/// Cobertura de AC2 (reenvío manual sin editar), AC5, AC7, AC9, AC10, AC11.
+/// Cobertura de AC2 (reenvío manual sin editar), AC5, AC7, AC9, AC10, AC11, AC13 (auditoría del reenvío
+/// manual, correo enmascarado — hallazgo de review post-cierre).
 /// </summary>
 public sealed class ReenviarPrevalidacionHandlerTests
 {
@@ -22,6 +23,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
     private readonly IKyverumVerifyClient _kyverum = Substitute.For<IKyverumVerifyClient>();
     private readonly FakeWebhookSecretProtector _protector = new();
     private readonly IIdentityValidationEventPublisher _events = Substitute.For<IIdentityValidationEventPublisher>();
+    private readonly IIdentityValidationAuditLog _audit = Substitute.For<IIdentityValidationAuditLog>();
 
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -31,7 +33,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
         {
             Provider = isKyverum ? BiometricProviders.Kyverum : BiometricProviders.Mock,
         };
-        return new ReenviarPrevalidacionHandler(_repo, _kyverum, opts, _protector, _events);
+        return new ReenviarPrevalidacionHandler(_repo, _kyverum, opts, _protector, _events, _audit);
     }
 
     private (Person Person, ProcedureInstanceBiometricValidation Validation) SeedStandalone(
@@ -269,6 +271,26 @@ public sealed class ReenviarPrevalidacionHandlerTests
         error.Should().Be("proveedor_error");
         result.Should().BeNull();
         validation.ResendCount.Should().Be(0);
+    }
+
+    // ── AC13 (Habeas Data) — auditoría del reenvío manual, correo enmascarado ───
+
+    [Fact]
+    public async Task AC13_ManualResend_AuditsWithMaskedEmail_NeverInClear()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone();
+        var handler = BuildHandler();
+
+        await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        await _audit.Received(1).LogAsync(
+            Arg.Is<IdentityValidationAuditEntry>(e =>
+                e.Stage == IdentityValidationAuditStages.Resend
+                && e.ValidationId == validation.Id
+                && e.Message != null && !e.Message.Contains("ana.rios@old.com")
+                && (e.Detail == null || !e.Detail.Contains("ana.rios@old.com"))),
+            ct);
     }
 
     [Fact]

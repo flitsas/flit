@@ -198,4 +198,73 @@ public sealed class TenantEnforcementMiddlewareTests
         next.Should().BeFalse();
         ctx.Response.StatusCode.Should().Be(401);
     }
+
+    // HU #10943 (hallazgo de review, IDOR cross-tenant) — antes IsRuntimeScoped comparaba
+    // "/api/v1/tramites/biometric-validations" con Equals EXACTO: el listado/create quedaban
+    // scopeados, pero las rutas HIJAS (PATCH /{id} y POST /{id}/resend — editar/reenviar una
+    // prevalidación con PII) caían FUERA del enforcement y el endpoint confiaba en el
+    // X-Tenant-Id crudo del cliente. Con StartsWithSegments el tenant se impone SIEMPRE desde
+    // el JWT, igual que en el resto del runtime.
+
+    [Fact]
+    public async Task BiometricValidationEdit_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        // Antes del fix, esta ruta NO entraba en IsRuntimeScoped: el header del atacante (OtherTenant)
+        // habría pasado intacto. Con el fix, el tenant SIEMPRE sale del JWT del caller.
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task BiometricValidationEdit_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task BiometricValidationResend_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context(
+            "/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222/resend",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task BiometricValidationResend_NoAutenticado_Returns401()
+    {
+        var ctx = Context(
+            "/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222/resend");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task BiometricValidationEdit_SuperAdmin_ConHeader_AcotaAEsaCompania()
+    {
+        // El superadmin sigue pudiendo acotar por header (comportamiento existente, sin cambios).
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222",
+            User("SuperAdmin", tenantId: CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(OtherTenant));
+    }
 }

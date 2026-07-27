@@ -90,7 +90,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
         // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
         || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
+        // HU #10943 — StartsWithSegments, NO Equals: con la comparación exacta el listado y el create
+        // quedaban scopeados, pero las rutas hijas (PATCH /{id} y POST /{id}/resend, edición y reenvío de
+        // una prevalidación) caían fuera y el backend confiaba en el X-Tenant-Id crudo del cliente — un
+        // caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug y mismo fix
+        // que ya se aplicó a identity-validation más abajo.
+        || path.StartsWithSegments("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
         // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
         // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
         // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
