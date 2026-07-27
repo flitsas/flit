@@ -746,4 +746,17 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ThenByDescending(h => h.Id)
             .Select(h => h.Metadata)
             .FirstOrDefaultAsync(ct);
+
+    // HU #10955 (AC2/AC3/AC5) — lookup de datos de contacto ya conocidos de una persona, a través de
+    // TODOS sus trámites (no eliminados) del tenant. Tenant explícito en el WHERE (AC5); el actor de
+    // la instancia más reciente por CreatedAt (mismo criterio de "recencia" que FindTramitesByVinAsync).
+    public Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
+        Guid tenantId, string documentType, string documentNumber, CancellationToken ct) =>
+        db.ProcedureInstanceActors.AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && a.DocumentType == documentType
+                && a.DocumentNumber == documentNumber
+                && a.ProcedureInstance!.DeletedAt == null)
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(ct);
 }

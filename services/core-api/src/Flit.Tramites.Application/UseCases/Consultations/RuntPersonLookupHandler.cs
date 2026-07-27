@@ -11,16 +11,18 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// El comprador se sigue guardando luego vía PUT actors.
 /// </summary>
 /// <remarks>
-/// HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031): ANTES de resolver la cadena de
-/// proveedores, consulta <see cref="ExternalQueryCacheService.TryReusePersonAsync"/> (fuente
-/// <c>RUNT</c>, llave = documento FLIT tal cual llega — CC/CE/PAS/TI, el mismo vocabulario que
-/// <c>ActorInput.TipoDocumento</c>, para que el gate de consentimiento capturado en <c>PUT
-/// actors</c> resuelva la misma llave). En HIT reconstruye el DTO desde el payload cacheado sin
-/// llamar al proveedor del RUNT (AC1); el DETALLE de comparendos SÍ se vuelve a consultar
-/// (best-effort), porque no viaja en el payload cacheado y sin él la ficha del actor perdía la
-/// lista de multas que antes mostraba. En MISS, el flujo original queda intacto y, al final,
-/// cachea el resultado fresco del RUNT (AC2), sin incluir el detalle de multas (SIMIT es una
-/// sub-consulta best-effort distinta, fuera de alcance de esta HU).
+/// <para><b>HU #10955 (AC1, revierte parcialmente HU #10878/ADR-0031):</b> la IDENTIDAD de un actor
+/// se consulta SIEMPRE en vivo contra el RUNT. Este handler YA NO llama a
+/// <see cref="ExternalQueryCacheService.TryReusePersonAsync"/> antes de resolver el proveedor —
+/// nunca sirve un HIT cacheado, exista o no <c>PersonDataConsent</c> en <c>granted</c> para esa
+/// persona (el gate de consentimiento del ADR-0031 queda sin efecto práctico para este flujo). Sí se
+/// conserva la llamada a <see cref="ExternalQueryCacheService.SavePersonResultAsync"/> al final: la
+/// caché se sigue escribiendo con el resultado fresco (fail-open, no cambia el shape de la respuesta)
+/// para no tocar otros consumidores del mismo mecanismo cache-aside (p. ej. <c>RunConsultationHandler</c>
+/// con templates <c>entity_scope=actor</c>), y por si una futura HU necesita reintroducir el reúso de
+/// forma explícita. <c>PersonDataConsent</c> NO se borra ni se toca: se conserva para auditoría.</para>
+/// <para>El DETALLE de comparendos se sigue consultando best-effort (SIMIT) cuando el RUNT marca el
+/// flag de multas pendientes.</para>
 /// </remarks>
 public sealed class RuntPersonLookupHandler(
     IProcedureInstanceRepository repo,
@@ -53,29 +55,9 @@ public sealed class RuntPersonLookupHandler(
 
         var now = DateTimeOffset.UtcNow;
 
-        // HU #10878 — cache-aside ANTES de resolver la cadena de proveedores (AC1).
-        var cacheLookup = await cacheService.TryReusePersonAsync(tenantId, RuntSourceCode, documentType, documentNumber, now, ct);
-        if (cacheLookup.Hit)
-        {
-            var cachedDto = BuildDtoFromFields(cacheLookup.Fields!, documentType, documentNumber, "cache");
-
-            // La caché guarda el FLAG de multas, no el detalle de cada comparendo (el detalle es una
-            // sub-consulta SIMIT best-effort, fuera del payload cacheado). Sin esto, al reusar la
-            // persona la ficha del actor mostraba la alerta "Comparendos/Multas pendientes" PERO sin
-            // la lista de comparendos — se perdía información que antes sí se veía. Se recompone con
-            // la misma consulta best-effort del camino en vivo: si falla, queda la alerta sola.
-            if (cachedDto is { Found: true, HasPendingFines: true })
-            {
-                var cachedOverride = await overrideProvider.GetAsync(tenantId, ct);
-                var cachedFines = await TryConsultFinesDetailAsync(
-                    cachedOverride, documentType, documentNumber, instanceId, tenantId, ct);
-                if (cachedFines is not null)
-                    cachedDto = cachedDto with { Fines = cachedFines };
-            }
-
-            return (cachedDto, null);
-        }
-
+        // HU #10955 (AC1) — la identidad SIEMPRE se consulta en vivo: ya no se intenta un HIT de
+        // ExternalQueryCacheService.TryReusePersonAsync antes de resolver el proveedor (ver remarks
+        // de la clase). El resultado fresco SÍ se sigue cacheando al final (SavePersonResultAsync).
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["document_type"] = mappedDocType,

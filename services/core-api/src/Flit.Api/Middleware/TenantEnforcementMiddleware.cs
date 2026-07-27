@@ -108,7 +108,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // operador de la compañía solo lee SU tenant. El tenant se impone desde el JWT (no del header),
         // para que un company-user no consulte el directorio de otra compañía cambiando X-Tenant-Id.
         || path.StartsWithSegments("/api/v1/tramites/deeds", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase)
+        // HU #10955 (AC5) — lookup de contacto de actores por documento: sin instancia en la ruta,
+        // pero tan tenant-scoped como el resto del runtime (mismo bug de fondo que b68b71e3 si se
+        // quedara fuera: el operador podría leer el contacto de una persona capturado por OTRA
+        // compañía cambiando X-Tenant-Id). El tenant se impone desde el JWT, no del header crudo.
+        || path.StartsWithSegments("/api/v1/tramites/actors", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

@@ -267,4 +267,31 @@ public sealed class TenantEnforcementMiddlewareTests
         next.Should().BeTrue();
         ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(OtherTenant));
     }
+
+    // HU #10955 (AC5) — lookup de contacto de actores por documento: sin instancia en la ruta, pero
+    // igual de tenant-scoped que el resto del runtime (mismo bug de fondo que b68b71e3 si se quedara
+    // fuera de IsRuntimeScoped: el operador podría leer el contacto capturado por OTRA compañía
+    // cambiando X-Tenant-Id).
+    [Fact]
+    public async Task ActorContactLookup_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/actors/contact-lookup",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task ActorContactLookup_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/actors/contact-lookup");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
 }

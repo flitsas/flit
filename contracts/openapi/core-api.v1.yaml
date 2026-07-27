@@ -3108,6 +3108,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/actors/contact-lookup:
+    get:
+      operationId: actorContactLookup
+      tags: [Tramites, Actores]
+      summary: Lookup de datos de CONTACTO ya conocidos de una persona (HU #10955, AC2/AC3/AC4/AC5)
+      description: >
+        Precarga ciudad, correo, dirección y teléfono del registro MÁS RECIENTE (por fecha de
+        creación) de esa persona (`tipoDocumento` + `numeroDocumento`) entre los actores de CUALQUIER
+        trámite del tenant. NUNCA devuelve nombre ni documento — esos siempre se obtienen del RUNT en
+        vivo (AC1, `POST /instances/{id}/runt-person`), que dejó de reutilizar consultas previas
+        aunque exista `PersonDataConsent` registrado (revierte parcialmente la HU #10878/ADR-0031,
+        ver ADR-0031 actualizado). Sin gate de consentimiento (AC4): el contacto no es una consulta a
+        un tercero, es un dato que la propia compañía ya capturó de esa persona. Sin antecedentes
+        (persona nunca ha sido actor de un trámite del tenant) responde 200 con los cuatro campos en
+        `null`, NUNCA 404 (AC3). Aislado por tenant: el tenant se resuelve del JWT vía
+        `TenantEnforcementMiddleware`, no del `X-Tenant-Id` crudo del cliente (AC5).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tipoDocumento
+          in: query
+          required: true
+          schema: { type: string, enum: [CC, CE, NIT, PAS, TI] }
+          description: Tipo de documento de la persona a consultar.
+        - name: numeroDocumento
+          in: query
+          required: true
+          schema: { type: string }
+          description: Número de documento de la persona a consultar.
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+          description: >
+            Compañía a consultar. Para un usuario de compañía, el middleware lo sobrescribe con el
+            tenant del JWT (no puede leer el contacto de otra compañía cambiando este header).
+      responses:
+        "200":
+          description: Datos de contacto conocidos (o los cuatro campos en null si no hay antecedentes).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorContactLookupResponse"
+        "400":
+          description: Falta el header X-Tenant-Id, o tipoDocumento/numeroDocumento inválidos o ausentes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+
   /api/v1/tramites/biometric-validations:
     post:
       operationId: iniciarPrevalidacionIdentidad
@@ -7276,6 +7328,25 @@ components:
         maxDeliveryAttempts:
           type: integer
           description: Tope de reintentos a partir del cual un evento se considera dead-letter.
+    ActorContactLookupResponse:
+      type: object
+      description: >
+        Datos de CONTACTO ya conocidos de una persona (HU #10955). NUNCA incluye nombre ni documento
+        — esos siempre vienen del RUNT en vivo. Los cuatro campos van en null si la persona nunca ha
+        sido actor de un trámite del tenant (AC3).
+      properties:
+        ciudad:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
     EnsureIdentityResult:
       type: object
       description: Desenlace de asegurar la identidad vigente de una parte (HU #10350).

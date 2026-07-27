@@ -496,9 +496,11 @@ public sealed class PutActorsHandler(
 
     /// <summary>
     /// Lee ciudad/dirección + representante legal de <c>actor.metadata</c>. Robusto ante
-    /// null/"{}"/JSON inválido.
+    /// null/"{}"/JSON inválido. <c>internal</c> (HU #10955): reutilizado por
+    /// <see cref="ActorContactLookupHandler"/> para el lookup de datos de contacto (AC2) sin
+    /// duplicar la deserialización del jsonb.
     /// </summary>
-    private static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal) ParseMetadata(string? metadata)
+    internal static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal) ParseMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
             return (null, null, null);

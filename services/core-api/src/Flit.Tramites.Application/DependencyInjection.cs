@@ -54,6 +54,9 @@ public static class DependencyInjection
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
+        // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
+        // dirección/teléfono) de una persona, sin gate de consentimiento.
+        services.AddScoped<ActorContactLookupHandler>();
         // HU #10520 — validación de carga por tipo (MIME/tamaño) con respaldo global. El catálogo
         // (IDocumentTypeCatalog) se registra en Infraestructura; aquí solo el validador que lo consume.
         services.AddScoped<AttachmentValidator>();

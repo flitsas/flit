@@ -308,6 +308,18 @@ public interface IProcedureInstanceRepository
     /// subsanación (fail-safe del caller: re-evalúa todos los gates).
     /// </summary>
     Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10955 (AC2/AC3/AC5) — actor MÁS RECIENTE (por <c>CreatedAt</c>) de esa persona
+    /// (<paramref name="documentType"/> + <paramref name="documentNumber"/>) en CUALQUIER trámite NO
+    /// eliminado del tenant, para precargar sus datos de CONTACTO (ciudad, email, dirección, teléfono)
+    /// en el paso de actores. Aislamiento por tenant explícito en el <c>WHERE</c> (AC5), como el resto
+    /// del repositorio. Devuelve <c>null</c> si la persona nunca ha sido actor de un trámite del
+    /// tenant — el caller responde 200 con los campos vacíos, NUNCA 404 (AC3). Solo lectura
+    /// (AsNoTracking).
+    /// </summary>
+    Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
+        Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
 }
 
 /// <summary>
