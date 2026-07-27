@@ -1367,6 +1367,9 @@ function ConsultaStep({
     const noEncontrado = (pf?.checks ?? []).some(
       (c) => c.key === 'vehiculo' && c.status === 'fail',
     );
+    // Set state en efecto: misma excepción aceptada arriba (el valor deriva de una consulta
+    // async — checks del preflight/preview —, no del render). Sticky por el guard de arriba.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (noEncontrado) setOwnerDocTypeSuggested(true);
   }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
