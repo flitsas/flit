@@ -180,7 +180,7 @@ public sealed class ProcessOtWebhookCallbackHandler
         var result = await _clientProcedureRepository
             .ApproveAsync(
                 otTenantId, procedureInstanceId, approvedBy: null,
-                OtTransitionSource.QuipuxWebhook, cancellationToken)
+                OtTransitionSource.QuipuxWebhook, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return result is not null;
     }

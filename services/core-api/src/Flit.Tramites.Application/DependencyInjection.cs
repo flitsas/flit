@@ -131,6 +131,8 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        // ADR-0036 §D9 (HU #10916) — resolución del mandatario al aprobar (consumida por AdminOtEndpoints).
+        services.AddScoped<MandatoApprovalHandler>();
         services.AddScoped<GenerarConsolidadoHandler>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();

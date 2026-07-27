@@ -187,6 +187,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid procedureInstanceId,
         Guid? approvedBy,
         string source,
+        Guid? mandateSignerId = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -195,7 +196,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             approvedBy,
             reason: null,
             source,
-            cancellationToken);
+            cancellationToken,
+            mandateSignerId);
 
     public Task<OtClientProcedure?> RejectAsync(
         Guid otTenantId,
@@ -222,7 +224,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid? changedBy,
         string? reason,
         string source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? mandateSignerId = null)
     {
         var accessible = await ExecuteOtScopedAsync(
             otTenantId,
@@ -298,6 +301,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.Status = targetStatus;
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
+
+                // ADR-0036 §D9 (HU #10916) — al aprobar, persistir el mandatario resuelto en el MISMO save
+                // que el status (el firmante ya se resolvió/eligió en el endpoint). Solo en aprobación.
+                if (targetStatus == TramiteEstado.Aprobado && mandateSignerId is not null)
+                {
+                    entity.MandateSignerId = mandateSignerId;
+                }
 
                 // Feature #10587 / HU #10785 — la decisión del OT parte SIEMPRE de 'entregado' (== develop):
                 // no hay hito sintético asignado→entregado (el trámite nunca salió de 'entregado'; el
