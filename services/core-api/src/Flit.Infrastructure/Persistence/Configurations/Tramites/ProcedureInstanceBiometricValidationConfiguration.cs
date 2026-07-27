@@ -40,6 +40,10 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
+        // HU #10943 (CF-03) — tope + cooldown de reenvíos de la prevalidación standalone.
+        builder.Property(x => x.ResendCount).HasColumnName("resend_count").IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.LastResentAt).HasColumnName("last_resent_at");
+
         // HU #10233 — Kyverum Verify.
         builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired().HasDefaultValue("mock");
         builder.Property(x => x.KyverumVerificationId).HasColumnName("kyverum_verification_id").HasMaxLength(200);

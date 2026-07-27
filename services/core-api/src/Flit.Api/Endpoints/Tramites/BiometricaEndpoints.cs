@@ -323,6 +323,87 @@ internal static class BiometricaEndpoints
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status201Created)
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
+        // PATCH editar los datos de contacto de una prevalidación standalone (HU #10943, CF-03, D7):
+        // solo nombre/correo (titular) y nombre/correo del representante legal (persona jurídica).
+        // Un cambio de correo dispara el reenvío automático en la misma transacción (D8); solo el
+        // nombre NO reenvía. Editable ⟺ ProcedureInstanceId IS NULL AND PersonId IS NOT NULL (D12).
+        group.MapPatch("/biometric-validations/{id:guid}", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] EditarPrevalidacionRequest? body,
+            EditarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, body, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
+                "no_editable" => Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "Esta validación pertenece a un trámite; edítala desde el trámite."),
+                "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Esta prevalidación ya está referenciada por un trámite."),
+                "documento_no_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
+                    detail: "El tipo/número de documento no es editable. Anula el registro y crea una prevalidación nueva."),
+                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
+                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("EditarPrevalidacionIdentidad")
+        .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
+
+        // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
+        // CF-03, D8): mismo registro, token/enlace nuevo, TTL 24h, intentos/sondeos reiniciados. 200 si el
+        // envío se completó; 202 si quedó encolada (falla transitoria del proveedor).
+        group.MapPost("/biometric-validations/{id:guid}/resend", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ReenviarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
+                "no_editable" => Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "Esta validación pertenece a un trámite; reenvíala desde el trámite."),
+                "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Esta prevalidación ya está referenciada por un trámite."),
+                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
+                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ when result!.Queued => Results.Accepted(
+                    $"/api/v1/tramites/biometric-validations/{id}", result),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("ReenviarPrevalidacionIdentidad")
+        .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status200OK)
+        .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status202Accepted);
+
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.
         group.MapPost("/instances/{id:guid}/identity/ensure", async (

@@ -3292,6 +3292,111 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/biometric-validations/{id}:
+    patch:
+      operationId: editarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Editar los datos de contacto de una prevalidación standalone — HU #10943, CF-03
+      description: >
+        Edita nombre/correo (titular) y nombre/correo del representante legal (persona jurídica) de una
+        prevalidación STANDALONE (procedureInstanceId=null y personId≠null). El tipo/número de documento
+        (titular o RL) NUNCA es editable (D7). Un cambio de correo (case-insensitive/trim) dispara el
+        reenvío automático en la misma transacción, con nuevo enlace y TTL de 24 h (D8); editar solo el
+        nombre no reenvía. El cambio de correo consume cupo de reenvíos igual que el reenvío manual (D10).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditarPrevalidacionRequest"
+      responses:
+        "200":
+          description: Prevalidación actualizada (y reenviada si cambió el correo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditarPrevalidacionResult"
+        "400":
+          description: Falta el header X-Tenant-Id o el cuerpo de la solicitud.
+        "403":
+          description: no_editable — la validación pertenece a un trámite (solo lectura en este módulo).
+        "404":
+          description: Prevalidación no encontrada.
+        "409":
+          description: >
+            identidad_aprobada (la identidad ya está aprobada, vigente o vencida) o
+            referenciada_por_tramite (defensa en profundidad, D11).
+        "422":
+          description: documento_no_editable — el tipo/número de documento no es editable (D7).
+        "429":
+          description: reenvio_en_cooldown o tope_reenvios (D10).
+        "502":
+          description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
+        "503":
+          description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
+  /api/v1/tramites/biometric-validations/{id}/resend:
+    post:
+      operationId: reenviarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Reenviar manualmente la validación de identidad de una prevalidación standalone — HU #10943, CF-03
+      description: >
+        Reenvía la validación de identidad sobre el MISMO registro (sin crear otro): nuevo token/enlace,
+        TTL de 24 h, intentos y sondeos de reconciliación reiniciados a 0 (D8). Solo aplica a prevalidaciones
+        STANDALONE; bloqueado si el estado es `aprobado` (D9) o si se agotó el tope de 3 reenvíos / no ha
+        pasado el cooldown de 5 minutos (D10).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Reenvío completado (enviado/en_proceso).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReenviarPrevalidacionResult"
+        "202":
+          description: Encolado (fallo transitorio del proveedor). El reenvío ya consumió cupo del tope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReenviarPrevalidacionResult"
+        "400":
+          description: Falta el header X-Tenant-Id.
+        "403":
+          description: no_editable — la validación pertenece a un trámite (solo lectura en este módulo).
+        "404":
+          description: Prevalidación no encontrada.
+        "409":
+          description: >
+            identidad_aprobada (la identidad ya está aprobada, vigente o vencida) o
+            referenciada_por_tramite (defensa en profundidad, D11).
+        "429":
+          description: reenvio_en_cooldown o tope_reenvios (D10).
+        "502":
+          description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
+        "503":
+          description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
   /api/v1/tramites/identity-validation/stuck:
     get:
       operationId: listStuckIdentityValidations
@@ -7400,6 +7505,99 @@ components:
           description: >
             true = el proveedor Kyverum falló de forma transitoria y la validación quedó
             encolada para reintento automático (estado pendiente_envio, HTTP 202).
+
+    EditarPrevalidacionRequest:
+      type: object
+      description: >
+        Edición de una prevalidación standalone — HU #10943, CF-03, D7. Todos los campos son
+        opcionales; documentType/documentNumber/legalRepDocumentType/legalRepDocumentNumber solo
+        existen para DETECTAR un intento de cambiarlos (→ 422 documento_no_editable), nunca se
+        persisten.
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Nuevo nombre del titular (persona natural o razón social).
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: Nuevo correo del titular. Si difiere del actual, dispara el reenvío automático (D8).
+        legalRepName:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Nuevo nombre del representante legal (solo persona jurídica).
+        legalRepEmail:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: >
+            Nuevo correo del representante legal (solo persona jurídica). Si difiere del actual,
+            dispara el reenvío automático dirigido al RL (D8, AC3).
+        documentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        documentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        legalRepDocumentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        legalRepDocumentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+
+    EditarPrevalidacionResult:
+      type: object
+      required: [validation, resent]
+      description: Resultado de editar una prevalidación standalone — HU #10943, CF-03.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          nullable: true
+          description: >
+            Enlace de captura NUEVO, solo si resent=true y el envío no quedó encolado (fallo
+            transitorio del proveedor). Null si resent=false (no hubo cambio de correo).
+        resent:
+          type: boolean
+          description: >
+            true si el cambio de correo disparó el reenvío automático (D8); false si solo cambió
+            el nombre (o ningún dato de contacto).
+
+    ReenviarPrevalidacionResult:
+      type: object
+      required: [validation, captureUrl]
+      description: Resultado de reenviar manualmente una prevalidación standalone — HU #10943, CF-03.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          description: >
+            URL de captura NUEVA. Kyverum → URL real del proveedor. Mock → magic-link público.
+            Vacío si queued=true (fallo transitorio).
+        queued:
+          type: boolean
+          default: false
+          description: >
+            true = el proveedor Kyverum falló de forma transitoria y la validación quedó encolada
+            para reintento automático (estado pendiente_envio, HTTP 202). El reenvío YA consumió
+            cupo del tope (D10) aunque el envío no se completó.
+
     KyverumWebhookPayload:
       type: object
       required: [evento, data]

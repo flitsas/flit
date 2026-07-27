@@ -5373,6 +5373,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("last_attempt_at");
 
+                    // HU #10943 (CF-03) — momento del último reenvío (cooldown D10)
+                    b.Property<DateTimeOffset?>("LastResentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_resent_at");
+
                     b.Property<int>("MaxAttempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -5422,6 +5427,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("reconcile_poll_count");
+
+                    // HU #10943 (CF-03) — tope de reenvíos (D10)
+                    b.Property<int>("ResendCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("resend_count");
 
                     b.Property<int?>("Score")
                         .HasColumnType("integer")

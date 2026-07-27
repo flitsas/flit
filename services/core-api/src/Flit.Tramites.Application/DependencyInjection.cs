@@ -115,6 +115,10 @@ public static class DependencyInjection
         // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
         // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
         services.AddScoped<UseCases.Persons.IniciarPrevalidacionHandler>();
+        // HU #10943 (CF-03, Feature #10864) — editar datos de contacto (reenvío automático si cambia
+        // el correo) y reenviar manualmente una prevalidación standalone.
+        services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
+        services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.

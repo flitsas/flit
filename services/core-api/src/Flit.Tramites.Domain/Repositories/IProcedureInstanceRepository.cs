@@ -170,6 +170,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #10943 (CF-03) — resuelve una validación biométrica por id, aislada por tenant y TRACKEADA
+    /// (para editar/reenviar), incluyendo su <see cref="Person"/> (necesaria para
+    /// <c>IniciarPrevalidacionHandler.ResolveSubject</c>). Devuelve null si no existe o no pertenece al
+    /// tenant. Aplica tanto a validaciones standalone como ligadas a trámite (el handler decide
+    /// editabilidad con <c>ProcedureInstanceId</c>/<c>PersonId</c>).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
     /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
     /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.

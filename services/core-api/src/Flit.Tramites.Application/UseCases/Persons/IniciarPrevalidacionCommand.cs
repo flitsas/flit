@@ -286,9 +286,11 @@ public sealed class IniciarPrevalidacionHandler(
     /// <summary>
     /// Resuelve el sujeto de identidad de la entidad <see cref="Person"/> para el contexto standalone
     /// (AC2: jurídica → datos del RL). Equivalente funcional a <c>IdentitySubjectResolver.For(actor)</c>
-    /// pero sin depender de <c>ProcedureInstanceActor</c>.
+    /// pero sin depender de <c>ProcedureInstanceActor</c>. <c>internal</c> — reutilizado por
+    /// <c>EditarPrevalidacionHandler</c>/<c>ReenviarPrevalidacionHandler</c> (HU #10943, CF-03) para
+    /// resolver el correo destino del reenvío sin duplicar la regla natural/jurídica.
     /// </summary>
-    private static IdentitySubjectStandalone ResolveSubject(Person person)
+    internal static IdentitySubjectStandalone ResolveSubject(Person person)
     {
         if (person.PersonType == PersonTypes.Juridical
             && !string.IsNullOrWhiteSpace(person.LegalRepDocumentType)
