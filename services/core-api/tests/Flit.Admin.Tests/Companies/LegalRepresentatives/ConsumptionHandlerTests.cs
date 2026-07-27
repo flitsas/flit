@@ -70,14 +70,17 @@ public sealed class ConsumptionHandlerTests
         result.Should().ContainSingle();
         result[0].Nit.Should().Be(Nit);
         result[0].Name.Should().Be("ACME S.A.S.");
+        result[0].Description.Should().Be("Vigente");
         result[0].VigenciaHasta.Should().Be(hasta);
         result[0].DiasRestantes.Should().Be(hasta.DayNumber - Today.DayNumber);
         result[0].DiasRestantes.Should().BePositive();
     }
 
     [Fact]
-    public async Task ActiveDeeds_CollapsesCompanyAcrossDeeds_KeepsLongestVigencia()
+    public async Task ActiveDeeds_ReturnsAllVigentesForSameCompany_DoesNotCollapse()
     {
+        // Feature #10929: dos escrituras VIGENTES de la MISMA compañía → el paso 1 debe ver AMBAS,
+        // ya no se colapsa a una sola fila por NIT.
         await using var ctx = NewContext();
         var deedRepo = new DeedRepository(ctx);
         var companyRepo = new LegalRepresentativeRepository(ctx);
@@ -87,9 +90,9 @@ public sealed class ConsumptionHandlerTests
 
         var nearest = new DateOnly(2026, 9, 30);
         var farthest = new DateOnly(2027, 3, 31);
-        await deedRepo.CreateAsync(new SaveDeedData(
+        var idCorta = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Corta", "path-1", "sha-1", new DateOnly(2026, 1, 1), nearest, [companyId], null), Ct);
-        await deedRepo.CreateAsync(new SaveDeedData(
+        var idLarga = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Larga", "path-2", "sha-2", new DateOnly(2026, 1, 1), farthest, [companyId], null), Ct);
 
         var handler = new ListActiveDeedsForTenantHandler(
@@ -97,9 +100,15 @@ public sealed class ConsumptionHandlerTests
 
         var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
 
-        // Una sola fila por NIT, conservando la escritura de mayor vigencia.
-        result.Should().ContainSingle();
-        result[0].VigenciaHasta.Should().Be(farthest);
+        // Ambas escrituras del mismo NIT, ordenadas por vigencia más próxima primero.
+        result.Should().HaveCount(2);
+        result.Should().OnlyContain(d => d.Nit == Nit);
+        result[0].VigenciaHasta.Should().Be(nearest);
+        result[0].Id.Should().Be(idCorta);
+        result[0].Description.Should().Be("Corta");
+        result[1].VigenciaHasta.Should().Be(farthest);
+        result[1].Id.Should().Be(idLarga);
+        result[1].Description.Should().Be("Larga");
     }
 
     [Fact]

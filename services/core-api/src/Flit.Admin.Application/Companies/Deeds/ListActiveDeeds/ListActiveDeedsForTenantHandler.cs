@@ -10,9 +10,10 @@ namespace Flit.Admin.Application.Companies.Deeds.ListActiveDeeds;
 /// vía <see cref="ILegalRepresentativeReader.ListRepresentedCompaniesAsync"/>.
 ///
 /// Una escritura puede cubrir varias compañías (puente M:N) y una compañía puede aparecer en varias
-/// escrituras vigentes: la salida se colapsa a UNA fila por NIT, conservando la escritura de mayor
-/// vigencia (la más días restantes), y se ordena por vencimiento más próximo primero para que el FE
-/// resalte con badges las que están por vencer. El "hoy" se ancla a la hora de Colombia (UTC-5) vía
+/// escrituras vigentes: la salida emite UNA fila por cada par (escritura × compañía representada) —
+/// NO colapsa por NIT, para que el wizard vea TODAS las escrituras vigentes (Feature #10929). Se
+/// ordena por vencimiento más próximo primero (y luego por razón social) para que el FE resalte con
+/// badges las que están por vencer. El "hoy" se ancla a la hora de Colombia (UTC-5) vía
 /// <see cref="TimeProvider"/>, coherente con el resto del cálculo de vigencia.
 /// </summary>
 public sealed class ListActiveDeedsForTenantHandler
@@ -56,8 +57,10 @@ public sealed class ListActiveDeedsForTenantHandler
             .ConfigureAwait(false);
         var companiesById = companies.ToDictionary(c => c.Id);
 
-        // Colapso por NIT: conserva la escritura de mayor vigencia por compañía (la más días restantes).
-        var bestByNit = new Dictionary<string, ActiveDeedResponse>(StringComparer.Ordinal);
+        // Una fila por cada par (escritura × compañía representada): NO se colapsa por NIT, de modo que
+        // una compañía con dos escrituras vigentes aparezca DOS veces (Feature #10929). Id/Description
+        // de la escritura distinguen las filas del mismo NIT.
+        var rows = new List<ActiveDeedResponse>();
         foreach (var deed in deeds)
         {
             var diasRestantes = deed.VigenciaHasta.DayNumber - today.DayNumber;
@@ -68,21 +71,17 @@ public sealed class ListActiveDeedsForTenantHandler
                     continue;
                 }
 
-                var candidate = new ActiveDeedResponse(
+                rows.Add(new ActiveDeedResponse(
+                    deed.Id,
                     company.DocumentNumber,
                     company.Name,
                     diasRestantes,
-                    deed.VigenciaHasta);
-
-                if (!bestByNit.TryGetValue(company.DocumentNumber, out var current)
-                    || candidate.VigenciaHasta > current.VigenciaHasta)
-                {
-                    bestByNit[company.DocumentNumber] = candidate;
-                }
+                    deed.VigenciaHasta,
+                    deed.Description));
             }
         }
 
-        return [.. bestByNit.Values
+        return [.. rows
             .OrderBy(d => d.VigenciaHasta)
             .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)];
     }

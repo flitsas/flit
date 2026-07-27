@@ -348,15 +348,21 @@ export interface RuesPersonLookupResult {
 }
 
 // ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
-// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es una compañía
-// representada (NIT) cubierta por una escritura activa y VIGENTE del tenant, proyectada para el
-// collapse del primer paso del wizard: NIT + razón social + días restantes de vigencia.
+// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es el par (escritura ×
+// compañía representada) de una escritura activa y VIGENTE del tenant, proyectada para el collapse
+// del primer paso del wizard: NIT + razón social + días restantes de vigencia. Una misma compañía
+// (NIT) puede aparecer en varias filas si tiene más de una escritura vigente (Feature #10929); `id`
+// (de la escritura) y `description` distinguen esas filas.
 export interface ActiveDeed {
+  /** Id de la escritura (llave estable de la fila; distingue dos escrituras del mismo NIT). */
+  id: string;
   nit: string;
   name: string;
   diasRestantes: number;
   /** Vigencia hasta (fecha ISO YYYY-MM-DD). */
   vigenciaHasta: string;
+  /** Descripción de la escritura (p. ej. número/notaría), si viene. */
+  description?: string | null;
 }
 
 /** Compañía representada precargada por NIT (razón social + contacto). */
