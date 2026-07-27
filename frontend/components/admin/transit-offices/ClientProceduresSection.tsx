@@ -17,6 +17,8 @@ import {
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
+import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
@@ -56,6 +58,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
+  // ADR-0036 §D9 (HU #10916) — cuando la aprobación devuelve 409 mandatario_requerido, se elige el
+  // mandatario que firma el mandato y se reintenta la aprobación con él.
+  const [mandatarioTarget, setMandatarioTarget] = useState<OtClientProcedure | null>(null);
+  const [mandatarioOptions, setMandatarioOptions] = useState<MandateSigner[]>([]);
+  const [mandatarioChoice, setMandatarioChoice] = useState("");
   // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
   const [assignTarget, setAssignTarget] = useState<OtClientProcedure | null>(null);
   const [plateInput, setPlateInput] = useState("");
@@ -157,24 +164,32 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     void load(undefined, 1);
   };
 
-  const confirmApprove = async () => {
-    if (!approveTarget) return;
+  // OT sobre el que se listan los mandatarios (SuperAdmin: prop de la ruta; ot_admin: su perfil).
+  const otIdForSigners = transitOfficeId ?? profile?.transitOfficeId ?? null;
+
+  /**
+   * Aprueba el trámite (opcionalmente con el mandatario elegido) y, si se adjuntó, sube la LT.
+   * ADR-0036 §D9 (HU #10916): un 409 `mandatario_requerido` abre el diálogo de selección de mandatario
+   * (varios candidatos sin cotejo automático) para reintentar con el firmante elegido.
+   */
+  const runApprove = async (target: OtClientProcedure, mandateSignerId?: string) => {
     setActing(true);
     try {
       // Se aprueba PRIMERO y luego se adjunta la LT: el gate de la LT exige el trámite en
       // entregado/aprobado. En la ruta de placa (Feature #10587) el trámite llega a la aprobación
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
-      const updated = await approveOtClientProcedure(approveTarget.id);
+      const updated = await approveOtClientProcedure(target.id, mandateSignerId);
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
       if (ltFile) {
         try {
-          await adjuntarOtLicenciaTransito(approveTarget.id, ltFile, scope);
+          await adjuntarOtLicenciaTransito(target.id, ltFile, scope);
         } catch {
           // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
           // acción dedicada de Licencia de Tránsito.
           setApproveTarget(null);
+          setMandatarioTarget(null);
           setLtFile(null);
           show(
             "Trámite aprobado, pero no se pudo adjuntar la Licencia de Tránsito. Reintenta la carga.",
@@ -185,13 +200,43 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       }
 
       setApproveTarget(null);
+      setMandatarioTarget(null);
       setLtFile(null);
       show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
-    } catch {
+    } catch (err) {
+      // ADR-0036 §D9 — hay varios mandatarios y ninguno cotejó: pedir que el OT elija uno.
+      const needsMandatario =
+        err instanceof ApiError &&
+        err.status === 409 &&
+        (err.body as { error?: string } | undefined)?.error === "mandatario_requerido";
+      const otId = target.transitOfficeId ?? otIdForSigners;
+      if (needsMandatario && otId) {
+        try {
+          const signers = await fetchMandateSigners(otId);
+          const options = signers.filter(
+            (s) => s.isActive && s.companyTenantIds.includes(target.clientTenantId),
+          );
+          setMandatarioOptions(options);
+          setMandatarioChoice(options[0]?.id ?? "");
+          setApproveTarget(null);
+          setMandatarioTarget(target);
+          return;
+        } catch {
+          // cae al mensaje genérico
+        }
+      }
       show("No se pudo aprobar el trámite.", "error");
     } finally {
       setActing(false);
     }
+  };
+
+  const confirmApprove = () => {
+    if (approveTarget) void runApprove(approveTarget);
+  };
+
+  const confirmMandatario = () => {
+    if (mandatarioTarget && mandatarioChoice) void runApprove(mandatarioTarget, mandatarioChoice);
   };
 
   // HU #10800 — abre el modal de asignar placa y carga las placas disponibles del rango de la compañía;
@@ -542,6 +587,76 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => void confirmApprove()}
               >
                 {acting ? "Procesando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mandatarioTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Elegir mandatario del mandato"
+        >
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
+            <h2 className="text-lg font-semibold text-foreground">Elige el mandatario que firma</h2>
+            <p className="mt-2 text-sm opacity-80">
+              Este trámite requiere contrato de mandato y la compañía tiene varios mandatarios. Elige quién
+              firma para aprobar.
+            </p>
+            <p className="mt-1 text-xs opacity-60">{mandatarioTarget.referenceNumber}</p>
+
+            {mandatarioOptions.length === 0 ? (
+              <p className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70">
+                No hay mandatarios activos para esta compañía en el organismo. Regístralos en la pestaña
+                «Mandatario» y reintenta.
+              </p>
+            ) : (
+              <fieldset className="mt-4 space-y-2" data-testid="mandatario-options">
+                <legend className="sr-only">Mandatarios disponibles</legend>
+                {mandatarioOptions.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm"
+                  >
+                    <input
+                      type="radio"
+                      name="mandatario"
+                      value={s.id}
+                      checked={mandatarioChoice === s.id}
+                      onChange={() => setMandatarioChoice(s.id)}
+                      className="h-4 w-4 accent-[#557EFF]"
+                    />
+                    <span className="flex-1">
+                      <span className="font-semibold">{s.fullName}</span>
+                      <span className="ml-2 font-mono text-xs opacity-60">
+                        {s.documentType} ••••{s.documentNumber.slice(-4)}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                onClick={() => setMandatarioTarget(null)}
+                disabled={acting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "#557EFF" }}
+                disabled={acting || !mandatarioChoice}
+                onClick={() => void confirmMandatario()}
+              >
+                {acting ? "Procesando…" : "Aprobar con este mandatario"}
               </button>
             </div>
           </div>
