@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -27,6 +28,7 @@ public sealed class IctOrchestrationService(
     PutCommercialHandler commercialHandler,
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
+    RunConsultationHandler runConsultationHandler,
     ITransitOfficeResolver transitOfficeResolver,
     FlitDbContext db) : IctOrchestration.IctOrchestrationBase
 {
@@ -124,6 +126,35 @@ public sealed class IctOrchestrationService(
             fieldItems.Add(new FieldValueInput(null, "selling_date", sellingDate.Trim(), null));
         }
 
+        // Documento del TITULAR (vendedor en traspaso / propietario). El registro manual lo captura como
+        // owner_document_* y ADEMÁS la consulta RUNT por placa lo EXIGE (VerifikConsultationProvider lee
+        // owner_document_type/number). Se deriva del actor titular que envía ICT (seller/owner) para que
+        // el borrador quede con el mismo dato que el manual y la hidratación del vehículo (más abajo) pueda
+        // consultar por placa. En matrícula (consulta por VIN) es igualmente el propietario del vehículo.
+        var titular = request.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType?.Trim(), "seller", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(a.ActorType?.Trim(), "owner", StringComparison.OrdinalIgnoreCase));
+        if (titular is not null && !string.IsNullOrWhiteSpace(titular.DocumentNumber))
+        {
+            fieldItems.Add(new FieldValueInput(null, "owner_document_type",
+                string.IsNullOrWhiteSpace(titular.DocumentType) ? "CC" : titular.DocumentType.Trim().ToUpperInvariant(), null));
+            fieldItems.Add(new FieldValueInput(null, "owner_document_number", titular.DocumentNumber.Trim(), null));
+        }
+
+        // Atributos "manuales" del traspaso que el frontend le pediría al gestor y que el contrato ICT v1
+        // NO trae (el master solo modela selling_price/vin/selling_date): se siembran con el default del
+        // caso estándar (no leasing, sin cambio de carrocería) para que el wizard no vuelva a solicitarlos.
+        // El gestor puede cambiarlos. accion_prenda se OMITE a propósito: es una decisión de negocio que
+        // depende de si el vehículo tiene gravamen (levantar/mantener) y no es derivable del payload ICT.
+        // TODO(ICT-MANUAL-ATTRS): derivar es_leasing/cambio_carroceria del tenant/transformaciones del
+        // master cuando ICT los capture (external_integration_master_transformation_type).
+        var esTraspasoDraft = request.ProcedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
+        if (esTraspasoDraft)
+        {
+            fieldItems.Add(new FieldValueInput(null, "es_leasing", "false", null));
+            fieldItems.Add(new FieldValueInput(null, "cambio_carroceria", "false", null));
+        }
+
         if (fieldItems.Count > 0)
         {
             var (_, patchError) = await patchHandler.HandleAsync(
@@ -202,6 +233,35 @@ public sealed class IctOrchestrationService(
             if (attachmentWarnings.Count > 0)
             {
                 AppendWarning(reply, "attachments_warning:" + string.Join(",", attachmentWarnings));
+            }
+        }
+
+        // Hidratación de los datos del VEHÍCULO desde el RUNT — PARIDAD con el registro manual del
+        // frontend. Reutiliza el MISMO RunConsultationHandler del wizard (template RUNT_VEHICLE →
+        // provider verifik) que upserta vehicle_*/soat_*/vin como field_values con Source="consultation".
+        // Sin esto el borrador de ICT solo tendría plate/vin y el gestor tendría que pulsar "Consultar
+        // RUNT" y reingresar los ~19 atributos que el manual llena solo. Se ejecuta cuando hay placa o VIN
+        // (traspaso consulta por placa+owner_document_*; matrícula por VIN). Best-effort: cualquier fallo
+        // del proveedor NO tumba la materialización (el borrador ya existe) — se degrada a warning y el
+        // gestor puede consultar manualmente. Mismo contrato que el flujo manual, cero reglas nuevas.
+        var tieneVehiculo = request.FieldValues.Any(f =>
+            (string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))
+            && !string.IsNullOrWhiteSpace(f.ValueText));
+        if (tieneVehiculo)
+        {
+            try
+            {
+                var (_, hydrateError) = await runConsultationHandler.HandleAsync(
+                    summary.Id, tenantId, "RUNT_VEHICLE", forceRefresh: false, context.CancellationToken);
+                if (hydrateError is not null)
+                {
+                    AppendWarning(reply, "hydrate_warning:" + hydrateError);
+                }
+            }
+            catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
+            {
+                AppendWarning(reply, "hydrate_warning:exception");
             }
         }
 
