@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
+  acknowledgeAlertEvent,
   fetchAlertEvents,
   type AlertEvent,
   type AlertRule,
@@ -28,6 +29,7 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
   const [page, setPage] = useState(1);
   const [ruleId, setRuleId] = useState<string>("");
   const [status, setStatus] = useState<UiStatus>("loading");
+  const [acking, setAcking] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -50,6 +52,18 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
     void load();
   }, [load]);
+
+  async function handleAck(id: string) {
+    setAcking(id);
+    try {
+      const updated = await acknowledgeAlertEvent(id, tenantId);
+      setEvents((prev) => prev.map((ev) => (ev.id === id ? updated : ev)));
+    } catch {
+      // Silencioso: el estado no cambia; el usuario puede reintentar.
+    } finally {
+      setAcking(null);
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -90,6 +104,7 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
                 <th className="px-3 py-2 text-right">Umbral</th>
                 <th className="px-3 py-2">Notificada</th>
                 <th className="px-3 py-2">Detalle</th>
+                <th className="px-3 py-2">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -108,6 +123,26 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
                   <td className="px-3 py-2">{e.notified ? "Sí" : "No"}</td>
                   <td className="px-3 py-2 max-w-[320px] truncate" title={e.message ?? undefined}>
                     {e.message ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {e.acknowledgedAt ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                        style={{ background: "#557EFF1A", color: "#557EFF" }}
+                      >
+                        <Check className="h-3 w-3" aria-hidden="true" /> Reconocida
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={acking === e.id}
+                        onClick={() => void handleAck(e.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        {acking === e.id ? "Reconociendo…" : "Reconocer"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
