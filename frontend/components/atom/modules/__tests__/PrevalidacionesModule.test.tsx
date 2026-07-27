@@ -117,6 +117,13 @@ describe('PrevalidacionesModule (HU #10944)', () => {
 
     expect(screen.getByText(/cargando prevalidaciones de identidad/i)).toBeInTheDocument();
 
+    // El efecto difiere `load` a un microtask (para no hacer setState síncrono dentro del efecto,
+    // regla react-hooks/set-state-in-effect), así que la petición NO sale durante el render: hay
+    // que esperar a que el cliente se haya invocado antes de resolver su promesa.
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalled();
+    });
+
     resolveFn(listResponse([]));
     await waitFor(() => {
       expect(screen.getByText(/no hay prevalidaciones aún/i)).toBeInTheDocument();

@@ -142,7 +142,11 @@ export function PrevalidacionesModule() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // `load()` arranca con setFetching(true), y llamarlo directo en el cuerpo del efecto dispara
+    // react-hooks/set-state-in-effect (setState síncrono dentro del efecto → renders en cascada).
+    // Se difiere a un microtask: el setState ocurre ya en un callback, que es justo el patrón que
+    // recomienda la regla. Comportamiento observable idéntico — la carga sigue siendo inmediata.
+    void Promise.resolve().then(load);
   }, [load]);
 
   const handleSuccess = (result: IniciarPrevalidacionResult) => {
