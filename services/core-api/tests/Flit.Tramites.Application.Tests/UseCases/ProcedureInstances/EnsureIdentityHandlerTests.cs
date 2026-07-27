@@ -462,12 +462,15 @@ public sealed class EnsureIdentityHandlerTests
     private sealed class FakeVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
     {
         public int Calls { get; private set; }
+
+        /// <summary>Último DOCUMENTO consultado (HU #10937: el baúl se resuelve por documento del representante).</summary>
         public string? LastNit { get; private set; }
 
-        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
         {
             Calls++;
-            LastNit = nitEmpresa;
+            LastNit = documentNumber;
             return Task.FromResult(match);
         }
     }

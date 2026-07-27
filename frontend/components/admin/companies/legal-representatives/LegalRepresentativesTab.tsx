@@ -235,9 +235,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               <thead>
                 <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
                   <th scope="col" className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-                    Compañía
-                  </th>
-                  <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
                     Representante
                   </th>
                   <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -260,11 +257,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                   const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
                     <tr key={item.id} className="bg-white dark:bg-[#0B0F14]">
-                      <td className="rounded-l-xl border-y border-l px-4 py-3">
-                        <span className="font-semibold">{item.companyName}</span>
-                        <span className="block font-mono opacity-60">{item.companyDocumentNumber}</span>
-                      </td>
-                      <td className="border-y px-4 py-3 font-semibold">{fullName(item)}</td>
+                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">{fullName(item)}</td>
                       <td className="border-y px-4 py-3 font-mono">
                         {item.documentType} {maskDocument(item.documentNumber)}
                       </td>
@@ -360,6 +353,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
       />
 
       <LegalRepresentativeDetailModal
+        tenantId={tenantId}
         item={detail}
         procedureTypes={procedureTypes}
         onClose={() => setDetail(null)}

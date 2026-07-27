@@ -25,4 +25,18 @@ public sealed record LegalRepresentativeWriteInput(
     string? City,
     string? Phone,
     IReadOnlyList<Guid> ProcedureTypeIds,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    IReadOnlyList<LegalRepresentativeCompanyInput>? Companies = null);
+
+/// <summary>
+/// Una compañía anidada del representante (HU #10932): la vista representante-céntrica envía la lista
+/// de empresas del representante. Si el request no trae <c>Companies</c>, se usa la compañía única de
+/// los campos <c>Company*</c> (compatibilidad). <c>Nit</c> es PII (Ley 1581): no loguear.
+/// </summary>
+public sealed record LegalRepresentativeCompanyInput(
+    string? Nit,
+    string? Name,
+    string? Email,
+    string? Address,
+    string? City,
+    string? Phone);

@@ -19,6 +19,9 @@ public sealed class DuplicateActiveProcedurePolicyTests
     [InlineData(TramiteEstado.Borrador)]
     [InlineData(TramiteEstado.Preparado)]
     [InlineData(TramiteEstado.Entregado)]
+    // HU #10870 — subsanación sigue "en proceso": el trámite se está corrigiendo para re-radicarse,
+    // así que NO libera la llave de duplicidad (VIN/placa) mientras dura la corrección.
+    [InlineData(TramiteEstado.Subsanacion)]
     public void FindActiveDuplicate_EstadoEnProceso_DevuelveId(string estado)
     {
         var id = Guid.NewGuid();

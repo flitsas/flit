@@ -28,6 +28,7 @@ import type {
   ActorPersonType,
   ActorRol,
   LegalRepresentativeLookupResult,
+  LegalRepresentativeOption,
   BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
@@ -242,12 +243,39 @@ type LookupState =
   | { status: 'error'; message: string };
 
 /** Nombre completo del representante legal a partir de sus partes (omite vacíos). */
-function repFullName(rep: LegalRepresentativeLookupResult['representante']): string {
+function repFullName(rep: {
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+}): string {
   return [rep.nombres, rep.primerApellido, rep.segundoApellido]
     .map((s) => s?.trim() ?? '')
     .filter((s) => s !== '')
     .join(' ')
     .trim();
+}
+
+/**
+ * Representantes seleccionables del resultado de precarga (HU #10937). Usa la lista `representantes`
+ * si viene; si no (contrato previo), construye una lista de un solo elemento a partir del
+ * representante primario. Así el selector funciona con ambos contratos.
+ */
+function repsOf(result: LegalRepresentativeLookupResult): LegalRepresentativeOption[] {
+  if (result.representantes?.length) return result.representantes;
+  const r = result.representante;
+  return [
+    {
+      tipoDoc: r.tipoDoc,
+      documento: r.documento,
+      nombres: r.nombres,
+      primerApellido: r.primerApellido,
+      segundoApellido: r.segundoApellido,
+      email: r.email,
+      telefono: r.telefono,
+      firmaVigente: result.firmaVigente,
+      identidadVigente: result.identidadVigente,
+    },
+  ];
 }
 
 /** Tipos de documento del representante legal: persona natural (excluye NIT). */
@@ -339,6 +367,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [runt, setRunt] = useState<Record<number, LookupState>>({});
   // Estado de la consulta RUNT del representante legal por índice de actor jurídico.
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
+  // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
+  // cuando la compañía tiene varios. Default 0 (el primario). Gobierna qué representante se precarga y
+  // firma, y las banderas mostradas.
+  const [selectedRepIdx, setSelectedRepIdx] = useState<Record<number, number>>({});
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
   // Fecha de expedición del documento (RNMC) por índice de actor, en formato de input (YYYY-MM-DD).
@@ -492,6 +524,28 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       ),
     );
 
+  // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
+  // guarda este representante embebido; el backend firma/valida identidad por SU documento.
+  const applySelectedRep = (index: number, rep: LegalRepresentativeOption) =>
+    updateRepLegal(index, {
+      tipoDocumento: (rep.tipoDoc as ActorDocumentType) || 'CC',
+      numeroDocumento: rep.documento,
+      nombreCompleto: repFullName(rep),
+      email: rep.email ?? undefined,
+      telefono: rep.telefono ?? undefined,
+    });
+
+  // Cambia el representante elegido del actor jurídico (selector cuando la compañía tiene varios) y
+  // reprecarga sus datos. Las banderas mostradas se derivan del representante elegido.
+  const handleSelectRep = (index: number, repIdx: number) => {
+    const lookup = runt[index];
+    if (!lookup || lookup.status !== 'found' || lookup.kind !== 'preload') return;
+    const rep = repsOf(lookup.result)[repIdx];
+    if (!rep) return;
+    setSelectedRepIdx((prev) => ({ ...prev, [index]: repIdx }));
+    applySelectedRep(index, rep);
+  };
+
   // Consulta de identidad por documento. Bifurca por tipo de persona: jurídica → RUES (por NIT),
   // natural → RUNT (conductor). Si encuentra, autopopula el actor. Nunca bloquea la captura
   // manual: not_found/error dejan los campos editables (registro sin resultado de consulta).
@@ -515,13 +569,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             tipoDocumento: 'NIT',
             numeroDocumento: preload.company.nit || documentNumber,
           });
-          updateRepLegal(index, {
-            tipoDocumento: (preload.representante.tipoDoc as ActorDocumentType) || 'CC',
-            numeroDocumento: preload.representante.documento,
-            nombreCompleto: repFullName(preload.representante),
-            email: preload.representante.email ?? undefined,
-            telefono: preload.representante.telefono ?? undefined,
-          });
+          // HU #10937 — si la compañía tiene varios representantes, se precarga el primero por defecto
+          // y el gestor puede cambiarlo con el selector (handleSelectRep). Con uno solo, comportamiento
+          // previo (auto-seleccionado). El representante elegido queda embebido en el actor.
+          const reps = repsOf(preload);
+          setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
+          if (reps[0]) applySelectedRep(index, reps[0]);
           setRuntFor(index, { status: 'found', kind: 'preload', result: preload });
           return;
         }
@@ -835,9 +888,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       );
     }
     if (runtState.status === 'found' && runtState.kind === 'preload') {
-      // HU #10906 — precarga desde el directorio de la compañía (NO se consultó RUES/RUNT). Copy
-      // honesto + badges de firma/identidad vigentes con los tonos unificados de StatusBadge.
-      const { company, representante, firmaVigente, identidadVigente } = runtState.result;
+      // HU #10906/#10937 — precarga desde el directorio de la compañía (NO se consultó RUES/RUNT). Copy
+      // honesto + selector de representante cuando hay varios + badges de firma/identidad vigentes del
+      // representante ELEGIDO, con los tonos unificados de StatusBadge.
+      const { company } = runtState.result;
+      const reps = repsOf(runtState.result);
+      const sel = selectedRepIdx[index] ?? 0;
+      const rep = reps[sel] ?? reps[0];
+      const firmaVigente = rep?.firmaVigente ?? false;
+      const identidadVigente = rep?.identidadVigente ?? false;
       return (
         <div className="space-y-2" role="status" aria-live="polite">
           <div
@@ -864,10 +923,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div>
                 <span className="opacity-60 font-normal">Representante: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
-                  {repFullName(representante) || '—'}
+                  {rep ? repFullName(rep) || rep.documento : '—'}
                 </span>
               </div>
             </div>
+            {/* HU #10937 — selector de representante cuando la compañía tiene más de uno. El elegido
+                se precarga y firma con su información. */}
+            {reps.length > 1 && (
+              <div className="mt-2">
+                <label
+                  htmlFor={`${index}-rep-select`}
+                  className="opacity-60 font-normal block mb-1"
+                >
+                  Representante legal que firma
+                </label>
+                <select
+                  id={`${index}-rep-select`}
+                  value={sel}
+                  disabled={readOnly}
+                  onChange={(e) => handleSelectRep(index, Number(e.target.value))}
+                  className={INPUT_BASE}
+                >
+                  {reps.map((r, i) => (
+                    <option key={`${r.tipoDoc}-${r.documento}`} value={i}>
+                      {`${repFullName(r) || r.documento} · ${r.tipoDoc} ${r.documento}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge
                 tone={firmaVigente ? 'success' : 'neutral'}

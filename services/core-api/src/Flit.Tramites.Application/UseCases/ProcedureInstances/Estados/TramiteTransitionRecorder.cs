@@ -38,6 +38,10 @@ public sealed class TramiteTransitionRecorder(IProcedureInstanceRepository repo)
             ChangedAt = record.ChangedAt,
             ChangedBy = changedBy,
             Reason = record.Reason,
+            // HU #10871 — checklist HÍBRIDO de subsanación (u otro metadata futuro) construido por el
+            // caller (ver TramiteTransitionCommand.Metadata). Sin metadata, se conserva '{}' (default
+            // de la columna, comportamiento previo a la HU).
+            Metadata = record.Metadata ?? "{}",
         });
 
         await repo.AddEventAsync(new ProcedureInstanceEvent

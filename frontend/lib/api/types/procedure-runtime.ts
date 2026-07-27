@@ -15,7 +15,10 @@ export type InstanceStatus =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
+  // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
+  | 'subsanacion';
 
 /**
  * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
@@ -165,6 +168,15 @@ export interface StatusHistory {
   toStatus: InstanceStatus;
   changedAt: string;
   reason: string | null;
+  /**
+   * HU #10871/#10872 (backend) — observación de subsanación serializada como JSON en
+   * `procedure_instance_status_history.metadata`. `GetProcedureInstanceHandler.ToDetail`
+   * (commit f3b64f5e) la expone filtrada a `{motivo, items:[{campo,detalle}]}`; por
+   * seguridad/Habeas Data NO incluye `fieldSnapshot` ni los tenant ids. Llega `null` en
+   * entradas sin observación (p. ej. aprobar/rechazar); `lib/tramites/subsanacion.ts` degrada
+   * entonces al `reason` plano (ver SubsanacionPanel).
+   */
+  metadata?: string | null;
 }
 
 export interface Actor {
@@ -348,15 +360,21 @@ export interface RuesPersonLookupResult {
 }
 
 // ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
-// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es una compañía
-// representada (NIT) cubierta por una escritura activa y VIGENTE del tenant, proyectada para el
-// collapse del primer paso del wizard: NIT + razón social + días restantes de vigencia.
+// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es el par (escritura ×
+// compañía representada) de una escritura activa y VIGENTE del tenant, proyectada para el collapse
+// del primer paso del wizard: NIT + razón social + días restantes de vigencia. Una misma compañía
+// (NIT) puede aparecer en varias filas si tiene más de una escritura vigente (Feature #10929); `id`
+// (de la escritura) y `description` distinguen esas filas.
 export interface ActiveDeed {
+  /** Id de la escritura (llave estable de la fila; distingue dos escrituras del mismo NIT). */
+  id: string;
   nit: string;
   name: string;
   diasRestantes: number;
   /** Vigencia hasta (fecha ISO YYYY-MM-DD). */
   vigenciaHasta: string;
+  /** Descripción de la escritura (p. ej. número/notaría), si viene. */
+  description?: string | null;
 }
 
 /** Compañía representada precargada por NIT (razón social + contacto). */
@@ -380,14 +398,36 @@ export interface LegalRepresentativeLookupContact {
   telefono?: string | null;
 }
 
+/**
+ * Un representante seleccionable de la compañía (HU #10937), con sus banderas de firma/identidad
+ * vigentes calculadas por su propio documento. Cuando la compañía tiene VARIOS, el FE muestra un
+ * selector; el elegido precarga sus datos y firma con su información (firma del baúl o validación de
+ * identidad por su documento). `documento` es PII (Ley 1581): no loguear.
+ */
+export interface LegalRepresentativeOption {
+  tipoDoc: string;
+  documento: string;
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  firmaVigente: boolean;
+  identidadVigente: boolean;
+}
+
 // GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — precarga comprador/vendedor por NIT.
-// 200 con el match (compañía + representante + banderas de firma/identidad VIGENTES al momento) o
-// 404 → null (el FE cae a la consulta RUES/RUNT normal).
+// 200 con el match (compañía + representante(s) + banderas de firma/identidad VIGENTES al momento) o
+// 404 → null (el FE cae a la consulta RUES/RUNT normal). HU #10937: `representantes` trae TODOS los
+// representantes activos de la compañía para el selector; `representante`/`firmaVigente`/
+// `identidadVigente` reflejan el primario (primero) por compatibilidad con el consumo previo.
 export interface LegalRepresentativeLookupResult {
   company: LegalRepresentativeLookupCompany;
   representante: LegalRepresentativeLookupContact;
   firmaVigente: boolean;
   identidadVigente: boolean;
+  /** HU #10937 — todos los representantes activos de la compañía (para elegir cuál firma). */
+  representantes: LegalRepresentativeOption[];
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -936,6 +976,43 @@ export interface StuckIdentityValidationsResponse {
   stuck: StuckIdentityValidation[];
   total: number;
   maxDeliveryAttempts: number;
+}
+
+/**
+ * Categoría de alerta ACCIONABLE de una validación de identidad (HU #10873/#10875). Espejo de
+ * `IdentityValidationAlertKinds` del backend. `null` (fuera de este union) = sin alerta, solo puede
+ * traer recordatorio de reenvío (`RequiresResendReminder`).
+ */
+export type IdentityValidationAlertKind = 'rechazada' | 'expirada' | 'por_vencer' | 'atascada';
+
+/**
+ * Fila de alerta/recordatorio de validación de identidad (HU #10873, AC1/AC2). Espejo de
+ * `IdentityValidationAlertDto`. Consumida por la vista consolidada del trámite (HU #10875, POR PULL —
+ * sin campana ni push).
+ */
+export interface IdentityValidationAlert {
+  id: string;
+  /** null en prevalidaciones standalone (Feature #10864): la validación no cuelga de ningún trámite. */
+  instanceId: string | null;
+  referenceNumber: string;
+  recipientUserId: string;
+  // string (no BiometricParte): el DTO del backend no acota el rol a comprador/vendedor — futuro-proof.
+  partyRole: string | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+  status: BiometricEstado;
+  alertKind: IdentityValidationAlertKind | null;
+  requiresResendReminder: boolean;
+  daysRemainingVigencia: number | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** Respuesta de GET .../identity-validation/alerts (tenant o por instancia). Espejo de IdentityValidationAlertsResponse. */
+export interface IdentityValidationAlertsResponse {
+  alerts: IdentityValidationAlert[];
+  total: number;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */

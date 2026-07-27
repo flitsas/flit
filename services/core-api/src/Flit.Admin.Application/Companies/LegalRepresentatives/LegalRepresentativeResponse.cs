@@ -26,6 +26,7 @@ public sealed record LegalRepresentativeResponse(
     Guid? IdentityValidationRef,
     bool HasSignatureOrIdentity,
     IReadOnlyList<Guid> ProcedureTypeIds,
+    IReadOnlyList<LegalRepresentativeCompanySummary> Companies,
     bool IsActive,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt)
@@ -51,6 +52,7 @@ public sealed record LegalRepresentativeResponse(
             item.IdentityValidationRef,
             item.HasSignatureOrIdentity,
             item.ProcedureTypeIds,
+            item.Companies,
             item.IsActive,
             item.CreatedAt,
             item.UpdatedAt);

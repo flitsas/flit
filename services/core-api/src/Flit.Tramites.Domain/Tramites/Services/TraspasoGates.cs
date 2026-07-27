@@ -8,6 +8,9 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// Gates del wizard de TRASPASO (6 pasos), puros (sin IO). Paridad <c>traspaso-gates.ts</c> de Johan.
 /// Fuente única de verdad de "paso completo / puede avanzar / inmutabilidad de pasos cerrados",
 /// reutilizada luego por API (checks server-side) y UI (sidebar + Continuar).
+///
+/// <para>HU #10935 — orden del wizard: los documentos van DESPUÉS de los actores
+/// (consulta → vendedor → comprador → documentos → comercial → fur).</para>
 /// </summary>
 public static class TraspasoGates
 {
@@ -17,11 +20,12 @@ public static class TraspasoGates
     public static readonly IReadOnlyDictionary<int, IReadOnlyList<string>> PasoDataKeys =
         new Dictionary<int, IReadOnlyList<string>>
         {
-            // El paz y salvo de impuesto se confirma en el paso 1 (junto a la consulta/preflight),
-            // ya no en el paso 2 (que pasa a ser Documentos, paridad con matrícula).
+            // El paz y salvo de impuesto se confirma en el paso 1 (junto a la consulta/preflight).
+            // HU #10935 — los actores pasan al frente (2 vendedor, 3 comprador) y Documentos (4) no
+            // tiene claves de datos propias en field_values (su completitud sale del checklist).
             [1] = ["paz_salvo_impuesto", "impuesto_consulta"],
-            [3] = ["vendedor", "runt_vendedor"],
-            [4] = ["comprador", "runt_comprador", "simit_comprador"],
+            [2] = ["vendedor", "runt_vendedor"],
+            [3] = ["comprador", "runt_comprador", "simit_comprador"],
             [5] = ["comercial"],
         };
 
@@ -51,10 +55,26 @@ public static class TraspasoGates
                 return GateResult.Allowed;
 
             case 2:
-                // Paso 2 = Documentos (paridad con MatriculaGates paso 2): preflight crítico + checklist.
-                // El gestor puede asumir el riesgo de un preflight rojo subsanable (sin tocar docs).
-                // Bloqueo DURO: una consulta no verificable (proveedor caído/timeout) NO se subsana con
-                // "aceptar riesgo" ni forzando; hay que reintentar la consulta.
+                // HU #10935 — Paso 2 = Vendedor (antes iba en el paso 3): parte + RUNT consultado.
+                if (!ParteCompleta(ctx.Vendedor))
+                    return GateResult.Block("vendedor_incompleto", "Completa nombre, documento y email del vendedor");
+                if (!RuntConsultado(ctx.RuntVendedor, ctx.Vendedor?.Documento))
+                    return GateResult.Block("runt_vendedor", "Consulta RUNT del vendedor antes de continuar");
+                return GateResult.Allowed;
+
+            case 3:
+                // HU #10935 — Paso 3 = Comprador (antes iba en el paso 4): parte + RUNT + SIMIT.
+                if (!ParteCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
+                    return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
+                return SimitCompradorGate(ctx, forzar);
+
+            case 4:
+                // HU #10935 — Paso 4 = Documentos, DESPUÉS de los actores (antes iba en el paso 2).
+                // Preflight crítico + checklist. El gestor puede asumir el riesgo de un preflight rojo
+                // subsanable (sin tocar docs). Bloqueo DURO: una consulta no verificable (proveedor
+                // caído/timeout) NO se subsana con "aceptar riesgo" ni forzando; hay que reintentar.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT/SIMIT/RNMC. Vuelve a ejecutar la consulta antes de continuar");
                 if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
@@ -63,25 +83,11 @@ public static class TraspasoGates
                     return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
                 return GateResult.Allowed;
 
-            case 3:
-                if (!ParteCompleta(ctx.Vendedor))
-                    return GateResult.Block("vendedor_incompleto", "Completa nombre, documento y email del vendedor");
-                if (!RuntConsultado(ctx.RuntVendedor, ctx.Vendedor?.Documento))
-                    return GateResult.Block("runt_vendedor", "Consulta RUNT del vendedor antes de continuar");
-                return GateResult.Allowed;
-
-            case 4:
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
-                if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
-                    return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
-                return SimitCompradorGate(ctx, forzar);
-
             case 5:
                 return ValidarComercial(ctx);
 
             case 6:
-                // Paso 6 = Generar FUR. Los documentos ya se exigen en el paso 2; aquí el gating
+                // Paso 6 = Generar FUR. Los documentos ya se exigen en el paso 4; aquí el gating
                 // (biometría de ambas partes + firma + FUR) se evalúa de forma diferida en
                 // WizardStateQuery.BuildTraspaso. PasoCompleto(6) no bloquea por documentos.
                 return GateResult.Allowed;

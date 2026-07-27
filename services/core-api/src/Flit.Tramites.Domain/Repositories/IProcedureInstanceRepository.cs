@@ -288,6 +288,26 @@ public interface IProcedureInstanceRepository
     /// una generación de impronta desde el trámite). Null si el usuario no existe.
     /// </summary>
     Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10872 (AC1) — field values ACTUALES de la instancia, proyección lean (sin el resto del
+    /// grafo del wizard). Lo usan los callers que transicionan a <c>subsanacion</c> pero no cargan
+    /// <c>GetByIdWithWizardGraphAsync</c> (p. ej. <c>ConsultarEstadoQuipuxHandler</c>) para capturar el
+    /// snapshot baseline (<see cref="Tramites.Services.FieldValueSnapshot.Capture"/>) del diff que la
+    /// re-radicación computará. Lista vacía si la instancia no existe o no tiene field values.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceFieldValue>> GetFieldValuesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10872 (AC1) — <c>metadata</c> (jsonb, deserializable con
+    /// <c>SubsanacionObservation.FromJson</c>) del registro MÁS RECIENTE de
+    /// <c>procedure_instance_status_history</c> con <c>to_status = 'subsanacion'</c> para la instancia:
+    /// el snapshot baseline de field values contra el que <c>TramiteLifecycleService</c> computa el
+    /// DIFF al re-radicar (<c>subsanacion → entregado</c>). <c>null</c> si el trámite nunca entró a
+    /// subsanación (fail-safe del caller: re-evalúa todos los gates).
+    /// </summary>
+    Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
 }
 
 /// <summary>

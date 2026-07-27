@@ -343,6 +343,87 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Borrador);
     }
 
+    // ── HU #10870 — subsanación sin volver a borrador ─────────────────────────────
+
+    [Theory]
+    [InlineData("entregado")]
+    [InlineData("rechazado")]
+    public async Task Ac1_EntregadoORechazado_PasaASubsanacion_SinMotivoObligatorio(string desde)
+    {
+        var i = Wire(desde);
+
+        var outcome = await Transition(i, TramiteEstado.Subsanacion);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Subsanacion);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == desde && r.ToStatus == TramiteEstado.Subsanacion);
+    }
+
+    [Fact]
+    public async Task Ac2_Subsanacion_ReRadica_ConservandoElHistorialPrevio()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+
+        // Primero pasa a subsanación (corrección post-entrega)...
+        var aSubsanacion = await Transition(i, TramiteEstado.Subsanacion);
+        aSubsanacion.Success.Should().BeTrue();
+
+        // ...y luego se re-radica: vuelve a 'entregado' SIN pasar por borrador/preparado.
+        var reRadicado = await Transition(i, TramiteEstado.Entregado);
+
+        reRadicado.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+        // AC2 — el historial conserva AMBAS transiciones (no se sobrescribe la anterior).
+        _recorder.Records.Should().HaveCount(2);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Entregado && r.ToStatus == TramiteEstado.Subsanacion);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Subsanacion && r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact] // HU #10871 — el servicio de ciclo de vida es agnóstico del shape: solo pasa el Metadata del
+           // command al recorder (el checklist HÍBRIDO lo arma el caller, p. ej. RejectOtClientProcedureHandler).
+    public async Task Ac1_Metadata_SePasaVerbatimAlRecorder()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+        const string metadata = "{\"motivo\":\"x\",\"items\":[{\"campo\":\"factura\",\"detalle\":\"falta\"}]}";
+
+        var outcome = await _sut.TransitionAsync(
+            new TramiteTransitionCommand(
+                i.Id, i.TenantId, TramiteEstado.Subsanacion, "x", null, Metadata: metadata),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        _recorder.Records.Should().ContainSingle(r => r.Metadata == metadata);
+    }
+
+    [Fact] // HU #10871 — sin Metadata, el command lo pasa como null (el recorder real degrada a '{}').
+    public async Task Metadata_PorDefecto_EsNull()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+
+        var outcome = await Transition(i, TramiteEstado.Subsanacion);
+
+        outcome.Success.Should().BeTrue();
+        _recorder.Records.Should().ContainSingle(r => r.Metadata == null);
+    }
+
+    [Fact]
+    public async Task Subsanacion_NoAdmiteVolverABorradorNiPreparado()
+    {
+        // Alcance de HU #10870: subsanacion SOLO re-radica (→ entregado); no bifurca a borrador ni
+        // preparado (eso seguiría el camino clásico rechazado→borrador si se necesitara).
+        var i = Wire(TramiteEstado.Subsanacion);
+
+        var aBorrador = await Transition(i, TramiteEstado.Borrador);
+        var aPreparado = await Transition(i, TramiteEstado.Preparado);
+
+        aBorrador.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        aPreparado.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        i.Status.Should().Be(TramiteEstado.Subsanacion);
+    }
+
     // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
     [Fact]
     public async Task Entrega_OtConGrantPeroNoOperable_BloqueaConOrganismoNoOperable()
@@ -552,5 +633,132 @@ public sealed class TramiteLifecycleServiceTests
 
         outcome.Success.Should().BeTrue();
         i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    // ── HU #10872 — re-radicar re-evaluando SOLO los gates de lo corregido ────────────────
+
+    private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
+        new SubsanacionObservation { Motivo = motivo, FieldSnapshot = fieldSnapshot }.ToJson();
+
+    [Fact]
+    public async Task Ac1_Reradicar_SoloVinCambio_NoReevaluaGateDePreparacion()
+    {
+        // Sin conGates: sin attachments ni biométrica — si el gate de preparación (RF03) corriera,
+        // fallaría por documentos incompletos. Solo el VIN cambió → SOLO se re-evalúa VehicleState.
+        var i = Wire(TramiteEstado.Subsanacion);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>());
+        _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "VINANTERIORCORREG" }));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task Ac1_Reradicar_VinConMatriculaAprobadaEnFlit_SigueBloqueando()
+    {
+        // El VIN corregido SÍ se re-valida contra duplicidad (CF-03): sigue siendo un gate "de lo
+        // corregido" cuando el campo cambiado es justamente el vin.
+        var i = Wire(TramiteEstado.Subsanacion);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+        _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "VINANTERIORCORREG" }));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(VehicleStatePolicy.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Ac1_Reradicar_OtroCampoCambio_ReevaluaGateDePreparacion_YFallaSinDocumentos()
+    {
+        // "color" no es el vin: cae en el bucket PreparationGate (HU #10872) — SIN attachments, el
+        // gate de documentos SÍ bloquea (prueba que la re-evaluación selectiva realmente se disparó).
+        var i = Wire(TramiteEstado.Subsanacion);
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            FieldKey = "color",
+            ValueText = "rojo",
+            Source = "user",
+        });
+        _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["color"] = "azul" }));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.DocumentosIncompletos);
+    }
+
+    [Fact]
+    public async Task Ac1_Reradicar_SinCambios_NoBloqueaPorGatesDeCorreccion()
+    {
+        // Snapshot idéntico al estado actual (nada cambió): el diff es vacío → ninguna categoría de
+        // gate de corrección corre; solo el gate final de entrega (siempre incondicional).
+        var i = Wire(TramiteEstado.Subsanacion);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "1HGCM82633A004352" }));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        await _repo.DidNotReceive().FindTramitesByVinAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Ac1_Reradicar_SinSnapshotBase_SoloReevaluaVehicleState_PreservaComportamientoPrevio()
+    {
+        // Fail-safe (dato legado anterior a HU #10872, sin GetLatestSubsanacionMetadataAsync
+        // configurado → null): el gate de preparación NUNCA corrió para subsanacion→entregado antes
+        // de esta HU — se preserva, así que sin attachments/biométrica igual puede re-radicarse.
+        var i = Wire(TramiteEstado.Subsanacion);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Ac2_Reradicar_IdentidadYDocumentosVigentes_NoLosVuelveASolicitar_Permite()
+    {
+        // conGates:true ya deja attachments + biométrica APROBADA/VIGENTE del comprador — el gate de
+        // preparación (disparado por el cambio de "color", no identidad) los REUTILIZA sin exigir una
+        // nueva biométrica ni una consulta cross-trámite (AC2: "no se vuelven a solicitar").
+        var i = Wire(TramiteEstado.Subsanacion, conGates: true);
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            FieldKey = "color",
+            ValueText = "rojo",
+            Source = "user",
+        });
+        _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["color"] = "azul" }));
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Entregado);
+        // AC2 — la identidad se resolvió con la fila PROPIA ya vigente del trámite: nunca se disparó
+        // la referencia cross-trámite (que sí implicaría "pedir"/buscar otra validación).
+        await _repo.DidNotReceive().FindVigenteApprovedByDocumentAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 }

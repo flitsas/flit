@@ -101,7 +101,10 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
             <ul className="space-y-2" aria-label="Escrituras vigentes">
               {deeds.map((deed) => (
                 <li
-                  key={`${deed.nit}-${deed.vigenciaHasta}`}
+                  // Llave estable por escritura: el backend devuelve UNA fila por cada par
+                  // (escritura × compañía), de modo que una misma compañía (NIT) puede aparecer en
+                  // varias filas —una por escritura vigente— (Feature #10929).
+                  key={deed.id}
                   className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
                 >
                   <div className="min-w-0">
@@ -109,6 +112,9 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
                       {deed.name}
                     </p>
                     <p className="text-[11px] font-mono opacity-60">NIT {deed.nit}</p>
+                    {deed.description && (
+                      <p className="truncate text-[11px] opacity-70">{deed.description}</p>
+                    )}
                   </div>
                   <StatusBadge
                     tone={deedVigenciaTone(deed.diasRestantes)}

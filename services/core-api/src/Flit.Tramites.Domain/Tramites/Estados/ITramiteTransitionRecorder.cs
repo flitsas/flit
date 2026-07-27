@@ -3,6 +3,10 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// <summary>
 /// Snapshot de una transición efectuada, compartido por el historial (RF05) y la publicación (RNF01).
 /// </summary>
+/// <param name="Metadata">
+/// HU #10871 — JSON adicional para <c>procedure_instance_status_history.metadata</c> (jsonb genérico,
+/// existía sin usar). <c>null</c> = el recorder persiste <c>'{}'</c> (comportamiento previo a la HU).
+/// </param>
 public sealed record TramiteTransitionRecord(
     Guid TenantId,
     Guid ProcedureInstanceId,
@@ -10,7 +14,8 @@ public sealed record TramiteTransitionRecord(
     string ToStatus,
     string? Reason,
     Guid? ChangedByUserId,
-    DateTimeOffset ChangedAt);
+    DateTimeOffset ChangedAt,
+    string? Metadata = null);
 
 /// <summary>
 /// Puerto de HISTORIAL (HU-2, RF05): registra la transición en

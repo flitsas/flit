@@ -110,6 +110,7 @@ public static class AdminSignatureVaultEndpoints
             VigenciaDesde = request.VigenciaDesde,
             VigenciaHasta = request.VigenciaHasta,
             ArtefactoFirmaBase64 = request.ArtefactoFirmaBase64,
+            CodigoHash = request.CodigoHash,
             MandateSignerId = request.MandateSignerId,
             CreatedBy = ResolveUserId(httpContext.User),
         };

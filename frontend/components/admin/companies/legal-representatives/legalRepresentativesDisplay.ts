@@ -1,7 +1,11 @@
 // Helpers de presentación del directorio de representantes legales (HU #10904): nombre completo,
 // enmascarado de documento (PII, Ley 1581), estado de firma/identidad y etiquetas de tipo de trámite.
 import type { StatusTone } from "@/components/atom/StatusBadge";
-import type { AssignableProcedureType, LegalRepresentativeItem } from "@/lib/api/admin-legal-representatives";
+import type {
+  AssignableProcedureType,
+  LegalRepresentativeItem,
+  RepresentativeDeedEstado,
+} from "@/lib/api/admin-legal-representatives";
 
 /** Nombre completo del representante: nombres + primer apellido + segundo apellido. */
 export function fullName(rep: Pick<LegalRepresentativeItem, "name" | "firstLastName" | "secondLastName">): string {
@@ -37,4 +41,24 @@ export function procedureTypeLabels(
     const match = catalog.find((p) => p.id === id);
     return match?.name ?? match?.code ?? "Trámite";
   });
+}
+
+/**
+ * Estado de vigencia de una escritura del historial (HU #10933) para el StatusBadge: tono semántico +
+ * etiqueta legible. `vigente`→success, `vencida`→danger, `futura`→info, `inactiva`→neutral.
+ */
+export function deedEstadoBadge(
+  estado: RepresentativeDeedEstado,
+): { tone: StatusTone; label: string } {
+  switch (estado) {
+    case "vigente":
+      return { tone: "success", label: "Vigente" };
+    case "vencida":
+      return { tone: "danger", label: "Vencida" };
+    case "futura":
+      return { tone: "info", label: "Programada" };
+    case "inactiva":
+    default:
+      return { tone: "neutral", label: "Inactiva" };
+  }
 }

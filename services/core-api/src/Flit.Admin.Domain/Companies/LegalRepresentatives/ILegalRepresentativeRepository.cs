@@ -62,4 +62,5 @@ public sealed record SaveLegalRepresentativeData(
     Guid? SignatureVaultId,
     Guid? IdentityValidationRef,
     IReadOnlyList<Guid> ProcedureTypeIds,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    IReadOnlyList<Guid>? RepresentedCompanyIds = null);

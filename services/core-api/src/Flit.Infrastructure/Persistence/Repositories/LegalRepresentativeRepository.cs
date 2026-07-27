@@ -162,6 +162,20 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                 }
 
                 AddProcedureTypes(entity.Id, data.ProcedureTypeIds);
+
+                // HU #10932: el representante-persona puede tener varias compañías. Sincroniza el
+                // puente admin.legal_representative_companies con el conjunto solicitado (la primaria
+                // es data.RepresentedCompanyId; el resto llega en RepresentedCompanyIds).
+                var companyIds = (data.RepresentedCompanyIds is { Count: > 0 }
+                        ? data.RepresentedCompanyIds
+                        : [data.RepresentedCompanyId])
+                    .Where(c => c != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+                await SyncCompaniesAsync(
+                        entity.TenantId, entity.Id, companyIds, data.ActorBy, cancellationToken)
+                    .ConfigureAwait(false);
+
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return entity.Id;
             },
@@ -234,6 +248,45 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                 RepresentativeId = representativeId,
                 ProcedureTypeId = procedureTypeId,
                 CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Sincroniza el puente representante ↔ compañía (HU #10932) al conjunto <paramref name="companyIds"/>:
+    /// borra los vínculos que sobran y agrega los que faltan (idempotente en edición).
+    /// </summary>
+    private async Task SyncCompaniesAsync(
+        Guid tenantId,
+        Guid representativeId,
+        IReadOnlyList<Guid> companyIds,
+        Guid? actorBy,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _context.LegalRepresentativeCompanies
+            .Where(l => l.RepresentativeId == representativeId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var desired = companyIds.ToHashSet();
+
+        var toRemove = existing.Where(e => !desired.Contains(e.RepresentedCompanyId)).ToList();
+        if (toRemove.Count > 0)
+        {
+            _context.LegalRepresentativeCompanies.RemoveRange(toRemove);
+        }
+
+        var existingIds = existing.Select(e => e.RepresentedCompanyId).ToHashSet();
+        foreach (var companyId in desired.Where(c => !existingIds.Contains(c)))
+        {
+            _context.LegalRepresentativeCompanies.Add(new LegalRepresentativeCompanyEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                RepresentativeId = representativeId,
+                RepresentedCompanyId = companyId,
+                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedBy = actorBy,
             });
         }
     }

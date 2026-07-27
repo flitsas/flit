@@ -53,7 +53,10 @@ public sealed record FirmaBaulMetadata(
     string FullName,
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
-    Guid SignatureVaultId);
+    Guid SignatureVaultId,
+    // HU #10930 (Feature #10929): código alfanumérico digitado por el usuario en el baúl. Es el valor
+    // que se estampa como "Hash" en el FUR (NO el UUID de la fila SignatureVaultId). null si no lo trae.
+    string? Hash = null);
 
 /// <summary>
 /// Datos del trámite ensamblados para generar los documentos. Vehículo (atributos completos),

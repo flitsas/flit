@@ -16,9 +16,10 @@ import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
  * (la máquina de estados); los gates de cada transición los valida el POST /transition.
  *
  * Política de UI: `anulado` → "Anular trámite" (destructivo, motivo OBLIGATORIO);
- * `borrador` (desde rechazado) → "Volver a borrador" (motivo opcional). `preparado`/
- * `entregado` no tienen botón propio (flujo radicar del wizard) y `aprobado`/`rechazado`
- * son decisión del Organismo de Tránsito.
+ * `subsanacion` (desde rechazado) → "Subsanar" (HU #10870/#10872): reabre la edición COMPLETA
+ * en sitio (como borrador) SIN devolver el trámite a `borrador`; al terminar, el wizard lo
+ * re-radica directo a `entregado`. `preparado`/`entregado` no tienen botón propio (flujo
+ * radicar del wizard) y `aprobado`/`rechazado` son decisión del Organismo de Tránsito.
  */
 
 interface AccionConfig {
@@ -26,11 +27,25 @@ interface AccionConfig {
   label: string;
   destructive: boolean;
   motivoRequerido: boolean;
+  /** Ejecuta la transición directo, sin abrir el panel de motivo (p. ej. "Subsanar"). */
+  directo?: boolean;
+  /** Motivo que viaja por debajo cuando la acción es `directo` (o si el operador no escribe uno). */
+  motivoPorDefecto?: string;
 }
 
 const ACCIONES: AccionConfig[] = [
   { toStatus: 'anulado', label: 'Anular trámite', destructive: true, motivoRequerido: true },
-  { toStatus: 'borrador', label: 'Volver a borrador', destructive: false, motivoRequerido: false },
+  // HU #10870/#10872 — subsanación por el operador: reabre la edición en sitio (como borrador)
+  // sin pasar por `borrador`; el wizard cierra re-radicando directo a `entregado`. Es una acción
+  // DIRECTA: no pide motivo al operador (solo aplica a subsanación) y envía un motivo por defecto.
+  {
+    toStatus: 'subsanacion',
+    label: 'Subsanar',
+    destructive: false,
+    motivoRequerido: false,
+    directo: true,
+    motivoPorDefecto: 'Subsanación iniciada por el operador',
+  },
 ];
 
 export function EstadoAcciones({
@@ -80,7 +95,7 @@ export function EstadoAcciones({
   const chip = estadoChipStyle(status);
 
   const ejecutar = async (accion: AccionConfig) => {
-    const reason = motivo.trim();
+    const reason = motivo.trim() || accion.motivoPorDefecto?.trim() || '';
     if (accion.motivoRequerido && !reason) {
       setError('Debes indicar el motivo para esta transición.');
       return;
@@ -147,9 +162,16 @@ export function EstadoAcciones({
             type="button"
             disabled={working}
             onClick={() => {
-              setPending((prev) => (prev?.toStatus === a.toStatus ? null : a));
               setMotivo('');
               setError(null);
+              // Acción directa (Subsanar): transiciona de inmediato con el motivo por defecto,
+              // sin abrir el panel de motivo.
+              if (a.directo) {
+                setPending(null);
+                void ejecutar(a);
+                return;
+              }
+              setPending((prev) => (prev?.toStatus === a.toStatus ? null : a));
             }}
             style={{
               background: 'transparent',

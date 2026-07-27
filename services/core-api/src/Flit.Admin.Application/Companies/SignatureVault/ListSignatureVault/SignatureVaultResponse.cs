@@ -13,7 +13,7 @@ public sealed record SignatureVaultResponse(
     Guid Id,
     string DocumentType,
     string DocumentNumber,
-    string NitEmpresa,
+    string? NitEmpresa,
     string FullName,
     string SignatureHash,
     string StoragePath,
@@ -23,7 +23,8 @@ public sealed record SignatureVaultResponse(
     DateOnly VigenciaHasta,
     Guid? MandateSignerId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt)
+    DateTimeOffset? UpdatedAt,
+    string? CodigoHash)
 {
     public static SignatureVaultResponse From(SignatureVaultItem item) =>
         new(
@@ -40,5 +41,6 @@ public sealed record SignatureVaultResponse(
             item.VigenciaHasta,
             item.MandateSignerId,
             item.CreatedAt,
-            item.UpdatedAt);
+            item.UpdatedAt,
+            item.CodigoHash);
 }

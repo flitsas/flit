@@ -13,11 +13,20 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
 {
-    private readonly FlitDbContext _context;
+    // Hora de Colombia (UTC-5, sin DST): el estado de vigencia se cuenta por día calendario local,
+    // coherente con el resto del cálculo de vigencia de escrituras (ADR-0033).
+    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
 
-    public DbLegalRepresentativeReader(FlitDbContext context)
+    private readonly FlitDbContext _context;
+    private readonly TimeProvider _timeProvider;
+
+    public DbLegalRepresentativeReader(FlitDbContext context, TimeProvider? timeProvider = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+
+        // TimeProvider es opcional para no romper los ~15 sitios que construyen el reader directamente
+        // (tests) ni la resolución por DI (TimeProvider.System está registrado como singleton).
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<PagedResult<LegalRepresentativeItem>> ListPagedAsync(
@@ -72,7 +81,9 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                     return null;
                 }
 
-                var items = await ProjectAsync([row], cancellationToken).ConfigureAwait(false);
+                // Detalle: incluye el historial de escrituras por compañía (HU #10933).
+                var items = await ProjectAsync([row], cancellationToken, includeDeeds: true)
+                    .ConfigureAwait(false);
                 return items.Count == 0 ? null : items[0];
             },
             cancellationToken);
@@ -97,20 +108,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             tenantId,
             async () =>
             {
-                var row = await (
-                    from r in _context.CompanyLegalRepresentatives.AsNoTracking()
-                    join c in _context.RepresentedCompanies.AsNoTracking()
-                        on r.RepresentedCompanyId equals c.Id
-                    where r.TenantId == tenantId
-                        && r.IsActive
-                        && r.DocumentType == docType
-                        && r.DocumentNumber == doc
-                        && c.DocumentNumber == nit
-                    select r)
-                    .OrderByDescending(r => r.CreatedAt)
-                    .FirstOrDefaultAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                var row = reps.FirstOrDefault(r => r.DocumentType == docType && r.DocumentNumber == doc);
                 if (row is null)
                 {
                     return null;
@@ -135,14 +134,61 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             tenantId,
             async () =>
             {
-                var row = await (
-                    from r in _context.CompanyLegalRepresentatives.AsNoTracking()
-                    join c in _context.RepresentedCompanies.AsNoTracking()
-                        on r.RepresentedCompanyId equals c.Id
-                    where r.TenantId == tenantId
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                var row = reps.FirstOrDefault();
+                if (row is null)
+                {
+                    return null;
+                }
+
+                var items = await ProjectAsync([row], cancellationToken).ConfigureAwait(false);
+                return items.Count == 0 ? null : items[0];
+            },
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<LegalRepresentativeItem>> ListActiveByCompanyNitAsync(
+        Guid tenantId,
+        string companyNit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(companyNit);
+        var nit = companyNit.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var reps = await ActiveRepsByNitAsync(tenantId, nit, cancellationToken).ConfigureAwait(false);
+                return await ProjectAsync(reps, cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+    }
+
+    public Task<LegalRepresentativeItem?> FindActiveByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+
+        var docType = documentType.Trim();
+        var doc = documentNumber.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var row = await _context.CompanyLegalRepresentatives
+                    .AsNoTracking()
+                    .Where(r => r.TenantId == tenantId
                         && r.IsActive
-                        && c.DocumentNumber == nit
-                    select r)
+                        && r.DocumentType == docType
+                        && r.DocumentNumber == doc)
                     .OrderByDescending(r => r.CreatedAt)
                     .ThenByDescending(r => r.Id)
                     .FirstOrDefaultAsync(cancellationToken)
@@ -157,6 +203,45 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 return items.Count == 0 ? null : items[0];
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Representantes ACTIVOS del tenant asociados a un NIT, por el puente multiempresa (HU #10932) o
+    /// por la compañía primaria (compatibilidad). Ordenados por creación descendente.
+    /// </summary>
+    private async Task<List<CompanyLegalRepresentativeEntity>> ActiveRepsByNitAsync(
+        Guid tenantId,
+        string nit,
+        CancellationToken cancellationToken)
+    {
+        var companyIds = await _context.RepresentedCompanies
+            .AsNoTracking()
+            .Where(c => c.TenantId == tenantId && c.DocumentNumber == nit)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (companyIds.Count == 0)
+        {
+            return [];
+        }
+
+        var bridgeRepIds = await _context.LegalRepresentativeCompanies
+            .AsNoTracking()
+            .Where(l => companyIds.Contains(l.RepresentedCompanyId))
+            .Select(l => l.RepresentativeId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return await _context.CompanyLegalRepresentatives
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId
+                && r.IsActive
+                && (bridgeRepIds.Contains(r.Id) || companyIds.Contains(r.RepresentedCompanyId)))
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(
@@ -204,12 +289,15 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
     }
 
     /// <summary>
-    /// Proyecta las filas de representante a su read model resolviendo, en dos consultas en lote (sin
-    /// N+1), la compañía representada y los tipos de trámite del puente.
+    /// Proyecta las filas de representante a su read model resolviendo, en consultas en lote (sin N+1),
+    /// la compañía representada y los tipos de trámite del puente. Con <paramref name="includeDeeds"/>
+    /// (detalle) también carga el HISTORIAL de escrituras de cada compañía del representante cruzando
+    /// <c>company_deed_companies</c> → <c>company_deeds</c> (HU #10933), en un lote adicional.
     /// </summary>
     private async Task<IReadOnlyList<LegalRepresentativeItem>> ProjectAsync(
         List<CompanyLegalRepresentativeEntity> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeDeeds = false)
     {
         if (rows.Count == 0)
         {
@@ -217,7 +305,23 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         }
 
         var repIds = rows.Select(r => r.Id).ToList();
-        var companyIds = rows.Select(r => r.RepresentedCompanyId).Distinct().ToList();
+
+        // Puente representante ↔ compañía (HU #10932): todas las compañías de cada representante.
+        var bridgeRows = await _context.LegalRepresentativeCompanies
+            .AsNoTracking()
+            .Where(l => repIds.Contains(l.RepresentativeId))
+            .Select(l => new { l.RepresentativeId, l.RepresentedCompanyId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var bridgeByRep = bridgeRows
+            .GroupBy(b => b.RepresentativeId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.RepresentedCompanyId).ToList());
+
+        var companyIds = rows.Select(r => r.RepresentedCompanyId)
+            .Concat(bridgeRows.Select(b => b.RepresentedCompanyId))
+            .Distinct()
+            .ToList();
 
         var companies = await _context.RepresentedCompanies
             .AsNoTracking()
@@ -236,10 +340,39 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             .GroupBy(p => p.RepresentativeId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(x => x.ProcedureTypeId)]);
 
+        // Historial de escrituras por compañía (solo en el detalle, que proyecta un ÚNICO representante:
+        // rows[0]). Feature #10929: la escritura es DEL representante, así que se filtran a las que ÉL
+        // asoció (RepresentativeId == rows[0].Id); las legadas (RepresentativeId null) NO aparecen en el
+        // detalle de ningún representante. Una escritura puede cubrir varias compañías (M:N) → aparece en
+        // cada una. Se ordena por VigenciaHasta desc y se anota el estado contra "hoy" en Colombia.
+        IReadOnlyDictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>> deedsByCompany = includeDeeds
+            ? await LoadDeedsByCompanyAsync(rows[0].TenantId, rows[0].Id, companyIds, cancellationToken).ConfigureAwait(false)
+            : new Dictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>();
+
         return [.. rows.Select(r =>
         {
             companies.TryGetValue(r.RepresentedCompanyId, out var company);
             procedureTypesByRep.TryGetValue(r.Id, out var procedureTypeIds);
+
+            // Compañías del representante: del puente si hay, si no la primaria; la primaria va primero.
+            var repCompanyIds = bridgeByRep.TryGetValue(r.Id, out var linked) && linked.Count > 0
+                ? linked
+                : [r.RepresentedCompanyId];
+            IReadOnlyList<LegalRepresentativeCompanySummary> companySummaries =
+            [
+                .. repCompanyIds
+                    .OrderBy(cid => cid == r.RepresentedCompanyId ? 0 : 1)
+                    .Where(companies.ContainsKey)
+                    .Select(cid =>
+                    {
+                        var c = companies[cid];
+                        var summary = new LegalRepresentativeCompanySummary(c.Id, c.DocumentNumber, c.Name);
+                        return deedsByCompany.TryGetValue(cid, out var deeds)
+                            ? summary with { Deeds = deeds }
+                            : summary;
+                    }),
+            ];
+
             return new LegalRepresentativeItem
             {
                 Id = r.Id,
@@ -259,11 +392,70 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 SignatureVaultId = r.SignatureVaultId,
                 IdentityValidationRef = r.IdentityValidationRef,
                 ProcedureTypeIds = procedureTypeIds ?? [],
+                Companies = companySummaries,
                 IsActive = r.IsActive,
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt,
             };
         })];
+    }
+
+    /// <summary>
+    /// Carga el historial de escrituras (activas y vencidas) de un conjunto de compañías del tenant,
+    /// filtradas a las que asoció el representante <paramref name="representativeId"/> (Feature #10929), y
+    /// lo agrupa por compañía. Cruza <c>company_deed_companies</c> → <c>company_deeds</c> en dos consultas
+    /// en lote. Las escrituras legadas (<c>representative_id</c> null) NO se incluyen: pertenecen a la
+    /// empresa, no a un representante. Cada escritura se anota con su estado contra "hoy" en Colombia
+    /// (UTC-5) y las listas quedan ordenadas por <c>VigenciaHasta</c> descendente. Una escritura del
+    /// representante compartida por varias compañías aparece en la lista de cada una.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>> LoadDeedsByCompanyAsync(
+        Guid tenantId,
+        Guid representativeId,
+        List<Guid> companyIds,
+        CancellationToken cancellationToken)
+    {
+        if (companyIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>();
+        }
+
+        var bridgeRows = await _context.CompanyDeedCompanies
+            .AsNoTracking()
+            .Where(dc => companyIds.Contains(dc.RepresentedCompanyId))
+            .Select(dc => new { dc.DeedId, dc.RepresentedCompanyId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (bridgeRows.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<RepresentativeDeedSummary>>();
+        }
+
+        var deedIds = bridgeRows.Select(b => b.DeedId).Distinct().ToList();
+        var deeds = await _context.CompanyDeeds
+            .AsNoTracking()
+            .Where(d => d.TenantId == tenantId
+                && deedIds.Contains(d.Id)
+                && d.RepresentativeId == representativeId)
+            .ToDictionaryAsync(d => d.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+
+        return bridgeRows
+            .Where(b => deeds.ContainsKey(b.DeedId))
+            .GroupBy(b => b.RepresentedCompanyId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<RepresentativeDeedSummary>)
+                [
+                    .. g.Select(b => deeds[b.DeedId])
+                        .OrderByDescending(d => d.VigenciaHasta)
+                        .ThenByDescending(d => d.CreatedAt)
+                        .Select(d => RepresentativeDeedSummary.Create(
+                            d.Id, d.Description, d.VigenciaDesde, d.VigenciaHasta, d.IsActive, today)),
+                ]);
     }
 
     private static RepresentedCompanyItem ToCompanyItem(RepresentedCompanyEntity c) =>

@@ -78,6 +78,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<CompanyLegalRepresentativeProcedureTypeEntity> CompanyLegalRepresentativeProcedureTypes =>
         Set<CompanyLegalRepresentativeProcedureTypeEntity>();
 
+    // Puente representante ↔ compañía (HU #10932, Feature #10929): representante multiempresa.
+    public DbSet<LegalRepresentativeCompanyEntity> LegalRepresentativeCompanies =>
+        Set<LegalRepresentativeCompanyEntity>();
+
     public DbSet<CompanyDeedEntity> CompanyDeeds => Set<CompanyDeedEntity>();
 
     public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();

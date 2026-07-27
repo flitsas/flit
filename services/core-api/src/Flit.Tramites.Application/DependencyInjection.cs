@@ -136,6 +136,8 @@ public static class DependencyInjection
         services.AddScoped<ListStuckIdentityValidationsHandler>();
         services.AddScoped<RequeueStuckIdentityValidationHandler>();
         services.AddScoped<RequeueAllStuckIdentityValidationsHandler>();
+        // HU #10873 — alertas y recordatorios de validación de identidad (AC1/AC2), entrega POR PULL.
+        services.AddScoped<ListIdentityValidationAlertsHandler>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).

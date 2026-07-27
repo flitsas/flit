@@ -18,7 +18,8 @@ public sealed record DeedResponse(
     bool IsActive,
     IReadOnlyList<Guid> RepresentedCompanyIds,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt)
+    DateTimeOffset? UpdatedAt,
+    Guid? RepresentativeId = null)
 {
     public static DeedResponse From(DeedItem item)
     {
@@ -33,7 +34,8 @@ public sealed record DeedResponse(
             item.IsActive,
             item.RepresentedCompanyIds,
             item.CreatedAt,
-            item.UpdatedAt);
+            item.UpdatedAt,
+            item.RepresentativeId);
     }
 }
 

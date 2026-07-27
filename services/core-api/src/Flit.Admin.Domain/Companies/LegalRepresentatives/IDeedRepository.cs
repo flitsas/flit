@@ -25,7 +25,8 @@ public interface IDeedRepository
 
 /// <summary>
 /// Datos de alta/edición de una escritura. <c>Id</c> nulo = alta. En edición, <c>StoragePath</c>/
-/// <c>StorageSha256</c> nulos conservan el artefacto actual.
+/// <c>StorageSha256</c> nulos conservan el artefacto actual. <c>RepresentativeId</c> (Feature #10929)
+/// solo aplica en el ALTA (el representante que la asocia); en la edición se conserva el actual.
 /// </summary>
 public sealed record SaveDeedData(
     Guid TenantId,
@@ -36,4 +37,5 @@ public sealed record SaveDeedData(
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
     IReadOnlyList<Guid> RepresentedCompanyIds,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    Guid? RepresentativeId = null);

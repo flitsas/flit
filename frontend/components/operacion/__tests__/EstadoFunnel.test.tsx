@@ -10,6 +10,9 @@ const counts = {
   aprobado: 7,
   rechazado: 1,
   anulado: 0,
+  // HU #10874 — Record<EstadoTramite, number> ahora incluye 'subsanacion' (sin tarjeta propia en
+  // el funnel; FUNNEL_ORDER no la lista).
+  subsanacion: 0,
 };
 
 describe('EstadoFunnel', () => {

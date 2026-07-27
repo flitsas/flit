@@ -229,6 +229,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<Guid?>("RepresentativeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("representative_id");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
@@ -270,6 +274,9 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_company_deeds");
+
+                    b.HasIndex("TenantId", "RepresentativeId")
+                        .HasDatabaseName("ix_company_deeds_tenant_representative");
 
                     b.HasIndex("TenantId", "IsActive", "VigenciaHasta")
                         .HasDatabaseName("ix_company_deeds_tenant_active_vigencia");
@@ -448,12 +455,13 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("SignatureVaultId")
                         .HasDatabaseName("ix_company_legal_representatives_signature_vault_id");
 
+                    b.HasIndex("TenantId", "DocumentNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_company_legal_representatives_tenant_document")
+                        .HasFilter("is_active");
+
                     b.HasIndex("TenantId", "DocumentType", "DocumentNumber")
                         .HasDatabaseName("ix_company_legal_representatives_tenant_document");
-
-                    b.HasIndex("TenantId", "RepresentedCompanyId", "DocumentNumber")
-                        .IsUnique()
-                        .HasDatabaseName("uq_company_legal_representatives_tenant_company_document");
 
                     b.ToTable("company_legal_representatives", "admin", t =>
                         {
@@ -625,6 +633,53 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("ix_impronta_generations_tenant_id");
 
                     b.ToTable("impronta_generations", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.LegalRepresentativeCompanyEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("RepresentativeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("representative_id");
+
+                    b.Property<Guid>("RepresentedCompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("represented_company_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_legal_representative_companies");
+
+                    b.HasIndex("RepresentedCompanyId")
+                        .HasDatabaseName("ix_lrc_represented_company_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_lrc_tenant_id");
+
+                    b.HasIndex("RepresentativeId", "RepresentedCompanyId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_lrc_representative_company");
+
+                    b.ToTable("legal_representative_companies", "admin", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", b =>
@@ -1337,6 +1392,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<string>("CodigoHash")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("codigo_hash");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1376,7 +1436,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("mandate_signer_id");
 
                     b.Property<string>("NitEmpresa")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("nit_empresa");
@@ -1432,10 +1491,13 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("MandateSignerId")
                         .HasDatabaseName("ix_signature_vault_mandate_signer_id");
 
-                    b.HasIndex("TenantId", "NitEmpresa", "DocumentNumber")
+                    b.HasIndex("TenantId", "DocumentNumber")
                         .IsUnique()
                         .HasDatabaseName("uq_signature_vault_activa")
                         .HasFilter("estado = 'activa'");
+
+                    b.HasIndex("TenantId", "DocumentNumber", "Estado")
+                        .HasDatabaseName("ix_signature_vault_tenant_document_estado");
 
                     b.HasIndex("TenantId", "NitEmpresa", "Estado")
                         .HasDatabaseName("ix_signature_vault_tenant_id_nit_empresa_estado");
@@ -5255,6 +5317,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue("user")
                         .HasColumnName("source");
 
+                    b.Property<Guid?>("SourceDeedId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_deed_id");
+
                     b.Property<string>("StoragePath")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -6502,6 +6568,23 @@ namespace Flit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_clr_procedure_types_representative");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.LegalRepresentativeCompanyEntity", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.CompanyLegalRepresentativeEntity", null)
+                        .WithMany()
+                        .HasForeignKey("RepresentativeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lrc_representative");
+
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.RepresentedCompanyEntity", null)
+                        .WithMany()
+                        .HasForeignKey("RepresentedCompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_lrc_represented_company");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>

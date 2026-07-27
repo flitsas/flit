@@ -912,6 +912,108 @@ public sealed class FurHandlerTests
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_rnmc");
         await _repo.Received(1).SaveChangesAsync(ct);
     }
+
+    // ── HU #10936 · Escritura: persistir la usada + congelar tras entrega ──────────
+
+    /// <summary>Resolutor de escrituras de prueba: cuenta invocaciones y devuelve lo configurado.</summary>
+    private sealed class FakeDeedResolver : IProcedureDeedResolver
+    {
+        public int Calls { get; private set; }
+        public IReadOnlyList<ResolvedDeedDocument> ToReturn { get; set; } = [];
+
+        public Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(ToReturn);
+        }
+    }
+
+    private static ProcedureInstanceAttachment EscrituraSistema(
+        ProcedureInstance instance, Guid attachmentId, Guid deedId, string storagePath) =>
+        new()
+        {
+            Id = attachmentId,
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = "escritura",
+            Filename = "escritura.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 4,
+            Sha256 = "sha-escritura",
+            StoragePath = storagePath,
+            Source = "system",
+            SourceDeedId = deedId,
+            UploadedAt = DateTimeOffset.UtcNow,
+        };
+
+    [Fact]
+    public async Task Generar_TramiteActivo_ResuelveEscritura_YPersisteSourceDeedId()
+    {
+        // HU #10936 — en estados previos a la entrega (borrador) se re-resuelve la escritura y el adjunto
+        // de sistema queda con source_deed_id = deed elegido.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial); // Status = borrador
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var deedId = Guid.NewGuid();
+        var resolver = new FakeDeedResolver
+        {
+            ToReturn = [new ResolvedDeedDocument(
+                "escritura", "escritura.pdf", Encoding.UTF8.GetBytes("%PDF-ESC"), "900123456", "vendedor", deedId)],
+        };
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, deedResolver: resolver);
+
+        var (result, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        resolver.Calls.Should().Be(1); // trámite activo ⇒ se re-resuelve
+        var esc = instance.Attachments.Single(a => a.Tipo == "escritura");
+        esc.Source.Should().Be("system");
+        esc.SourceDeedId.Should().Be(deedId);
+        result!.Documents.Select(d => d.Tipo).Should().Contain("escritura");
+    }
+
+    [Fact]
+    public async Task Generar_TramiteEntregado_CongelaEscritura_NoReResuelveNiReemplaza()
+    {
+        // HU #10936 — una vez ENTREGADO, la escritura utilizada queda fija: no se re-resuelve (el resolutor
+        // no se invoca) ni se reemplaza el adjunto existente (mismo id, mismo source_deed_id, sin borrado).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.Status = TramiteEstado.Entregado;
+        WithOrganismo(instance);
+        var prevAttachmentId = Guid.NewGuid();
+        var usedDeedId = Guid.NewGuid();
+        instance.Attachments.Add(EscrituraSistema(instance, prevAttachmentId, usedDeedId, "old/escritura"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        // El resolutor devolvería OTRA escritura si se le llamara: no debe usarse (congelado).
+        var resolver = new FakeDeedResolver
+        {
+            ToReturn = [new ResolvedDeedDocument(
+                "escritura", "escritura.pdf", Encoding.UTF8.GetBytes("%PDF-NUEVA"), "900123456", "vendedor", Guid.NewGuid())],
+        };
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, deedResolver: resolver);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        resolver.Calls.Should().Be(0); // congelado ⇒ no se re-resuelve
+        var esc = instance.Attachments.Single(a => a.Tipo == "escritura");
+        esc.Id.Should().Be(prevAttachmentId);       // el adjunto previo se conserva
+        esc.SourceDeedId.Should().Be(usedDeedId);   // con la escritura original
+        _storage.Deleted.Should().NotContain("old/escritura"); // no se trató como huérfano
+    }
 }
 
 public sealed class MockFurDocumentGeneratorTests

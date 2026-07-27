@@ -368,6 +368,8 @@ public sealed class FurOverlayDocumentGeneratorTests
     [Fact]
     public void FurFieldMapper_VaultSignatureImage_IncludesSidecarMetadata()
     {
+        // HU #10930 (Feature #10929): el sidecar estampa el codigo_hash digitado en el baúl, NO el UUID
+        // de la fila.
         var vaultId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var data = FullData() with
         {
@@ -379,7 +381,8 @@ public sealed class FurOverlayDocumentGeneratorTests
                     "RENTING SAS",
                     new DateOnly(2026, 1, 1),
                     new DateOnly(2026, 12, 31),
-                    vaultId),
+                    vaultId,
+                    "ABC-123-XYZ"),
             },
         };
 
@@ -390,7 +393,38 @@ public sealed class FurOverlayDocumentGeneratorTests
         sig.ImageSidecarText.Should().Contain("RENTING SAS");
         sig.ImageSidecarText.Should().Contain("01/01/2026");
         sig.ImageSidecarText.Should().Contain("31/12/2026");
-        sig.ImageSidecarText.Should().Contain(vaultId.ToString("D"));
+        // Se pinta el codigo_hash del baúl…
+        sig.ImageSidecarText.Should().Contain("Hash: ABC-123-XYZ");
+        // …y NUNCA el UUID de la fila.
+        sig.ImageSidecarText.Should().NotContain(vaultId.ToString("D"));
+    }
+
+    [Fact]
+    public void FurFieldMapper_VaultSignatureImage_WithoutCodigoHash_OmitsHashLine()
+    {
+        // HU #10930: si la firma del baúl no trae codigo_hash, se OMITE la línea "Hash" (no se imprime
+        // el GUID de la fila).
+        var vaultId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var data = FullData() with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { ["comprador"] = [0x89, 0x50, 0x4E, 0x47] },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>
+            {
+                ["comprador"] = new FirmaBaulMetadata(
+                    "900123456",
+                    "RENTING SAS",
+                    new DateOnly(2026, 1, 1),
+                    new DateOnly(2026, 12, 31),
+                    vaultId,
+                    null),
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        var sig = values["vehicle_owner_signature"];
+        sig.ImageSidecarText.Should().Contain("Doc. 900123456");
+        sig.ImageSidecarText.Should().NotContain("Hash:");
+        sig.ImageSidecarText.Should().NotContain(vaultId.ToString("D"));
     }
 
     [Fact]
