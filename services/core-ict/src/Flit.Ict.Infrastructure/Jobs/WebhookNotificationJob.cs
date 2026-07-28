@@ -14,7 +14,7 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// vocabulario v2. Reintentos con backoff + dead-letter. Mejora sobre v1: PollInterval de segundos
 /// (objetivo &lt;9 min holgado). El payload nunca usa los códigos numéricos v1.
 /// </summary>
-public sealed class WebhookNotificationJob(
+public sealed partial class WebhookNotificationJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
     ILogger<WebhookNotificationJob> logger) : IctPollingJob(scopeFactory, options, logger)
@@ -23,7 +23,7 @@ public sealed class WebhookNotificationJob(
 
     private sealed record PendingWebhook(
         Guid Id, string TargetUrl, string ManagerIdTransaction, string IctEstado,
-        string Message, int TransactionType, short Attempts, short StatusValidation);
+        string Message, int TransactionType, short Attempts, short StatusValidation, Guid? ProcedureInstanceId);
 
     protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.WebhookPollSeconds);
 
@@ -45,8 +45,11 @@ public sealed class WebhookNotificationJob(
             var pending = await ReadPendingAsync(connection, ct);
             foreach (var wh in pending)
             {
-                if (string.IsNullOrWhiteSpace(wh.TargetUrl))
+                // Anti-SSRF: el target_url viene del payload de ingesta. Un destino interno/privado o un
+                // esquema no-http se descarta como fallo terminal (no reintentar; no se arregla solo).
+                if (!await WebhookTargetGuard.IsPublicHttpTargetAsync(wh.TargetUrl, ct))
                 {
+                    Log.TargetBlocked(logger, wh.Id, wh.TargetUrl);
                     await MarkDeliveredAsync(connection, wh.Id, responseOk: false, ct);
                     continue;
                 }
@@ -75,19 +78,27 @@ public sealed class WebhookNotificationJob(
     {
         try
         {
-            // Forma de payload v1 (clientes existentes): no cambiar los nombres de campo. v1 emite
-            // `status` como NÚMERO (no cadena) y adjunta statusText/message; se calca exactamente.
+            // Payload con vocabulario v2 (plan §A.9): el estado v2 del pre-trámite (ictEstado) y la
+            // correlación del trámite (procedureInstanceId) son los campos primarios. Se CONSERVAN los
+            // campos v1 (status numérico, statusText, …) por compatibilidad con los gestores existentes
+            // migrados desde v1; no se rompe su contrato.
+            // TODO(ICT-WEBHOOK-V1-COMPAT): retirar los campos numéricos v1 cuando los gestores confirmen v2.
             var description = DescribeStatus(wh.StatusValidation);
             var payload = new
             {
-                transactionFlit = wh.ManagerIdTransaction,
                 managerIdTransaction = wh.ManagerIdTransaction,
+                ictEstado = wh.IctEstado,
+                procedureInstanceId = wh.ProcedureInstanceId,
+                transactionType = wh.TransactionType,
+                message = wh.Message,
+                timestamp = DateTimeOffset.UtcNow,
+                // ── Compat v1 ──
+                transactionFlit = wh.ManagerIdTransaction,
                 status = (int)wh.StatusValidation,
                 statusDescription = description,
                 statusMessage = wh.Message,
                 statusObservation = string.Empty,
                 statusText = description,
-                message = wh.Message,
             };
             using var response = await http.PostAsJsonAsync(new Uri(wh.TargetUrl), payload, ct);
             return response.IsSuccessStatusCode;
@@ -104,12 +115,14 @@ public sealed class WebhookNotificationJob(
     private static async Task<List<PendingWebhook>> ReadPendingAsync(DbConnection connection, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
+        // JOIN al master para adjuntar la correlación del trámite (procedure_instance_id) al payload v2.
         cmd.CommandText = """
-            SELECT id, target_url, manager_id_transaction, ict_estado, message_validation, transaction_type,
-                   attempts, status_validation
-            FROM ict.external_integration_webhook_master
-            WHERE is_notified = false AND next_attempt_at <= now()
-            ORDER BY created_at
+            SELECT w.id, w.target_url, w.manager_id_transaction, w.ict_estado, w.message_validation,
+                   w.transaction_type, w.attempts, w.status_validation, m.procedure_instance_id
+            FROM ict.external_integration_webhook_master w
+            LEFT JOIN ict.external_integration_master m ON m.id = w.id_transaction
+            WHERE w.is_notified = false AND w.next_attempt_at <= now()
+            ORDER BY w.created_at
             LIMIT 50
             """;
         var list = new List<PendingWebhook>();
@@ -118,7 +131,8 @@ public sealed class WebhookNotificationJob(
         {
             list.Add(new PendingWebhook(
                 reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                reader.GetString(4), reader.GetInt32(5), reader.GetInt16(6), reader.GetInt16(7)));
+                reader.GetString(4), reader.GetInt32(5), reader.GetInt16(6), reader.GetInt16(7),
+                await reader.IsDBNullAsync(8, ct) ? null : reader.GetGuid(8)));
         }
 
         return list;
@@ -181,4 +195,11 @@ public sealed class WebhookNotificationJob(
         6 => "Anulado",
         _ => string.Empty,
     };
+
+    private static partial class Log
+    {
+        [LoggerMessage(Level = LogLevel.Warning,
+            Message = "Webhook {WebhookId} bloqueado por destino no público (anti-SSRF): {TargetUrl}. No se reintenta.")]
+        public static partial void TargetBlocked(ILogger logger, Guid webhookId, string targetUrl);
+    }
 }
