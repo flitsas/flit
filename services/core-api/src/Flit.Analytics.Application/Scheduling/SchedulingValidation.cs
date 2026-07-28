@@ -24,7 +24,11 @@ public static partial class SchedulingValidation
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
-        ["rejection_rate_pct", "stuck_count", "external_api_errors", "pending_identity_validations"];
+    [
+        "rejection_rate_pct", "stuck_count", "external_api_errors", "pending_identity_validations",
+        // Métricas ICT (HU5 / E1) evaluadas cross-schema sobre ict.*
+        "ict_stuck_in_validation", "ict_novelty_rate_pct", "ict_webhook_delivery_failures", "ict_jobs_out_of_sla",
+    ];
     private static readonly string[] Operators = ["gt", "gte", "lt", "lte"];
 
     [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")]
@@ -95,7 +99,9 @@ public static partial class SchedulingValidation
             return (null, $"El nombre no puede superar los {MaxNameLength} caracteres.");
 
         if (input.Metric is null || !Metrics.Contains(input.Metric))
-            return (null, "La métrica debe ser una de: rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations.");
+            return (null, "La métrica debe ser una de: rejection_rate_pct, stuck_count, external_api_errors, " +
+                "pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, " +
+                "ict_webhook_delivery_failures, ict_jobs_out_of_sla.");
 
         if (input.Operator is null || !Operators.Contains(input.Operator))
             return (null, "El operador debe ser uno de: gt, gte, lt, lte.");

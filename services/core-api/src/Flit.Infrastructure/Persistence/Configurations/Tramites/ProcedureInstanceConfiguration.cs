@@ -88,9 +88,35 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("plate_flow_status")
             .HasMaxLength(20);
 
+        // ADR-0036 §D9 (HU #10916) — mandatario que firma el mandato, resuelto al aprobar. Columna
+        // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al
+        // modelo EF. La FK a admin.mandate_signers (ON DELETE SET NULL) se declara en el DDL, no en EF
+        // (evita que EF intente materializar una relación en una tabla excluida de migraciones).
+        builder.Property(x => x.MandateSignerId)
+            .HasColumnName("mandate_signer_id");
+
+        builder.HasIndex(x => x.MandateSignerId)
+            .HasDatabaseName("ix_procedure_instances_mandate_signer_id")
+            .HasFilter("mandate_signer_id IS NOT NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");
+
+        // ICT — origen/referencia externa para materialización idempotente. Columnas agregadas por
+        // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapean para el modelo
+        // EF. El índice único parcial (creado en 40-ICT-procedure-external-ref.sql) impide dos borradores
+        // para el mismo pre-trámite; aquí se declara para que EF conozca el modelo (no emite DDL).
+        builder.Property(x => x.Origin)
+            .HasColumnName("origin")
+            .HasMaxLength(20);
+        builder.Property(x => x.ExternalRef)
+            .HasColumnName("external_ref")
+            .HasMaxLength(64);
+        builder.HasIndex(x => new { x.TenantId, x.ExternalRef })
+            .IsUnique()
+            .HasDatabaseName("uq_procedure_instances_tenant_external_ref")
+            .HasFilter("external_ref IS NOT NULL AND deleted_at IS NULL");
 
         builder.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_tenant_id_status_created_at");

@@ -378,7 +378,7 @@ public sealed class OtClientProcedureHandlerTests
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.ApproveAsync(
-            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
         await using var verify = NewContext(db);
@@ -435,7 +435,7 @@ public sealed class OtClientProcedureHandlerTests
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.ApproveAsync(
-            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+            OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().BeNull();
         await using var verify = NewContext(db);
@@ -574,7 +574,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
-        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
         await using var verify = NewContext(db);
@@ -605,7 +605,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
-        var updated = await repo.RevokePlateAsync(OtTenant, procedureId, "Error en la placa", Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+        var updated = await repo.RevokePlateAsync(OtTenant, procedureId, "Error en la placa", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
         await using var verify = NewContext(db);
@@ -743,7 +743,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
-        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         await using var verify = NewContext(db);
         var status = (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken)).Status;

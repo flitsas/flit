@@ -41,6 +41,10 @@ export const METRIC_LABELS: Record<AlertMetric, string> = {
   stuck_count: "Trámites atascados",
   external_api_errors: "Errores de integraciones externas",
   pending_identity_validations: "Validaciones de identidad pendientes",
+  ict_stuck_in_validation: "ICT · Atascados en validación",
+  ict_novelty_rate_pct: "ICT · Tasa de novedades (%)",
+  ict_webhook_delivery_failures: "ICT · Fallos de entrega de webhook",
+  ict_jobs_out_of_sla: "ICT · Jobs fuera de SLA",
 };
 
 export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
@@ -52,6 +56,14 @@ export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
     "Cantidad de llamadas con error a integraciones externas (OT) dentro de la ventana.",
   pending_identity_validations:
     "Validaciones biométricas cuyo estado actual es pendiente o en proceso.",
+  ict_stuck_in_validation:
+    "Pre-trámites ICT aún en validación (sin materializar) creados hace más de la ventana.",
+  ict_novelty_rate_pct:
+    "Porcentaje de pre-trámites ICT que cayeron en novedad sobre los creados en la ventana.",
+  ict_webhook_delivery_failures:
+    "Webhooks ICT entregados con respuesta no satisfactoria dentro de la ventana.",
+  ict_jobs_out_of_sla:
+    "Corridas de los jobs ICT que incumplieron su SLA (error o duración excedida) en la ventana.",
 };
 
 export const OPERATOR_LABELS: Record<AlertOperator, string> = {

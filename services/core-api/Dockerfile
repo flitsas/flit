@@ -1,16 +1,24 @@
 # core-api Dockerfile — una sola imagen con Flit.Api y Flit.Gateway.
-# Build context: services/core-api/
+# Build context: services/  (incluye core-api + core-ict Grpc.Contracts)
 #
 # Framework-dependent (NO AOT): QuestPDF en Flit.Modules.Receipts aun no es
 # AOT-compatible (ADR-0002). Cada servicio del compose elige su DLL via `command`:
 #   core-api -> dotnet /app/api/Flit.Api.dll        (default CMD)
 #   gateway  -> dotnet /app/gateway/Flit.Gateway.dll
+#
+# Flit.Api / Flit.Infrastructure referencian
+#   ../../../core-ict/src/Flit.Ict.Grpc.Contracts
+# desde services/core-api/src/... → resuelve a /core-ict/... en la imagen
+# (WORKDIR /src + ProjectReference sube tres niveles hasta /).
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY global.json ./
-COPY Directory.Build.props Directory.Packages.props ./
-COPY src/ ./src/
+COPY core-api/global.json ./
+COPY core-api/Directory.Build.props core-api/Directory.Packages.props ./
+COPY core-api/src/ ./src/
+# Contratos gRPC compartidos (ProjectReference fuera de core-api/).
+COPY core-ict/Directory.Build.props core-ict/Directory.Packages.props /core-ict/
+COPY core-ict/src/Flit.Ict.Grpc.Contracts/ /core-ict/src/Flit.Ict.Grpc.Contracts/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con
 # TreatWarningsAsErrors (IL2026/IL3050) al no ser un build AOT real.

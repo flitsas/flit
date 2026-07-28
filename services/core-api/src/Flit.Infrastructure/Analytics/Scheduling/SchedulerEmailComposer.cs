@@ -37,6 +37,10 @@ internal static class SchedulerEmailComposer
             ["stuck_count"] = "Trámites atascados",
             ["external_api_errors"] = "Errores de integraciones externas",
             ["pending_identity_validations"] = "Validaciones de identidad pendientes",
+            ["ict_stuck_in_validation"] = "ICT · Pre-trámites atascados en validación",
+            ["ict_novelty_rate_pct"] = "ICT · Tasa de novedades (%)",
+            ["ict_webhook_delivery_failures"] = "ICT · Fallos de entrega de webhook",
+            ["ict_jobs_out_of_sla"] = "ICT · Jobs fuera de SLA",
         };
 
     private static readonly Dictionary<string, string> OperatorLabels =

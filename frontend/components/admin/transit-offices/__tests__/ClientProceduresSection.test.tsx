@@ -26,6 +26,10 @@ vi.mock("@/lib/auth/jwt", async (importOriginal) => {
   return { ...actual, isSuperAdmin: () => mockSuperAdmin };
 });
 
+vi.mock("@/lib/api/admin-mandate-signers", () => ({
+  fetchMandateSigners: vi.fn(),
+}));
+
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: {
     listPublishedProcedureTypes: vi.fn().mockResolvedValue([
@@ -52,6 +56,8 @@ import {
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
+import { fetchMandateSigners } from "@/lib/api/admin-mandate-signers";
+import { ApiError } from "@/lib/api/types";
 
 const procedure: OtClientProcedure = {
   id: "proc-1",
@@ -121,7 +127,44 @@ describe("ClientProceduresSection — HU #10220", () => {
     await screen.findByRole("button", { name: /Aprobar/i });
     await user.click(screen.getByRole("button", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
-    await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1"));
+    await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1", undefined));
+    expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
+  });
+
+  it("ADR-0036 §D9: 409 mandatario_requerido abre el diálogo y reintenta con el elegido", async () => {
+    const user = userEvent.setup();
+    const signerBase = {
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      documentType: "CC",
+      integrityHash: "h",
+      email: null,
+      userId: null,
+      identityValidationRef: null,
+      signatureVaultId: null,
+      registeredAt: "2026-07-01T00:00:00Z",
+      isActive: true,
+      companyTenantIds: ["client-tenant-aaaa"],
+    };
+    vi.mocked(fetchMandateSigners).mockResolvedValue([
+      { ...signerBase, id: "signer-1", fullName: "Ana Gómez", documentNumber: "52123456" },
+      { ...signerBase, id: "signer-2", fullName: "Luis Ríos", documentNumber: "70111222" },
+    ]);
+    vi.mocked(approveOtClientProcedure)
+      .mockRejectedValueOnce(new ApiError(409, "mandatario_requerido", { error: "mandatario_requerido" }))
+      .mockResolvedValueOnce({ ...procedure, status: "aprobado" });
+
+    renderSection();
+    await screen.findByRole("button", { name: /Aprobar/i });
+    await user.click(screen.getByRole("button", { name: /Aprobar/i }));
+    await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+
+    // Aparece el diálogo de selección de mandatario (varios sin cotejo).
+    expect(await screen.findByText(/Elige el mandatario que firma/i)).toBeInTheDocument();
+    // Elige el segundo mandatario y reintenta.
+    await user.click(screen.getByRole("radio", { name: /Luis Ríos/i }));
+    await user.click(screen.getByRole("button", { name: /Aprobar con este mandatario/i }));
+
+    await waitFor(() => expect(approveOtClientProcedure).toHaveBeenLastCalledWith("proc-1", "signer-2"));
     expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
   });
 
@@ -240,7 +283,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
     await waitFor(() => expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined));
-    expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1");
+    expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1", undefined);
     // La aprobación va PRIMERO: el gate de la LT exige el trámite en aprobado (ruta de placa
     // Feature #10587: llega a la aprobación en 'asignado', donde adjuntar antes fallaría).
     const ltOrder = vi.mocked(adjuntarOtLicenciaTransito).mock.invocationCallOrder[0];

@@ -16,7 +16,10 @@ public sealed record CreateProcedureInstanceRequest(
     Guid? TransitOfficeId,
     string? Modalidad = null,
     // FEATURE-08 / HU-BE-08 (CFD-12): código del tipo. Tiene precedencia sobre modalidad.
-    string? ProcedureTypeCode = null);
+    string? ProcedureTypeCode = null,
+    // ICT — origen ('ict') y referencia externa (id del pre-trámite) para materialización idempotente.
+    string? Origin = null,
+    string? ExternalRef = null);
 
 public sealed record ProcedureInstanceSummary(
     Guid Id,
@@ -116,6 +119,10 @@ public sealed class CreateProcedureInstanceHandler(
             TipologiaCodigo = tipologia,
             TransitOfficeId = request.TransitOfficeId,
             CreatedByUserId = request.CreatedByUserId,
+            // ICT — correlación idempotente (null para trámites de plataforma). Van en el MISMO INSERT
+            // que AddWithUniqueReferenceAsync: nada de UPDATE posterior que dejaría external_ref sin grabar.
+            Origin = request.Origin,
+            ExternalRef = request.ExternalRef,
             CreatedAt = now,
             CreatedBy = request.CreatedByUserId
         };

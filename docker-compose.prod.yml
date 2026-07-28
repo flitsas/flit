@@ -8,7 +8,11 @@
 #   frontend   FRONTEND_PORT     4001   5001   6001   (Next.js)
 #   gateway    GATEWAY_PORT      4002   5002   6002   (API publica YARP: /api, /hubs, /ml)
 #   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
+#   core-ict   CORE_ICT_PORT     4020   5020   6020   (Flit.Ict.Api interno, detras de YARP)
 #   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
+#
+# gRPC este-oeste (interno, NO publicado): core-ict -> core-api en CORE_API_GRPC_PORT (default 8082);
+# el callback de estados va core-api -> core-ict en CORE_ICT_PORT (h2c en el mismo puerto REST).
 #
 # Los defaults son los de DEV. El CD exporta las vars segun la rama (develop/staging/
 # release); para operacion manual, fijalas en el .env del VPS de ese ambiente.
@@ -24,6 +28,8 @@
 #   CONNECTION_STRING_CORE  cadena Npgsql .NET (Host=...;Port=5432;Database=...;Username=...;Password=...)
 #   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online)
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
+#   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
+#                             Sin el, la orquestacion y el callback quedan fail-closed.
 # Variables de puerto (defaults DEV; el CD las inyecta por ambiente):
 #   FRONTEND_PORT / GATEWAY_PORT / CORE_API_PORT / PYTHON_ML_PORT
 # Variables para AISLAR este proyecto del resto del VPS:
@@ -147,10 +153,47 @@ services:
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-60}
       ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-2000}
+      # ── Integración con Terceros (ICT, Feature #10888) ──────────────────────
+      # gRPC este-oeste dedicado (SOLO HTTP/2, puerto aparte del REST): core-ict llama la
+      # orquestación/consulta aquí. Puerto interno (no publicado a host).
+      Ict__GrpcPort: ${CORE_API_GRPC_PORT:-8082}
+      # Secreto HMAC compartido con core-ict (valida el canal directo y firma el inverso).
+      Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
+      Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_API_PORT:-4003}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    logging: *default-logging
+
+  # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
+  core-ict:
+    image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}
+    # content root = working_dir, para que .NET encuentre su appsettings.json (dll en /app/api).
+    working_dir: /app/api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
+      ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
+      # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
+      CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
+      # Secreto HMAC compartido con core-api (canal directo e inverso).
+      Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+    ports:
+      - "127.0.0.1:${CORE_ICT_PORT:-4020}:${CORE_ICT_PORT:-4020}"
+    depends_on:
+      core-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_ICT_PORT:-4020}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -172,6 +215,7 @@ services:
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
+      ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
     ports:

@@ -58,7 +58,7 @@ public sealed class ActorContactLookupHandler(IProcedureInstanceRepository repo)
         if (actor is null)
             return (Empty, null); // AC3: sin antecedentes -> 200 con los 4 campos vacíos, nunca 404.
 
-        var (ciudad, direccion, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
+        var (ciudad, direccion, _, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
 
         return (new ActorContactLookupDto(ciudad, actor.Email, direccion, actor.Phone), null);
     }

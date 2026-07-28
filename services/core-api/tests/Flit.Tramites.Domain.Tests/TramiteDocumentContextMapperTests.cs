@@ -51,6 +51,35 @@ public sealed class TramiteDocumentContextMapperTests
     }
 
     [Fact]
+    public void PersonaJuridica_ExigeMandato_SinImportarConfigDelOt()
+    {
+        // ADR-0036 (HU #10913): el mandato aplica a persona jurídica en cualquier OT (sin config).
+        var ctx = TramiteDocumentContextMapper.From(
+            InstanceWith(actors: [("comprador", "NIT")]));
+        ctx.ExigeMandato.Should().BeTrue();
+    }
+
+    [Fact]
+    public void PersonaNatural_ExigeMandato_SoloSiElOtLoExige()
+    {
+        var instance = InstanceWith(actors: [("comprador", "CC")]);
+        foreach (var a in instance.Actors) a.PersonType = ActorPersonTypes.Natural;
+
+        // Sin config del OT ⇒ no exige mandato a persona natural.
+        TramiteDocumentContextMapper.From(instance).ExigeMandato.Should().BeFalse();
+
+        // OT que exige mandato a persona natural (Sabaneta) ⇒ sí lo exige.
+        var sabaneta = new Flit.Tramites.Domain.Integration.MandateOtConfig(
+            Guid.NewGuid(), "sabaneta", RequiresForNaturalPerson: true, "UT-SETSA", "900273813-7");
+        TramiteDocumentContextMapper.From(instance, sabaneta).ExigeMandato.Should().BeTrue();
+
+        // OT con config pero que NO exige a persona natural ⇒ no lo exige.
+        var bello = new Flit.Tramites.Domain.Integration.MandateOtConfig(
+            Guid.NewGuid(), "bello", RequiresForNaturalPerson: false, "UT-MAB", "901783814-6");
+        TramiteDocumentContextMapper.From(instance, bello).ExigeMandato.Should().BeFalse();
+    }
+
+    [Fact]
     public void ActoresPersonaNatural_EsPersonaNatural_NoNit()
     {
         // HU #10542: la persona natural es explícita (PersonType), no inferida del tipo de documento.

@@ -44,6 +44,13 @@ public static class ConditionalDocumentRules
             Item("cedulas", "Documento de identidad", false, "cedulas"));
         yield return new ConditionalRule("pn_sin_cedula", c => c.EsPersonaNatural, ConditionalEffect.Hide,
             Item("cedulas", "Documento de identidad", false, "cedulas"));
+
+        // ADR-0036 (HU #10913) — MANDATO autogenerado: aparece en el checklist cuando el trámite lo
+        // exige (persona jurídica siempre; persona natural en OT que lo exija, p. ej. Sabaneta). No es
+        // carga del cliente: el sistema lo genera (FUR handler) y lo pega al consolidado, por eso es
+        // OPCIONAL en el checklist (obligatorio=false, no bloquea la radicación).
+        yield return new ConditionalRule("mandato_autogenerado", c => c.ExigeMandato, ConditionalEffect.Add,
+            Item("mandato", "Mandato (autogenerado por el sistema)", false, "mandato"));
     }
 
     /// <summary>Reglas para traspaso.</summary>

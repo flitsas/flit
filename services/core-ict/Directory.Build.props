@@ -1,0 +1,37 @@
+<Project>
+
+  <!--
+    Configuración compartida por TODOS los proyectos .NET de core-ict.
+    Calca las convenciones de services/core-api (ADR-0002): net10, nullable,
+    warnings-as-errors, EnforceCodeStyleInBuild, CPM.
+
+    Diferencia deliberada: PublishAot=false en todo el servicio (JIT), igual que el
+    runtime de core-api. core-ict usa EF Core (reflexión) y gRPC codegen, incompatibles
+    con AOT; el escape JIT está documentado en el plan de migración ICT.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <!-- CA1014: CLSCompliant innecesario en código moderno.
+         CA1000: factories estáticas en tipos genéricos (Result pattern).
+         CA1707: underscore en nombres de test (convención xUnit).
+         CA1861/CA1304/CA1310/CA1311/CA1862: consultas EF Core sin StringComparison
+         para que Npgsql las traduzca a SQL (lower()/LIKE). -->
+    <NoWarn>$(NoWarn);CA1014;CA1000;CA1707;CA1861;CA1304;CA1310;CA1311;CA1862</NoWarn>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+</Project>

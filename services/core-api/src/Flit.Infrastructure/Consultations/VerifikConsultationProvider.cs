@@ -164,6 +164,9 @@ internal sealed class VerifikConsultationProvider(
     private static ConsultationResult MockResult(string? vin, string? plate)
     {
         var effectiveVin = string.IsNullOrWhiteSpace(vin) ? "LRWYGCEKXTC564524" : vin;
+        // Sentinel de PRUEBA (solo modo mock): placa que empieza por "SNV" => SOAT NO VIGENTE, para
+        // ejercitar la ruta de novedad de fuentes externas (p.ej. desde ICT) sin depender de datos reales.
+        var soatVencido = plate?.Trim().StartsWith("SNV", StringComparison.OrdinalIgnoreCase) == true;
         return VerifikResultMapper.MapVehicle(new VerifikVehicleResponse
         {
             Data = new VerifikVehicleData
@@ -194,8 +197,8 @@ internal sealed class VerifikConsultationProvider(
                 [
                     new VerifikSoat
                     {
-                        Estado = "VIGENTE",
-                        FechaVencimiento = "05/05/2027",
+                        Estado = soatVencido ? "VENCIDO" : "VIGENTE",
+                        FechaVencimiento = soatVencido ? "01/01/2020" : "05/05/2027",
                         EntidadExpideSoat = "LA PREVISORA S.A.COMPAÑIA DE SEGUROS",
                     },
                 ],

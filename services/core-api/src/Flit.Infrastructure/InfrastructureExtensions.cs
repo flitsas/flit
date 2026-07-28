@@ -4,6 +4,7 @@ using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
@@ -178,6 +179,10 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
+        services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
+        // ADR-0036 (HU #10915) — Contrato Privado de Mandato (PDF real, condicional por OT/persona).
+        services.AddSingleton<IMandatoGenerator, Documents.MandatoPdfGenerator>();
         // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
         services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 
@@ -579,6 +584,10 @@ public static class InfrastructureExtensions
         // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+
+        // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
+        // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
+        services.AddIctStateReflection(configuration);
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)

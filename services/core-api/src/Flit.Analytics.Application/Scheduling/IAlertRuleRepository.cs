@@ -23,4 +23,11 @@ public interface IAlertRuleRepository
     /// <summary>Historial de disparos paginado, más recientes primero; filtrable por regla.</summary>
     Task<AlertEventsPageDto> ListEventsAsync(
         Guid tenantId, Guid? ruleId, int page, int pageSize, CancellationToken ct);
+
+    /// <summary>
+    /// Reconoce (set-once, idempotente) un disparo de alerta. Null si el evento no existe o
+    /// pertenece a otro tenant (→ 404). Devuelve el evento actualizado.
+    /// </summary>
+    Task<AlertEventDto?> AckEventAsync(
+        Guid tenantId, Guid eventId, Guid? acknowledgedBy, CancellationToken ct);
 }

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Ict.Api</RootNamespace>
+    <UserSecretsId>ict-api-dev</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Ict.Application\Flit.Ict.Application.csproj" />
+    <ProjectReference Include="..\Flit.Ict.Domain\Flit.Ict.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Ict.Infrastructure\Flit.Ict.Infrastructure.csproj" />
+    <ProjectReference Include="..\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+  </ItemGroup>
+
+</Project>

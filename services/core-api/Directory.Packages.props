@@ -17,7 +17,7 @@
          y trae Microsoft.OpenApi 2.x. Reflexión: solo carga en Flit.Api (PublishAot=false). -->
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.2" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
 
     <!-- Observabilidad (ADR-0002 §2 Decision 9). 1.15.x es la actual estable sin CVEs (CVE en 1.10.x corregido en 1.11+). -->
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
@@ -70,27 +70,30 @@
     <!-- Persistencia compartida del keyring de Data Protection en Postgres (HU #10233):
          sin esto las llaves viven en el filesystem efímero de cada pod y el secreto HMAC
          del webhook de Kyverum no se puede descifrar tras un reinicio o entre réplicas. -->
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.10" />
 
     <!-- EF Core 10 + Npgsql (ADR-0007 — JIT escape documentado en
          Tramites.Infrastructure por reflexion de EF). -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
     <PackageVersion Include="Npgsql" Version="10.0.0" />
 
     <!-- Pin transitivo para anular vulnerabilidades conocidas en dependencias indirectas.
          System.Security.Cryptography.Xml 9.0.0 (via Npgsql) tiene CVE GHSA-37gx-xxp4-5rgx
-         y GHSA-w3x6-4m5h-cxqf. Se fija a 10.0.1 (sin el CVE) — además Microsoft.AspNetCore
-         .DataProtection 10.0.1 (keyring en Postgres, HU #10233) exige >= 10.0.1. -->
-    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.1" />
+         y GHSA-w3x6-4m5h-cxqf. 10.0.1 seguia marcado (NU1903); se sube a la ultima servicing
+         10.0.10 (sin CVE). Alineado con Microsoft.AspNetCore.DataProtection 10.0.10 (NU1904). -->
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.10" />
 
     <!-- API Gateway YARP (ADR-0017 Aceptado 2026-05-27). YARP 2.2+ es AOT-compatible. -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+
+    <!-- gRPC server para la orquestación de creación de borrador desde core-ict (ICT). -->
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
 
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->
@@ -100,7 +103,7 @@
     <PackageVersion Include="FluentValidation" Version="11.10.0" />
 
     <!-- DI abstractions para librerías que exponen AddXxx() sin depender de ASP.NET. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />

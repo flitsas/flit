@@ -4,4 +4,7 @@ namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 public sealed record UpdateMandateSignerRequest(
     string? FullName,
     string? DocumentNumber,
-    IReadOnlyList<Guid>? CompanyTenantIds);
+    IReadOnlyList<Guid>? CompanyTenantIds,
+    string? DocumentType = null,
+    string? Email = null,
+    Guid? UserId = null);

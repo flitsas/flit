@@ -51,6 +51,17 @@ public sealed class RejectOtClientProcedureRequest
     public IReadOnlyList<OtProcedureObservationItem>? Items { get; init; }
 }
 
+/// <summary>
+/// Body OPCIONAL de POST .../client-procedures/{id}/approve (ADR-0036 §D9, HU #10916). El aprobador
+/// solo lo envía para elegir el mandatario cuando hay varios y ninguno cotejó (subsana el 409
+/// <c>mandatario_requerido</c>). Sin body, o con <c>MandateSignerId</c> nulo, la aprobación resuelve el
+/// firmante automáticamente (uno solo o cotejo por usuario).
+/// </summary>
+public sealed class ApproveOtClientProcedureRequest
+{
+    public Guid? MandateSignerId { get; init; }
+}
+
 internal static class OtClientProcedureMapper
 {
     public static OtClientProcedureResponse ToResponse(Domain.OtClientProcedures.OtClientProcedure procedure) =>
