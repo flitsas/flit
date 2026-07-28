@@ -43,7 +43,9 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ISecretariesV1Query, SecretariesV1Query>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IAttachmentDocTypeResolver, AttachmentDocTypeResolver>();
-        services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>();
+        services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>()
+            .AddHttpMessageHandler(sp => new Logging.IctOutboundLoggingHandler(
+                sp.GetRequiredService<IServiceScopeFactory>(), "external"));
 
         // Observabilidad (HU5): logs en Postgres (escritura + consulta enmascarada) y métricas de alerta.
         services.AddScoped<IntegrationLogRepository>();
@@ -69,7 +71,9 @@ public static class IctInfrastructureExtensions
 
         // Pipeline de validación: clientes externos + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
-        services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30))
+            .AddHttpMessageHandler(sp => new Logging.IctOutboundLoggingHandler(
+                sp.GetRequiredService<IServiceScopeFactory>(), "webhook"));
         services.AddHostedService<BusinessValidationJob>();
         services.AddHostedService<ExternalValidationJob>();
         services.AddHostedService<OrchestratorJob>();
