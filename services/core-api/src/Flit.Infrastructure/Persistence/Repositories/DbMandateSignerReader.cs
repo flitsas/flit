@@ -287,6 +287,16 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             return await action().ConfigureAwait(false);
         }
 
+        // HU #11000 — misma guarda que MandateSignerDirectory (HU #10992) y PlateRangeRepository: dentro de
+        // una transacción ya abierta NO se puede anidar otra ("The connection is already in a transaction").
+        // Se aplica el SET LOCAL sobre la transacción en curso; muere con su commit.
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
+            return await action().ConfigureAwait(false);
+        }
+
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {

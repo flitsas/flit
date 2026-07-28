@@ -123,6 +123,26 @@ internal sealed class DbSignatureVaultReader : ISignatureVaultReader
             return await read().ConfigureAwait(false);
         }
 
+        // HU #11000 — si YA hay una transacción abierta (la regeneración documental del expediente corre
+        // dentro del scope de tenant del cliente que abren la aprobación y la asignación de placa, HU
+        // #10995/#10996), abrir otra lanzaba "The connection is already in a transaction" y el best-effort
+        // de esos endpoints se tragaba la excepción: los documentos NO se regeneraban. Se reutiliza la
+        // transacción en curso fijando el tenant de la lectura y RESTAURÁNDOLO después, para no dejar el
+        // scope apuntando a otro tenant en las consultas que sigan dentro de la misma transacción.
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            var previous = await ReadCurrentTenantAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await SetCurrentTenantAsync(tenantId.ToString(), cancellationToken).ConfigureAwait(false);
+                return await read().ConfigureAwait(false);
+            }
+            finally
+            {
+                await SetCurrentTenantAsync(previous, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -141,4 +161,22 @@ internal sealed class DbSignatureVaultReader : ISignatureVaultReader
             }
         }).ConfigureAwait(false);
     }
+
+    /// <summary>Tenant fijado en la transacción en curso (cadena vacía si no hay ninguno). HU #11000.</summary>
+    private async Task<string> ReadCurrentTenantAsync(CancellationToken cancellationToken)
+    {
+        var values = await _context.Database
+            .SqlQueryRaw<string>(
+                "SELECT COALESCE(current_setting('app.current_tenant_id', true), '') AS \"Value\"")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return values.Count > 0 ? values[0] : string.Empty;
+    }
+
+    /// <summary>Fija <c>app.current_tenant_id</c> LOCAL a la transacción en curso. HU #11000.</summary>
+    private Task<int> SetCurrentTenantAsync(string tenantId, CancellationToken cancellationToken) =>
+        _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('app.current_tenant_id', {tenantId}, true)",
+            cancellationToken);
 }
