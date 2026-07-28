@@ -131,6 +131,14 @@ export function canReadLogQx(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, LOG_QX_READ_PERMISSION);
 }
 
+/** Permiso del submódulo de observabilidad ICT (HU10893). */
+export const ICT_LOGS_READ_PERMISSION = "ict.logs.read";
+
+/** Puede ver los logs/alertas de Integración con Terceros: permiso `ict.logs.read` o SuperAdmin. */
+export function canReadIctLogs(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_LOGS_READ_PERMISSION);
+}
+
 /**
  * Indica si el payload contiene el rol ot_admin (comparación case-insensitive).
  */

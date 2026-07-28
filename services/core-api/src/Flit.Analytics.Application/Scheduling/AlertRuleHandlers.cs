@@ -62,3 +62,11 @@ public sealed class ListAlertEventsHandler(IAlertRuleRepository repo)
         return repo.ListEventsAsync(tenantId, ruleId, effectivePage, effectiveSize, ct);
     }
 }
+
+/// <summary>POST /analytics/alert-events/{id}/ack — reconoce un disparo; otro tenant → null (404).</summary>
+public sealed class AckAlertEventsHandler(IAlertRuleRepository repo)
+{
+    public Task<AlertEventDto?> HandleAsync(
+        Guid tenantId, Guid eventId, Guid? acknowledgedBy, CancellationToken ct = default) =>
+        repo.AckEventAsync(tenantId, eventId, acknowledgedBy, ct);
+}

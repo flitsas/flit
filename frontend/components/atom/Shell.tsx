@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -31,6 +31,7 @@ import {
   Send,
   ScrollText,
   Radar,
+  Network,
   X,
 } from "lucide-react";
 
@@ -44,7 +45,8 @@ export type ModuleId =
   | "ayuda"
   | "rbac"
   | "auditoria"
-  | "log-qx";
+  | "log-qx"
+  | "ict-logs";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -116,6 +118,7 @@ function useCurrentUser() {
       isAdminCompany: isAdminCompany(payload),
       isOtAdmin: isOtAdmin(payload),
       canReadLogQx: canReadLogQx(payload),
+      canReadIctLogs: canReadIctLogs(payload),
     };
   });
   return user;
@@ -262,6 +265,17 @@ export function Shell({
       icon: Radar,
       active: !onAdminRoute && active === "log-qx",
       onClick: () => onNav("log-qx"),
+    });
+  }
+
+  // ICT (Integración con Terceros, HU10893) — gate por el permiso `ict.logs.read` (o SuperAdmin).
+  if (currentUser?.canReadIctLogs) {
+    entries.push({
+      key: "ict-logs",
+      label: "ICT",
+      icon: Network,
+      active: !onAdminRoute && active === "ict-logs",
+      onClick: () => onNav("ict-logs"),
     });
   }
 

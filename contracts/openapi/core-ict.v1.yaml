@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: FLIT Core ICT API
+  version: "1.0.0"
+  description: >
+    Contrato público de la Integración con Terceros (services/core-ict, Feature #10888).
+    Un cliente gestor se autentica con su PROPIO token ICT (independiente del login de
+    plataforma), registra trámites en lote, consulta su estado y los reprocesa. El
+    submódulo de observabilidad (logs/alertas) usa el JWT de plataforma. Todas las rutas
+    pasan por el Gateway YARP.
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4002
+    description: Local (Gateway)
+
+tags:
+  - name: ICT · Auth
+    description: Login propio del cliente de integración (token independiente del de plataforma).
+  - name: ICT · Ingesta
+    description: Registro por lote de pre-trámites (matrículas/traspasos/otros).
+  - name: ICT · Estado
+    description: Consulta de estado (forma v1 de compatibilidad y forma v2-native) y reproceso.
+  - name: ICT · Pre-trámites
+    description: Edición de pre-trámites antes de materializar (mejora v2).
+  - name: ICT · Observabilidad
+    description: Logs y alertas ICT (submódulo frontend, JWT de plataforma con permiso ict.logs.read).
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [ICT · Auth]
+      summary: Login del cliente de integración
+      description: >
+        Autentica al cliente ICT por usuario/contraseña y emite un token propio
+        (aud=flit-ict). `companyManagerId` se acepta y descarta (compat v1); el tenant se
+        deriva del cliente. Aplica rate-limit (bloqueo tras varios intentos fallidos).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IctLoginRequest'
+      responses:
+        '200':
+          description: Token emitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IctLoginResponse'
+        '401':
+          description: Credenciales inválidas o cliente bloqueado/inactivo.
+
+  /api/v1/external-transaction/register:
+    post:
+      tags: [ICT · Ingesta]
+      summary: Registro por lote de pre-trámites
+      description: >
+        Ingresa un lote de trámites (respuesta con la forma v1). Valida el límite de lote
+        (422 si se excede, sin persistir nada), el NIT del token contra cada fila y los
+        duplicados intra-lote. NO crea nada en trámites todavía: el pipeline valida y, al
+        pasar, materializa el borrador por gRPC.
+      security:
+        - ictClientToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBatchRequest'
+      responses:
+        '200':
+          description: Lote procesado (cada fila con su resultado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterBatchResponse'
+        '401':
+          description: Token ICT ausente o inválido.
+        '422':
+          description: El lote excede el límite configurado; no se persiste ninguna fila.
+
+  /api/v1/status-process/byId/{id}:
+    get:
+      tags: [ICT · Estado]
+      summary: Estado del pre-trámite (forma v1, compatibilidad)
+      description: Devuelve el histórico de estados con códigos numéricos (contrato v1). El id es el TransactionFlit (manager_id_transaction).
+      security:
+        - ictClientToken: []
+      parameters:
+        - $ref: '#/components/parameters/ManagerIdTransaction'
+      responses:
+        '200':
+          description: Estado en forma v1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusProcessV1Response'
+        '404':
+          description: No existe un pre-trámite con ese id para el tenant.
+
+  /api/v1/ict/status/{id}:
+    get:
+      tags: [ICT · Estado]
+      summary: Estado del pre-trámite (v2-native)
+      description: >
+        Proyecta el estado interno al vocabulario v2 (sin códigos numéricos) y, si el
+        pre-trámite ya se materializó, adjunta el estado v2 del trámite (Plano C).
+      security:
+        - ictClientToken: []
+      parameters:
+        - $ref: '#/components/parameters/ManagerIdTransaction'
+      responses:
+        '200':
+          description: Estado en vocabulario v2.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IctStatusV2Response'
+        '404':
+          description: No existe un pre-trámite con ese id para el tenant.
+
+  /api/v1/ict/reprocess/{id}:
+    post:
+      tags: [ICT · Estado]
+      summary: Reprocesar un pre-trámite con novedades
+      description: >
+        Reencola el pipeline para un pre-trámite en estado con_novedades (resetea los flags
+        de validación). Alias v1-compat: POST /api/v1/transactions/reprocess/{id}.
+      security:
+        - ictClientToken: []
+      parameters:
+        - $ref: '#/components/parameters/ManagerIdTransaction'
+      responses:
+        '200':
+          description: Reproceso encolado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reprocessed:
+                    type: boolean
+        '404':
+          description: No encontrado.
+        '409':
+          description: Ya materializado o no está en estado con_novedades.
+
+  /api/v1/pretramites/{id}:
+    patch:
+      tags: [ICT · Pre-trámites]
+      summary: Editar un pre-trámite antes de materializar
+      description: >
+        Edición parcial con concurrencia optimista (rowVersion). Si cambian campos que
+        afectan la validación, se resetean los flags y se re-encola el pipeline. Una vez
+        materializado (borrador creado) responde 409 already_materialized.
+      security:
+        - ictClientToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreTramitePatchRequest'
+      responses:
+        '200':
+          description: Pre-trámite actualizado (row_version incrementado).
+        '409':
+          description: Conflicto de concurrencia (stale), ya materializado, o no editable.
+
+  /api/v1/ict/logs:
+    get:
+      tags: [ICT · Observabilidad]
+      summary: Logs de integración (submódulo frontend)
+      description: >
+        Listado paginado de logs (PII enmascarada al servir). Requiere el JWT de plataforma
+        con el permiso ict.logs.read (o SuperAdmin). No es parte del token de cliente ICT.
+      security:
+        - platformJwt: []
+      parameters:
+        - name: logType
+          in: query
+          schema:
+            type: string
+            enum: [auth, transaction, webhook, external]
+        - name: correlationId
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Página de logs.
+        '403':
+          description: Falta el permiso ict.logs.read.
+
+  /api/v1/ict/alerts:
+    get:
+      tags: [ICT · Observabilidad]
+      summary: Métricas de alerta ICT
+      description: Métricas en vivo (atascados en validación, tasa de novedades, fallos de webhook, jobs fuera de SLA).
+      security:
+        - platformJwt: []
+      responses:
+        '200':
+          description: Métricas ICT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IctAlertMetrics'
+        '403':
+          description: Falta el permiso ict.logs.read.
+
+components:
+  securitySchemes:
+    ictClientToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token propio del cliente de integración (aud=flit-ict, scope ict.transactions.write).
+    platformJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT de plataforma FLIT (para el submódulo de observabilidad).
+
+  parameters:
+    ManagerIdTransaction:
+      name: id
+      in: path
+      required: true
+      description: TransactionFlit (manager_id_transaction) devuelto por el registro.
+      schema:
+        type: string
+
+  schemas:
+    IctLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        companyManagerId:
+          type: string
+          description: Aceptado y descartado (compat v1); el tenant se deriva del cliente.
+    IctLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        mustRotate:
+          type: boolean
+
+    RegisterBatchRequest:
+      type: object
+      description: Lote de trámites a registrar (estructura de fila heredada de v1).
+      properties:
+        transactions:
+          type: array
+          items:
+            type: object
+            description: >
+              Fila de trámite: transaction_type, plate/vin, company_manager_document,
+              seller/buyer/lessee, url_web_hook, process_without_attached_documents, etc.
+    RegisterBatchResponse:
+      type: object
+      properties:
+        TotalRows:
+          type: integer
+        TotalRowsProcessed:
+          type: integer
+        Detail:
+          type: array
+          items:
+            type: object
+            properties:
+              Plate:
+                type: string
+              Status:
+                type: integer
+                description: 1 = ok, 2 = error.
+              Message:
+                type: string
+              TransactionFlit:
+                type: string
+
+    StatusProcessV1Response:
+      type: object
+      properties:
+        transactionFlit:
+          type: string
+        statusValidation:
+          type: integer
+        statusDescription:
+          type: string
+        messageValidation:
+          type: string
+        statusObservation:
+          type: string
+        status:
+          type: integer
+        statusMessage:
+          type: string
+        statusProcess:
+          type: array
+          items:
+            type: object
+
+    IctStatusV2Response:
+      type: object
+      properties:
+        managerIdTransaction:
+          type: string
+        ictEstado:
+          type: string
+          enum: [recibido, en_validacion_negocio, en_validacion_externa, procesado, borrador_creado, con_novedades, anulado]
+        procedureInstanceId:
+          type: string
+          nullable: true
+        tramiteStatus:
+          type: string
+          nullable: true
+          description: Estado v2 del trámite materializado (borrador/preparado/entregado/…), si aplica.
+        comments:
+          type: string
+
+    PreTramitePatchRequest:
+      type: object
+      required: [rowVersion]
+      properties:
+        rowVersion:
+          type: integer
+        sellingDate:
+          type: string
+        sellingPrice:
+          type: number
+        trafficSecretaryCode:
+          type: string
+        processWithoutAttachedDocuments:
+          type: boolean
+
+    IctAlertMetrics:
+      type: object
+      properties:
+        stuckInValidation:
+          type: integer
+        noveltyRatePct:
+          type: number
+        webhookDeliveryFailures:
+          type: integer
+        jobsOutOfSla:
+          type: integer

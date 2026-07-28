@@ -283,6 +283,114 @@ public sealed class RegisterAttachmentHandler(
     }
 }
 
+/// <summary>
+/// Registra por REFERENCIA un adjunto proveniente de la integración con terceros (ICT). El binario ya
+/// vive en el File Manager corporativo (mismo backend que core-ict): aquí solo se registra la metadata
+/// apuntando al mismo <c>StoragePath</c> (no se re-suben bytes). A diferencia de
+/// <see cref="RegisterAttachmentHandler"/> (subida del gestor desde el front), NO aplica el whitelist de
+/// tipos/mime del contrato del front: el DocTipo lo resuelve core-ict con su tabla de asociación y puede
+/// ser un tipo "loose" (p.ej. <c>contrato_leasing</c>) o un sufijo de parte (p.ej. <c>cedulas_vendedor</c>).
+/// Es una escritura de SISTEMA confiable, en el mismo espíritu que la del FUR (Source='system'). Sí
+/// conserva los invariantes estructurales (draft + storage_path/sha256 presentes) y el AutoMark del
+/// checklist. Idempotente: si ya existe un adjunto con el mismo sha256 en la instancia, no lo duplica
+/// (el Job 4 de core-ict podría reintentar la materialización).
+/// </summary>
+public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepository repo)
+{
+    /// <summary>
+    /// Registra en LOTE (una sola unidad de trabajo) los adjuntos que llegan en la materialización ICT.
+    /// Se hace en un único <c>SaveChanges</c> a propósito: cada AutoMark muta <c>checklist_estado</c> de la
+    /// MISMA instancia y el trigger de BD incrementa su token de concurrencia (<c>row_version</c>); registrar
+    /// uno por uno (un SaveChanges por adjunto) haría que el segundo UPDATE de la instancia viajara con un
+    /// row_version obsoleto → DbUpdateConcurrencyException y toda la materialización fallaría. Al insertar
+    /// todos los adjuntos y acumular los AutoMark antes de un único SaveChanges hay UN solo UPDATE de la
+    /// instancia (mismo patrón de lista que PutActorsHandler/PatchFieldValuesHandler). Devuelve los DTOs
+    /// registrados y la lista de warnings por adjunto (no fatales: el borrador ya existe).
+    /// </summary>
+    public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<RegisterAttachmentInput> inputs,
+        Guid? uploadedBy = null,
+        CancellationToken ct = default)
+    {
+        var registered = new List<AttachmentDto>();
+        var warnings = new List<string>();
+        if (inputs.Count == 0)
+            return (registered, warnings);
+
+        var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (registered, ["not_found"]);
+        if (instance.Status != TramiteEstado.Borrador)
+            return (registered, ["not_draft"]);
+
+        // Dedup por sha256 (idempotencia): arranca con lo ya presente en la instancia y va agregando los
+        // de este lote; un objeto repetido (mismo hash) no se duplica.
+        var seenSha = instance.Attachments
+            .Where(a => !string.IsNullOrEmpty(a.Sha256))
+            .Select(a => a.Sha256!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTimeOffset.UtcNow;
+        var added = 0;
+        foreach (var input in inputs)
+        {
+            var label = string.IsNullOrWhiteSpace(input.Tipo) ? "?" : input.Tipo.Trim();
+            if (string.IsNullOrWhiteSpace(input.Tipo))
+            {
+                warnings.Add($"{label}:invalid_tipo");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(input.StoragePath))
+            {
+                warnings.Add($"{label}:missing_storage_path");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(input.Sha256))
+            {
+                warnings.Add($"{label}:missing_sha256");
+                continue;
+            }
+
+            var sha = input.Sha256.Trim().ToLowerInvariant();
+            if (!seenSha.Add(sha))
+                continue; // ya registrado (dentro del lote o en un intento previo) — idempotente.
+
+            var tipo = input.Tipo.Trim().ToLowerInvariant();
+            var attachment = new ProcedureInstanceAttachment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = tipo,
+                Filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim(),
+                Mimetype = string.IsNullOrWhiteSpace(input.Mimetype)
+                    ? "application/pdf"
+                    : input.Mimetype.Trim().ToLowerInvariant(),
+                SizeBytes = input.SizeBytes,
+                Sha256 = sha,
+                StoragePath = input.StoragePath.Trim(),
+                Source = "ict",
+                UploadedAt = now,
+                UploadedBy = uploadedBy,
+            };
+            instance.Attachments.Add(attachment);
+            // PK store-generated con Id ya seteado: Added explícito para forzar INSERT (igual que la subida).
+            repo.Add(attachment);
+            // Auto-marca el ítem de checklist cuyo docTipo == tipo (los tipos loose/sufijo sin ítem no marcan nada).
+            ChecklistEstadoJson.AutoMark(instance, tipo);
+            registered.Add(UploadAttachmentHandler.ToDto(attachment));
+            added++;
+        }
+
+        if (added > 0)
+            await repo.SaveChangesAsync(ct);
+
+        return (registered, warnings);
+    }
+}
+
 /// <summary>Lista los adjuntos de una instancia.</summary>
 public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
 {

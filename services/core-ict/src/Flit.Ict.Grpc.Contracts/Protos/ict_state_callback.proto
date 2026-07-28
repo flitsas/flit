@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package flit.ict.v1;
+
+option csharp_namespace = "Flit.Ict.Grpc.Contracts";
+
+import "google/protobuf/timestamp.proto";
+
+// Servicio expuesto por core-ict (servidor) e invocado por core-api (cliente).
+// core-api hace push unario cuando cambia el estado de un trámite con origin='ict',
+// alimentado por su outbox transaccional (ProcedureStateChangeOutboxProcessor).
+service IctStateCallback {
+  rpc NotifyProcedureStateChanged (StateChangeNotification) returns (Ack);
+}
+
+message StateChangeNotification {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  string external_ref          = 3;   // ict.external_integration_master.id
+  string from_status           = 4;   // vocabulario v2
+  string to_status             = 5;   // vocabulario v2
+  google.protobuf.Timestamp occurred_at = 6;
+  string reason                = 7;
+}
+
+message Ack {
+  bool received = 1;
+}

@@ -30,7 +30,7 @@ internal sealed class VerifikConductorConsultationProvider(
     public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
     {
         if (ConsultationProviderModeOptions.IsMock(_modes.VerifikConductorMode))
-            return Task.FromResult(MockResult());
+            return Task.FromResult(MockResult(GetValue(ctx, "document_number") ?? GetValue(ctx, "documentNumber")));
 
         return RealConsultAsync(ctx, ct);
     }
@@ -90,8 +90,14 @@ internal sealed class VerifikConductorConsultationProvider(
         }
     }
 
-    private static ConsultationResult MockResult()
+    private static ConsultationResult MockResult(string? documentNumber = null)
     {
+        // Sentinel de prueba (paralelo al SNV* del SOAT en el mock Verifik vehículo): un documento que
+        // empieza con '9999' simula un conductor CON multas (paz y salvo NO), para poder probar la
+        // advertencia INFORMATIVA del DRIVER (que registra la novedad pero NO bloquea el trámite). El
+        // resto queda a paz y salvo.
+        var tieneMultas = (documentNumber ?? string.Empty).StartsWith("9999", StringComparison.Ordinal) ? "SI" : "NO";
+
         // Nombre sintético determinista — demoable sin token, obviamente mock.
         var mock = new VerifikConductorResponse
         {
@@ -119,8 +125,8 @@ internal sealed class VerifikConductorConsultationProvider(
                 ],
                 Infractions = new VerifikConductorInfractions
                 {
-                    TieneMultas = "NO",
-                    NroPazYSalvo = "DEMO-PAZ-Y-SALVO"
+                    TieneMultas = tieneMultas,
+                    NroPazYSalvo = tieneMultas == "SI" ? string.Empty : "DEMO-PAZ-Y-SALVO"
                 },
                 IdentityValidationAttempts = new VerifikConductorIdentityValidation
                 {

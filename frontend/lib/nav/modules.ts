@@ -14,6 +14,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "rbac",
   "auditoria",
   "log-qx",
+  "ict-logs",
 ];
 
 /**
@@ -34,7 +35,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
  * (sin guion), que NO casa con el id de ruta `log-qx`. Se lista aquí solo para que
  * `parseModule` no rebote a "dashboard" tras `router.replace("/?m=log-qx")`.
  */
-export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda", "auditoria", "log-qx"];
+export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda", "auditoria", "log-qx", "ict-logs"];
 
 /**
  * Construye la lista de módulos válidos para la SPA: los accesibles por RBAC más los

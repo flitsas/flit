@@ -63,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();
+        // Materialización de adjuntos ICT por referencia (escritura de sistema; bypassa el whitelist del front).
+        services.AddScoped<RegisterIntegrationAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
