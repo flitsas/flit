@@ -30,6 +30,8 @@ import {
   createMandateSigner,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  resendMandateSignerIdentity,
+  sendMandateSignerIdentity,
 } from "@/lib/api/admin-mandate-signers";
 
 const companies: OtCompany[] = [
@@ -202,5 +204,52 @@ describe("MandatariosSection (ADR-0023 + ADR-0036)", () => {
     await waitFor(() =>
       expect(reactivateMandateSigner).toHaveBeenCalledWith("ot-1", "signer-1"),
     );
+  });
+
+  // HU #11000 — la tabla muestra el estado de identidad y ofrece la acción sin abrir el panel.
+  it.each([
+    ["valid", "Identidad validada", "Reenviar validación"],
+    ["expired", "Identidad vencida", "Renovar validación"],
+    ["pending", "Validación en proceso", "Reenviar validación"],
+    ["none", "Identidad sin validar", "Enviar validación"],
+  ] as const)(
+    "columna Identidad: %s pinta «%s» y ofrece «%s»",
+    async (identityStatus, label, action) => {
+      vi.mocked(fetchMandateSigners).mockResolvedValue([
+        { ...samuel, identityStatus, email: "samuel@x.co" },
+      ]);
+      renderSection();
+      await screen.findByText("Samuel Cárdenas");
+
+      expect(within(screen.getByTestId("ms-identity-signer-1")).getByText(label)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(action, "i") })).toBeInTheDocument();
+    },
+  );
+
+  it("la acción de identidad renueva la vencida y recarga la lista", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([
+      { ...samuel, identityStatus: "expired", email: "samuel@x.co" },
+    ]);
+    vi.mocked(resendMandateSignerIdentity).mockResolvedValue({
+      id: "val-1", status: "enviado", captureUrl: null, validUntil: null, reused: false,
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    await user.click(screen.getByRole("button", { name: /Renovar validación de Samuel Cárdenas/i }));
+
+    await waitFor(() =>
+      expect(resendMandateSignerIdentity).toHaveBeenCalledWith("ot-1", "signer-1"),
+    );
+    expect(sendMandateSignerIdentity).not.toHaveBeenCalled();
+  });
+
+  it("sin correo, la acción de identidad queda deshabilitada", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([{ ...samuel, email: null }]);
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    expect(screen.getByRole("button", { name: /Enviar validación/i })).toBeDisabled();
   });
 });

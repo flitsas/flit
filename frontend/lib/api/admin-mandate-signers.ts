@@ -63,6 +63,13 @@ export interface MandateSignerInput {
 export interface MandateSignerSaved {
   id: string;
   integrityHash: string;
+  /**
+   * Desenlace de la validación de identidad disparada por el alta (HU #11000): `"sent"` (correo
+   * enviado), `"reused"` (la persona ya tenía identidad vigente y se apalancó), `"failed"` (el
+   * proveedor falló; el mandatario quedó creado) o `"notattempted"` (se registró sin correo).
+   * Solo viaja en el POST de alta.
+   */
+  identity?: "sent" | "reused" | "failed" | "notattempted";
 }
 
 /** Resultado de iniciar/reenviar la validación de identidad del mandatario (ADR-0036, HU #10911). */
