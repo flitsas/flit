@@ -10,7 +10,7 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// metadata de la nube 169.254.169.254). Fail-closed: cualquier error de parseo/resolución ⇒ bloqueado.
 /// TODO(ICT-WEBHOOK-ALLOWLIST): endurecer con allowlist de hosts por tenant (plan §A.9).
 /// </summary>
-internal static class WebhookTargetGuard
+public static class WebhookTargetGuard
 {
     private static readonly IPAddress MetadataV4 = IPAddress.Parse("169.254.169.254");
 
