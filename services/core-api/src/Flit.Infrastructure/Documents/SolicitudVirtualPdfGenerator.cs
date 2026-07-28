@@ -52,7 +52,10 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
                     col.Item().Text($"{ciudad}, {fecha}");
                     col.Item().PaddingTop(10).AlignCenter().Text(t => t.Span("SOLICITUD TRÁMITE DE FORMA VIRTUAL").Bold());
 
-                    col.Item().PaddingTop(6).Text(Parrafo1(data, parte, esJuridica, tramite, ot, placa));
+                    RenderKeywordText(
+                        col.Item().PaddingTop(6),
+                        Parrafo1(data, parte, esJuridica, tramite, ot, placa),
+                        Parrafo1Keywords(parte, esJuridica, tramite, placa));
 
                     col.Item().Text(
                         "Por lo anterior, solicito se autorice el trámite indicado y de esta manera aportar los requisitos " +
@@ -88,6 +91,71 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
             $"solicitud_tramite_virtual_{SafeRef(data.ReferenceNumber)}.pdf",
             "application/pdf",
             bytes);
+    }
+
+    // HU #10998 — resalta en negrita las palabras clave del párrafo de solicitud (tipo de trámite, placa e
+    // identificación del solicitante), replicando el patrón de spans de la compraventa autogenerada.
+    private static void RenderKeywordText(IContainer container, string texto, string[] keywords) =>
+        container.Text(t =>
+        {
+            foreach (var (segment, bold) in SplitKeywords(texto, keywords))
+            {
+                var span = t.Span(segment);
+                if (bold)
+                    span.Bold();
+            }
+        });
+
+    private static string[] Parrafo1Keywords(
+        DocumentParte? parte, bool esJuridica, string tramite, string placa)
+    {
+        var keys = new List<string> { tramite, placa };
+        if (esJuridica)
+        {
+            keys.Add(Val(parte?.RepresentanteLegalNombre, "___"));
+            keys.Add(Val(parte?.Nombre, "___"));
+            keys.Add(Val(parte?.Documento, "___"));
+        }
+        else
+        {
+            keys.Add(Val(parte?.Nombre, "___"));
+            keys.Add(Val(parte?.Documento, "___"));
+        }
+
+        return [.. keys.Where(k => !string.IsNullOrWhiteSpace(k) && k != "___").Distinct()];
+    }
+
+    // Divide el texto en segmentos normales y en negrita según coincidencias EXACTAS (case-sensitive) de
+    // las palabras clave, tomando siempre la coincidencia más larga en cada posición.
+    private static IEnumerable<(string Text, bool Bold)> SplitKeywords(string texto, string[] keywords)
+    {
+        var ordered = keywords.OrderByDescending(k => k.Length).ToArray();
+        var buffer = new System.Text.StringBuilder();
+        var i = 0;
+        while (i < texto.Length)
+        {
+            var match = ordered.FirstOrDefault(k =>
+                i + k.Length <= texto.Length && string.CompareOrdinal(texto, i, k, 0, k.Length) == 0);
+            if (match is not null)
+            {
+                if (buffer.Length > 0)
+                {
+                    yield return (buffer.ToString(), false);
+                    buffer.Clear();
+                }
+
+                yield return (match, true);
+                i += match.Length;
+            }
+            else
+            {
+                buffer.Append(texto[i]);
+                i++;
+            }
+        }
+
+        if (buffer.Length > 0)
+            yield return (buffer.ToString(), false);
     }
 
     private static string Parrafo1(

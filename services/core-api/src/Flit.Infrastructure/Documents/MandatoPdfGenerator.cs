@@ -67,7 +67,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(14));
 
                     foreach (var p in parrafos)
-                        col.Item().PaddingTop(4).Text(p);
+                        RenderParrafo(col, p);
 
                     if (tramite.FirmasVisibles)
                         RenderFirmas(col, data, parte, esJuridica, variante);
@@ -289,6 +289,62 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         {
             sig.Item().PaddingTop(2).Text(t => t.Span(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2));
         }
+    }
+
+    // HU #10998 — palabras clave del mandato que se resaltan en negrita dentro del cuerpo (las partes
+    // definidas y los encabezados de cláusula). Se ordenan por longitud descendente al tokenizar para que
+    // los encabezados compuestos ganen sobre sus subcadenas (p. ej. "SEGUNDA: ..." sobre "MANDANTE").
+    private static readonly string[] MandatoKeywords =
+    [
+        "PRIMERA: OBJETO DEL MANDATO",
+        "SEGUNDA: OBLIGACIONES DEL MANDANTE",
+        "OBLIGACIONES DEL MANDANTE",
+        "MANDATARIO",
+        "MANDANTE",
+    ];
+
+    private static void RenderParrafo(ColumnDescriptor col, string texto) =>
+        col.Item().PaddingTop(4).Text(t =>
+        {
+            foreach (var (segment, bold) in SplitKeywords(texto, MandatoKeywords))
+            {
+                var span = t.Span(segment);
+                if (bold)
+                    span.Bold();
+            }
+        });
+
+    // Divide el texto en segmentos normales y en negrita según coincidencias EXACTAS (case-sensitive) de
+    // las palabras clave, tomando siempre la coincidencia más larga en cada posición.
+    private static IEnumerable<(string Text, bool Bold)> SplitKeywords(string texto, string[] keywords)
+    {
+        var ordered = keywords.OrderByDescending(k => k.Length).ToArray();
+        var buffer = new System.Text.StringBuilder();
+        var i = 0;
+        while (i < texto.Length)
+        {
+            var match = ordered.FirstOrDefault(k =>
+                i + k.Length <= texto.Length && string.CompareOrdinal(texto, i, k, 0, k.Length) == 0);
+            if (match is not null)
+            {
+                if (buffer.Length > 0)
+                {
+                    yield return (buffer.ToString(), false);
+                    buffer.Clear();
+                }
+
+                yield return (match, true);
+                i += match.Length;
+            }
+            else
+            {
+                buffer.Append(texto[i]);
+                i++;
+            }
+        }
+
+        if (buffer.Length > 0)
+            yield return (buffer.ToString(), false);
     }
 
     private static IEnumerable<string> MandanteIdentificacion(DocumentParte? parte, bool esJuridica)
