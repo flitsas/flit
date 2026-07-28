@@ -352,6 +352,72 @@ public sealed class TramiteValidationModeTests
         instance.FieldValues.Should().Contain(f => f.FieldKey == "vin_conflicto_traspaso" && f.ValueText == "true");
     }
 
+    // ── CF-01 en el avance del paso 1 al paso 2 (creación diferida, CF-02) ────
+
+    private CreateProcedureInstanceFromConsultaHandler FromConsultaHandler(TramiteValidationPolicy policy) =>
+        new(_repo,
+            new CreateProcedureInstanceHandler(_repo, Substitute.For<IProcedureTypeRepository>()),
+            new PatchFieldValuesHandler(_repo),
+            Handler(policy),
+            Substitute.For<IPreflightPreviewStore>(),
+            policy);
+
+    private static CreateFromConsultaRequest FromConsultaRequest() =>
+        new(TenantId: Guid.NewGuid(),
+            CreatedByUserId: Guid.NewGuid(),
+            Modalidad: "matricula_inicial",
+            Vin: "1HGCM82633A004352",
+            Plate: null,
+            OwnerDocumentType: null,
+            OwnerDocumentNumber: null,
+            PreviewToken: null);
+
+    [Fact]
+    public async Task CreateFromConsulta_ModoBlock_DuplicadoDevuelve409SinCrear()
+    {
+        // El avance paso 1 → paso 2 re-verifica la duplicidad ANTES de persistir nada (CF-02): en modo
+        // block sigue cortando ahí, sin dejar un trámite inservible.
+        var ct = TestContext.Current.CancellationToken;
+        var request = FromConsultaRequest();
+        var existingId = Guid.NewGuid();
+        _repo.FindTramitesByVinAsync(request.TenantId, Arg.Any<string>(), Guid.Empty, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(existingId, TramiteEstado.Borrador, Paso: 2, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error, existing, _) = await FromConsultaHandler(Policy()).HandleAsync(request, ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existing.Should().Be(existingId);
+    }
+
+    [Theory]
+    [InlineData(TramiteValidationMode.Warn)]
+    [InlineData(TramiteValidationMode.Off)]
+    public async Task CreateFromConsulta_ModoNoBlock_NoCortaPorDuplicidad(TramiteValidationMode modo)
+    {
+        // Regresión de la HU #10970: este handler tenía su PROPIO chequeo de CF-01 sin cablear al modo,
+        // así que el wizard seguía devolviendo 409 al avanzar de paso aunque el ambiente estuviera en
+        // off/warn. Fuera de block no debe cortar aquí: la señal la da el preflight de más abajo.
+        var ct = TestContext.Current.CancellationToken;
+        var request = FromConsultaRequest();
+        _repo.FindTramitesByVinAsync(request.TenantId, Arg.Any<string>(), Guid.Empty, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Borrador, Paso: 2, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (_, error, existing, _) = await FromConsultaHandler(Policy(duplicidad: modo)).HandleAsync(request, ct);
+
+        error.Should().NotBe("DUPLICATE_ACTIVE_PROCEDURE");
+        existing.Should().BeNull();
+        // La llave ni se consulta con Guid.Empty (la exclusión que usa este handler antes de crear).
+        await _repo.DidNotReceive().FindTramitesByVinAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Is<Guid>(g => g == Guid.Empty), ct);
+    }
+
     // ── Independencia de las dos validaciones ─────────────────────────────────
 
     [Fact]
