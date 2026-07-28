@@ -172,6 +172,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
+      Urls: http://0.0.0.0:${CORE_ICT_PORT:-4020}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
