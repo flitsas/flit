@@ -1,4 +1,5 @@
 using Flit.Ict.Application.Auth.Login;
+using Flit.Ict.Application.Auth.Rotate;
 
 namespace Flit.Ict.Api.Endpoints;
 
@@ -11,6 +12,9 @@ public static class IctAuthEndpoints
     /// <summary>Body del login. <c>companyManagerId</c> se acepta por compat v1 y se ignora.</summary>
     public sealed record LoginRequest(string Username, string Password, long? CompanyManagerId);
 
+    /// <summary>Body de la rotación de contraseña (se autentica con la contraseña actual, sin token).</summary>
+    public sealed record RotateRequest(string Username, string CurrentPassword, string NewPassword);
+
     private static readonly string[] LoginPaths = ["/api/v1/auth/login"];
 
     public static IEndpointRouteBuilder MapIctAuthEndpoints(this IEndpointRouteBuilder app)
@@ -20,7 +24,34 @@ public static class IctAuthEndpoints
             app.MapPost(path, LoginAsync).AllowAnonymous();
         }
 
+        // Rotación de contraseña (§A.5): anónima porque un cliente con must_rotate no puede obtener token.
+        app.MapPost("/api/v1/auth/rotate", RotateAsync).AllowAnonymous();
+
         return app;
+    }
+
+    private static async Task<IResult> RotateAsync(
+        RotateRequest request,
+        RotateIntegrationClientPasswordHandler handler,
+        CancellationToken ct)
+    {
+        var (ok, error) = await handler.HandleAsync(
+            new RotateIntegrationClientPasswordCommand(request.Username, request.CurrentPassword, request.NewPassword),
+            ct);
+
+        if (ok)
+        {
+            return Results.Ok(new { rotated = true });
+        }
+
+        return error switch
+        {
+            "invalid_credentials" => Results.Json(new { error }, statusCode: StatusCodes.Status401Unauthorized),
+            "inactive" or "locked" => Results.Json(new { error }, statusCode: StatusCodes.Status403Forbidden),
+            "weak_password" or "same_password" =>
+                Results.Json(new { error }, statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest),
+        };
     }
 
     private static async Task<IResult> LoginAsync(

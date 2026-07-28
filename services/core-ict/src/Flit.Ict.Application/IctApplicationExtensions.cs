@@ -1,5 +1,6 @@
 using Flit.Ict.Application.Attachments;
 using Flit.Ict.Application.Auth.Login;
+using Flit.Ict.Application.Auth.Rotate;
 using Flit.Ict.Application.Edit;
 using Flit.Ict.Application.Register;
 using Flit.Ict.Application.Status;
@@ -13,6 +14,7 @@ public static class IctApplicationExtensions
     public static IServiceCollection AddIctApplication(this IServiceCollection services)
     {
         services.AddScoped<LoginIntegrationClientHandler>();
+        services.AddScoped<RotateIntegrationClientPasswordHandler>();
         services.AddScoped<RegisterIctBatchHandler>();
         services.AddScoped<EditPreTramiteHandler>();
         services.AddScoped<PresignAttachmentHandler>();
