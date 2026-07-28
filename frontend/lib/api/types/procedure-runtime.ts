@@ -116,6 +116,12 @@ export interface InstanceSummary {
   vehiculoLinea: string | null;
   compradorNombre: string | null;
   compradorDocumento: string | null;
+  /**
+   * HU #11020 — parte SALIENTE del traspaso, para identificar el trámite desde el dashboard sin
+   * abrirlo. `null` en matrícula inicial (no hay vendedor).
+   */
+  vendedorNombre?: string | null;
+  vendedorDocumento?: string | null;
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
