@@ -1,7 +1,7 @@
 using System.Globalization;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Infrastructure.Persistence;
-using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -28,7 +28,11 @@ public sealed class IctOrchestrationService(
     PutCommercialHandler commercialHandler,
     RegisterIntegrationAttachmentHandler attachmentsHandler,
     TransitionProcedureInstanceHandler transitionHandler,
-    RunConsultationHandler runConsultationHandler,
+    RunPreflightHandler preflightHandler,
+    EnsureIdentityHandler ensureIdentityHandler,
+    IniciarKyverumVerifyHandler kyverumVerifyHandler,
+    SimularBiometriaHandler simularBiometriaHandler,
+    BiometricsProviderOptions biometricsProviderOptions,
     ITransitOfficeResolver transitOfficeResolver,
     FlitDbContext db) : IctOrchestration.IctOrchestrationBase
 {
@@ -236,14 +240,13 @@ public sealed class IctOrchestrationService(
             }
         }
 
-        // Hidratación de los datos del VEHÍCULO desde el RUNT — PARIDAD con el registro manual del
-        // frontend. Reutiliza el MISMO RunConsultationHandler del wizard (template RUNT_VEHICLE →
-        // provider verifik) que upserta vehicle_*/soat_*/vin como field_values con Source="consultation".
-        // Sin esto el borrador de ICT solo tendría plate/vin y el gestor tendría que pulsar "Consultar
-        // RUNT" y reingresar los ~19 atributos que el manual llena solo. Se ejecuta cuando hay placa o VIN
-        // (traspaso consulta por placa+owner_document_*; matrícula por VIN). Best-effort: cualquier fallo
-        // del proveedor NO tumba la materialización (el borrador ya existe) — se degrada a warning y el
-        // gestor puede consultar manualmente. Mismo contrato que el flujo manual, cero reglas nuevas.
+        // Preflight — PARIDAD con "Consultar RUNT del vehículo" (paso 1 del wizard manual). Un solo
+        // RunPreflightHandler hace TODO: consulta el vehículo por la cadena (kyverum-first→verifik) e HIDRATA
+        // los field_values del vehículo (marca/línea/soat/rtm/…), corre el SIMIT de comprador y vendedor,
+        // auto-vincula el OT desde el RUNT y PERSISTE el snapshot de preflight. Ese snapshot es lo que el gate
+        // del paso Comprador (SIMIT) exige: sin él, el paso 4 queda `incompleto` (simit_pendiente) y el wizard
+        // no avanza aunque los datos de comprador/vendedor ya estén. Requiere placa/VIN + owner_document_* (ya
+        // sembrados) + los actores (ya materializados). Best-effort: un fallo NO tumba la materialización.
         var tieneVehiculo = request.FieldValues.Any(f =>
             (string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase)
              || string.Equals(f.FieldKey, "vin", StringComparison.OrdinalIgnoreCase))
@@ -252,16 +255,59 @@ public sealed class IctOrchestrationService(
         {
             try
             {
-                var (_, hydrateError) = await runConsultationHandler.HandleAsync(
-                    summary.Id, tenantId, "RUNT_VEHICLE", forceRefresh: false, context.CancellationToken);
-                if (hydrateError is not null)
+                var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
+                    summary.Id, tenantId, context.CancellationToken);
+                if (preflightError is not null)
                 {
-                    AppendWarning(reply, "hydrate_warning:" + hydrateError);
+                    AppendWarning(reply, "preflight_warning:" + preflightError);
                 }
             }
             catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
             {
-                AppendWarning(reply, "hydrate_warning:exception");
+                AppendWarning(reply, "preflight_warning:exception");
+            }
+        }
+
+        // Identidad auto-iniciada — PARIDAD con el wizard manual (ensure → biométrica, TramiteWizard) y con
+        // v1 (identityValidationService.validateIdentities). ICT no pasa por el wizard, así que se replica
+        // aquí, DESPUÉS de materializar los actores: comprador siempre; vendedor solo en traspaso.
+        // EnsureIdentity DECIDE (reutiliza una identidad vigente de la persona si existe → no revalida); solo
+        // si devuelve `requiere_validacion` se inicia la biométrica del proveedor configurado (Kyverum real /
+        // mock). El sujeto (nombre/doc/email) lo resuelven los handlers desde el actor. Best-effort.
+        var partesIdentidad = esTraspasoDraft
+            ? new[] { "comprador", "vendedor" }
+            : new[] { "comprador" };
+        foreach (var parte in partesIdentidad)
+        {
+            try
+            {
+                var (ensured, ensureError) = await ensureIdentityHandler.HandleAsync(
+                    summary.Id, tenantId, parte, context.CancellationToken);
+                if (ensureError is not null || ensured is null)
+                {
+                    AppendWarning(reply, "identity_warning:" + (ensureError ?? "ensure_null"));
+                    continue;
+                }
+
+                if (ensured.Outcome == EnsureIdentityOutcomes.RequiereValidacion)
+                {
+                    if (biometricsProviderOptions.IsKyverum)
+                    {
+                        await kyverumVerifyHandler.HandleAsync(
+                            summary.Id,
+                            tenantId,
+                            new IniciarBiometriaInput(parte, string.Empty, string.Empty, string.Empty, string.Empty),
+                            context.CancellationToken);
+                    }
+                    else
+                    {
+                        await simularBiometriaHandler.HandleAsync(summary.Id, tenantId, parte, context.CancellationToken);
+                    }
+                }
+            }
+            catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
+            {
+                AppendWarning(reply, "identity_warning:exception");
             }
         }
 
