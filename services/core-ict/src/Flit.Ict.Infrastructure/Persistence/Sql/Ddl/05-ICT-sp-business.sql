@@ -16,6 +16,7 @@ AS $BODY$
 DECLARE
     rec RECORD;
     resultcomments text;
+    missingdocs text;
 BEGIN
     FOR rec IN
         SELECT m.id AS id_master, m.tenant_id, m.manager_id_transaction, m.transaction_type,
@@ -143,6 +144,29 @@ BEGIN
         SET business_comments_validation = business_comments_validation || ' transaction_type invalido;'
         WHERE eim.id = rec.id_master
           AND NOT EXISTS (SELECT 1 FROM ict.procedure_type_mapping m WHERE m.external_transaction_type = eim.transaction_type);
+
+        -- ===== Integridad de adjuntos obligatorios (PORTADO de v1) =====
+        -- Solo corre si el documento está CERRADO y NO se pidió procesar sin adjuntos. El waiver
+        -- process_without_attached_documents=TRUE (bandera de v1) OMITE esta validación: el pre-trámite
+        -- se procesa sin exigir los obligatorios. Antes esta bandera se persistía pero NO se consumía.
+        IF rec.closed_document = TRUE AND rec.process_without_attached_documents = FALSE THEN
+            SELECT string_agg(docs.name, ', ') INTO missingdocs
+            FROM ict.external_integration_configuration_documents cfg
+            JOIN ict.external_integration_allowed_documents docs ON docs.id = cfg.id_eiad
+            LEFT JOIN ict.external_integration_transaction_attachments att
+                   ON att.id_attachment = cfg.id_eiad AND att.master_id = rec.id_master AND att.deleted_at IS NULL
+            WHERE cfg.external_transaction_type = rec.transaction_type
+              AND cfg.is_mandatory = TRUE
+              AND cfg.deleted_at IS NULL
+              AND att.id IS NULL;
+
+            IF missingdocs IS NOT NULL THEN
+                UPDATE ict.external_integration_master
+                SET business_comments_validation = business_comments_validation
+                    || ' Faltan los siguientes documentos obligatorios: ' || missingdocs || ';'
+                WHERE id = rec.id_master;
+            END IF;
+        END IF;
 
         -- ===== Disponibilidad (adaptada a tabla única de trámites v2) =====
         -- VIN activo (matrículas 1/2).
