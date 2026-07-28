@@ -67,7 +67,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(14));
 
                     foreach (var p in parrafos)
-                        col.Item().PaddingTop(4).Text(p);
+                        RenderParrafo(col, p);
 
                     if (tramite.FirmasVisibles)
                         RenderFirmas(col, data, parte, esJuridica, variante);
@@ -221,15 +221,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static void RenderFirmas(
         ColumnDescriptor col, MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante)
     {
+        var tramite = data.Tramite;
+
         // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
         if (variante == MandatoVariante.Sabaneta)
         {
             col.Item().PaddingTop(40).Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                sig.Item().PaddingTop(28).Text("_______________________________");
+                RenderFirmaSlot(sig, tramite, parte?.Rol, "_______________________________");
                 foreach (var line in MandanteIdentificacion(parte, esJuridica))
                     sig.Item().Text(t => t.Span(line).FontSize(10));
+                RenderSello(sig, tramite, parte?.Rol);
             });
             return;
         }
@@ -241,9 +244,10 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                sig.Item().PaddingTop(28).Text("____________________________");
+                RenderFirmaSlot(sig, tramite, parte?.Rol, "____________________________");
                 foreach (var line in MandanteIdentificacion(parte, esJuridica))
                     sig.Item().Text(t => t.Span(line).FontSize(10));
+                RenderSello(sig, tramite, parte?.Rol);
             });
             row.RelativeItem().Column(sig =>
             {
@@ -253,6 +257,94 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 sig.Item().Text(t => t.Span($"C.C. {mandatario.Documento}").FontSize(10));
             });
         });
+    }
+
+    // HU #10997 — pinta la firma del MANDANTE según el mecanismo aplicable: imagen del baúl de firmas si
+    // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o la línea en blanco para
+    // firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
+    private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData tramite, string? rol, string underline)
+    {
+        if (rol is not null
+            && tramite.FirmaImagenes is not null
+            && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
+            && imagen.Length > 0)
+        {
+            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
+        }
+        else
+        {
+            sig.Item().PaddingTop(28).Text(underline);
+        }
+    }
+
+    // HU #10997 — sello de validación biométrica de identidad bajo la firma, solo si la identidad está
+    // validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
+    private static void RenderSello(ColumnDescriptor sig, FurDocumentData tramite, string? rol)
+    {
+        if (rol is not null
+            && tramite.IdentidadValidada
+            && tramite.SellosIdentidad is not null
+            && tramite.SellosIdentidad.TryGetValue(rol, out var sello)
+            && !string.IsNullOrWhiteSpace(sello))
+        {
+            sig.Item().PaddingTop(2).Text(t => t.Span(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2));
+        }
+    }
+
+    // HU #10998 — palabras clave del mandato que se resaltan en negrita dentro del cuerpo (las partes
+    // definidas y los encabezados de cláusula). Se ordenan por longitud descendente al tokenizar para que
+    // los encabezados compuestos ganen sobre sus subcadenas (p. ej. "SEGUNDA: ..." sobre "MANDANTE").
+    private static readonly string[] MandatoKeywords =
+    [
+        "PRIMERA: OBJETO DEL MANDATO",
+        "SEGUNDA: OBLIGACIONES DEL MANDANTE",
+        "OBLIGACIONES DEL MANDANTE",
+        "MANDATARIO",
+        "MANDANTE",
+    ];
+
+    private static void RenderParrafo(ColumnDescriptor col, string texto) =>
+        col.Item().PaddingTop(4).Text(t =>
+        {
+            foreach (var (segment, bold) in SplitKeywords(texto, MandatoKeywords))
+            {
+                var span = t.Span(segment);
+                if (bold)
+                    span.Bold();
+            }
+        });
+
+    // Divide el texto en segmentos normales y en negrita según coincidencias EXACTAS (case-sensitive) de
+    // las palabras clave, tomando siempre la coincidencia más larga en cada posición.
+    private static IEnumerable<(string Text, bool Bold)> SplitKeywords(string texto, string[] keywords)
+    {
+        var ordered = keywords.OrderByDescending(k => k.Length).ToArray();
+        var buffer = new System.Text.StringBuilder();
+        var i = 0;
+        while (i < texto.Length)
+        {
+            var match = ordered.FirstOrDefault(k =>
+                i + k.Length <= texto.Length && string.CompareOrdinal(texto, i, k, 0, k.Length) == 0);
+            if (match is not null)
+            {
+                if (buffer.Length > 0)
+                {
+                    yield return (buffer.ToString(), false);
+                    buffer.Clear();
+                }
+
+                yield return (match, true);
+                i += match.Length;
+            }
+            else
+            {
+                buffer.Append(texto[i]);
+                i++;
+            }
+        }
+
+        if (buffer.Length > 0)
+            yield return (buffer.ToString(), false);
     }
 
     private static IEnumerable<string> MandanteIdentificacion(DocumentParte? parte, bool esJuridica)
