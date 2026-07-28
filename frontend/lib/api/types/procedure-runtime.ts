@@ -582,6 +582,20 @@ export interface DocumentOcrResult {
   extractedPdfBase64?: string | null;
 }
 
+/**
+ * HU #10975 (Feature #10972) — resultado de persistir en `field_values` lo que extrajo el OCR.
+ * Las dos listas de omitidos son deliberadas: sin ellas, "el certificado sigue saliendo vacío"
+ * no se puede depurar desde fuera del backend.
+ */
+export interface PersistOcrFieldsResult {
+  /** Cuántas llaves se escribieron efectivamente. */
+  persistidos: number;
+  /** Llaves que ya tenían un valor de mayor precedencia (consulta al RUNT o dato del usuario). */
+  omitidosPorPrecedencia: string[];
+  /** Campos del OCR que no están en la whitelist del tipo de documento. */
+  ignoradosFueraDeAlcance: string[];
+}
+
 /** Item del checklist guiado por la tipología del trámite. */
 export interface ChecklistItemView {
   key: string;

@@ -167,6 +167,32 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("PatchProcedureInstanceFieldValues");
 
+        // HU #10975 (Feature #10972) — persiste en field_values los campos que el OCR semántico ya
+        // extrae del documento cargado (p. ej. el número de póliza y las fechas del SOAT), que hasta
+        // ahora se pintaban en el panel de validación y se descartaban. El endpoint /ocr/{tipo} sigue
+        // siendo stateless (no conoce la instancia): es el wizard quien, tras un OCR verificado,
+        // manda aquí los campos ya extraídos.
+        group.MapPost("/instances/{id:guid}/ocr-fields", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PersistOcrFieldsRequest request,
+            PersistOcrFieldsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden escribir field_values en borrador o subsanación."),
+                "tipo_no_soportado" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tipo de documento no tiene campos persistibles por OCR."),
+                "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el tipo de documento."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("PersistProcedureInstanceOcrFields");
+
         // R4 (HU #10595) — decisión de prenda (gravamen) del trámite. En matrícula es DECLARATIVA
         // (informativa: no se añade a SubmitGate, por lo que no bloquea la radicación). En traspaso es
         // gate (HU #10597) y admite modificación post-registro versionada (HU #10599). El versionado

@@ -1665,6 +1665,13 @@ function ImprontaSection({
 /** Tipos de documento generados por el FUR. */
 const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
 
+/**
+ * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
+ * `multiline` de alto fijo en el manifest: un texto más largo se desbordaría del formulario. El
+ * límite es de presentación, no de negocio.
+ */
+const FUR_OBSERVACIONES_MAX = 300;
+
 function FurSection({
   instanceId,
   modalidad,
@@ -1683,6 +1690,12 @@ function FurSection({
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
   // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
   const [furFormat, setFurFormat] = useState<string | null>(null);
+  // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
+  // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
+  // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
+  const [observaciones, setObservaciones] = useState('');
+  const [fechaTramite, setFechaTramite] = useState('');
+  const [savingCampos, setSavingCampos] = useState(false);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1692,10 +1705,36 @@ function FurSection({
       setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
       const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
       setFurFormat(fmt.format);
+      const detail = await tramitesClient.getInstance(instanceId);
+      const valor = (key: string) =>
+        detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
+      setObservaciones(valor('fur_observations'));
+      setFechaTramite(valor('fur_processing_date').slice(0, 10));
     } catch {
       // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
   }, [instanceId]);
+
+  /**
+   * Persiste observaciones y fecha del trámite. Se dispara al perder el foco y ANTES de generar, para
+   * que el PDF salga con lo que el gestor tiene en pantalla y no con lo último guardado.
+   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft` y el campo queda de
+   * solo lectura de hecho — no tiene sentido bloquear la generación por eso.
+   */
+  const guardarCampos = useCallback(async () => {
+    if (!instanceId) return;
+    setSavingCampos(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'fur_observations', valueText: observaciones.trim() || null },
+        { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fechaTramite || null },
+      ]);
+    } catch {
+      // Silencio intencionado: ver comentario de arriba.
+    } finally {
+      setSavingCampos(false);
+    }
+  }, [instanceId, observaciones, fechaTramite]);
 
   useEffect(() => {
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
@@ -1708,6 +1747,9 @@ function FurSection({
     setGenerating(true);
     setError(null);
     try {
+      // HU #10987/#10988 — guardar antes de generar: si el gestor escribe y pulsa el botón sin que
+      // el textarea pierda el foco, el PDF saldría sin ese texto.
+      await guardarCampos();
       const result = await tramitesClient.generarFur(instanceId);
       setLastResult(result.documents);
       await load();
@@ -1789,6 +1831,54 @@ function FurSection({
           {error}
         </div>
       )}
+
+      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
+          OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
+          generación del PDF. */}
+      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: '#DFE5ED' }}>
+        <div>
+          <label htmlFor="fur-fecha-tramite" className="text-xs font-semibold mb-1.5 block">
+            Fecha del trámite
+          </label>
+          <input
+            id="fur-fecha-tramite"
+            type="date"
+            value={fechaTramite}
+            onChange={(e) => setFechaTramite(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            className="rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            Se estampa en el FUR y en el resto de documentos del trámite. Si la dejas vacía se usa la
+            fecha de hoy.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="fur-observaciones" className="text-xs font-semibold mb-1.5 block">
+            Observaciones
+          </label>
+          <textarea
+            id="fur-observaciones"
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            rows={3}
+            maxLength={FUR_OBSERVACIONES_MAX}
+            placeholder="Particularidades del vehículo o del negocio que el formulario no contempla."
+            className="w-full rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            {observaciones.length}/{FUR_OBSERVACIONES_MAX} · Se imprimen en el recuadro OBSERVACIONES
+            del FUR, junto a las transformaciones declaradas y, si aplica, el gravamen.
+            {savingCampos && ' · Guardando…'}
+          </p>
+        </div>
+      </div>
 
       <button
         type="button"
