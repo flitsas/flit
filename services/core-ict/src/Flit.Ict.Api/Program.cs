@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddIctInfrastructure(builder.Configuration);
 builder.Services.AddIctApplication();
-builder.Services.AddIctApiSecurity();
+builder.Services.AddIctApiSecurity(builder.Configuration);
 builder.Services.AddGrpc();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -41,7 +41,10 @@ app.MapIctLifecycleEndpoints();
 app.MapIctObservabilityEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
-app.MapGrpcService<IctStateCallbackService>();
+// Protegido con el service-token del canal inverso (aud=core-ict-internal, scope=ict.state): solo
+// core-api autenticado como sistema puede notificar cambios de estado (no un tercero en el puerto interno).
+app.MapGrpcService<IctStateCallbackService>()
+    .RequireAuthorization(Flit.Ict.Api.Authorization.IctSecurityExtensions.CoreApiCallbackPolicy);
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "core-ict" }));
 

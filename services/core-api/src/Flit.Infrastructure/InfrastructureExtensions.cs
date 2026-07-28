@@ -4,6 +4,7 @@ using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
@@ -550,6 +551,10 @@ public static class InfrastructureExtensions
         // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+
+        // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
+        // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
+        services.AddIctStateReflection(configuration);
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)

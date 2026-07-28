@@ -19,6 +19,10 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
+// Plano C: core-api hace push gRPC hacia core-ict (callback de estado) sobre HTTP/2 en claro (h2c) en la
+// red interna. Sin este switch, el cliente gRPC exige TLS y la llamada saliente falla.
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
