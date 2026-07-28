@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatOtDate } from "./ot-utils";
 import {
   assignPlateRange,
   editPlateRange,
@@ -215,7 +216,7 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
                   </td>
                   <td className="px-2 py-2">{r.availablePlates}</td>
                   <td className="px-2 py-2">{r.totalPlates}</td>
-                  <td className="px-2 py-2 opacity-70">{new Date(r.editableUntil).toLocaleString("es-CO")}</td>
+                  <td className="px-2 py-2 opacity-70">{formatOtDate(r.editableUntil)}</td>
                   <td className="px-2 py-2">
                     <button
                       type="button"

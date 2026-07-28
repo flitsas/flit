@@ -147,7 +147,8 @@ public static class FurFieldMapper
             {
                 $"Doc. {meta.DocumentNumber}",
                 meta.FullName,
-                $"Vig. {meta.VigenciaDesde:dd/MM/yyyy} — {meta.VigenciaHasta:dd/MM/yyyy}",
+                // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
+                $"Vig. {meta.VigenciaDesde:yyyy/MM/dd} — {meta.VigenciaHasta:yyyy/MM/dd}",
             };
 
             // HU #10930 (Feature #10929): se estampa el codigo_hash digitado en el baúl (meta.Hash), NO el

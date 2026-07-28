@@ -642,10 +642,11 @@ public sealed class GenerarFurHandler(
         // declara explícitamente, para que quien lee el documento sepa que la firma no se pudo estampar
         // en vez de creer que el valor se perdió al imprimir.
         var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
+        // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA, sin hora.
         var aprob = v.ValidatedAt is { } va
-            ? va.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
+            ? va.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
         var vence = v.ValidUntil is { } vu
-            ? vu.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
+            ? vu.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
     }
 

@@ -166,8 +166,10 @@ describe('M6 — tabla de trámites en curso', () => {
     expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Borrador')).toBeInTheDocument();
 
-    // Fila entregado: placa nula -> "—", chip azul "Entregado" (N 03).
-    expect(within(rows[1]).getByText('—')).toBeInTheDocument();
+    // Fila entregado: placa nula -> "—", chip azul "Entregado" (N 03). HU #11020 — la columna
+    // Vendedor también pinta "—" cuando no hay parte saliente, así que se cuentan las celdas vacías
+    // en vez de exigir una sola.
+    expect(within(rows[1]).getAllByText('—').length).toBeGreaterThan(0);
     expect(within(rows[1]).getByText('Entregado')).toBeInTheDocument();
     expect(within(rows[1]).getByText('5/5')).toBeInTheDocument();
   });

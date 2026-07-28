@@ -391,8 +391,9 @@ public sealed class FurOverlayDocumentGeneratorTests
         sig.ImageBytes.Should().NotBeNullOrEmpty();
         sig.ImageSidecarText.Should().Contain("Doc. 900123456");
         sig.ImageSidecarText.Should().Contain("RENTING SAS");
-        sig.ImageSidecarText.Should().Contain("01/01/2026");
-        sig.ImageSidecarText.Should().Contain("31/12/2026");
+        // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
+        sig.ImageSidecarText.Should().Contain("2026/01/01");
+        sig.ImageSidecarText.Should().Contain("2026/12/31");
         // Se pinta el codigo_hash del baúl…
         sig.ImageSidecarText.Should().Contain("Hash: ABC-123-XYZ");
         // …y NUNCA el UUID de la fila.
