@@ -5,6 +5,12 @@
 **Alcance:** flujo `registrar trámite → consultar → generar FUR` en `services/core-api` y `frontend`
 **Naturaleza:** solo lectura / diagnóstico. No se modificó código.
 
+> **Ampliación (2026-07-28).** Este informe cubre los cuatro bloques reportados, que tocan 3 de los ~10
+> documentos del expediente. El **barrido de los documentos restantes** (compraventa, solicitud de
+> trámite virtual y mandato) se hizo después y vive en `docs/plan-tecnico-fur-datos-incompletos.md`
+> §2.bis. Añadió dos huérfanas más en el propio FUR (`fur_observations`, `fur_processing_date`), un
+> criterio de "dato ausente" no unificado entre documentos, y un campo muerto (`Causal`).
+
 ---
 
 ## 1. Resumen ejecutivo

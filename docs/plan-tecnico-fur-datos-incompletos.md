@@ -59,9 +59,61 @@ mismo documento, y mantiene `soat_estado` — que además es un **gate de aproba
 
 ---
 
+## 2.bis Barrido completo del expediente (ampliación del 2026-07-28)
+
+El informe original se ciñó a los cuatro bloques reportados (SOAT, RTM, RUES, prendas), que cubren
+3 de los ~10 documentos del expediente. Tras cerrar la Fase 1 se barrieron los tres que faltaban
+—**compraventa**, **solicitud de trámite virtual** y **mandato**— y el propio FUR completo. Resultado:
+
+### H1 — Dos llaves huérfanas más, en el FUR `[CONFIRMADO]`
+
+`fur_observations` y `fur_processing_date` aparecen **únicamente** en `FurCommand.cs` en todo el
+repositorio: ni en `src`, ni en los tests, ni en el frontend. Nadie las escribe.
+
+| Llave | Consecuencia real |
+|---|---|
+| `fur_observations` | **No existe forma de escribir observaciones manuales en el FUR.** El recuadro OBSERVACIONES del formulario oficial solo recibe el texto automático de transformaciones de color/combustible (ADR-0029). El operador no puede aportar nada. |
+| `fur_processing_date` | El mapper cae a `data.FechaTramite ?? DateTime.UtcNow`, así que el FUR estampa **la fecha de generación**. No sale en blanco: sale silenciosamente impuesta y no es controlable. Lo heredan también compraventa, solicitud virtual y mandato. |
+
+### H2 — Criterio de "dato ausente" no unificado entre documentos `[CONFIRMADO]`
+
+| Documento | Qué pinta si falta el dato |
+|---|---|
+| `certificado_soat_rtm`, `certificado_rues` | **En blanco** (regla HU #10856) |
+| `tramite_virtual`, `mandato` | **`___`** (marcador visible) |
+| `fur` | En blanco, salvo dirección/ciudad/teléfono que pintan `-` (`DisplayOrDash`) |
+
+Tres criterios distintos para la misma situación. No es un defecto funcional, pero al fusionarse todo
+en el consolidado el resultado se lee inconsistente. Decisión de negocio pendiente.
+
+### H3 — `FurDocumentData.Causal` es campo muerto en producción `[CONFIRMADO]`
+
+Se puebla desde `instance.Commercial?.Causal` y viaja hasta el generador, pero el **único** consumidor
+es `MockFurDocumentGenerator`, que es solo para tests y no está registrado en DI. Ningún documento real
+lo imprime. Mismo patrón que `AcreedorPrenda` (§6 del informe): dato capturado, transportado y
+descartado.
+
+### H4 — Los tres documentos barridos no añaden huérfanas propias `[CONFIRMADO]`
+
+Compraventa, solicitud virtual y mandato **no leen `field_values` directamente**: consumen
+`FurDocumentData`, así que heredan lo que ensambla `FurCommand` y nada más. Su exposición se limita a
+H1 (fecha) y H2 (criterio de ausencia). El `___` del mandatario en estado *preparado* es **por diseño**
+(se regenera al aprobar, HU #10916), no un defecto.
+
+### H5 — La guardia de la Fase 5 debe cubrir llaves construidas dinámicamente `[CONFIRMADO]`
+
+Durante el barrido, `vehicle_color_runt` y `vehicle_fuel_runt` aparecieron como huérfanas en una
+búsqueda por literal, pero **sí tienen productor**: `PreflightCommand.UpsertTransformationAwareField`
+las escribe como `field.FieldKey + RuntSnapshotSuffix` (`PreflightCommand.cs:802`). Una guardia que
+solo compare literales produciría falsos positivos aquí y falsos negativos en el caso simétrico. El
+registro de productores de HU-8 debe declararse **explícitamente**, no inferirse por grep.
+
+---
+
 ## 3. Fases y Historias de Usuario propuestas
 
-Total estimado: **8 HUs · 27 SP**. Las fases 1-2 son secuenciales entre sí; 3 y 4 son independientes y
+Total estimado: **10 HUs · 32 SP** (ampliado desde 8/27 tras el barrido completo de §2.bis: HU-9 y
+HU-10 cubren las dos huérfanas nuevas del FUR). Las fases 1-2 son secuenciales entre sí; 3 y 4 son independientes y
 pueden ir en paralelo; la 5 cierra.
 
 ### Fase 1 — Recuperar el dato que ya está en casa `BACKEND · 4 SP`
@@ -279,9 +331,72 @@ Escenario: El proveedor RUES no responde
 
 ---
 
-### Fase 4 — Prenda: imprimir el acreedor `BACKEND · 3 SP`
+### Fase 4 — Prenda: imprimir el acreedor `FULLSTACK · 6 SP`
+
+> ⚠️ **Prerrequisito descubierto en el barrido (H1).** D2 decidió imprimir el acreedor en el bloque
+> `observations` del FUR, pero ese bloque se alimenta de `fur_observations`, que **no tiene productor**.
+> Tal cual, HU-7 escribiría en un campo que nadie puede alimentar y el resto del recuadro seguiría
+> muerto. Por eso la fase incorpora **HU-9 antes que HU-7**.
+
+#### HU-9 · Dar productor a `fur_observations` — `FULLSTACK · 3 SP`
+
+Habilita el recuadro OBSERVACIONES del FUR para el operador, que hoy es de solo-lectura automática.
+
+- **Frontend:** campo de texto multilínea en el paso del FUR, con límite de caracteres acorde al alto
+  del recuadro en el manifest (`observations` es de tipo `multiline`).
+- **Backend:** `fur_observations` por `PatchFieldValues` (`Source = "user"`), sujeto a
+  `borrador`/`subsanacion` como el resto.
+- La composición ya existe y no cambia: `FurTransformationObservations.Compose` antepone/mezcla el
+  texto manual con el automático de transformaciones (ADR-0029).
+
+```gherkin
+Escenario: El operador escribe observaciones y salen en el FUR
+  Dado un trámite en borrador
+  Cuando el operador escribe "Vehículo con platón adaptado" en observaciones y genera el FUR
+  Entonces el recuadro OBSERVACIONES del FUR contiene ese texto
+
+Escenario: Las observaciones manuales conviven con las automáticas
+  Dado un trámite con una transformación de color declarada
+  Y observaciones manuales escritas por el operador
+  Cuando se genera el FUR
+  Entonces el recuadro contiene ambos textos, sin que uno pise al otro
+
+Escenario: Fuera de borrador no se editan
+  Dado un trámite en estado "entregado"
+  Cuando se intenta escribir fur_observations
+  Entonces se responde "not_draft"
+```
+
+#### HU-10 · Resolver `fur_processing_date` — `BACKEND · 2 SP`
+
+Segunda huérfana de H1. Hoy el FUR (y compraventa, solicitud virtual y mandato) estampan la fecha de
+generación por el fallback `?? DateTime.UtcNow`, sin que nadie pueda fijarla.
+
+Dos salidas legítimas; se implementa **la primera** salvo indicación contraria de negocio:
+
+1. **Darle productor** — el operador fija la fecha del trámite en el mismo paso que las observaciones,
+   con *default* al día de hoy en huso Colombia. Coherente con HU-9 y hace el campo auditable.
+2. **Retirar la lectura muerta** y documentar que el FUR estampa la fecha de generación.
+
+Lo que **no** es aceptable es dejarlo como está: una llave leída, sin productor y con un fallback
+silencioso que aparenta ser un dato del trámite.
+
+```gherkin
+Escenario: La fecha del trámite es la que fijó el operador
+  Dado un trámite en borrador con fur_processing_date = "2026-07-20"
+  Cuando se genera el FUR
+  Entonces las casillas de día, mes y año del FUR son 20, 7 y 2026
+
+Escenario: Sin fecha fijada se usa el día de hoy
+  Dado un trámite en borrador sin fur_processing_date
+  Cuando se genera el FUR
+  Entonces las casillas reflejan la fecha de hoy en huso Colombia
+  Y la compraventa, la solicitud virtual y el mandato usan esa misma fecha
+```
 
 #### HU-7 · Acreedor de la prenda en las observaciones del FUR — `BACKEND · 3 SP`
+
+> Depende de **HU-9**.
 
 El dato ya llega hasta el generador: `FurCommand.cs:139-141` lo resuelve y `:497` lo pasa como
 `FurDocumentData.AcreedorPrenda`. `FurFieldMapper` simplemente nunca lo referencia. Por D2 se compone en
@@ -322,10 +437,18 @@ puede quedar huérfano exactamente igual y nadie se entera hasta que un OT recla
 Existe el precedente exacto: `FurManifestGuardTests` ya valida que *"todos los tokens del mapper tengan
 placement"* en el manifest. Se replica el mismo concepto una capa más abajo.
 
-- Registro declarativo de las llaves de `field_values` que **produce** cada mapper/handler.
+- Registro **declarativo** de las llaves de `field_values` que produce cada mapper/handler. Declarativo
+  y no inferido: el barrido (H5) demostró que hay productores con llave construida en tiempo de
+  ejecución (`field.FieldKey + RuntSnapshotSuffix` en `PreflightCommand.cs:802`), invisibles a
+  cualquier búsqueda por literal. Esos productores deben registrarse a mano, incluido el patrón de
+  sufijo, o la guardia dará falsos positivos.
 - Test que recorre las llaves que **consume** cada generador de documentos y falla si alguna no tiene
   productor declarado, nombrando la llave y el documento.
-- Cobertura inicial: certificado SOAT/RTM, certificado RUES, FUR.
+- Cobertura: certificado SOAT/RTM, certificado RUES, FUR, compraventa, solicitud virtual y mandato
+  (los tres últimos consumen `FurDocumentData`, así que la guardia cubre el ensamblado de `FurCommand`).
+- **Caso de prueba obligatorio del propio barrido:** la guardia debe detectar `fur_observations` y
+  `fur_processing_date` si se revirtieran HU-9 / HU-10 — son las huérfanas que un `grep` sí encontró y
+  que nadie notó durante meses.
 
 ```gherkin
 Escenario: Una llave consumida sin productor rompe el build
@@ -352,7 +475,8 @@ Fase 2 ── HU-3 ──┴─► HU-4 ─► HU-5      (HU-3 es prerrequisito 
 
 Fase 3 ── HU-6 ─────────────────────────► (independiente, paralelizable)
 
-Fase 4 ── HU-7 ─────────────────────────► (independiente, paralelizable)
+Fase 4 ── HU-9 ──► HU-7                    (HU-9 es PRERREQUISITO de HU-7: sin
+          HU-10 ─────────────────────────► productor, HU-7 escribe en un campo muerto)
 
 Fase 5 ── HU-8 ─────────────────────────► (al final: la guardia debe pasar en verde)
 ```
