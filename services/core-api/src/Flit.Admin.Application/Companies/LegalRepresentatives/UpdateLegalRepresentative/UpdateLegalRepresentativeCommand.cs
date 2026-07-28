@@ -42,5 +42,8 @@ public sealed class UpdateLegalRepresentativeCommand
 
     public IReadOnlyList<Guid> ProcedureTypeIds { get; init; } = [];
 
+    /// <summary>Compañías del representante (HU #10932): lista anidada si viene; si no, la compañía única.</summary>
+    public IReadOnlyList<LegalRepresentativeCompanyInput>? Companies { get; init; }
+
     public Guid? ActorBy { get; init; }
 }

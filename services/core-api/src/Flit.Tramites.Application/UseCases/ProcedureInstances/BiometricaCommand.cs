@@ -419,12 +419,14 @@ public sealed class CompletarBiometriaHandler(
         v.UpdatedAt = now;
 
         // Persiste las fotos presentes (reusa IAttachmentStorage con tipos biometric_*).
+        // El scorer mock solo se usa en validaciones ligadas a una instancia de trámite (HU #10865).
+        var instanceIdForStorage = v.ProcedureInstanceId.GetValueOrDefault();
         if (rostro is { Length: > 0 })
-            v.FacePhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
+            v.FacePhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
         if (frontal is { Length: > 0 })
-            v.IdFrontPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
+            v.IdFrontPhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
         if (reverso is { Length: > 0 })
-            v.IdBackPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
+            v.IdBackPhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
 
         var score = scorer.Score(new BiometricPhotos(rostro, frontal, reverso));
 

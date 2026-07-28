@@ -323,9 +323,12 @@ internal static class ProcedureInstanceEndpoints
         }).WithName("SubmitProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado|preasignado|asignado) + reason
-        // (obligatorio para anulado/rechazado). preasignado/asignado = ruta de preasignación de placa
-        // (Feature #10587). Errores: ProblemDetails con title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado|subsanacion|preasignado|asignado)
+        // + reason (obligatorio para anulado/rechazado). subsanacion (HU #10870): entregado/rechazado
+        // → subsanacion reabre la edición sin volver a borrador; el re-radicado (subsanacion→entregado)
+        // usa este mismo endpoint o POST /submit (ambos delegan en TramiteLifecycleService). preasignado/
+        // asignado = ruta de preasignación de placa (Feature #10587). Errores: ProblemDetails con
+        // title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -338,7 +341,8 @@ internal static class ProcedureInstanceEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, errorCode, errorDetail) = await handler.HandleAsync(
-                id, tenantId.Value, request.ToStatus, request.Reason, ResolveUserId(http.User), ct);
+                id, tenantId.Value, request.ToStatus, request.Reason, ResolveUserId(http.User),
+                request.MandateSignerId, ct);
 
             if (errorCode is null)
                 return Results.Ok(result);
@@ -352,6 +356,10 @@ internal static class ProcedureInstanceEndpoints
                     detail: errorDetail ?? "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 // R10 (HU #10597) — gate de prenda del traspaso (409, subsanable con la decisión/documento).
                 TramiteEstadoErrores.PrendaDecisionRequerida or TramiteEstadoErrores.PrendaDocumentoRequerido =>
+                    Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
+                // ADR-0036 §D9 (HU #10916) — al aprobar hay varios mandatarios y ninguno cotejó: elegir uno
+                // (409, subsanable reintentando con mandateSignerId).
+                TramiteEstadoErrores.MandatarioRequerido =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
                 _ => Results.Problem(
                     statusCode: 422, title: errorCode,
@@ -597,8 +605,12 @@ internal static class ProcedureInstanceEndpoints
 /// </summary>
 internal sealed record TransitOfficeOptionDto(Guid Id, string Code, string Name, string CityCode);
 
-/// <summary>Body de POST /instances/{id}/transition (N 03). reason es obligatorio para anulado/rechazado.</summary>
-internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, string? Reason);
+/// <summary>
+/// Body de POST /instances/{id}/transition (N 03). reason es obligatorio para anulado/rechazado.
+/// mandateSignerId (ADR-0036 §D9, HU #10916) elige el mandatario al aprobar cuando hay varios sin cotejo
+/// (subsana el 409 mandatario_requerido); se ignora en el resto de transiciones.
+/// </summary>
+internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, string? Reason, Guid? MandateSignerId = null);
 
 /// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
 internal sealed record SetPriorityRequest(bool Prioritario);

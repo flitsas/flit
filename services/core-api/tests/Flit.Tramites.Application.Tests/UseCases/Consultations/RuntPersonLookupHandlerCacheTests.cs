@@ -9,7 +9,12 @@ using Xunit;
 namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
 /// <summary>
-/// HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside en <see cref="RuntPersonLookupHandler"/>.
+/// HU #10955 (AC1) — revierte parcialmente HU #10878/ADR-0031: la identidad de un actor SIEMPRE se
+/// consulta en vivo contra el RUNT. <see cref="RuntPersonLookupHandler"/> ya NO intenta un HIT de
+/// <see cref="ExternalQueryCacheService.TryReusePersonAsync"/>, exista o no un
+/// <see cref="PersonDataConsent"/> vigente, ni aunque haya una entrada de caché fresca. El resultado
+/// SÍ se sigue cacheando al final (para otros consumidores del cache-aside, p. ej.
+/// <c>RunConsultationHandler</c> con templates <c>entity_scope=actor</c>).
 /// </summary>
 public sealed class RuntPersonLookupHandlerCacheTests
 {
@@ -61,198 +66,13 @@ public sealed class RuntPersonLookupHandlerCacheTests
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
-    [Fact]
-    public async Task HandleAsync_ConConsentimientoYCacheVigente_NoLlamaProveedor()
-    {
-        // AC1
-        var ct = TestContext.Current.CancellationToken;
-        var id = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
-
-        _consentRepo.GetAsync(tenantId, "CC", "123456789", ct)
-            .Returns(new PersonDataConsent
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                DocumentType = "CC",
-                DocumentNumber = "123456789",
-                Status = PersonDataConsentStatus.Granted,
-                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
-            });
-
-        var cachedEntry = new ExternalQueryCacheEntry
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ExternalDataSourceId = RuntSourceId,
-            SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
-            DocumentType = "CC",
-            DocumentNumber = "123456789",
-            Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN PEREZ","valueJson":null}]""",
-            QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
-        };
-        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct).Returns(cachedEntry);
-
-        var provider = new FakeProvider(new ConsultationResult("verifik_conductor", "green", [], []));
-        _registry.Resolve("verifik_conductor").Returns(provider);
-
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
-
-        error.Should().BeNull();
-        result.Should().NotBeNull();
-        result!.Found.Should().BeTrue();
-        result.FullName.Should().Be("JUAN PEREZ");
-        provider.Called.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task HandleAsync_CacheVencida_Reconsulta_Y_Recachea()
-    {
-        // AC2
-        var ct = TestContext.Current.CancellationToken;
-        var id = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
-
-        _consentRepo.GetAsync(tenantId, "CC", "123456789", ct)
-            .Returns(new PersonDataConsent
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                DocumentType = "CC",
-                DocumentNumber = "123456789",
-                Status = PersonDataConsentStatus.Granted,
-                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
-            });
-
-        var expiredEntry = new ExternalQueryCacheEntry
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ExternalDataSourceId = RuntSourceId,
-            SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
-            DocumentType = "CC",
-            DocumentNumber = "123456789",
-            Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN VIEJO","valueJson":null}]""",
-            QueriedAt = DateTimeOffset.UtcNow.AddDays(-2),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1),
-        };
-        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct).Returns(expiredEntry);
-
-        var freshResult = new ConsultationResult("verifik_conductor", "green",
-            [], [new HydratedField("person_full_name", "JUAN NUEVO", null)]);
-        var provider = new FakeProvider(freshResult);
-        _registry.Resolve("verifik_conductor").Returns(provider);
-
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
-
-        error.Should().BeNull();
-        provider.Called.Should().BeTrue();
-        result!.FullName.Should().Be("JUAN NUEVO");
-        expiredEntry.Payload.Should().Contain("JUAN NUEVO");
-        expiredEntry.ExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow);
-    }
-
-    [Fact]
-    public async Task HandleAsync_SinConsentimiento_NuncaPrecarga_ConsultaFresca()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var id = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
-        // Sin consentimiento (GetAsync sin stub => null).
-
-        var vigenteEntry = new ExternalQueryCacheEntry
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ExternalDataSourceId = RuntSourceId,
-            SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
-            DocumentType = "CC",
-            DocumentNumber = "123456789",
-            Payload = """[{"fieldKey":"person_full_name","valueText":"NO DEBERIA VERSE","valueJson":null}]""",
-            QueriedAt = DateTimeOffset.UtcNow.AddHours(-1),
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(23),
-        };
-        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct).Returns(vigenteEntry);
-
-        var freshResult = new ConsultationResult("verifik_conductor", "green",
-            [], [new HydratedField("person_full_name", "CONSULTA FRESCA", null)]);
-        var provider = new FakeProvider(freshResult);
-        _registry.Resolve("verifik_conductor").Returns(provider);
-
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
-
-        error.Should().BeNull();
-        provider.Called.Should().BeTrue();
-        result!.FullName.Should().Be("CONSULTA FRESCA");
-        vigenteEntry.ReuseCount.Should().Be(0);
-    }
-
     /// <summary>
-    /// Regresión — la caché guarda el FLAG de multas pero NO el detalle de cada comparendo (el
-    /// detalle es una sub-consulta SIMIT best-effort que no viaja en el payload). Al reusar la
-    /// persona, la ficha del actor mostraba la alerta "Comparendos/Multas pendientes" pero SIN la
-    /// lista: se perdía información que el operador sí veía en la primera consulta. El detalle debe
-    /// recomponerse también en el HIT.
+    /// AC1 — aunque exista consentimiento `granted` Y una entrada de caché vigente (el escenario que
+    /// ANTES servía un HIT sin llamar al proveedor), el handler SIEMPRE consulta el RUNT en vivo y el
+    /// nombre devuelto es el de la consulta fresca, no el del payload cacheado.
     /// </summary>
     [Fact]
-    public async Task HandleAsync_HitDeCacheConMultas_DevuelveElDetalleDeComparendos()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var id = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
-        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
-
-        _consentRepo.GetAsync(tenantId, "CC", "1193552679", ct)
-            .Returns(new PersonDataConsent
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                DocumentType = "CC",
-                DocumentNumber = "1193552679",
-                Status = PersonDataConsentStatus.Granted,
-                GrantedAt = DateTimeOffset.UtcNow.AddDays(-1),
-            });
-
-        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "1193552679", ct)
-            .Returns(new ExternalQueryCacheEntry
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                ExternalDataSourceId = RuntSourceId,
-                SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
-                DocumentType = "CC",
-                DocumentNumber = "1193552679",
-                // Lo que realmente guarda la caché: nombre + FLAG de multas, sin detalle.
-                Payload = """
-                [{"fieldKey":"person_full_name","valueText":"DANIEL AMADO GARCIA","valueJson":null},
-                 {"fieldKey":"person_has_pending_fines","valueText":"true","valueJson":null}]
-                """,
-                QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
-                ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
-            });
-
-        var comparendo = new FineDetail(
-            "05001000000044805008", "26/01/2025", 651906m, "Medellín", "Pendiente de pago",
-            "Conducir un vehículo a velocidad superior a la máxima permitida.");
-        var simit = new FakeFinesProvider([comparendo]);
-        _registry.Resolve("verifik_simit").Returns(simit);
-
-        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "1193552679", ct);
-
-        error.Should().BeNull();
-        result!.HasPendingFines.Should().BeTrue();
-        simit.Called.Should().BeTrue("el detalle no está en la caché, hay que volver a pedirlo");
-        result.Fines.Should().ContainSingle()
-            .Which.Numero.Should().Be("05001000000044805008");
-    }
-
-    /// <summary>Sin multas pendientes, el HIT no gasta una consulta de comparendos.</summary>
-    [Fact]
-    public async Task HandleAsync_HitDeCacheSinMultas_NoConsultaComparendos()
+    public async Task HandleAsync_ConConsentimientoYCacheVigente_SiempreConsultaEnVivo()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -279,36 +99,67 @@ public sealed class RuntPersonLookupHandlerCacheTests
                 SubjectKind = ExternalQueryCacheRules.SubjectKindPerson,
                 DocumentType = "CC",
                 DocumentNumber = "123456789",
-                Payload = """[{"fieldKey":"person_full_name","valueText":"JUAN PEREZ","valueJson":null}]""",
+                Payload = """[{"fieldKey":"person_full_name","valueText":"NOMBRE CACHEADO","valueJson":null}]""",
                 QueriedAt = DateTimeOffset.UtcNow.AddHours(-2),
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(22),
             });
 
-        var simit = new FakeFinesProvider([]);
-        _registry.Resolve("verifik_simit").Returns(simit);
+        var provider = new FakeProvider(new ConsultationResult("verifik_conductor", "green",
+            [], [new HydratedField("person_full_name", "NOMBRE EN VIVO", null)]));
+        _registry.Resolve("verifik_conductor").Returns(provider);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
 
         error.Should().BeNull();
-        result!.HasPendingFines.Should().BeFalse();
-        simit.Called.Should().BeFalse();
-        result.Fines.Should().BeNull();
+        provider.Called.Should().BeTrue("AC1: la identidad SIEMPRE se consulta en vivo, con o sin consentimiento/caché");
+        result!.FullName.Should().Be("NOMBRE EN VIVO");
+        result.Mode.Should().NotBe("cache");
     }
 
-    /// <summary>Proveedor de comparendos que devuelve un detalle fijo, contando invocaciones.</summary>
-    private sealed class FakeFinesProvider(IReadOnlyList<FineDetail> fines) : IConsultationProvider
+    /// <summary>AC1 — el handler no lee el gate de consentimiento en absoluto: nunca invoca GetAsync.</summary>
+    [Fact]
+    public async Task HandleAsync_NuncaConsultaElConsentimiento()
     {
-        public string Key => "verifik_simit";
-        public bool Called { get; private set; }
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        _registry.Resolve("verifik_conductor").Returns(new FakeProvider(
+            new ConsultationResult("verifik_conductor", "green", [], [new HydratedField("person_full_name", "JUAN", null)])));
 
-        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
-        {
-            Called = true;
-            return Task.FromResult(new ConsultationResult(
-                Key,
-                "yellow",
-                [new ConsultationCheck(FinesCheckFactory.KeyMultas, "Multas", "warn", Key, "1 comparendo", fines)],
-                []));
-        }
+        var (_, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
+
+        error.Should().BeNull();
+        await _consentRepo.DidNotReceive().GetAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// El resultado fresco se sigue cacheando (para otros consumidores del mecanismo, p. ej.
+    /// RunConsultationHandler) aunque este handler ya no lea la caché.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_TrasConsultarEnVivo_SigueEscribiendoLaCache()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        // Sin entrada previa: SavePersonResultAsync debe hacer un AddAsync.
+        _cacheRepo.FindPersonAsync(tenantId, RuntSourceId, "CC", "123456789", ct)
+            .Returns((ExternalQueryCacheEntry?)null);
+
+        var freshResult = new ConsultationResult("verifik_conductor", "green",
+            [], [new HydratedField("person_full_name", "JUAN NUEVO", null)]);
+        _registry.Resolve("verifik_conductor").Returns(new FakeProvider(freshResult));
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "CC", "123456789", ct);
+
+        error.Should().BeNull();
+        result!.FullName.Should().Be("JUAN NUEVO");
+        await _cacheRepo.Received(1).AddAsync(
+            Arg.Is<ExternalQueryCacheEntry>(e =>
+                e.TenantId == tenantId && e.DocumentType == "CC" && e.DocumentNumber == "123456789"),
+            Arg.Any<CancellationToken>());
     }
 }

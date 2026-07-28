@@ -116,10 +116,10 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                   Registro
                 </th>
                 <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-                  NIT empresa
+                  Documento
                 </th>
                 <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-                  Documento
+                  Código hash
                 </th>
                 <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
                   Apoderado
@@ -145,13 +145,13 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`}>
                       {formatDate(registro)}
                     </td>
-                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`}>
-                      {item.nitEmpresa}
-                    </td>
                     <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`}>
                       <span className="font-mono">
                         {item.documentType} {maskDocument(item.documentNumber)}
                       </span>
+                    </td>
+                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`}>
+                      {item.codigoHash ?? "—"}
                     </td>
                     <td className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`}>
                       {item.fullName}

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -35,8 +36,18 @@ public sealed class TramiteLifecycleService(
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
     ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null,
+    IMandateSignerDirectory? mandateDirectory = null,
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null) : ITramiteLifecycleService
 {
+    // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
+    // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // ADR-0036 §D9 (HU #10916) — directorio de mandatarios del OT para resolver el firmante al aprobar.
+    // Default seguro (NUNCA resuelve candidatos) en tests que no lo ejercitan.
+    private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
@@ -94,65 +105,64 @@ public sealed class TramiteLifecycleService(
                 TramiteEstadoErrores.MotivoRequerido,
                 $"Debe indicar el motivo para pasar el trámite a '{command.ToStatus}'.");
 
+        // HU #10872 (AC1) — re-radicación selectiva: subsanacion→entregado NO re-evalúa TODOS los
+        // gates de negocio, solo los que dependen de los campos corregidos desde que el trámite entró
+        // a subsanación (más el gate final de entrega, EvaluarEntregaAsync, que SIEMPRE corre más
+        // abajo). Vacío/AllGates fuera de este escenario para que las demás transiciones (borrador→
+        // preparado, preparado→entregado) mantengan el comportamiento incondicional de siempre.
+        var affectedGates = from == TramiteEstado.Subsanacion && command.ToStatus == TramiteEstado.Entregado
+            ? await ResolveSubsanacionAffectedGatesAsync(instance, command.TenantId, ct).ConfigureAwait(false)
+            : SubsanacionGateMap.AllGates;
+
         // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado", SEGUNDO momento
         // ("de nuevo al radicar", el estado pudo cambiar desde el preflight). SOLO Matrícula Inicial,
         // SOLO fuente FLIT (bloqueo duro por repo, sin IO externo al RUNT en este gate — la fuente RUNT
         // ya se validó de forma DURA en el preflight, AC1/AC3): si OTRO trámite del mismo VIN llegó a
         // 'aprobado' mientras este seguía en curso, esta relectura lo atrapa antes de preparar/entregar.
-        if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado)
+        // HU #10872 (AC1) — al re-radicar desde subsanación, SOLO si el VIN fue uno de los campos
+        // corregidos (o no hay snapshot base: fail-safe).
+        if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado
+            && affectedGates.Contains(SubsanacionGateMap.VehicleState))
         {
             var vehicleStateDetail = await EvaluarEstadoVehiculoRegistralAsync(instance, ct).ConfigureAwait(false);
             if (vehicleStateDetail is not null)
                 return TramiteTransitionOutcome.Fail(VehicleStatePolicy.ErrorCode, vehicleStateDetail);
         }
 
-        // RF03 — gate borrador→preparado: identidad aprobada/vigente + documentos obligatorios.
-        if (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
+        // RF03/R10 — gate de preparación (identidad aprobada/vigente + documentos + impronta + prenda
+        // del traspaso): SIEMPRE en borrador→preparado; en subsanacion→entregado SOLO si el diff de
+        // campos corregidos toca el bucket PreparationGate (HU #10872 AC1) — la resolución de identidad
+        // (IdentityApprovalResolver) reutiliza validaciones vigentes sin solicitar nada nuevo (AC2).
+        var debeEvaluarGatePreparacion =
+            (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
+            || (from == TramiteEstado.Subsanacion && command.ToStatus == TramiteEstado.Entregado
+                && affectedGates.Contains(SubsanacionGateMap.PreparationGate));
+
+        if (debeEvaluarGatePreparacion)
         {
-            // Identidad PER-PERSONA (documento del actor), referenciada de su validación vigente
-            // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
-            // en otro trámite del tenant, sin clonar.
-            var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-                repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
-            // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
-            // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
-            var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
-                instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
-            if (!identityRequired)
-                identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
-
-            // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
-            var docsCompletos = matrixCompleteness is null
-                ? null
-                : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
-
-            // FEATURE-08 / HU-BE-06 (AC-06): para tipos dinámicos (flag F08_DynamicProcedures + snapshot)
-            // el gate de preparación se delega en DynamicGateEvaluator.CanSubmitBlockers; en cualquier
-            // otro caso se conserva SubmitGate estático (sin regresión).
-            ProcedureTypeSnapshotRecord? snapshot = null;
-            if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct).ConfigureAwait(false))
-                snapshot = await snapshotRepo.GetByInstanceIdAsync(instance.Id, command.TenantId, ct).ConfigureAwait(false);
-
-            var gateErrors = snapshot is not null
-                ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
-                : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
-            if (gateErrors.Count > 0)
-                return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors));
-
-            // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
-            // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
-            // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
-            var prendaError = await EvaluarPrendaGateAsync(instance, ct).ConfigureAwait(false);
-            if (prendaError is var (prendaCode, prendaDetail) && prendaCode is not null)
-                return TramiteTransitionOutcome.Fail(prendaCode, prendaDetail);
+            var gatePreparacionError = await EvaluarGatePreparacionAsync(instance, command, ct).ConfigureAwait(false);
+            if (gatePreparacionError is var (code, detail) && code is not null)
+                return TramiteTransitionOutcome.Fail(code, detail);
         }
 
-        // Gates OT de entrega (heredados del submit HU #10217/#2).
+        // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
+        // FINAL de radicación: corre SIEMPRE, sin importar el diff de campos corregidos.
         if (command.ToStatus == TramiteEstado.Entregado)
         {
             var entregaError = await EvaluarEntregaAsync(instance, ct).ConfigureAwait(false);
             if (entregaError is var (code, detail) && code is not null)
                 return TramiteTransitionOutcome.Fail(code, detail);
+        }
+
+        // ADR-0036 §D9 (HU #10916) — al APROBAR, resolver el mandatario que firma el mandato: automático
+        // si hay uno solo o el cotejo por usuario es único; explícito (mandateSignerId) si hay varios sin
+        // match ⇒ 409 mandatario_requerido. Fija instance.MandateSignerId en la MISMA unidad de trabajo;
+        // la regeneración del PDF del mandato con el firmante la dispara el handler tras el commit.
+        if (command.ToStatus == TramiteEstado.Aprobado)
+        {
+            var mandatoError = await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
+            if (mandatoError is not null)
+                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -179,7 +189,8 @@ public sealed class TramiteLifecycleService(
             command.ToStatus,
             command.Reason,
             command.ChangedByUserId,
-            now);
+            now,
+            command.Metadata);
 
         // Historial (RF05) + publicación (RNF01) se ENCOLAN en la misma unidad de trabajo;
         // el commit único de abajo los persiste o descarta en bloque.
@@ -194,6 +205,69 @@ public sealed class TramiteLifecycleService(
 
         return TramiteTransitionOutcome.Ok(instance);
     }
+
+    /// <summary>
+    /// ADR-0036 §D9 (HU #10916) — resuelve el mandatario del mandato al aprobar. Devuelve el código de
+    /// error (<c>mandatario_requerido</c>) si hay varios mandatarios y ninguno cotejó; <c>null</c> si no
+    /// hay nada que resolver (el mandato no aplica, o el mandatario es institucional sin firmante persona)
+    /// o si el firmante quedó fijado en <c>instance.MandateSignerId</c>.
+    /// </summary>
+    private async Task<string?> ResolverMandatarioAlAprobarAsync(
+        ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
+    {
+        // ¿Exige mandato? Persona jurídica siempre; persona natural solo si el OT lo configura.
+        var comprador = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase));
+        var esJuridica = ActorPersonTypes.IsJuridical(comprador?.PersonType)
+            || string.Equals(comprador?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+
+        var code = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var config = string.IsNullOrWhiteSpace(code)
+            ? null
+            : await _mandatePolicy.ResolveAsync(code, ct).ConfigureAwait(false);
+
+        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
+        if (!exigeMandato)
+            return null;
+
+        // Sabaneta (mandatario institucional UT-SETSA): solo firma el mandante ⇒ no hay firmante persona
+        // que resolver. Cualquier otra plantilla (genérica/Bello) necesita un mandatario persona.
+        if (MandatoTemplateResolver.Resolve(config?.TemplateCode) == MandatoVariante.Sabaneta)
+            return null;
+
+        // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
+        if (instance.TransitOfficeId is not { } transitOfficeId)
+            return null;
+
+        var candidates = await _mandateDirectory
+            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .ConfigureAwait(false);
+
+        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, command.MandateSignerId);
+
+        switch (resolution.Status)
+        {
+            case MandateSignerResolutionStatus.Resolved:
+                instance.MandateSignerId = resolution.Signer!.Id;
+                return null;
+            case MandateSignerResolutionStatus.RequiereSeleccion:
+                return TramiteEstadoErrores.MandatarioRequerido;
+            default:
+                // NoConfigurado: el OT no tiene mandatarios; se aprueba sin firmante (el mandato queda con
+                // placeholder hasta que el OT registre uno y se regenere). No bloquea la aprobación.
+                return null;
+        }
+    }
+
+    /// <summary>Detalle del error de mandatario para el mensaje al usuario (ADR-0036 §D9).</summary>
+    private static string DetalleMandatario(string code) => code switch
+    {
+        TramiteEstadoErrores.MandatarioRequerido =>
+            "Hay varios mandatarios para la compañía en este organismo y ninguno corresponde a su usuario. " +
+            "Elija el mandatario que firma el mandato e intente aprobar de nuevo.",
+        _ => "No se pudo resolver el mandatario del mandato.",
+    };
 
     /// <summary>
     /// Causa(s) exacta(s) del gate de preparación (RF03) para el mensaje al usuario. Lista TODO lo que
@@ -218,6 +292,79 @@ public sealed class TramiteLifecycleService(
         SubmitGate.ImprontaRequerida => "generar la impronta de motor y chasis",
         _ => $"resolver un requisito pendiente ({code})",
     };
+
+    /// <summary>
+    /// RF03/R10 — gate de preparación: identidad aprobada/vigente + documentos obligatorios + impronta
+    /// + prenda del traspaso. Extraído para reusarse SIN duplicar lógica (HU #10872 AC1) desde dos
+    /// disparadores: borrador→preparado (siempre) y subsanacion→entregado (solo si el diff de campos
+    /// corregidos toca <see cref="SubsanacionGateMap.PreparationGate"/>). <c>(null, null)</c> = puede
+    /// avanzar. La resolución de identidad reutiliza validaciones vigentes existentes — NUNCA solicita
+    /// una nueva biométrica aquí (AC2: "no se vuelven a solicitar").
+    /// </summary>
+    private async Task<(string? Code, string? Detail)> EvaluarGatePreparacionAsync(
+        ProcedureInstance instance,
+        TramiteTransitionCommand command,
+        CancellationToken ct)
+    {
+        // Identidad PER-PERSONA (documento del actor), referenciada de su validación vigente
+        // (HU #10350 rediseño #87): fila propia del trámite O identidad vigente de la persona
+        // en otro trámite del tenant, sin clonar. HU #10872 (AC2) — es la MISMA resolución de siempre:
+        // no dispara ninguna solicitud nueva, solo consulta vigencia de lo ya validado.
+        var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
+            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
+        // HU #10548 — el OT destino puede tener la validación de identidad deshabilitada por
+        // acuerdo: en ese caso se considera satisfecha para no bloquear la preparación.
+        var identityRequired = await _identityPolicy.IsIdentityValidationRequiredAsync(
+            instance.TenantId, TransitOfficeIdFromFieldValues(instance), ct).ConfigureAwait(false);
+        if (!identityRequired)
+            identidadAprobada = IdentitySatisfiedForAllParties(identidadAprobada);
+
+        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
+        var docsCompletos = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+
+        // FEATURE-08 / HU-BE-06 (AC-06): para tipos dinámicos (flag F08_DynamicProcedures + snapshot)
+        // el gate de preparación se delega en DynamicGateEvaluator.CanSubmitBlockers; en cualquier
+        // otro caso se conserva SubmitGate estático (sin regresión).
+        ProcedureTypeSnapshotRecord? snapshot = null;
+        if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct).ConfigureAwait(false))
+            snapshot = await snapshotRepo.GetByInstanceIdAsync(instance.Id, command.TenantId, ct).ConfigureAwait(false);
+
+        var gateErrors = snapshot is not null
+            ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
+            : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
+        if (gateErrors.Count > 0)
+            return (gateErrors[0], DetalleGatePreparacion(gateErrors));
+
+        // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
+        // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
+        // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
+        return await EvaluarPrendaGateAsync(instance, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #10872 (AC1) — resuelve las categorías de gate afectadas por la re-radicación desde
+    /// subsanación: trae el snapshot de field_values capturado al ENTRAR a subsanación (baseline) y lo
+    /// compara contra el estado ACTUAL de <c>instance.FieldValues</c> (<see cref="FieldValueSnapshot.Diff"/>).
+    /// Sin snapshot base (dato legado anterior a esta HU, o degradado) el fail-safe es
+    /// <see cref="SubsanacionGateMap.NoBaselineFallback"/> — preserva el comportamiento previo a esta
+    /// HU en vez de bloquear re-radicaciones legítimas que antes pasaban.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> ResolveSubsanacionAffectedGatesAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        var baselineJson = await repo
+            .GetLatestSubsanacionMetadataAsync(instance.Id, tenantId, ct)
+            .ConfigureAwait(false);
+        var baseline = SubsanacionObservation.FromJson(baselineJson)?.FieldSnapshot;
+        if (baseline is null)
+            return SubsanacionGateMap.NoBaselineFallback;
+
+        var current = FieldValueSnapshot.Capture(instance.FieldValues);
+        var changedKeys = FieldValueSnapshot.Diff(baseline, current);
+        return SubsanacionGateMap.ResolveGates(changedKeys);
+    }
 
     /// <summary>
     /// Gates de la entrega al OT: tipo publicado, organismo elegido HABILITADO para la empresa

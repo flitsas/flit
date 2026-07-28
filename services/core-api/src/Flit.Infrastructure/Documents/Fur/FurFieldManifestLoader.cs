@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Application.Documents;
 
 namespace Flit.Infrastructure.Documents.Fur;
 
@@ -27,10 +28,14 @@ public static class FurFieldManifestLoader
         };
     }
 
-    public static FurFieldManifest LoadEmbedded()
+    /// <summary>Carga el manifest AUTOMOTOR embebido (compatibilidad).</summary>
+    public static FurFieldManifest LoadEmbedded() => LoadEmbedded(FurTemplateFormat.Automotor);
+
+    /// <summary>Carga el manifest embebido del formato indicado (HU #10920).</summary>
+    public static FurFieldManifest LoadEmbedded(FurTemplateFormat format)
     {
         var asm = typeof(FurFieldManifestLoader).Assembly;
-        const string resourceName = "Flit.Infrastructure.Documents.Fur.fur-field-manifest.json";
+        var resourceName = "Flit.Infrastructure.Documents.Fur." + ManifestFileName(format);
         using var stream = asm.GetManifestResourceStream(resourceName);
         if (stream is null)
             throw new InvalidOperationException($"Recurso embebido no encontrado: {resourceName}");
@@ -38,6 +43,23 @@ public static class FurFieldManifestLoader
         using var reader = new StreamReader(stream);
         return LoadFromJson(reader.ReadToEnd());
     }
+
+    /// <summary>¿Existe el manifest embebido del formato? (para saltar formatos aún no incorporados).</summary>
+    public static bool HasEmbedded(FurTemplateFormat format)
+    {
+        var asm = typeof(FurFieldManifestLoader).Assembly;
+        var resourceName = "Flit.Infrastructure.Documents.Fur." + ManifestFileName(format);
+        using var stream = asm.GetManifestResourceStream(resourceName);
+        return stream is not null;
+    }
+
+    // AUTOMOTOR conserva el nombre histórico del recurso; los formatos nuevos usan sufijo.
+    private static string ManifestFileName(FurTemplateFormat format) => format switch
+    {
+        FurTemplateFormat.Maquinaria => "fur-field-manifest.maquinaria.json",
+        FurTemplateFormat.Remolques => "fur-field-manifest.remolques.json",
+        _ => "fur-field-manifest.json",
+    };
 
     private static FurFieldDefinition MapField(FieldDto f)
     {

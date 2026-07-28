@@ -98,6 +98,8 @@ public static class InfrastructureExtensions
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
@@ -140,6 +142,9 @@ public static class InfrastructureExtensions
 
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
+        // HU #10919 (Feature #10918) — plantilla de FUR según la clasificación del vehículo (catálogo
+        // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
+        services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
@@ -150,6 +155,10 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
+        services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
+        // ADR-0036 (HU #10915) — Contrato Privado de Mandato (PDF real, condicional por OT/persona).
+        services.AddSingleton<IMandatoGenerator, Documents.MandatoPdfGenerator>();
         // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
         services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 

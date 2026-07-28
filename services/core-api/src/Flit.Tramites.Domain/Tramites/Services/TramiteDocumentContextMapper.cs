@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
@@ -38,7 +39,9 @@ public static class TramiteDocumentContextMapper
     /// <c>Actors</c>, <c>FieldValues</c>, <c>Participants</c>). Es tolerante a colecciones nulas
     /// o vacías: en ausencia de datos devuelve un contexto sin condiciones (todo <c>false</c>).
     /// </summary>
-    public static TramiteDocumentContext From(ProcedureInstance instance)
+    public static TramiteDocumentContext From(
+        ProcedureInstance instance,
+        MandateOtConfig? mandateConfig = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
 
@@ -73,6 +76,12 @@ public static class TramiteDocumentContextMapper
         var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
         var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
 
+        // ADR-0036 (HU #10913) — el mandato aplica a persona jurídica SIEMPRE, y a persona natural solo
+        // si el OT lo exige (config.RequiresForNaturalPerson, p. ej. Sabaneta). Sin config del OF ⇒ solo
+        // persona jurídica (default conservador, sin regresión).
+        var exigeMandato = esNit
+            || (esPersonaNatural && mandateConfig is { RequiresForNaturalPerson: true });
+
         return new TramiteDocumentContext(
             // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se
             // condiciona a una bandera del operador, así que EsImportado queda siempre false.
@@ -85,7 +94,8 @@ public static class TramiteDocumentContextMapper
             TienePrenda: false,
             TieneTramitador: tieneTramitador,
             CambioCarroceria: cambioCarroceria,
-            ServicioEspecial: servicioEspecial);
+            ServicioEspecial: servicioEspecial,
+            ExigeMandato: exigeMandato);
     }
 
     private static string? LeerTexto(IEnumerable<ProcedureInstanceFieldValue> fieldValues, string fieldKey) =>

@@ -12,6 +12,12 @@ public sealed class CompanyDeedEntity
 
     public Guid TenantId { get; set; }
 
+    /// <summary>
+    /// Representante que asoció la escritura (Feature #10929). <c>null</c> en escrituras legadas
+    /// (asociadas a la empresa antes del ajuste): esas NO aparecen en el detalle de ningún representante.
+    /// </summary>
+    public Guid? RepresentativeId { get; set; }
+
     public string Description { get; set; } = string.Empty;
 
     public string StoragePath { get; set; } = string.Empty;

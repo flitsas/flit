@@ -208,6 +208,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       entregado: 0,
       aprobado: 0,
       rechazado: 0,
+      // HU #10874 — no tiene tarjeta propia en el funnel (FUNNEL_ORDER no la incluye), pero el
+      // tipo Record<EstadoTramite, number> exige la clave; se cuenta igual por completitud.
+      subsanacion: 0,
     };
     for (const it of items) {
       if (it.estado in c) c[it.estado as EstadoTramite] += 1;

@@ -62,6 +62,11 @@ export interface DeedRequest {
   vigenciaHasta: string;
   sha256: string | null;
   representedCompanyIds: string[];
+  /**
+   * Representante que asocia la escritura (Feature #10929). Solo se envía en el ALTA (desde el detalle
+   * del representante); en la edición se omite y el backend conserva el representante actual.
+   */
+  representativeId?: string;
 }
 
 /**
@@ -160,6 +165,7 @@ export async function saveDeed(
   tenantId: string,
   editingId: string | null,
   input: DeedFormInput,
+  representativeId?: string,
 ): Promise<DeedSaved> {
   const sha256 = input.file ? await sha256Hex(input.file) : null;
   const body: DeedRequest = {
@@ -168,6 +174,9 @@ export async function saveDeed(
     vigenciaHasta: input.vigenciaHasta,
     sha256,
     representedCompanyIds: input.companyIds,
+    // Feature #10929: en el alta se asocia al representante del detalle; en la edición no se envía
+    // (el backend conserva el representante actual).
+    ...(editingId ? {} : { representativeId }),
   };
   const saved = editingId
     ? await updateDeed(tenantId, editingId, body)

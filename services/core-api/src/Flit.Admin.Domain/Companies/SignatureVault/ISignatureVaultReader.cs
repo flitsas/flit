@@ -19,6 +19,19 @@ public interface ISignatureVaultReader
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Firma 'activa' del baúl para una PERSONA (por tipo + número de documento) dentro del tenant
+    /// (HU #10930, Feature #10929): la firma es de la persona + tenant, ya no depende del NIT.
+    /// Devuelve la más reciente rehidratada para que el llamador aplique
+    /// <see cref="SignatureVault.EstaVigente"/>; <c>null</c> si no hay ninguna activa.
+    /// <c>documentNumber</c> es PII (Ley 1581): no loguear.
+    /// </summary>
+    Task<SignatureVault?> FindActiveByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Firmas del baúl del tenant (activas y revocadas) para la gestión admin, ordenadas primero
     /// las activas y luego por creación descendente.
     /// </summary>

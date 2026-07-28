@@ -53,7 +53,8 @@ public sealed class CreateDeedHandler
                 command.VigenciaDesde,
                 command.VigenciaHasta,
                 DeedValidation.NormalizeCompanies(command.RepresentedCompanyIds),
-                command.CreatedBy),
+                command.CreatedBy,
+                command.RepresentativeId),
             cancellationToken).ConfigureAwait(false);
 
         return CreateDeedResult.Success(id, ticket);

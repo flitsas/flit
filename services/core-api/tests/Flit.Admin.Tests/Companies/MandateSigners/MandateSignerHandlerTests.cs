@@ -15,11 +15,11 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies.MandateSigners;
 
 /// <summary>
-/// Tests del CRUD de mandatarios y la exclusividad estricta (ADR-0023, HU10613) ejercitando
-/// los handlers reales sobre <see cref="DbMandateSignerReader"/> + <see cref="MandateSignerRepository"/>
+/// Tests del CRUD de mandatarios (ADR-0023, ampliado por ADR-0036) ejercitando los handlers reales
+/// sobre <see cref="DbMandateSignerReader"/> + <see cref="MandateSignerRepository"/>
 /// + <see cref="DbTransitOfficeOperationalStatusReader"/> con proveedor InMemory. Cubren alta,
-/// exclusividad (compañía ya tomada por otro mandatario activo), soft-delete que libera
-/// compañías y regeneración de huella al editar. El seed y las constantes se comparten con
+/// multiplicidad (varios mandatarios por compañía, ADR-0036), soft-delete que libera compañías y
+/// regeneración de huella al editar. El seed y las constantes se comparten con
 /// <see cref="MandateSignerUsageAndViewTests"/> (HU10614, RF33/RF34).
 /// </summary>
 public sealed class MandateSignerHandlerTests
@@ -50,22 +50,23 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Create_RejectsCompanyAlreadyTakenByAnotherSigner_Exclusivity()
+    public async Task Create_AllowsMultipleSignersPerCompany_Multiplicity()
     {
+        // ADR-0036 (supersede ADR-0023): una compañía puede tener VARIOS mandatarios activos.
         await using var ctx = NewSeededContext();
-        var (create, _, _, _, _) = CrudHandlers(ctx);
+        var (create, _, _, _, list) = CrudHandlers(ctx);
 
         var firstCreate = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
         firstCreate.IsValid.Should().BeTrue();
 
-        // Daniel NO puede tomar A (ya es de Samuel).
+        // Daniel SÍ puede tomar A aunque ya sea de Samuel (sin exclusividad).
         var second = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA, CompanyB]), Ct);
 
-        second.IsValid.Should().BeFalse();
-        second.Errors.Should().Contain(e =>
-            e.Field == "companyTenantIds"
-            && e.Value == CompanyA.ToString()
-            && e.Message.Contains("ya tiene un mandatario"));
+        second.IsValid.Should().BeTrue();
+        second.MandateSignerId.Should().NotBeNull();
+
+        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
+        signers.Should().HaveCount(2);
     }
 
     [Fact]
@@ -76,10 +77,6 @@ public sealed class MandateSignerHandlerTests
 
         var samuel = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
 
-        // Antes de inactivar, Daniel no puede tomar A.
-        var blocked = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA]), Ct);
-        blocked.IsValid.Should().BeFalse();
-
         var outcome = await inactivate.HandleAsync(new InactivateMandateSignerCommand
         {
             TransitOfficeId = Office,
@@ -88,15 +85,11 @@ public sealed class MandateSignerHandlerTests
         }, Ct);
         outcome.Should().Be(InactivateMandateSignerOutcome.Inactivated);
 
-        // Samuel SIGUE visible en el listado, pero inactivo y sin compañías (liberadas).
+        // Samuel SIGUE visible en el listado, pero inactivo y sin compañías (liberadas por el soft-delete).
         var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
         var samuelRow = signers.Single(s => s.Id == samuel.MandateSignerId);
         samuelRow.IsActive.Should().BeFalse();
         samuelRow.CompanyTenantIds.Should().BeEmpty();
-
-        // Ahora A queda libre → Daniel sí puede tomarla.
-        var freed = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA]), Ct);
-        freed.IsValid.Should().BeTrue();
     }
 
     [Fact]

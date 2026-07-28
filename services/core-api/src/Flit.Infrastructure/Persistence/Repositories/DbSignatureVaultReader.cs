@@ -44,6 +44,36 @@ internal sealed class DbSignatureVaultReader : ISignatureVaultReader
             cancellationToken);
     }
 
+    public Task<SignatureVault?> FindActiveByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+        var type = documentType.Trim();
+        var number = documentNumber.Trim();
+
+        return ExecuteInTenantScopeAsync(
+            tenantId,
+            async () =>
+            {
+                var entity = await _context.SignatureVault
+                    .AsNoTracking()
+                    .Where(s => s.TenantId == tenantId
+                        && s.DocumentType == type
+                        && s.DocumentNumber == number
+                        && s.Estado == SignatureVaultEstadoMapping.Activa)
+                    .OrderByDescending(s => s.CreatedAt)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                return entity is null ? null : SignatureVaultEstadoMapping.Rehydrate(entity);
+            },
+            cancellationToken);
+    }
+
     public Task<IReadOnlyList<SignatureVaultItem>> ListByTenantAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default) =>

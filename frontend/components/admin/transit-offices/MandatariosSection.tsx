@@ -233,6 +233,7 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
 
       <MandatarioFormPanel
         open={formOpen}
+        transitOfficeId={transitOfficeId}
         editing={editing}
         companies={companies}
         onClose={() => setFormOpen(false)}

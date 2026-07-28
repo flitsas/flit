@@ -24,10 +24,12 @@ import {
   validateReadableName,
 } from '@/lib/validation/fieldRules';
 import type {
+  ActorContactLookupResult,
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
   LegalRepresentativeLookupResult,
+  LegalRepresentativeOption,
   BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
@@ -212,12 +214,17 @@ export function validateActors(
 /** Normaliza opcionales vacíos a undefined antes de persistir. */
 function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   const blankToUndef = (v?: string) => (v?.trim() ? v.trim() : undefined);
-  return actors.map((a) => ({
-    ...a,
-    telefono: blankToUndef(a.telefono),
-    ciudad: blankToUndef(a.ciudad),
-    direccion: blankToUndef(a.direccion),
-  }));
+  return actors.map((a) => {
+    // HU #10956 (AC1) — el check de reutilización desapareció: el campo NUNCA viaja en el PUT,
+    // ni siquiera si un actor persistido ANTES de esta HU lo trae en `true` desde el backend.
+    const { autorizaReutilizacionDatos: _legacyConsent, ...rest } = a;
+    return {
+      ...rest,
+      telefono: blankToUndef(a.telefono),
+      ciudad: blankToUndef(a.ciudad),
+      direccion: blankToUndef(a.direccion),
+    };
+  });
 }
 
 const INPUT_BASE =
@@ -241,13 +248,58 @@ type LookupState =
   | { status: 'not_found' }
   | { status: 'error'; message: string };
 
+/**
+ * HU #10956 (AC2/AC3/AC4/AC5) — estado por actor de la precarga de datos de CONTACTO (ciudad,
+ * correo, dirección, teléfono), disparada tras resolver la identidad del actor (RUNT/RUES/
+ * directorio). `found`/`empty` distinguen si la persona tenía antecedentes de contacto en el
+ * tenant (AC4: sin antecedentes, campos vacíos, sin error). `error` nunca bloquea: los 4 campos
+ * quedan editables igual (degradación silenciosa, AC5).
+ */
+type ContactLookupState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'found' }
+  | { status: 'empty' }
+  | { status: 'error'; message: string };
+
+/** Campos de contacto sujetos a precarga (AC2) y a la protección "no pisar" del operador (AC3). */
+type ContactField = 'ciudad' | 'email' | 'direccion' | 'telefono';
+const CONTACT_FIELDS: readonly ContactField[] = ['ciudad', 'email', 'direccion', 'telefono'];
+
 /** Nombre completo del representante legal a partir de sus partes (omite vacíos). */
-function repFullName(rep: LegalRepresentativeLookupResult['representante']): string {
+function repFullName(rep: {
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+}): string {
   return [rep.nombres, rep.primerApellido, rep.segundoApellido]
     .map((s) => s?.trim() ?? '')
     .filter((s) => s !== '')
     .join(' ')
     .trim();
+}
+
+/**
+ * Representantes seleccionables del resultado de precarga (HU #10937). Usa la lista `representantes`
+ * si viene; si no (contrato previo), construye una lista de un solo elemento a partir del
+ * representante primario. Así el selector funciona con ambos contratos.
+ */
+function repsOf(result: LegalRepresentativeLookupResult): LegalRepresentativeOption[] {
+  if (result.representantes?.length) return result.representantes;
+  const r = result.representante;
+  return [
+    {
+      tipoDoc: r.tipoDoc,
+      documento: r.documento,
+      nombres: r.nombres,
+      primerApellido: r.primerApellido,
+      segundoApellido: r.segundoApellido,
+      email: r.email,
+      telefono: r.telefono,
+      firmaVigente: result.firmaVigente,
+      identidadVigente: result.identidadVigente,
+    },
+  ];
 }
 
 /** Tipos de documento del representante legal: persona natural (excluye NIT). */
@@ -339,6 +391,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [runt, setRunt] = useState<Record<number, LookupState>>({});
   // Estado de la consulta RUNT del representante legal por índice de actor jurídico.
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
+  // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
+  // cuando la compañía tiene varios. Default 0 (el primario). Gobierna qué representante se precarga y
+  // firma, y las banderas mostradas.
+  const [selectedRepIdx, setSelectedRepIdx] = useState<Record<number, number>>({});
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
   // Fecha de expedición del documento (RNMC) por índice de actor, en formato de input (YYYY-MM-DD).
@@ -346,6 +402,75 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [issueDates, setIssueDates] = useState<Record<number, string>>({});
   // Evita doble auto-consulta RUNT para el mismo documento en el mismo montaje.
   const autoLookupTriggeredRef = useRef<string | null>(null);
+
+  // HU #10956 — precarga de datos de contacto por índice de actor (AC2/AC4/AC5) + campos que el
+  // operador ya editó a mano (AC3: la precarga nunca los pisa). Se dispara UNA vez, de forma
+  // imperativa, al final de `handleIdentityLookup` (justo cuando la identidad se resuelve) — NO
+  // como efecto reactivo sobre `actors`, precisamente para no crear un bucle de re-precarga.
+  const [contactLookup, setContactLookup] = useState<Record<number, ContactLookupState>>({});
+  const [touchedContact, setTouchedContact] = useState<Record<number, Set<ContactField>>>({});
+  // Refs con el valor más reciente de `actors`/`touchedContact`: `runContactLookup` es async y debe
+  // leer el estado vigente al momento de aplicar el resultado, no el capturado al iniciar la consulta
+  // (el operador puede escribir mientras la precarga de contacto sigue en vuelo).
+  const actorsRef = useRef(actors);
+  useEffect(() => {
+    actorsRef.current = actors;
+  }, [actors]);
+  const touchedContactRef = useRef(touchedContact);
+  useEffect(() => {
+    touchedContactRef.current = touchedContact;
+  }, [touchedContact]);
+
+  const markContactTouched = (index: number, field: ContactField) => {
+    setTouchedContact((prev) => {
+      const next = new Set(prev[index] ?? []);
+      next.add(field);
+      return { ...prev, [index]: next };
+    });
+  };
+
+  // Aplica el resultado de la precarga de contacto SIN pisar (AC3): omite un campo si el operador ya
+  // lo marcó como editado, o si ya tiene un valor no vacío (defensa adicional ante una carrera entre
+  // la edición manual y la respuesta async del lookup).
+  const applyContactLookup = (index: number, result: ActorContactLookupResult) => {
+    const touched = touchedContactRef.current[index] ?? new Set<ContactField>();
+    const current = actorsRef.current[index];
+    if (!current) return;
+    const patch: Partial<ProcedureActor> = {};
+    for (const field of CONTACT_FIELDS) {
+      if (touched.has(field)) continue;
+      if ((current[field] ?? '').toString().trim()) continue;
+      const value = result[field];
+      if (value && value.trim()) patch[field] = value.trim();
+    }
+    if (Object.keys(patch).length > 0) updateActor(index, patch);
+  };
+
+  // Dispara el lookup de contacto (HU #10956, AC2) tras resolver la identidad del actor. Nunca
+  // bloquea: un error solo se refleja como aviso no intrusivo (AC5), la captura manual sigue posible.
+  const runContactLookup = async (
+    index: number,
+    tipoDocumento: ActorDocumentType,
+    numeroDocumento: string,
+  ) => {
+    const numero = numeroDocumento.trim();
+    if (!numero) return;
+    setContactLookup((prev) => ({ ...prev, [index]: { status: 'loading' } }));
+    try {
+      const result = await tramitesClient.actorContactLookup({ tipoDocumento, numeroDocumento: numero });
+      applyContactLookup(index, result);
+      const hasData = CONTACT_FIELDS.some((f) => !!result[f]?.trim());
+      setContactLookup((prev) => ({ ...prev, [index]: { status: hasData ? 'found' : 'empty' } }));
+    } catch (err) {
+      setContactLookup((prev) => ({
+        ...prev,
+        [index]: {
+          status: 'error',
+          message: err instanceof Error ? err.message : 'Error consultando contacto',
+        },
+      }));
+    }
+  };
 
   // Documento del propietario capturado en el paso 1 (`owner_document_*` en
   // field_values), para sembrar el documento del vendedor cuando aún no lo tiene.
@@ -403,7 +528,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // aterriza, completa el documento del actor si seguía vacío.
   useEffect(() => {
     if (!ownerSeed) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el seed async con los actores ya montados (mismo patrón que el resto del repo)
     setActors((prev) => prev.map(withOwnerSeed));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerSeed]);
@@ -492,6 +616,28 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       ),
     );
 
+  // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
+  // guarda este representante embebido; el backend firma/valida identidad por SU documento.
+  const applySelectedRep = (index: number, rep: LegalRepresentativeOption) =>
+    updateRepLegal(index, {
+      tipoDocumento: (rep.tipoDoc as ActorDocumentType) || 'CC',
+      numeroDocumento: rep.documento,
+      nombreCompleto: repFullName(rep),
+      email: rep.email ?? undefined,
+      telefono: rep.telefono ?? undefined,
+    });
+
+  // Cambia el representante elegido del actor jurídico (selector cuando la compañía tiene varios) y
+  // reprecarga sus datos. Las banderas mostradas se derivan del representante elegido.
+  const handleSelectRep = (index: number, repIdx: number) => {
+    const lookup = runt[index];
+    if (!lookup || lookup.status !== 'found' || lookup.kind !== 'preload') return;
+    const rep = repsOf(lookup.result)[repIdx];
+    if (!rep) return;
+    setSelectedRepIdx((prev) => ({ ...prev, [index]: repIdx }));
+    applySelectedRep(index, rep);
+  };
+
   // Consulta de identidad por documento. Bifurca por tipo de persona: jurídica → RUES (por NIT),
   // natural → RUNT (conductor). Si encuentra, autopopula el actor. Nunca bloquea la captura
   // manual: not_found/error dejan los campos editables (registro sin resultado de consulta).
@@ -510,19 +656,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // importar si es comprador o vendedor). Sin match (404 → null) ⇒ flujo RUES normal.
         const preload = await tramitesClient.lookupLegalRepresentativeByNit(documentNumber);
         if (preload) {
+          const nit = preload.company.nit || documentNumber;
           updateActor(index, {
             nombreCompleto: preload.company.razonSocial,
             tipoDocumento: 'NIT',
-            numeroDocumento: preload.company.nit || documentNumber,
+            numeroDocumento: nit,
           });
-          updateRepLegal(index, {
-            tipoDocumento: (preload.representante.tipoDoc as ActorDocumentType) || 'CC',
-            numeroDocumento: preload.representante.documento,
-            nombreCompleto: repFullName(preload.representante),
-            email: preload.representante.email ?? undefined,
-            telefono: preload.representante.telefono ?? undefined,
-          });
+          // HU #10937 — si la compañía tiene varios representantes, se precarga el primero por defecto
+          // y el gestor puede cambiarlo con el selector (handleSelectRep). Con uno solo, comportamiento
+          // previo (auto-seleccionado). El representante elegido queda embebido en el actor.
+          const reps = repsOf(preload);
+          setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
+          if (reps[0]) applySelectedRep(index, reps[0]);
           setRuntFor(index, { status: 'found', kind: 'preload', result: preload });
+          // HU #10956 (AC2) — identidad resuelta (match del directorio): precarga el contacto conocido.
+          void runContactLookup(index, 'NIT', nit);
           return;
         }
 
@@ -530,12 +678,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           documentNumber,
         });
         if (result.found) {
+          const nit = result.documentNumber || actor.numeroDocumento;
           updateActor(index, {
             nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
             tipoDocumento: 'NIT',
-            numeroDocumento: result.documentNumber || actor.numeroDocumento,
+            numeroDocumento: nit,
           });
           setRuntFor(index, { status: 'found', kind: 'rues', result });
+          // HU #10956 (AC2) — identidad resuelta en RUES: precarga el contacto conocido.
+          void runContactLookup(index, 'NIT', nit);
         } else {
           setRuntFor(index, { status: 'not_found' });
         }
@@ -547,13 +698,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         documentNumber,
       });
       if (result.found) {
+        const resolvedTipo = (result.documentType as ActorDocumentType) || actor.tipoDocumento;
+        const resolvedNumero = result.documentNumber || actor.numeroDocumento;
         updateActor(index, {
           nombreCompleto: result.fullName ?? actor.nombreCompleto,
-          tipoDocumento:
-            (result.documentType as ActorDocumentType) || actor.tipoDocumento,
-          numeroDocumento: result.documentNumber || actor.numeroDocumento,
+          tipoDocumento: resolvedTipo,
+          numeroDocumento: resolvedNumero,
         });
         setRuntFor(index, { status: 'found', kind: 'runt', result });
+        // HU #10956 (AC2) — identidad resuelta en RUNT: precarga el contacto conocido.
+        void runContactLookup(index, resolvedTipo, resolvedNumero);
       } else {
         setRuntFor(index, { status: 'not_found' });
       }
@@ -835,9 +989,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       );
     }
     if (runtState.status === 'found' && runtState.kind === 'preload') {
-      // HU #10906 — precarga desde el directorio de la compañía (NO se consultó RUES/RUNT). Copy
-      // honesto + badges de firma/identidad vigentes con los tonos unificados de StatusBadge.
-      const { company, representante, firmaVigente, identidadVigente } = runtState.result;
+      // HU #10906/#10937 — precarga desde el directorio de la compañía (NO se consultó RUES/RUNT). Copy
+      // honesto + selector de representante cuando hay varios + badges de firma/identidad vigentes del
+      // representante ELEGIDO, con los tonos unificados de StatusBadge.
+      const { company } = runtState.result;
+      const reps = repsOf(runtState.result);
+      const sel = selectedRepIdx[index] ?? 0;
+      const rep = reps[sel] ?? reps[0];
+      const firmaVigente = rep?.firmaVigente ?? false;
+      const identidadVigente = rep?.identidadVigente ?? false;
       return (
         <div className="space-y-2" role="status" aria-live="polite">
           <div
@@ -864,10 +1024,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div>
                 <span className="opacity-60 font-normal">Representante: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
-                  {repFullName(representante) || '—'}
+                  {rep ? repFullName(rep) || rep.documento : '—'}
                 </span>
               </div>
             </div>
+            {/* HU #10937 — selector de representante cuando la compañía tiene más de uno. El elegido
+                se precarga y firma con su información. */}
+            {reps.length > 1 && (
+              <div className="mt-2">
+                <label
+                  htmlFor={`${index}-rep-select`}
+                  className="opacity-60 font-normal block mb-1"
+                >
+                  Representante legal que firma
+                </label>
+                <select
+                  id={`${index}-rep-select`}
+                  value={sel}
+                  disabled={readOnly}
+                  onChange={(e) => handleSelectRep(index, Number(e.target.value))}
+                  className={INPUT_BASE}
+                >
+                  {reps.map((r, i) => (
+                    <option key={`${r.tipoDoc}-${r.documento}`} value={i}>
+                      {`${repFullName(r) || r.documento} · ${r.tipoDoc} ${r.documento}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge
                 tone={firmaVigente ? 'success' : 'neutral'}
@@ -1214,42 +1399,39 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
   };
 
-  // ── Consentimiento Habeas Data — reúso de datos de persona (HU #10885, Feature #10862, CF-04) ──
-  // Checkbox de autorización explícita para que los datos de ESTA persona (comprador/vendedor,
-  // natural o jurídica) se reutilicen en futuros trámites del mismo tenant (ADR-0031). Se envía en
-  // el PUT de actores (`autorizaReutilizacionDatos`); el backend NUNCA reutiliza datos de persona
-  // sin este consentimiento explícito (fail-safe) — el vehículo no lo requiere (no es dato personal).
-  const habeasDataConsent = (index: number) => {
-    const actor = actors[index];
-    const checked = !!actor.autorizaReutilizacionDatos;
-    const id = `${actor.rol}-autoriza-reuso`;
-    return (
-      <div
-        className="md:col-span-2 flex items-start gap-2.5 rounded-xl border p-3"
-        style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.03)' }}
-      >
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={(e) =>
-            updateActor(index, {
-              autorizaReutilizacionDatos: e.target.checked || undefined,
-            })
-          }
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
-        />
-        <label htmlFor={id} className="text-[11px]">
-          <span className="block font-semibold" style={{ color: '#162744' }}>
-            Autorizo la reutilización de estos datos en futuros trámites (Habeas Data)
-          </span>
-          <span className="opacity-60">
-            Sin esta autorización, los datos de {ROL_LABEL[actor.rol].toLowerCase()} no se
-            precargarán automáticamente en otros trámites de esta compañía.
-          </span>
-        </label>
-      </div>
-    );
+  // ── HU #10956 (AC1) — el check de Habeas Data de HU #10885 desapareció: la identidad se consulta
+  // SIEMPRE en vivo (sin gate de consentimiento), así que ya no hay nada que autorizar aquí. En su
+  // lugar, el aviso no intrusivo de abajo (`contactLookupHint`) informa cuándo el contacto se
+  // precargó desde un trámite previo de esta persona en la compañía (AC2/AC5) — un origen distinto
+  // al de `originBadge` (consulta externa reutilizada, AC1 de HU #10885): por eso usa copy propio y
+  // NUNCA el texto "Dato reutilizado" del badge de RUNT/RUES, para no atribuirle a la consulta
+  // externa un dato que en realidad viene de los propios registros de la compañía.
+  const contactLookupHint = (index: number) => {
+    const c = contactLookup[index] ?? { status: 'idle' };
+    if (c.status === 'loading') {
+      return (
+        <p className="text-[10px] opacity-70" role="status" aria-live="polite">
+          Buscando datos de contacto conocidos de esta persona…
+        </p>
+      );
+    }
+    if (c.status === 'found') {
+      return (
+        <p className="text-[10px]" style={{ color: '#5a8a1f' }} role="status" aria-live="polite">
+          Contacto precargado desde un trámite anterior de esta persona en la compañía — puedes
+          editarlo.
+        </p>
+      );
+    }
+    if (c.status === 'error') {
+      return (
+        <p className="text-[10px] opacity-70" role="status" aria-live="polite">
+          No se pudo precargar el contacto conocido — completa los datos manualmente.
+        </p>
+      );
+    }
+    // idle/empty (AC4: sin antecedentes) — sin aviso, sin error; los campos siguen vacíos y editables.
+    return null;
   };
 
   // ── Layout SPLIT (un comprador): 2 secciones ──────────────────────────────
@@ -1329,16 +1511,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {runtResult(0)}
             {rlSection(0)}
-            {habeasDataConsent(0)}
           </div>
         </section>
 
         {/* Sección B — Datos de contacto */}
         <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
-          <div className="border-b px-4 py-3" style={{ background: 'rgba(85,126,255,0.04)' }}>
+          <div className="border-b px-4 py-3 flex flex-col gap-1" style={{ background: 'rgba(85,126,255,0.04)' }}>
             <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               Datos de contacto
             </span>
+            {contactLookupHint(0)}
           </div>
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Nombre completo */}
@@ -1386,7 +1568,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 id="comprador-email"
                 type="email"
                 value={actor.email}
-                onChange={(e) => updateActor(0, { email: e.target.value })}
+                onChange={(e) => {
+                  markContactTouched(0, 'email');
+                  updateActor(0, { email: e.target.value });
+                }}
                 placeholder="correo@ejemplo.com"
                 aria-invalid={!!errors.email}
                 aria-describedby={errors.email ? 'comprador-email-err' : undefined}
@@ -1407,7 +1592,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 id="comprador-telefono"
                 type="tel"
                 value={actor.telefono ?? ''}
-                onChange={(e) => updateActor(0, { telefono: e.target.value })}
+                onChange={(e) => {
+                  markContactTouched(0, 'telefono');
+                  updateActor(0, { telefono: e.target.value });
+                }}
                 placeholder="3001234567"
                 className={INPUT_BASE}
               />
@@ -1424,6 +1612,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 type="text"
                 value={actor.ciudad ?? ''}
                 onChange={(e) => {
+                  markContactTouched(0, 'ciudad');
                   updateActor(0, { ciudad: e.target.value });
                   setCiudadOpen((p) => ({ ...p, 0: true }));
                 }}
@@ -1446,6 +1635,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
+                          markContactTouched(0, 'ciudad');
                           updateActor(0, { ciudad: c });
                           setCiudadOpen((p) => ({ ...p, 0: false }));
                         }}
@@ -1467,7 +1657,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 id="comprador-direccion"
                 type="text"
                 value={actor.direccion ?? ''}
-                onChange={(e) => updateActor(0, { direccion: e.target.value })}
+                onChange={(e) => {
+                  markContactTouched(0, 'direccion');
+                  updateActor(0, { direccion: e.target.value });
+                }}
                 className={INPUT_BASE}
               />
             </div>
@@ -1518,6 +1711,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
           const runtState: LookupState = runt[index] ?? { status: 'idle' };
+          // HU #10956 — ciudad con autocomplete, misma lógica que el layout SPLIT pero por índice.
+          const ciudadesSuggestions = filterCiudades(actor.ciudad ?? '');
+          const showCiudadSuggestions = !!ciudadOpen[index] && ciudadesSuggestions.length > 0;
           return (
             <fieldset key={actor.rol} className="rounded-xl border p-4">
               <legend className="px-1 text-xs font-bold">{ROL_LABEL[actor.rol]}</legend>
@@ -1589,9 +1785,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {/* Representante legal (solo persona jurídica). */}
                 {rlSection(index)}
 
-                {/* Consentimiento Habeas Data — reúso de datos de persona (HU #10885). */}
-                {habeasDataConsent(index)}
-
                 {/* Nombre completo */}
                 <div className="md:col-span-2">
                   <label htmlFor={`${prefix}-nombre`} className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
@@ -1624,7 +1817,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     id={`${prefix}-email`}
                     type="email"
                     value={actor.email}
-                    onChange={(e) => updateActor(index, { email: e.target.value })}
+                    onChange={(e) => {
+                      markContactTouched(index, 'email');
+                      updateActor(index, { email: e.target.value });
+                    }}
                     aria-invalid={!!errors.email}
                     aria-describedby={errors.email ? `${prefix}-email-err` : undefined}
                     className={INPUT_BASE}
@@ -1645,10 +1841,85 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     id={`${prefix}-telefono`}
                     type="tel"
                     value={actor.telefono ?? ''}
-                    onChange={(e) => updateActor(index, { telefono: e.target.value })}
+                    onChange={(e) => {
+                      markContactTouched(index, 'telefono');
+                      updateActor(index, { telefono: e.target.value });
+                    }}
                     className={INPUT_BASE}
                   />
                 </div>
+
+                {/* Ciudad (autocomplete) — HU #10956, precargable desde el contacto ya conocido. */}
+                <div className="relative">
+                  <label htmlFor={`${prefix}-ciudad`} className="text-xs font-semibold mb-1.5 block">
+                    Ciudad
+                  </label>
+                  <input
+                    id={`${prefix}-ciudad`}
+                    type="text"
+                    value={actor.ciudad ?? ''}
+                    onChange={(e) => {
+                      markContactTouched(index, 'ciudad');
+                      updateActor(index, { ciudad: e.target.value });
+                      setCiudadOpen((p) => ({ ...p, [index]: true }));
+                    }}
+                    onFocus={() => {
+                      if ((actor.ciudad ?? '').trim().length >= 2) {
+                        setCiudadOpen((p) => ({ ...p, [index]: true }));
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setCiudadOpen((p) => ({ ...p, [index]: false })), 150)}
+                    autoComplete="off"
+                    placeholder="Escribe para buscar…"
+                    className={INPUT_BASE}
+                  />
+                  {showCiudadSuggestions && (
+                    <ul
+                      className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-auto rounded-xl border bg-white dark:bg-[#0B0F14]"
+                      aria-label="Sugerencias de ciudad"
+                    >
+                      {ciudadesSuggestions.map((c) => (
+                        <li key={c}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              markContactTouched(index, 'ciudad');
+                              updateActor(index, { ciudad: c });
+                              setCiudadOpen((p) => ({ ...p, [index]: false }));
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[rgba(85,126,255,0.06)]"
+                          >
+                            {c}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Dirección (opcional) — HU #10956, precargable desde el contacto ya conocido. */}
+                <div>
+                  <label htmlFor={`${prefix}-direccion`} className="text-xs font-semibold mb-1.5 block">
+                    Dirección
+                  </label>
+                  <input
+                    id={`${prefix}-direccion`}
+                    type="text"
+                    value={actor.direccion ?? ''}
+                    onChange={(e) => {
+                      markContactTouched(index, 'direccion');
+                      updateActor(index, { direccion: e.target.value });
+                    }}
+                    className={INPUT_BASE}
+                  />
+                </div>
+
+                {/* Aviso de precarga de contacto (HU #10956) — no bloqueante, no reemplaza al badge de
+                    origen de la consulta externa (`originBadge`, dentro de runtResult). */}
+                {contactLookupHint(index) && (
+                  <div className="md:col-span-2">{contactLookupHint(index)}</div>
+                )}
 
                 {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
                 {issueDateField(index)}

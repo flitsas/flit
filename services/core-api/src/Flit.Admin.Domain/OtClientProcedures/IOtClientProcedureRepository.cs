@@ -56,6 +56,7 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         Guid? approvedBy,
         string source,
+        Guid? mandateSignerId = null,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> RejectAsync(
@@ -63,6 +64,21 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         string reason,
         Guid? rejectedBy,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10871 (AC1) — observación subsanable del OT: transiciona <c>entregado → subsanacion</c>
+    /// (en vez de <c>entregado → rechazado</c>) con un checklist HÍBRIDO (motivo + ítems) persistido
+    /// en <c>procedure_instance_status_history.metadata</c>. Misma máquina de estados (N 03 /
+    /// HU #10870: <c>entregado</c> ya admite <c>subsanacion</c> directamente).
+    /// </summary>
+    Task<OtClientProcedure?> ObserveAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        IReadOnlyList<OtProcedureObservationItem> items,
+        Guid? observedBy,
         string source,
         CancellationToken cancellationToken = default);
 

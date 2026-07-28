@@ -16,10 +16,17 @@ public sealed record CacheLookupResult(
 
 /// <summary>
 /// Cache-aside de consultas externas cross-trámite (HU #10878, Feature #10862, CF-04). Consumido por
-/// <see cref="RunConsultationHandler"/>, <see cref="RuntPersonLookupHandler"/> y
-/// <see cref="RuesPersonLookupHandler"/> ANTES de resolver/llamar al proveedor externo. NO modifica
-/// el contrato <c>IConsultationProvider</c>/<c>IConsultationProviderRegistry</c> (ADR-0020): es una
-/// capa previa a la resolución de proveedor, no un provider más.
+/// <see cref="RunConsultationHandler"/> y <see cref="RuesPersonLookupHandler"/> ANTES de
+/// resolver/llamar al proveedor externo. NO modifica el contrato
+/// <c>IConsultationProvider</c>/<c>IConsultationProviderRegistry</c> (ADR-0020): es una capa previa a
+/// la resolución de proveedor, no un provider más.
+///
+/// <para><b>HU #10955 (AC1) — <see cref="RuntPersonLookupHandler"/> YA NO consume
+/// <see cref="TryReusePersonAsync"/>:</b> la identidad de un actor (paso de actores del wizard) se
+/// consulta SIEMPRE en vivo contra el RUNT, exista o no <see cref="PersonDataConsent"/> vigente. Ese
+/// handler solo sigue ESCRIBIENDO en la caché (<see cref="SavePersonResultAsync"/>) para no afectar a
+/// otros consumidores del mismo mecanismo (p. ej. <see cref="RunConsultationHandler"/> con templates
+/// <c>entity_scope=actor</c>).</para>
 ///
 /// <para><b>Gate de consentimiento (ADR-0031, FAIL-SAFE):</b> <see cref="TryReusePersonAsync"/> SOLO
 /// sirve un HIT si existe un <see cref="PersonDataConsent"/> con

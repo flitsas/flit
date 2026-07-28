@@ -1681,6 +1681,8 @@ function FurSection({
   const [error, setError] = useState<string | null>(null);
   const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
+  // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
+  const [furFormat, setFurFormat] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1688,8 +1690,10 @@ function FurSection({
       const list = await tramitesClient.getAttachments(instanceId);
       setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
       setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
+      const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
+      setFurFormat(fmt.format);
     } catch {
-      // El listado de adjuntos es secundario; el error de generar se muestra abajo.
+      // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
   }, [instanceId]);
 
@@ -1754,7 +1758,18 @@ function FurSection({
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
       <div>
-        <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+          {furFormat && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              title="Plantilla de FUR determinada por la clasificación del vehículo"
+            >
+              Plantilla: {furFormat}
+            </span>
+          )}
+        </div>
         <p className="text-xs opacity-70">
           Genera el FUR y el certificado de identidad (y, en traspaso, el
           contrato de compraventa) con los datos del trámite. Este paso es

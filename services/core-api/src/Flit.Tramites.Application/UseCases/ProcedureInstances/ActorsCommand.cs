@@ -137,7 +137,11 @@ public sealed class PutActorsHandler(
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != TramiteEstado.Borrador)
+        // HU #10870 (AC1) — subsanación reabre la edición COMPLETA del trámite (entregado/rechazado
+        // → subsanacion) SIN pasar por borrador: los actores se editan igual que en borrador. Mismo
+        // criterio que PatchFieldValuesHandler y el trigger de BD (trg_field_value_immutable). Fuera
+        // de borrador/subsanacion, el PUT de actores sigue bloqueado.
+        if (instance.Status != TramiteEstado.Borrador && instance.Status != TramiteEstado.Subsanacion)
             return (null, "not_draft");
 
         var inputs = request.Actors ?? [];
@@ -511,9 +515,11 @@ public sealed class PutActorsHandler(
 
     /// <summary>
     /// Lee ciudad/dirección + representante legal de <c>actor.metadata</c>. Robusto ante
-    /// null/"{}"/JSON inválido.
+    /// null/"{}"/JSON inválido. <c>internal</c> (HU #10955): reutilizado por
+    /// <see cref="ActorContactLookupHandler"/> para el lookup de datos de contacto (AC2) sin
+    /// duplicar la deserialización del jsonb.
     /// </summary>
-    private static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata)
+    internal static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
             return (null, null, null, null);

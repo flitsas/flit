@@ -527,7 +527,7 @@ public sealed class IctOrchestrationService(
         var changedBy = await ResolveIctCreatorAsync(string.Empty, tenantId, context.CancellationToken);
 
         var (result, errorCode, _) = await transitionHandler.HandleAsync(
-            instanceId, tenantId, TramiteEstado.Anulado, reason, changedBy, context.CancellationToken);
+            instanceId, tenantId, TramiteEstado.Anulado, reason, changedBy, ct: context.CancellationToken);
         if (errorCode is not null || result is null)
         {
             return new DraftReply { ErrorCode = errorCode ?? "abort_failed" };

@@ -100,6 +100,7 @@ export function DataTable<T>({
                 {columns.map((col, i) => (
                   <th
                     key={col.key}
+                    scope="col"
                     className={`px-4 py-2.5 ${ALIGN[col.align ?? "left"]} ${
                       i === 0 ? "rounded-l-xl" : ""
                     } ${i === last ? "rounded-r-xl" : ""} ${col.headerClassName ?? ""}`}

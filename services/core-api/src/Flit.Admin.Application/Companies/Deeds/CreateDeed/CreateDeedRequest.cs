@@ -12,4 +12,5 @@ public sealed record CreateDeedRequest(
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
     string? Sha256,
-    IReadOnlyList<Guid>? RepresentedCompanyIds);
+    IReadOnlyList<Guid>? RepresentedCompanyIds,
+    Guid? RepresentativeId = null);

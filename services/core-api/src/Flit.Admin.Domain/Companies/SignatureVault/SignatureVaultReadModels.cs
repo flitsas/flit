@@ -12,9 +12,12 @@ public sealed class SignatureVaultItem
     public Guid TenantId { get; init; }
     public string DocumentType { get; init; } = string.Empty;
     public string DocumentNumber { get; init; } = string.Empty;
-    public string NitEmpresa { get; init; } = string.Empty;
+    /// <summary>NIT deprecado (HU #10930, Feature #10929): nullable durante la transición.</summary>
+    public string? NitEmpresa { get; init; }
     public string FullName { get; init; } = string.Empty;
     public string SignatureHash { get; init; } = string.Empty;
+    /// <summary>Código alfanumérico digitado por el usuario (distinto del SHA-256 del artefacto).</summary>
+    public string? CodigoHash { get; init; }
     public string StoragePath { get; init; } = string.Empty;
     public string StorageSha256 { get; init; } = string.Empty;
     public SignatureVaultEstado Estado { get; init; }

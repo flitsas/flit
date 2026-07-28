@@ -31,7 +31,7 @@ export function SignatureVaultDetailModal({ item, onClose }: SignatureVaultDetai
         <Field label="Apoderado" value={item.fullName} />
         <Field label="Estado" value={ESTADO_LABELS[item.estado] ?? item.estado} />
         <Field label="Documento" value={`${item.documentType} ${item.documentNumber}`} />
-        <Field label="NIT empresa" value={item.nitEmpresa} />
+        {item.codigoHash ? <Field label="Código hash" value={item.codigoHash} /> : null}
         <Field label="Vigencia desde" value={formatDate(item.vigenciaDesde)} />
         <Field label="Vigencia hasta" value={formatDate(item.vigenciaHasta)} />
         <Field label="Fecha de registro" value={registro ? formatDate(registro) : "—"} />

@@ -4,10 +4,11 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 namespace Flit.Admin.Application.Companies.MandateSigners;
 
 /// <summary>
-/// Validaciones compartidas de alta/edición de mandatarios (ADR-0023): operabilidad del OT,
-/// regla de uso RF33 (compañía activa y no bloqueada en el OT) y exclusividad estricta
-/// (compañía ya tomada por otro mandatario activo). Devuelve una lista de errores 422;
-/// vacía = válido. Ningún mensaje expone el número de documento (PII).
+/// Validaciones compartidas de alta/edición de mandatarios (ADR-0023, ampliado por ADR-0036):
+/// operabilidad del OT y regla de uso RF33 (compañía activa y no bloqueada en el OT). La
+/// exclusividad estricta compañía↔mandatario fue DEROGADA por ADR-0036 (multiplicidad): una compañía
+/// puede tener varios mandatarios activos. Devuelve una lista de errores 422; vacía = válido. Ningún
+/// mensaje expone el número de documento (PII).
 /// </summary>
 internal static class MandateSignerValidation
 {
@@ -68,8 +69,9 @@ internal static class MandateSignerValidation
     }
 
     /// <summary>
-    /// RF33 (compañía activa y no bloqueada) + exclusividad. <paramref name="currentSignerId"/>
-    /// excluye al propio mandatario en la edición (una compañía ya suya no es conflicto).
+    /// RF33 (compañía activa y no bloqueada). <paramref name="activeResolutions"/> y
+    /// <paramref name="currentSignerId"/> se conservan por compatibilidad de firma pero YA NO se usan
+    /// para exclusividad: ADR-0036 permite varios mandatarios activos por compañía.
     /// </summary>
     public static void ValidateCompanies(
         List<MandateSignerValidationError> errors,
@@ -79,7 +81,6 @@ internal static class MandateSignerValidation
         Guid? currentSignerId)
     {
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
-        var resolutionByCompany = activeResolutions.ToDictionary(r => r.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
         {
@@ -90,18 +91,9 @@ internal static class MandateSignerValidation
                     "companyTenantIds",
                     "La compañía no está habilitada o está inactiva en el organismo de tránsito.",
                     companyId.ToString()));
-                continue;
             }
 
-            // Exclusividad: la compañía no puede estar tomada por OTRO mandatario activo.
-            if (resolutionByCompany.TryGetValue(companyId, out var resolution)
-                && resolution.MandateSignerId != currentSignerId)
-            {
-                errors.Add(new MandateSignerValidationError(
-                    "companyTenantIds",
-                    $"La compañía ya tiene un mandatario asignado: {resolution.FullName}.",
-                    companyId.ToString()));
-            }
+            // ADR-0036: sin exclusividad. La compañía puede tener varios mandatarios activos.
         }
     }
 }

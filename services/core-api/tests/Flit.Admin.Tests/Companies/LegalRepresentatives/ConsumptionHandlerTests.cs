@@ -70,14 +70,17 @@ public sealed class ConsumptionHandlerTests
         result.Should().ContainSingle();
         result[0].Nit.Should().Be(Nit);
         result[0].Name.Should().Be("ACME S.A.S.");
+        result[0].Description.Should().Be("Vigente");
         result[0].VigenciaHasta.Should().Be(hasta);
         result[0].DiasRestantes.Should().Be(hasta.DayNumber - Today.DayNumber);
         result[0].DiasRestantes.Should().BePositive();
     }
 
     [Fact]
-    public async Task ActiveDeeds_CollapsesCompanyAcrossDeeds_KeepsLongestVigencia()
+    public async Task ActiveDeeds_ReturnsAllVigentesForSameCompany_DoesNotCollapse()
     {
+        // Feature #10929: dos escrituras VIGENTES de la MISMA compañía → el paso 1 debe ver AMBAS,
+        // ya no se colapsa a una sola fila por NIT.
         await using var ctx = NewContext();
         var deedRepo = new DeedRepository(ctx);
         var companyRepo = new LegalRepresentativeRepository(ctx);
@@ -87,9 +90,9 @@ public sealed class ConsumptionHandlerTests
 
         var nearest = new DateOnly(2026, 9, 30);
         var farthest = new DateOnly(2027, 3, 31);
-        await deedRepo.CreateAsync(new SaveDeedData(
+        var idCorta = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Corta", "path-1", "sha-1", new DateOnly(2026, 1, 1), nearest, [companyId], null), Ct);
-        await deedRepo.CreateAsync(new SaveDeedData(
+        var idLarga = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Larga", "path-2", "sha-2", new DateOnly(2026, 1, 1), farthest, [companyId], null), Ct);
 
         var handler = new ListActiveDeedsForTenantHandler(
@@ -97,9 +100,15 @@ public sealed class ConsumptionHandlerTests
 
         var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
 
-        // Una sola fila por NIT, conservando la escritura de mayor vigencia.
-        result.Should().ContainSingle();
-        result[0].VigenciaHasta.Should().Be(farthest);
+        // Ambas escrituras del mismo NIT, ordenadas por vigencia más próxima primero.
+        result.Should().HaveCount(2);
+        result.Should().OnlyContain(d => d.Nit == Nit);
+        result[0].VigenciaHasta.Should().Be(nearest);
+        result[0].Id.Should().Be(idCorta);
+        result[0].Description.Should().Be("Corta");
+        result[1].VigenciaHasta.Should().Be(farthest);
+        result[1].Id.Should().Be(idLarga);
+        result[1].Description.Should().Be("Larga");
     }
 
     [Fact]
@@ -131,7 +140,7 @@ public sealed class ConsumptionHandlerTests
 
         result.Should().BeNull();
         // Sin match no se consultan las banderas de firma/identidad.
-        await signature.DidNotReceiveWithAnyArgs().FindActiveByNitAsync(default, default!, default);
+        await signature.DidNotReceiveWithAnyArgs().FindActiveByDocumentAsync(default, default!, default!, default);
     }
 
     [Fact]
@@ -141,7 +150,8 @@ public sealed class ConsumptionHandlerTests
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        // HU #10930/#10937 — la firma se resuelve por el DOCUMENTO del representante, no por el NIT.
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
             .Returns(VigenteSignature(document: "123456789"));
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -163,6 +173,10 @@ public sealed class ConsumptionHandlerTests
         result.Representante.PrimerApellido.Should().Be("Perez");
         result.FirmaVigente.Should().BeTrue();
         result.IdentidadVigente.Should().BeFalse();
+        // HU #10937 — la lista trae al representante con sus banderas por documento.
+        result.Representantes.Should().ContainSingle();
+        result.Representantes[0].Documento.Should().Be("123456789");
+        result.Representantes[0].FirmaVigente.Should().BeTrue();
     }
 
     [Fact]
@@ -172,7 +186,7 @@ public sealed class ConsumptionHandlerTests
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
             .Returns((SignatureVaultAggregate?)null);
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
@@ -190,15 +204,15 @@ public sealed class ConsumptionHandlerTests
     }
 
     [Fact]
-    public async Task Lookup_FirmaExpiradaOrOtherDocument_FlagsFirmaFalse()
+    public async Task Lookup_FirmaExpirada_FlagsFirmaFalse()
     {
         await using var ctx = NewContext();
         await SeedRepresentativeAsync(ctx);
 
         var signature = Substitute.For<ISignatureVaultReader>();
-        // Firma vigente pero de OTRO documento de la misma compañía → no cuenta.
-        signature.FindActiveByNitAsync(Tenant, Nit, Arg.Any<CancellationToken>())
-            .Returns(VigenteSignature(document: "999999999"));
+        // Firma del representante pero VENCIDA → no cuenta (HU #10930: el baúl se resuelve por documento).
+        signature.FindActiveByDocumentAsync(Tenant, "CC", "123456789", Arg.Any<CancellationToken>())
+            .Returns(ExpiredSignature(document: "123456789"));
         var identity = Substitute.For<IRepresentativeIdentityLookup>();
         identity.FindVigenteIdentityRefAsync(Tenant, "CC", "123456789", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((Guid?)null);
@@ -231,6 +245,11 @@ public sealed class ConsumptionHandlerTests
         SignatureVaultAggregate.Create(
             Tenant, "CC", document, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
             new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+
+    private static SignatureVaultAggregate ExpiredSignature(string document) =>
+        SignatureVaultAggregate.Create(
+            Tenant, "CC", document, Nit, "Apoderada S.A.S.", "sha", "path", "sha256",
+            new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 30)); // venció antes de "hoy" (2026-07-23)
 
     /// <summary>TimeProvider fijo: ancla el "ahora" a un instante conocido (sin dependencias externas).</summary>
     private sealed class StubTimeProvider(DateTimeOffset now) : TimeProvider

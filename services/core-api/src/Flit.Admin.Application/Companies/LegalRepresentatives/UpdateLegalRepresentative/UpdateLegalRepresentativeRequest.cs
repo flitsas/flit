@@ -21,4 +21,5 @@ public sealed record UpdateLegalRepresentativeRequest(
     string? Address,
     string? City,
     string? Phone,
-    IReadOnlyList<Guid>? ProcedureTypeIds);
+    IReadOnlyList<Guid>? ProcedureTypeIds,
+    IReadOnlyList<LegalRepresentativeCompanyInput>? Companies = null);

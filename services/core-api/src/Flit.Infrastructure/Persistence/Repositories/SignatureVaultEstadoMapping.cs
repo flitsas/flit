@@ -42,7 +42,8 @@ internal static class SignatureVaultEstadoMapping
             FromDb(entity.Estado),
             entity.VigenciaDesde,
             entity.VigenciaHasta,
-            entity.MandateSignerId);
+            entity.MandateSignerId,
+            entity.CodigoHash);
 
     public static SignatureVaultItem ToItem(SignatureVaultEntity entity) =>
         new()
@@ -60,6 +61,7 @@ internal static class SignatureVaultEstadoMapping
             VigenciaDesde = entity.VigenciaDesde,
             VigenciaHasta = entity.VigenciaHasta,
             MandateSignerId = entity.MandateSignerId,
+            CodigoHash = entity.CodigoHash,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
         };

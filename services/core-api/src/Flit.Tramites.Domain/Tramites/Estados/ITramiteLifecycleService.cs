@@ -13,13 +13,27 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// entrega al OT): <c>preasignado</c> (Flujo B), <c>asignado</c> (Flujo A) o <c>null</c> (ruta estándar).
 /// Ortogonal al status global. Se ignora fuera de <c>ToStatus == Entregado</c>.
 /// </param>
+/// <param name="MandateSignerId">
+/// ADR-0036 §D9 (HU #10916) — firmante del mandato elegido explícitamente por el aprobador, cuando hay
+/// varios mandatarios y el cotejo automático por usuario no fue único (subsana el 409
+/// <c>mandatario_requerido</c>). Se ignora fuera de <c>ToStatus == Aprobado</c>.
+/// </param>
+/// <param name="Metadata">
+/// HU #10871 — JSON adicional para el historial (<c>procedure_instance_status_history.metadata</c>,
+/// columna jsonb genérica). El caller construye el shape (p. ej. el checklist HÍBRIDO
+/// <c>Flit.Tramites.Domain.Tramites.ValueObjects.SubsanacionObservation</c> cuando <c>ToStatus ==
+/// Subsanacion</c>); el servicio de ciclo de vida es agnóstico de su contenido y solo lo pasa al
+/// recorder. <c>null</c> = sin metadata (el recorder persiste <c>'{}'</c>, comportamiento previo).
+/// </param>
 public sealed record TramiteTransitionCommand(
     Guid InstanceId,
     Guid TenantId,
     string ToStatus,
     string? Reason,
     Guid? ChangedByUserId,
-    string? PlateFlowStatus = null);
+    string? PlateFlowStatus = null,
+    Guid? MandateSignerId = null,
+    string? Metadata = null);
 
 /// <summary>
 /// Resultado de una transición. <c>ErrorCode</c> null = éxito. Los códigos son los de

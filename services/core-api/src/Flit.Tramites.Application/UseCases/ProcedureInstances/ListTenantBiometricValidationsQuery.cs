@@ -13,9 +13,12 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public sealed record TenantBiometricValidationDto(
     Guid Id,
-    Guid InstanceId,
-    string ReferenceNumber,
-    string Modalidad,
+    /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
+    Guid? InstanceId,
+    /// <summary>HU #10867 — null para prevalidaciones standalone (sin trámite asociado).</summary>
+    string? ReferenceNumber,
+    /// <summary>HU #10867 — null para prevalidaciones standalone (sin trámite asociado).</summary>
+    string? Modalidad,
     string? PartyRole,
     string Name,
     string DocumentType,
@@ -120,8 +123,9 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         new(
             v.Id,
             v.ProcedureInstanceId,
-            v.ProcedureInstance?.ReferenceNumber ?? string.Empty,
-            v.ProcedureInstance?.ModalidadEntrada ?? string.Empty,
+            // HU #10867 — null para prevalidaciones standalone; la FE muestra "—" / badge "Prevalidación".
+            v.ProcedureInstance?.ReferenceNumber,
+            v.ProcedureInstance?.ModalidadEntrada,
             v.PartyRole,
             v.Name,
             v.DocumentType,

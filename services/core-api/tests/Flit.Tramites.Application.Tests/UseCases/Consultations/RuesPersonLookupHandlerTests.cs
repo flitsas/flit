@@ -117,8 +117,15 @@ public sealed class RuesPersonLookupHandlerTests
         provider.Called.Should().BeTrue();
     }
 
+    /// <summary>
+    /// HU #10955 (AC1, extendido a RUES). ANTES este test verificaba lo contrario: con consentimiento
+    /// `granted` y caché vigente, el handler servía el HIT y NO llamaba al proveedor. La decisión de
+    /// producto del 2026-07-27 revierte eso: la identidad se consulta SIEMPRE en vivo, así que ni el
+    /// consentimiento ni una caché vigente evitan la llamada al RUES, y el resultado devuelto es el
+    /// FRESCO del proveedor, no el cacheado.
+    /// </summary>
     [Fact]
-    public async Task HandleAsync_ConConsentimientoYCacheVigente_NoLlamaProveedor()
+    public async Task HandleAsync_ConConsentimientoYCacheVigente_IgualConsultaElProveedor()
     {
         // AC1
         var ct = TestContext.Current.CancellationToken;
@@ -151,15 +158,20 @@ public sealed class RuesPersonLookupHandlerTests
         };
         _cacheRepo.FindPersonAsync(tenantId, RuesSourceId, "NIT", "900123456", ct).Returns(cachedEntry);
 
-        var provider = new FakeProvider(new ConsultationResult("verifik_rues", "green", [], []));
+        var provider = new FakeProvider(new ConsultationResult(
+            "verifik_rues",
+            "green",
+            [],
+            [new HydratedField("rues_razon_social", "ACME FRESCA", null)]));
         _registry.Resolve("verifik_rues").Returns(provider);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, "900123456", ct);
 
         error.Should().BeNull();
         result!.Found.Should().BeTrue();
-        result.RazonSocial.Should().Be("ACME CACHEADA");
-        provider.Called.Should().BeFalse();
+        // El dato viene del proveedor en vivo, NO del payload cacheado ("ACME CACHEADA").
+        result.RazonSocial.Should().Be("ACME FRESCA");
+        provider.Called.Should().BeTrue();
     }
 
     [Fact]

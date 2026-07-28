@@ -119,6 +119,9 @@ public static class AdminMandateSignersEndpoints
             FullName = request.FullName ?? string.Empty,
             DocumentNumber = request.DocumentNumber ?? string.Empty,
             CompanyTenantIds = request.CompanyTenantIds ?? [],
+            DocumentType = request.DocumentType ?? "CC",
+            Email = request.Email,
+            UserId = request.UserId,
             CreatedBy = ResolveUserId(httpContext.User),
         };
 
@@ -146,6 +149,9 @@ public static class AdminMandateSignersEndpoints
             FullName = request.FullName ?? string.Empty,
             DocumentNumber = request.DocumentNumber ?? string.Empty,
             CompanyTenantIds = request.CompanyTenantIds ?? [],
+            DocumentType = request.DocumentType ?? "CC",
+            Email = request.Email,
+            UserId = request.UserId,
             UpdatedBy = ResolveUserId(httpContext.User),
         };
 

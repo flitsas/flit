@@ -113,16 +113,18 @@ public sealed class EnsureIdentityHandler(
             return (new EnsureIdentityResult(EnsureIdentityOutcomes.EnProceso), null);
         }
 
-        // 1.5) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14). Si el actor es JURÍDICO (NIT) y el tenant
-        // tiene una firma de baúl ACTIVA+VIGENTE para su NIT, la identidad queda cubierta por la firma
-        // precargada → outcome firma_baul, sin exigir validación (ValidationId null). Precedencia D8: el
-        // baúl va DESPUÉS de una validación propia vigente/en curso del trámite (ya resuelta arriba) pero
-        // ANTES de la reutilización cross-trámite por documento (paso 2, reusada). Solo NIT: las personas
-        // naturales caen al flujo de identidad sin cambios. La política es null-safe cuando el baúl está
-        // deshabilitado o no hay firma vigente (devuelve null → se sigue al paso 2).
-        if (EsActorJuridico(tipoActual))
+        // 1.5) BAÚL DE FIRMAS (ADR-0025 §4, HU #10645, R14). Si el actor es JURÍDICO y el tenant tiene una
+        // firma de baúl ACTIVA+VIGENTE del REPRESENTANTE LEGAL seleccionado (HU #10930/#10937: el baúl es de
+        // la persona, se resuelve por el documento del sujeto = tipo/docActual, no por el NIT), la identidad
+        // queda cubierta por la firma precargada → outcome firma_baul, sin exigir validación (ValidationId
+        // null). Precedencia D8: el baúl va DESPUÉS de una validación propia vigente/en curso del trámite (ya
+        // resuelta arriba) pero ANTES de la reutilización cross-trámite por documento (paso 2, reusada). Solo
+        // actores jurídicos: las personas naturales caen al flujo de identidad sin cambios. La política es
+        // null-safe cuando el baúl está deshabilitado o no hay firma vigente (devuelve null → se sigue al 2).
+        // actor no es null aquí: si lo fuera, subject sería null y ya habríamos retornado SinActor arriba.
+        if (EsActorJuridico(actor!.DocumentType))
         {
-            var vaultMatch = await _vaultPolicy.ResolveAsync(tenantId, docActual, ct);
+            var vaultMatch = await _vaultPolicy.ResolveAsync(tenantId, tipoActual, docActual, ct);
             if (vaultMatch is not null)
             {
                 if (changed) await repo.SaveChangesAsync(ct);
