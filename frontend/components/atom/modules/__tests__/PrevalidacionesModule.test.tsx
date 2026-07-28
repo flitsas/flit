@@ -70,6 +70,7 @@ const EDITABLE: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: '/api/v1/public/biometric/tok-1',
   linkExpiresAt: '2026-07-25T10:00:00Z',
+  email: 'ana.rios@old.com', // CF-05 (HU #11006)
 };
 
 const TRAMITE_ROW: TenantBiometricValidation = {
@@ -418,6 +419,60 @@ describe('PrevalidacionesModule (HU #10944)', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/la identidad ya está aprobada/i);
     });
     expect(screen.getByText(/usa la acción "nueva prevalidación"/i)).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HU #11006 (Feature #11004) — CF-02, CF-04, CF-05
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PrevalidacionesModule (HU #11006 — CF-02/CF-04/CF-05)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('CF-02: consulta el listado con standalone=true directo, sin fallback client-side', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith({ standalone: true });
+    });
+  });
+
+  it('CF-04: muestra el documento completo, sin enmascarar', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('CC 1020304050')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
+  });
+
+  it('CF-05: muestra la columna Correo con el valor del backend', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ana.rios@old.com')).toBeInTheDocument();
+    });
+  });
+
+  it('CF-05: muestra "—" cuando el backend aún no envía email (BE en curso), sin romper la fila', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(
+      listResponse([{ ...EDITABLE, email: null }]),
+    );
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana Ríos')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 });
 

@@ -49,6 +49,7 @@ const ROW: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: null,
   linkExpiresAt: null,
+  email: 'carlos.prueba@old.com', // CF-05 (HU #11006)
 };
 
 describe('parseRateLimitDetail (HU #10944, D10)', () => {

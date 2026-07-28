@@ -86,6 +86,18 @@ function formatFechaCorta(iso: string | null | undefined): string {
 }
 
 /**
+ * Enmascara el documento dejando visibles solo los últimos 4. CF-04 (Feature #11004, HU #11006)
+ * retira el enmascarado de la TABLA principal de Validaciones (D3 — documento completo); este
+ * helper se conserva solo para el banner de eventos atascados (observabilidad de dead-letter, fuera
+ * del alcance de D3, que limita el documento/correo completos a "las tablas").
+ */
+function maskDoc(tipoDoc: string, documento: string): string {
+  const tail = documento.length > 4 ? documento.slice(-4) : documento;
+  const masked = documento.length > 4 ? `••••${tail}` : tail;
+  return `${tipoDoc} ${masked}`.trim();
+}
+
+/**
  * Presentación de los días de vigencia restantes de una validación aprobada: color de urgencia
  * (verde holgado, ámbar por vencer, rojo vencida) + etiqueta. La vigencia es de 30 días desde la
  * aprobación; el backend ya calcula los días (0 = vencida). Null cuando la validación no está aprobada.
@@ -96,13 +108,6 @@ function vigenciaBadge(dias: number | null): { label: string; color: string; bg:
   const label = `${dias} día${dias === 1 ? '' : 's'}`;
   if (dias <= 7) return { label, color: '#B26A00', bg: 'rgba(249,172,0,0.16)' };
   return { label, color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' };
-}
-
-/** Enmascara el documento dejando visibles solo los últimos 4 (no se muestra el número completo). */
-function maskDoc(tipoDoc: string, documento: string): string {
-  const tail = documento.length > 4 ? documento.slice(-4) : documento;
-  const masked = documento.length > 4 ? `••••${tail}` : tail;
-  return `${tipoDoc} ${masked}`.trim();
 }
 
 /**
@@ -739,7 +744,7 @@ function ValidacionesSkeleton() {
  * permite truncar el contenido dentro de cada celda del grid.
  */
 const GRID_COLS =
-  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr)';
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr)';
 
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
@@ -748,7 +753,7 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
     // un contenedor de scroll y, como ítem flex, su min-height pasa a 0 → sin shrink-0 el flex del módulo
     // lo colapsaría a casi nada (solo se vería la paginación).
     <div className="overflow-x-auto shrink-0">
-      <div className="min-w-[880px]">
+      <div className="min-w-[980px]">
         {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila.
             sticky → permanece visible al hacer scroll del módulo. */}
         <div
@@ -759,6 +764,7 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
           <div>Trámite</div>
           <div>Persona</div>
           <div>Documento</div>
+          <div>Correo</div>
           <div>Estado</div>
           <div>Score</div>
           <div>Registro</div>
@@ -787,9 +793,12 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
   const vigencia = vigenciaBadge(r.daysRemaining);
   // HU #10869 — referenceNumber null → mostrar "—" en el aria-label
   const refLabel = r.referenceNumber ?? '—';
+  // CF-05 (Feature #11004, HU #11006) — el backend aún puede no enviar `email` (HU #11005 en curso
+  // en paralelo): se muestra "—" sin romper la fila.
+  const emailLabel = r.email ?? '—';
   const ariaLabel =
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
-    `proveedor ${provider}, estado ${meta.label}` +
+    `proveedor ${provider}, correo ${emailLabel}, estado ${meta.label}` +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.status === 'rechazado' && r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '') +
     `, registrada ${formatFecha(r.createdAt)}` +
@@ -830,7 +839,10 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
         </span>
       </div>
       <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
-        {maskDoc(r.documentType, r.documentNumber)}
+        {r.documentType} {r.documentNumber}
+      </div>
+      <div className="min-w-0 text-[11px] opacity-80 truncate" title={emailLabel}>
+        {emailLabel}
       </div>
       <div className="min-w-0">
         <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />

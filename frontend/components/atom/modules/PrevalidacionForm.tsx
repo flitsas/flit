@@ -6,14 +6,15 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   IniciarPrevalidacionRequest,
   IniciarPrevalidacionResult,
-  PrevalidacionPersonType,
 } from '@/lib/api/types/procedure-runtime';
 import { TramitesApiError } from '@/lib/api/tramites-client';
 
 /**
  * Formulario modal/drawer para crear una prevalidación de identidad standalone (HU #10868).
- * CF-01 — Datos mínimos: tipo + número de documento, nombre completo, correo.
- * Persona jurídica: campos del representante legal (legalRep*) obligatorios.
+ * CF-01 (Feature #11004, HU #11006, D1) — la prevalidación es SOLO persona natural: el backend
+ * rechaza `personType=juridical` con 422 (`prevalidacion_solo_natural`); el formulario ya no ofrece
+ * el selector natural/jurídica ni los campos de representante legal, y no envía `personType`/
+ * `legalRep*` en el body. Datos mínimos: tipo + número de documento, nombre completo, correo.
  * WCAG 2.1 AA: todos los inputs con <label> asociado, focus ring, role="dialog".
  *
  * Props:
@@ -29,7 +30,7 @@ export interface PrevalidacionFormProps {
    * reenviar el viejo). El correo NO se precarga (no viaja en el listado ni en las respuestas de
    * error); el operador lo escribe de nuevo.
    */
-  initialValues?: Partial<Pick<FormValues, 'documentType' | 'documentNumber' | 'name' | 'personType'>>;
+  initialValues?: Partial<Pick<FormValues, 'documentType' | 'documentNumber' | 'name'>>;
 }
 
 const DOCUMENT_TYPES = [
@@ -46,11 +47,6 @@ interface FormValues {
   documentNumber: string;
   name: string;
   email: string;
-  personType: PrevalidacionPersonType;
-  legalRepDocumentType: string;
-  legalRepDocumentNumber: string;
-  legalRepName: string;
-  legalRepEmail: string;
 }
 
 const EMPTY_FORM: FormValues = {
@@ -58,11 +54,6 @@ const EMPTY_FORM: FormValues = {
   documentNumber: '',
   name: '',
   email: '',
-  personType: 'natural',
-  legalRepDocumentType: 'CC',
-  legalRepDocumentNumber: '',
-  legalRepName: '',
-  legalRepEmail: '',
 };
 
 function required(v: string) {
@@ -79,21 +70,12 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const isJuridical = values.personType === 'juridical';
-
   const errors: Partial<Record<keyof FormValues, string>> = {};
   if (!required(values.documentType)) errors.documentType = 'Requerido';
   if (!required(values.documentNumber)) errors.documentNumber = 'Requerido';
   if (!required(values.name)) errors.name = 'Requerido';
   if (!required(values.email)) errors.email = 'Requerido';
   else if (!validEmail(values.email)) errors.email = 'Correo inválido';
-  if (isJuridical) {
-    if (!required(values.legalRepDocumentType)) errors.legalRepDocumentType = 'Requerido';
-    if (!required(values.legalRepDocumentNumber)) errors.legalRepDocumentNumber = 'Requerido';
-    if (!required(values.legalRepName)) errors.legalRepName = 'Requerido';
-    if (values.legalRepEmail && !validEmail(values.legalRepEmail))
-      errors.legalRepEmail = 'Correo inválido';
-  }
 
   const hasErrors = Object.keys(errors).length > 0;
 
@@ -119,19 +101,14 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
     setSubmitting(true);
     setApiError(null);
     try {
+      // CF-01 (D1) — no se envía personType/legalRep*: el backend asume "natural" por defecto y
+      // rechaza cualquier otro valor. El formulario ya no ofrece la opción jurídica.
       const body: IniciarPrevalidacionRequest = {
         documentType: values.documentType,
         documentNumber: values.documentNumber.trim(),
         name: values.name.trim(),
         email: values.email.trim(),
-        personType: values.personType,
       };
-      if (isJuridical) {
-        body.legalRepDocumentType = values.legalRepDocumentType;
-        body.legalRepDocumentNumber = values.legalRepDocumentNumber.trim();
-        body.legalRepName = values.legalRepName.trim();
-        body.legalRepEmail = values.legalRepEmail.trim() || undefined;
-      }
       const result = await tramitesClient.createPrevalidacion(body);
       onSuccess(result);
     } catch (err) {
@@ -183,39 +160,6 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
         {/* Body */}
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
-            {/* Tipo de persona */}
-            <fieldset>
-              <legend className="mb-1.5 text-xs font-semibold text-[#162744] dark:text-white">
-                Tipo de persona <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-              </legend>
-              <div className="flex gap-3">
-                {([['natural', 'Persona natural'], ['juridical', 'Persona jurídica']] as const).map(
-                  ([val, label]) => (
-                    <label
-                      key={val}
-                      className="flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm transition hover:border-[#557EFF]"
-                      style={
-                        values.personType === val
-                          ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }
-                          : {}
-                      }
-                    >
-                      <input
-                        type="radio"
-                        name="personType"
-                        value={val}
-                        checked={values.personType === val}
-                        onChange={() => set('personType', val)}
-                        className="accent-[#557EFF]"
-                        aria-label={label}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ),
-                )}
-              </div>
-            </fieldset>
-
             {/* Documento */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -270,8 +214,7 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
             {/* Nombre */}
             <div>
               <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                {isJuridical ? 'Razón social / nombre de la empresa' : 'Nombre completo'}{' '}
-                <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+                Nombre completo <span aria-hidden="true" className="text-[#FF4E00]">*</span>
               </label>
               <input
                 id="pv-name"
@@ -279,7 +222,7 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
                 value={values.name}
                 onChange={(e) => set('name', e.target.value)}
                 disabled={submitting}
-                placeholder={isJuridical ? 'Razón social de la empresa' : 'Nombre completo de la persona'}
+                placeholder="Nombre completo de la persona"
                 className={fieldClass('name')}
                 aria-describedby={touched.name && errors.name ? 'pv-name-err' : undefined}
                 aria-invalid={!!(touched.name && errors.name)}
@@ -317,107 +260,6 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
                 </p>
               )}
             </div>
-
-            {/* Representante Legal (solo jurídica) */}
-            {isJuridical && (
-              <fieldset className="space-y-3 rounded-xl border border-[#DDE5F0] p-4">
-                <legend className="px-1 text-xs font-semibold text-[#162744] dark:text-white">
-                  Representante legal <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                </legend>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="pv-rl-docType" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                      Tipo doc. RL <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                    </label>
-                    <select
-                      id="pv-rl-docType"
-                      value={values.legalRepDocumentType}
-                      onChange={(e) => set('legalRepDocumentType', e.target.value)}
-                      disabled={submitting}
-                      className={fieldClass('legalRepDocumentType')}
-                      aria-describedby={touched.legalRepDocumentType && errors.legalRepDocumentType ? 'pv-rl-docType-err' : undefined}
-                      aria-invalid={!!(touched.legalRepDocumentType && errors.legalRepDocumentType)}
-                    >
-                      {DOCUMENT_TYPES.filter((d) => d.value !== 'NIT').map((d) => (
-                        <option key={d.value} value={d.value}>
-                          {d.label}
-                        </option>
-                      ))}
-                    </select>
-                    {touched.legalRepDocumentType && errors.legalRepDocumentType && (
-                      <p id="pv-rl-docType-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                        {errors.legalRepDocumentType}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label htmlFor="pv-rl-docNum" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                      Número doc. RL <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                    </label>
-                    <input
-                      id="pv-rl-docNum"
-                      type="text"
-                      value={values.legalRepDocumentNumber}
-                      onChange={(e) => set('legalRepDocumentNumber', e.target.value)}
-                      disabled={submitting}
-                      autoComplete="off"
-                      className={fieldClass('legalRepDocumentNumber')}
-                      aria-describedby={touched.legalRepDocumentNumber && errors.legalRepDocumentNumber ? 'pv-rl-docNum-err' : undefined}
-                      aria-invalid={!!(touched.legalRepDocumentNumber && errors.legalRepDocumentNumber)}
-                    />
-                    {touched.legalRepDocumentNumber && errors.legalRepDocumentNumber && (
-                      <p id="pv-rl-docNum-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                        {errors.legalRepDocumentNumber}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="pv-rl-name" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                    Nombre completo del RL <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                  </label>
-                  <input
-                    id="pv-rl-name"
-                    type="text"
-                    value={values.legalRepName}
-                    onChange={(e) => set('legalRepName', e.target.value)}
-                    disabled={submitting}
-                    className={fieldClass('legalRepName')}
-                    aria-describedby={touched.legalRepName && errors.legalRepName ? 'pv-rl-name-err' : undefined}
-                    aria-invalid={!!(touched.legalRepName && errors.legalRepName)}
-                  />
-                  {touched.legalRepName && errors.legalRepName && (
-                    <p id="pv-rl-name-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                      {errors.legalRepName}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="pv-rl-email" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                    Correo del RL
-                  </label>
-                  <input
-                    id="pv-rl-email"
-                    type="email"
-                    value={values.legalRepEmail}
-                    onChange={(e) => set('legalRepEmail', e.target.value)}
-                    disabled={submitting}
-                    placeholder="correo_rl@ejemplo.com (opcional)"
-                    className={fieldClass('legalRepEmail')}
-                    aria-describedby={touched.legalRepEmail && errors.legalRepEmail ? 'pv-rl-email-err' : 'pv-rl-email-hint'}
-                    aria-invalid={!!(touched.legalRepEmail && errors.legalRepEmail)}
-                  />
-                  <p id="pv-rl-email-hint" className="mt-1 text-[11px] opacity-60">
-                    Si no se indica, se usa el correo de la empresa.
-                  </p>
-                  {touched.legalRepEmail && errors.legalRepEmail && (
-                    <p id="pv-rl-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                      {errors.legalRepEmail}
-                    </p>
-                  )}
-                </div>
-              </fieldset>
-            )}
 
             {/* API error */}
             {apiError && (

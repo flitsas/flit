@@ -65,6 +65,7 @@ const RESULT_STANDALONE: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: 'https://capture.kyverum.co/abc123',
   linkExpiresAt: '2026-07-25T10:00:00Z',
+  email: 'juan.prevalidado@correo.co', // CF-05 (HU #11006)
 };
 
 const RESULT_TRAMITE: TenantBiometricValidation = {
@@ -87,6 +88,7 @@ const RESULT_TRAMITE: TenantBiometricValidation = {
   daysRemaining: 26,
   captureUrl: null,
   linkExpiresAt: null,
+  email: null, // CF-05 (HU #11006) — BE aún no lo envía para esta fila (fixture de borde)
 };
 
 const EMPTY_RESPONSE: TenantBiometricValidationsResponse = {
@@ -154,14 +156,17 @@ describe('PrevalidacionForm (HU #10868)', () => {
     await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
 
     await waitFor(() => {
+      // CF-01 (HU #11006, D1) — ya no se envía personType/legalRep*: el backend asume "natural".
       expect(mocks.createPrevalidacion).toHaveBeenCalledWith(
         expect.objectContaining({
           documentNumber: '1234567890',
           name: 'Carlos Prueba',
           email: 'carlos@prueba.co',
-          personType: 'natural',
         }),
       );
+      const sentBody = mocks.createPrevalidacion.mock.calls[0][0];
+      expect(sentBody).not.toHaveProperty('personType');
+      expect(sentBody).not.toHaveProperty('legalRepName');
       expect(onSuccess).toHaveBeenCalledWith(
         expect.objectContaining({ validationId: 'val-new-1' }),
       );
@@ -188,15 +193,15 @@ describe('PrevalidacionForm (HU #10868)', () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it('muestra campos de RL cuando se selecciona persona jurídica', async () => {
-    const user = userEvent.setup();
+  it('CF-01 (HU #11006, D1): no ofrece selector de tipo de persona ni campos de representante legal', () => {
     render(<PrevalidacionForm onClose={onClose} onSuccess={onSuccess} />);
 
-    await user.click(screen.getByLabelText(/persona jurídica/i));
-
-    expect(screen.getByLabelText(/tipo doc. rl/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/número doc. rl/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/nombre completo del rl/i)).toBeInTheDocument();
+    expect(screen.queryByText(/tipo de persona/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/persona jurídica/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/persona natural/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/tipo doc. rl/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/número doc. rl/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/nombre completo del rl/i)).not.toBeInTheDocument();
   });
 
   it('invoca onClose al pulsar Cancelar', async () => {

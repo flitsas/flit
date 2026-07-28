@@ -47,6 +47,7 @@ const ROW_APROBADA: TenantBiometricValidation = {
   // Aprobada: no hay enlace vigente que reenviar (el backend lo devuelve null en estados terminales).
   captureUrl: null,
   linkExpiresAt: '2026-06-21T15:30:00Z',
+  email: 'ana.compradora@correo.co', // CF-05 (HU #11006)
 };
 
 const ROW_RECHAZADA: TenantBiometricValidation = {
@@ -69,6 +70,7 @@ const ROW_RECHAZADA: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: null,
   linkExpiresAt: null,
+  email: null, // CF-05 (HU #11006) — BE aún no lo envía para esta fila (fixture de borde)
 };
 
 /** CF-05 (HU #10886, AC2) — validación EN CURSO: es la única que trae enlace vigente. */
@@ -92,6 +94,7 @@ const ROW_EN_PROCESO: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: 'https://capture.kyverum.co/kyv_123',
   linkExpiresAt: '2026-06-23T09:00:00Z',
+  email: 'carlos.vendedor@correo.co', // CF-05 (HU #11006)
 };
 
 const FULL: TenantBiometricValidationsResponse = {
@@ -191,12 +194,22 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(link.getAttribute('aria-label')).toMatch(/trámite trm-2026-000001/i);
   });
 
-  it('enmascara el documento (no muestra el número completo)', async () => {
+  it('CF-04 (HU #11006): muestra el documento completo en la tabla, sin enmascarar', async () => {
     render(<Validaciones />);
 
-    // 1020304050 → ••••4050; el número completo NO aparece.
-    expect(await screen.findByText('CC ••••4050')).toBeInTheDocument();
-    expect(screen.queryByText(/1020304050/)).not.toBeInTheDocument();
+    expect(await screen.findByText('CC 1020304050')).toBeInTheDocument();
+    expect(screen.queryByText(/CC ••••4050/)).not.toBeInTheDocument();
+  });
+
+  it('CF-05 (HU #11006): muestra la columna Correo con el valor del backend y "—" si aún no llega', async () => {
+    render(<Validaciones />);
+
+    await screen.findByText('TRM-2026-000001');
+    expect(screen.getByText('ana.compradora@correo.co')).toBeInTheDocument();
+
+    // ROW_RECHAZADA no trae email todavía (BE en curso, HU #11005) — se muestra "—" sin romper la fila.
+    const rechazadaLink = screen.getByRole('link', { name: /validación de luis vendedor/i });
+    expect(rechazadaLink.getAttribute('aria-label')).toMatch(/correo —/i);
   });
 
   it('muestra el motivo de rechazo sanitizado en la fila rechazada', async () => {

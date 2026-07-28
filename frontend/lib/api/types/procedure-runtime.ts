@@ -907,6 +907,12 @@ export interface TenantBiometricValidation {
   captureUrl: string | null;
   /** Vencimiento del ENLACE de captura (distinto de `validUntil`, que es la vigencia de la identidad). */
   linkExpiresAt: string | null;
+  /**
+   * CF-05 (Feature #11004, HU #11006) — correo de la validación, vista autenticada del gestor del
+   * tenant (D3): completo, sin enmascarar. `null` si el backend aún no lo envía (HU #11005 en curso
+   * en paralelo) — se muestra "—" sin romper la tabla.
+   */
+  email: string | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -962,6 +968,11 @@ export interface TenantBiometricValidationFilters {
   page?: number;
   /** Filas por página (10–50). */
   pageSize?: number;
+  /**
+   * CF-02 (Feature #11004, HU #11006) — true = solo prevalidaciones standalone (sin trámite);
+   * false = solo ligadas a trámite; omitido = todas (comportamiento de Validaciones — CF-03).
+   */
+  standalone?: boolean;
 }
 
 /** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó

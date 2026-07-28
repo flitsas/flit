@@ -9,7 +9,6 @@ import type {
   BiometricEstado,
   EditarPrevalidacionResult,
   IniciarPrevalidacionResult,
-  PrevalidacionPersonType,
   TenantBiometricValidation,
   TenantBiometricValidationsResponse,
 } from '@/lib/api/types/procedure-runtime';
@@ -23,11 +22,11 @@ import {
 
 /**
  * Módulo "Prevalidaciones de Identidad" (HU #10868 — Feature #10864 CF-01; ampliado por HU #10944,
- * CF-03, con las acciones Editar/Reenviar). Pantalla dedicada para crear prevalidaciones standalone
- * (sin trámite) y ver/gestionar el estado de las existentes. Reutiliza el endpoint
- * GET /biometric-validations con filtro standalone=true para mostrar solo las prevalidaciones sin
- * trámite. Cuando el BE todavía no soporte el filtro, muestra todas y nota el comportamiento
- * contract-first.
+ * CF-03, con las acciones Editar/Reenviar; y por HU #11006, Feature #11004, CF-02/CF-04/CF-05).
+ * Pantalla dedicada para crear prevalidaciones standalone (sin trámite) y ver/gestionar el estado de
+ * las existentes. Consume GET /biometric-validations con `standalone=true` (el backend ya soporta el
+ * filtro — CF-02): solo prevalidaciones sin trámite, sin fallback client-side que mezcle filas de
+ * trámite.
  *
  * 4 estados obligatorios FLIT: vacío, cargando, error, lleno. WCAG 2.1 AA.
  */
@@ -56,7 +55,6 @@ interface PrefillNueva {
   documentType?: string;
   documentNumber?: string;
   name?: string;
-  personType?: PrevalidacionPersonType;
 }
 
 /** Resultado de un reenvío (automático al editar el correo, o manual) para el panel de éxito. */
@@ -74,14 +72,8 @@ function formatFecha(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
-function maskDoc(tipoDoc: string, documento: string): string {
-  const tail = documento.length > 4 ? documento.slice(-4) : documento;
-  const masked = documento.length > 4 ? `••••${tail}` : tail;
-  return `${tipoDoc} ${masked}`.trim();
-}
-
 const GRID_COLS =
-  'minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr)';
+  'minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr)';
 
 export function PrevalidacionesModule() {
   const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
@@ -116,19 +108,12 @@ export function PrevalidacionesModule() {
     const reqId = ++reqIdRef.current;
     setFetching(true);
     try {
+      // CF-02 (Feature #11004, HU #11006) — el backend ya soporta `standalone`; se envía directo,
+      // sin fallback client-side que mezclara filas de trámite (bug preexistente de HU #10869/#10944).
       const res: TenantBiometricValidationsResponse =
-        await tramitesClient.listTenantBiometricValidations(
-          { standalone: true } as Parameters<typeof tramitesClient.listTenantBiometricValidations>[0],
-        );
+        await tramitesClient.listTenantBiometricValidations({ standalone: true });
       if (reqId !== reqIdRef.current) return;
-      // HU #10869: filter client-side if backend doesn't support standalone param yet
-      const standalone = res.validations.filter((v) => v.instanceId === null);
-      // HU #10944 (AC3/D12) — fix de bug preexistente (HU #10869): el fallback comparaba el MISMO
-      // filtro dos veces (nunca mostraba nada distinto). Ahora, si no hay ninguna standalone, cae a
-      // TODAS las filas devueltas (tal como ya decía el comentario original) para que una validación
-      // ligada a un trámite pueda renderizarse en modo solo lectura (defensa en profundidad, D11/D12)
-      // en vez de desaparecer silenciosamente.
-      setValidations(standalone.length > 0 ? standalone : res.validations);
+      setValidations(res.validations);
       setError(null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
@@ -339,7 +324,7 @@ export function PrevalidacionesModule() {
       {/* Estado: Lleno (tabla) */}
       {!initialLoading && !isEmpty && validations !== null && validations.length > 0 && (
         <div className="overflow-x-auto shrink-0">
-          <div className="min-w-[920px]">
+          <div className="min-w-[1020px]">
             <div
               className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
               style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
@@ -347,6 +332,7 @@ export function PrevalidacionesModule() {
             >
               <div>Persona</div>
               <div>Documento</div>
+              <div>Correo</div>
               <div>Estado</div>
               <div>Creada</div>
               <div>Aprobada</div>
@@ -507,9 +493,13 @@ function PrevalidacionRow({
     resendDisabledReason = `Disponible en ${minsLeft} min.`;
   }
 
+  // CF-05 (Feature #11004, HU #11006) — el backend aún puede no enviar `email` (HU #11005 en curso
+  // en paralelo): se muestra "—" sin romper la fila.
+  const emailLabel = r.email ?? '—';
+
   const ariaLabel =
-    `Prevalidación de ${r.name}, documento ${maskDoc(r.documentType, r.documentNumber)}, ` +
-    `estado ${meta.label}` +
+    `Prevalidación de ${r.name}, documento ${r.documentType} ${r.documentNumber}, ` +
+    `correo ${emailLabel}, estado ${meta.label}` +
     (r.validatedAt ? `, aprobada` : '') +
     (isTramite ? ', solo lectura, pertenece a un trámite' : '') +
     `.`;
@@ -527,7 +517,10 @@ function PrevalidacionRow({
         )}
       </div>
       <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
-        {maskDoc(r.documentType, r.documentNumber)}
+        {r.documentType} {r.documentNumber}
+      </div>
+      <div className="min-w-0 text-[11px] opacity-80 truncate" title={emailLabel}>
+        {emailLabel}
       </div>
       <div>
         <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />

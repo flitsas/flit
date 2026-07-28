@@ -1089,6 +1089,11 @@ export const tramitesClient = {
     add('venceEnDias', filters.venceEnDias);
     add('page', filters.page);
     add('pageSize', filters.pageSize);
+    // CF-02 (Feature #11004, HU #11006) — boolean explícito: no reutiliza `add()` (string|number) para
+    // no perder `false` (que sí debe viajar como filtro "solo ligadas a trámite").
+    if (filters.standalone !== undefined) {
+      params.set('standalone', String(filters.standalone));
+    }
 
     const query = params.toString();
     const res = await request<TenantBiometricValidationsResponse>(
