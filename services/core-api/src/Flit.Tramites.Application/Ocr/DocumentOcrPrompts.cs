@@ -5,12 +5,19 @@ namespace Flit.Tramites.Application.Ocr;
 /// al modelo de visión qué validar, qué rechazar y qué campos devolver en JSON. El bloque
 /// "IMPORTANTE — DOCUMENTO MULTIPAGINA" va inline en cada prompt para identificar el subconjunto de
 /// páginas del tipo solicitado en PDFs multi-documento. Prompts fijados en v1 (no reescribir).
+/// <para><b>Versionado (Feature #10972):</b> el prompt de <c>soat</c> pasa a <b>v2</b> — HU #10976 le
+/// AÑADE <c>fecha_expedicion</c> (el certificado la pide en celda propia y v1 solo daba el inicio de
+/// vigencia). No se reescribió ningún campo previo: v2 es aditivo sobre v1. El prompt de <c>rtm</c> es
+/// nuevo en HU #10977. El resto sigue en v1 intacto.</para>
 /// </summary>
 public static class DocumentOcrPrompts
 {
-    /// <summary>Tipos de documento soportados por el endpoint OCR (matrícula: los 4; traspaso: impronta + soat).</summary>
+    /// <summary>
+    /// Tipos de documento soportados por el endpoint OCR (matrícula: los 4 originales; traspaso:
+    /// impronta + soat). HU #10977 añade <c>rtm</c> en ambas modalidades.
+    /// </summary>
     public static readonly IReadOnlySet<string> SupportedTipos =
-        new HashSet<string>(StringComparer.Ordinal) { "factura", "aduana", "impronta", "soat" };
+        new HashSet<string>(StringComparer.Ordinal) { "factura", "aduana", "impronta", "soat", "rtm" };
 
     /// <summary>true si <paramref name="tipo"/> tiene prompt OCR asociado.</summary>
     public static bool IsSupported(string? tipo) => tipo is not null && SupportedTipos.Contains(tipo);
@@ -22,6 +29,7 @@ public static class DocumentOcrPrompts
         "aduana" => Aduana,
         "impronta" => Impronta,
         "soat" => Soat,
+        "rtm" => Rtm,
         _ => null,
     };
 
@@ -254,6 +262,7 @@ EXTRAER:
 - paginas_documento: [paginas], total_paginas: numero
 - numero_poliza: numero de la poliza SOAT
 - aseguradora: nombre de la aseguradora
+- fecha_expedicion: fecha en que se EXPIDIO la poliza (YYYY-MM-DD). Puede ser anterior al inicio de vigencia; si el documento no la muestra, dejar vacia. NO copiar aqui la fecha de inicio de vigencia.
 - fecha_inicio: fecha inicio vigencia (YYYY-MM-DD)
 - fecha_vencimiento: fecha vencimiento (YYYY-MM-DD)
 - estado_poliza: "vigente" | "vencida" | "anulada" | "no_determinado"
@@ -264,6 +273,51 @@ EXTRAER:
 - observaciones
 
 JSON valido sin markdown:
-{"tipo_documento":"soat","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_poliza":"","aseguradora":"","fecha_inicio":"","fecha_vencimiento":"","estado_poliza":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","tomador_nombre":"","tomador_documento":"","valor_prima":0,"observaciones":""}
+{"tipo_documento":"soat","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_poliza":"","aseguradora":"","fecha_expedicion":"","fecha_inicio":"","fecha_vencimiento":"","estado_poliza":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","tomador_nombre":"","tomador_documento":"","valor_prima":0,"observaciones":""}
+""";
+
+    // HU #10977 (Feature #10972) — prompt NUEVO. El certificado de vigencia SOAT y RTM pide seis datos
+    // de la revision y el RUNT solo entrega vencimiento, estado y CDA: numero, expedicion y vigencia
+    // no los da ningun proveedor, asi que salen del propio certificado del CDA.
+    private const string Rtm =
+"""
+Analiza este documento. Determina si contiene un CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES (RTM) de Colombia.
+
+VALIDACIONES:
+1. DEBE ser un certificado de revision tecnico-mecanica y de emisiones contaminantes expedido por un CDA (Centro de Diagnostico Automotor) autorizado
+2. NO es valido si es: una poliza SOAT, una factura, un FUR, un certificado de improntas, una declaracion de importacion, una licencia de transito, un recibo de pago
+3. DEBE contener: numero de certificado (o numero de runt/consecutivo), nombre del CDA que expide, fechas de vigencia, datos del vehiculo
+4. El certificado suele llevar el logo del ONAC / organismo acreditador y un codigo de barras o QR de verificacion
+
+DISTINCION CRITICA ENTRE FECHAS:
+- fecha_expedicion: el dia en que se realizo la revision y se expidio el certificado
+- fecha_vigencia: el dia en que EMPIEZA a regir (suele coincidir con la expedicion, pero no siempre)
+- fecha_vencimiento: el dia en que DEJA de regir (normalmente un ano despues, o dos para vehiculos nuevos)
+Si el documento solo muestra una fecha de expedicion y una de vencimiento, deja fecha_vigencia vacia. NO inventes ni deduzcas fechas.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+EXTRAER:
+- tipo_documento: "rtm" | "certificado_rtm" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- numero_certificado: numero del certificado de revision (o consecutivo RUNT)
+- cda_expide: nombre del CDA que expidio la revision
+- cda_nit: NIT del CDA si aparece
+- fecha_expedicion: fecha de expedicion (YYYY-MM-DD)
+- fecha_vigencia: fecha de inicio de vigencia (YYYY-MM-DD), vacia si el documento no la distingue
+- fecha_vencimiento: fecha de vencimiento (YYYY-MM-DD)
+- estado: "vigente" | "vencida" | "no_determinado"
+- resultado: "aprobado" | "rechazado" | "no_determinado"
+- vehiculo_placa, vehiculo_marca, vehiculo_linea, vehiculo_modelo, vehiculo_clase
+- vehiculo_vin: VIN si aparece
+- observaciones
+
+JSON valido sin markdown:
+{"tipo_documento":"rtm","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","cda_expide":"","cda_nit":"","fecha_expedicion":"","fecha_vigencia":"","fecha_vencimiento":"","estado":"no_determinado","resultado":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","observaciones":""}
 """;
 }
