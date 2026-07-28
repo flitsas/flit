@@ -12,10 +12,21 @@ import type {
 // ── OCR de documentos ────────────────────────────────────────────────
 // Tipos que pasan por OCR semántico antes de subir al expediente, por modalidad.
 // Matrícula: factura + aduana + impronta + soat. Traspaso: sólo impronta + soat.
+// HU #10977 (Feature #10972) — se añade `rtm` en AMBAS modalidades: el certificado de vigencia
+// SOAT y RTM pide número, entidad, expedición y vigencia de la revisión, y esos tres últimos no
+// los entrega ningún proveedor de consulta. Salen del propio certificado del CDA.
 export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
-  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat'],
-  traspaso: ['impronta', 'soat'],
+  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm'],
+  traspaso: ['impronta', 'soat', 'rtm'],
 };
+
+/**
+ * HU #10975 — tipos cuyo JSON de OCR se PERSISTE en `field_values` además de analizarse.
+ * Es un subconjunto de OCR_TIPOS: factura/aduana/impronta se analizan para validar el documento,
+ * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
+ * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
+ */
+const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
@@ -236,6 +247,20 @@ export function useProcedureDocuments(
           analyzingTipo: null,
           ocrResults: { ...s.ocrResults, [tipo]: ocrUi },
         }));
+
+        // HU #10975 — persistir en field_values lo que el OCR extrajo, para que el certificado de
+        // vigencia SOAT y RTM deje de salir con celdas en blanco. Solo con el documento VERIFICADO:
+        // de un documento rechazado (tipo equivocado o VIN que no cruza) no se toma ningún dato.
+        // Best-effort deliberado: si esta llamada falla, el adjunto ya se sube igual — el documento
+        // es el entregable y los field_values son un enriquecimiento del certificado, así que un
+        // fallo aquí no puede costarle al operador el cargue que ya hizo.
+        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.includes(tipo)) {
+          try {
+            await tramitesClient.persistOcrFields(instanceId, tipo, ocr.data, tenantId);
+          } catch {
+            // Silencio intencionado: ver comentario de arriba.
+          }
+        }
       } else if (usaOcr && file.size > OCR_MAX_BYTES) {
         // 10–20 MB: se salta el OCR (excede el límite del análisis), se sube igual y se marca "no analizado".
         setState((s) => ({
