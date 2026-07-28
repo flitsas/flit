@@ -60,6 +60,7 @@ const samuel: MandateSigner = {
   email: null,
   userId: null,
   identityValidationRef: null,
+  identityStatus: "none",
   signatureVaultId: null,
   registeredAt: "2026-07-07T12:00:00Z",
   isActive: true,

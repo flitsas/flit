@@ -1,27 +1,34 @@
+using Flit.Admin.Application.Identity;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.Identity;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 
 /// <summary>
 /// Edición de un mandatario (RF23): valida OT operable + RF33 + exclusividad, regenera la
 /// huella con la fecha de registro original y persiste con auditoría atómica (RF28). Los
-/// mandatos ya emitidos conservan su huella previa (no se tocan).
+/// mandatos ya emitidos conservan su huella previa (no se tocan). Si en la edición se AGREGA
+/// un correo que antes no existía, apalanca la validación de identidad por correo (HU #10993,
+/// best-effort: un fallo del proveedor NO revierte la edición).
 /// </summary>
 public sealed class UpdateMandateSignerHandler
 {
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
+    private readonly IAdminIdentityValidationService? _identityService;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
-        IMandateSignerRepository repository)
+        IMandateSignerRepository repository,
+        IAdminIdentityValidationService? identityService = null)
     {
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _identityService = identityService;
     }
 
     public async Task<UpdateMandateSignerResult> HandleAsync(
@@ -85,6 +92,32 @@ public sealed class UpdateMandateSignerHandler
                 email,
                 command.UserId),
             cancellationToken).ConfigureAwait(false);
+
+        // HU #10993 — apalancar la validación de identidad también al EDITAR: si el correo se acaba de
+        // agregar (antes no tenía) se dispara la validación por correo. Best-effort (un fallo del
+        // proveedor NO revierte la edición) e idempotente: ResendAsync reutiliza una validación
+        // aprobada y vigente y solo envía una nueva cuando no hay una activa.
+        var emailNewlyAdded = string.IsNullOrWhiteSpace(signer.Email);
+        if (updated && _identityService is not null && emailNewlyAdded && email is not null)
+        {
+            try
+            {
+                var descriptor = new AdminIdentitySubjectDescriptor(
+                    otTenantId.Value,
+                    AdminIdentitySubjectTypes.MandateSigner,
+                    command.MandateSignerId,
+                    fullName,
+                    documentType,
+                    documentNumber,
+                    email,
+                    command.UpdatedBy);
+                await _identityService.ResendAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            }
+            catch (AdminIdentityProviderException)
+            {
+                // Best-effort: la edición ya está persistida; el reenvío manual queda disponible.
+            }
+        }
 
         return updated
             ? UpdateMandateSignerResult.Updated(integrityHash)
