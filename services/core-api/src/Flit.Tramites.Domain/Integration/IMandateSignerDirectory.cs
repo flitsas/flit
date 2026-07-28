@@ -4,8 +4,12 @@ namespace Flit.Tramites.Domain.Integration;
 /// Un mandatario candidato para firmar el mandato de un trámite (ADR-0036, HU #10916): el firmante
 /// (<c>admin.mandate_signers</c>) activo asignado a la compañía gestora en el OT del trámite. <c>UserId</c>
 /// es la cuenta de OT vinculada (§D9): la llave del cotejo automático con el usuario que aprueba.
+/// <c>IdentityVigente</c> (HU #10916/#10911): el mandatario tiene una validación de identidad admin
+/// APROBADA y VIGENTE (se valida una vez y se apalanca en los mandatos mientras esté vigente); un
+/// mandatario sin identidad vigente NO puede firmar (se exige validar antes de aprobar).
 /// </summary>
-public sealed record MandateSignerCandidate(Guid Id, string Nombre, string Documento, Guid? UserId);
+public sealed record MandateSignerCandidate(
+    Guid Id, string Nombre, string Documento, Guid? UserId, bool IdentityVigente = true);
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,

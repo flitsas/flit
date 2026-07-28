@@ -204,11 +204,25 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       setLtFile(null);
       show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch (err) {
+      const errorCode =
+        err instanceof ApiError && err.status === 409
+          ? (err.body as { error?: string } | undefined)?.error
+          : undefined;
+
+      // ADR-0036 §D9 (HU #10911) — el mandatario resuelto no tiene identidad validada vigente.
+      if (errorCode === "mandatario_identidad_requerida") {
+        setApproveTarget(null);
+        setMandatarioTarget(null);
+        show(
+          "El mandatario debe validar su identidad (vigente) antes de firmar el mandato. " +
+            "Envíale la validación desde la pestaña «Mandatario».",
+          "error",
+        );
+        return;
+      }
+
       // ADR-0036 §D9 — hay varios mandatarios y ninguno cotejó: pedir que el OT elija uno.
-      const needsMandatario =
-        err instanceof ApiError &&
-        err.status === 409 &&
-        (err.body as { error?: string } | undefined)?.error === "mandatario_requerido";
+      const needsMandatario = errorCode === "mandatario_requerido";
       const otId = target.transitOfficeId ?? otIdForSigners;
       if (needsMandatario && otId) {
         try {

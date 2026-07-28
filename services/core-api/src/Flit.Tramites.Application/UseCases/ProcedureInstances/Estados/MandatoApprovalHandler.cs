@@ -14,6 +14,12 @@ public enum MandatoApprovalOutcome
 
     /// <summary>Varios mandatarios sin cotejo único: el aprobador debe elegir uno (⇒ 409 mandatario_requerido).</summary>
     RequiereSeleccion,
+
+    /// <summary>
+    /// El mandatario resuelto NO tiene identidad validada vigente (HU #10911/#10916): debe validar su
+    /// identidad antes de firmar (⇒ 409 mandatario_identidad_requerida).
+    /// </summary>
+    IdentidadRequerida,
 }
 
 /// <summary>Decisión de la resolución del mandatario al aprobar; <c>MandateSignerId</c> solo con <see cref="MandatoApprovalOutcome.Resolved"/>.</summary>
@@ -59,9 +65,12 @@ public sealed class MandatoApprovalHandler(
 
         return resolution.Status switch
         {
-            // Un único candidato / cotejo por usuario / selección explícita válida.
+            // Un único candidato / cotejo por usuario / selección explícita válida. El firmante debe tener
+            // identidad validada VIGENTE (HU #10911/#10916): si no, se exige validar antes de aprobar.
+            MandateSignerResolutionStatus.Resolved when resolution.Signer!.IdentityVigente =>
+                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer.Id),
             MandateSignerResolutionStatus.Resolved =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
+                new MandatoApprovalDecision(MandatoApprovalOutcome.IdentidadRequerida, null),
             // Varios sin match: el aprobador debe elegir (409).
             MandateSignerResolutionStatus.RequiereSeleccion =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null),

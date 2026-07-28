@@ -40,8 +40,8 @@ public sealed class MandatoApprovalHandlerTests
         _directory.GetCandidatesAsync(Office, Tenant, Arg.Any<CancellationToken>())
             .Returns(candidates);
 
-    private static MandateSignerCandidate Signer(Guid? userId = null, Guid? id = null) =>
-        new(id ?? Guid.NewGuid(), "Firmante", "123", userId);
+    private static MandateSignerCandidate Signer(Guid? userId = null, Guid? id = null, bool vigente = true) =>
+        new(id ?? Guid.NewGuid(), "Firmante", "123", userId, vigente);
 
     [Fact]
     public async Task NoMandatoAttachment_IsNotApplicable_AndSkipsDirectory()
@@ -105,6 +105,33 @@ public sealed class MandatoApprovalHandlerTests
 
         decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
         decision.MandateSignerId.Should().Be(chosen.Id);
+    }
+
+    [Fact]
+    public async Task SingleCandidate_WithoutVigentIdentity_RequiresValidation()
+    {
+        var instance = SeedInstance();
+        Candidates(Signer(vigente: false));
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
+
+        // HU #10911/#10916 — el mandatario debe validar identidad (vigente) antes de firmar.
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.IdentidadRequerida);
+        decision.MandateSignerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExplicitSelection_WithoutVigentIdentity_RequiresValidation()
+    {
+        var instance = SeedInstance();
+        var chosen = Signer(vigente: false);
+        Candidates(Signer(), chosen);
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, null, chosen.Id, TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.IdentidadRequerida);
     }
 
     [Fact]

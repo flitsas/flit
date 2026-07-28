@@ -909,6 +909,15 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status409Conflict);
         }
 
+        if (decision.Outcome == MandatoApprovalOutcome.IdentidadRequerida)
+        {
+            // ADR-0036 §D9 (HU #10911/#10916) — el mandatario resuelto no tiene identidad validada vigente:
+            // debe validarla (se valida una vez y se apalanca mientras esté vigente) antes de firmar.
+            return Results.Json(
+                new { error = "mandatario_identidad_requerida" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
         var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
         {
             OtTenantId = tenantId,
