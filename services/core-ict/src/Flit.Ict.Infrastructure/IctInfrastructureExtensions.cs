@@ -39,6 +39,7 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ICurrentTenant, HttpCurrentTenant>();
         services.AddScoped<IPreTramiteRepository, PreTramiteRepository>();
         services.AddScoped<IStatusProcessV1Query, StatusProcessV1Query>();
+        services.AddScoped<IIctStatusV2Query, IctStatusV2Query>();
         services.AddScoped<ISecretariesV1Query, SecretariesV1Query>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IAttachmentDocTypeResolver, AttachmentDocTypeResolver>();

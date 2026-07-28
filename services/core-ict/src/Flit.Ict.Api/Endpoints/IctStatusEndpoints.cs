@@ -22,6 +22,7 @@ public static class IctStatusEndpoints
     private static readonly string[] ReprocessPaths =
     [
         "/api/v1/transactions/reprocess/{id}",
+        "/api/v1/ict/reprocess/{id}",
     ];
 
     public static IEndpointRouteBuilder MapIctStatusEndpoints(this IEndpointRouteBuilder app)
@@ -31,12 +32,33 @@ public static class IctStatusEndpoints
             app.MapGet(path, GetStatusAsync).RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
         }
 
+        // Estado v2-native (plan §A.9): vocabulario v2 sin códigos numéricos.
+        app.MapGet("/api/v1/ict/status/{id}", GetStatusV2Async)
+            .RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
+
         foreach (var path in ReprocessPaths)
         {
             app.MapPost(path, ReprocessAsync).RequireAuthorization(IctSecurityExtensions.IctClientPolicy);
         }
 
         return app;
+    }
+
+    private static async Task<IResult> GetStatusV2Async(
+        string id,
+        IIctStatusV2Query query,
+        ICurrentTenant currentTenant,
+        CancellationToken ct)
+    {
+        if (currentTenant.TenantId is null)
+        {
+            return Results.Json(new { error = "unauthenticated" }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await query.GetByManagerIdTransactionAsync(id, currentTenant.TenantId.Value, ct);
+        return result is null
+            ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+            : Results.Ok(result);
     }
 
     private static async Task<IResult> GetStatusAsync(
