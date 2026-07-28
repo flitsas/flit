@@ -42,9 +42,10 @@ public static class TipologiaMatrizCatalog
             Partes: [Comprador],
             Pasos:
             [
+                // HU #10935 — los documentos van DESPUÉS del comprador.
                 new PasoTipologia(1, "Consulta VIN", Aplica: true, Nota: "VIN-first: el vehículo aún no existe en RUNT (primera matrícula)."),
-                new PasoTipologia(2, "Documentos", Aplica: true, Nota: "Factura + manifiesto/aduana + impronta (obligatorios)."),
-                new PasoTipologia(3, "Comprador", Aplica: true, Nota: "Adquirente único; sin vendedor."),
+                new PasoTipologia(2, "Comprador", Aplica: true, Nota: "Adquirente único; sin vendedor."),
+                new PasoTipologia(3, "Documentos", Aplica: true, Nota: "Factura + manifiesto/aduana + impronta (obligatorios)."),
                 new PasoTipologia(4, "Identidad", Aplica: true, Nota: "Validación de identidad del comprador."),
                 new PasoTipologia(5, "Generar FUR", Aplica: true, Nota: "FUR de matrícula inicial → envío a tránsito."),
             ]),
@@ -57,10 +58,11 @@ public static class TipologiaMatrizCatalog
             Partes: [Comprador, Vendedor],
             Pasos:
             [
+                // HU #10935 — los documentos van DESPUÉS del vendedor y comprador.
                 new PasoTipologia(1, "Consulta del vehículo", Aplica: true, Nota: "Pre-vuelo SOAT/SIMIT/RUNT del vehículo por placa y de ambas partes."),
-                new PasoTipologia(2, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo."),
-                new PasoTipologia(3, "Vendedor", Aplica: true, Nota: "Parte saliente; consulta RUNT del vendedor."),
-                new PasoTipologia(4, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),
+                new PasoTipologia(2, "Vendedor", Aplica: true, Nota: "Parte saliente; consulta RUNT del vendedor."),
+                new PasoTipologia(3, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),
+                new PasoTipologia(4, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo."),
                 new PasoTipologia(5, "Datos comerciales", Aplica: true, Nota: "Valor de venta > 0."),
                 new PasoTipologia(6, "Generar FUR", Aplica: true, Nota: "FUR de traspaso → envío a tránsito."),
             ]),

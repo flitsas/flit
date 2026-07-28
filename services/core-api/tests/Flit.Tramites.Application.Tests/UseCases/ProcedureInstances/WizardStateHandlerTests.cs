@@ -127,6 +127,19 @@ public sealed class WizardStateHandlerTests
                 settings.Select(s => new KeyValuePair<string, bool>(s.kind, s.enabled))));
     }
 
+    /// <summary>
+    /// CF-06 (HU #10881) — stub del override OT del documento de prenda. El comportamiento SNAPSHOT
+    /// (AC2) se prueba aparte, en la implementación EF (Infraestructura); aquí solo se fija si "ya
+    /// aplica" para poder probar el cableado en <see cref="GetWizardStateHandler"/> (canSubmit/blockers).
+    /// </summary>
+    private sealed class StubPrendaDocumentRequirementPolicy(bool required) : IPrendaDocumentRequirementPolicy
+    {
+        public Task<bool> IsRequiredAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(required);
+    }
+
     // ── FEATURE 05 — RnmcEnabled controla la visibilidad de la fecha de expedición ──
 
     [Fact] // El OT exige RNMC → RnmcEnabled=true (el frontend muestra la fecha de expedición).
@@ -272,7 +285,7 @@ public sealed class WizardStateHandlerTests
     [Fact]
     public async Task Get_Matricula_IdentidadReachable_IncompleteWithBiometriaReason()
     {
-        // Pasos 1-3 completos (VIN, docs, comprador+RUNT) → Identidad (4) alcanzable y,
+        // Pasos 1-3 completos (VIN, comprador+RUNT, docs) → Identidad (4) alcanzable y,
         // sin biométrica aprobada, incomplete con 'pendiente_biometria'. HU #10350: FUR (5) ahora
         // también es ALCANZABLE en cuanto los datos están completos, aunque la identidad siga
         // pendiente — es el último paso donde el gestor finaliza el borrador → incomplete + fur_pendiente.
@@ -360,6 +373,71 @@ public sealed class WizardStateHandlerTests
         result.CanSubmit.Should().BeTrue();
     }
 
+    // ── CF-06 (HU #10881) — override OT del documento de prenda ───────────────
+
+    private static ProcedureInstance TraspasoListoParaRadicar()
+    {
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "transit_office_code", ValueText = "11001000", Source = "user" });
+        instance.Actors.Add(Actor("vendedor", "555"));
+        instance.Actors.Add(Actor("comprador", "666"));
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        CompletarDocsTraspaso(instance);
+        instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
+        AprobarIdentidad(instance, "comprador", "666");
+        AprobarIdentidad(instance, "vendedor", "555");
+        instance.Attachments.Add(Attachment("fur"));
+        return instance;
+    }
+
+    [Fact]
+    public async Task Ac1_Get_Traspaso_OverrideOtPrendaActivo_SinDocumento_CanSubmitFalseConBlocker()
+    {
+        // AC1 — con el override activo y SIN el documento de prenda, canSubmit refleja el bloqueo
+        // con el MISMO código que usa el gate de preparación (prenda_documento_requerido).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeFalse();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Ac1_Get_Traspaso_OverrideOtPrendaActivo_ConDocumentoAdjunto_CanSubmitTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        instance.Attachments.Add(Attachment("prenda_registro"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Get_Traspaso_OverrideOtPrendaInactivo_NoAgregaBlocker()
+    {
+        // Sin override (comportamiento previo / matrícula sin concepto de prenda): sin regresión.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.CanSubmit.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
     // ── Mapeo persistencia → GateContext (pasos completan al llenarlos) ───────
 
     [Fact]
@@ -395,15 +473,15 @@ public sealed class WizardStateHandlerTests
         var instance = Base("traspaso");
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Actors.Add(Actor("vendedor", "555"));
-        CompletarDocsTraspaso(instance); // habilita pasar el paso 2 (documentos) para evaluar el 3.
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Paso 3 (vendedor) completo: parte completa + RUNT consultado (documento presente).
-        result!.Steps.Single(s => s.Index == 3).Status.Should().Be("complete");
-        // Paso 4 (comprador) incompleto: sin comprador.
-        result.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
+        // HU #10935 — los actores van antes de documentos.
+        // Paso 2 (vendedor) completo: parte completa + RUNT consultado (documento presente).
+        result!.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
+        // Paso 3 (comprador) incompleto: sin comprador.
+        result.Steps.Single(s => s.Index == 3).Status.Should().Be("incomplete");
     }
 
     [Fact]
@@ -415,7 +493,7 @@ public sealed class WizardStateHandlerTests
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
-        CompletarDocsTraspaso(instance); // habilita pasar el paso 2 (documentos) para evaluar el 5.
+        CompletarDocsTraspaso(instance); // HU #10935: documentos (paso 4) tras los actores; habilita el 5.
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
@@ -443,11 +521,11 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_PreflightRed_RiesgoAceptado_LiftsBlockerAndStep2Completes()
+    public async Task Get_PreflightRed_RiesgoAceptado_LiftsBlockerAndDocsStepCompletes()
     {
         // "Asumo el riesgo" (riesgo_aceptado=true en field_values) levanta el blocker de
-        // preflight rojo subsanable: el paso 2 (documentos) deja de bloquearse por preflight
-        // y el submit ya no se veta por ese motivo.
+        // preflight rojo subsanable: el paso de documentos (HU #10935: paso 3 en matrícula, tras el
+        // comprador) deja de bloquearse por preflight y el submit ya no se veta por ese motivo.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
@@ -461,9 +539,9 @@ public sealed class WizardStateHandlerTests
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.Blockers.Should().NotContain("preflight_red");
-        // Paso 2 completo: preflight rojo ya no bloquea y los docs obligatorios están.
-        result.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
-        // Pasos 1-3 completos; identidad aprobada; FUR diferido → submit habilitado.
+        // Paso 3 (documentos) completo: preflight rojo ya no bloquea y los docs obligatorios están.
+        result.Steps.Single(s => s.Index == 3).Status.Should().Be("complete");
+        // Pasos 1-3 completos (vin, comprador, documentos); identidad aprobada; FUR diferido → submit habilitado.
         result.CanSubmit.Should().BeTrue();
     }
 
@@ -471,8 +549,9 @@ public sealed class WizardStateHandlerTests
     public async Task Get_PreflightProviderError_AddsHardBlocker_NotLiftedByRiesgo()
     {
         // Una consulta no verificable (check "error") es un bloqueo DURO: aunque el gestor acepte
-        // el riesgo, el blocker preflight_provider_error se mantiene, el paso 2 NO se completa y el
-        // submit sigue vetado. Solo se levanta reejecutando la consulta con éxito.
+        // el riesgo, el blocker preflight_provider_error se mantiene, el paso de documentos NO se
+        // completa (HU #10935: paso 3 en matrícula) y el submit sigue vetado. Solo se levanta
+        // reejecutando la consulta con éxito.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
@@ -487,17 +566,18 @@ public sealed class WizardStateHandlerTests
 
         result!.Blockers.Should().Contain("preflight_provider_error");
         result.Blockers.Should().NotContain("preflight_red");
-        result.Steps.Single(s => s.Index == 2).Status.Should().NotBe("complete");
+        result.Steps.Single(s => s.Index == 3).Status.Should().NotBe("complete");
         result.CanSubmit.Should().BeFalse();
     }
 
     [Fact]
     public async Task Get_Traspaso_PreflightRedPorSoat_NoBloqueaComprador_ConSimitMultas()
     {
-        // Bug #10728: el paso 4 (comprador) NO debe bloquearse con simit_multas cuando el preflight
-        // está en rojo por el VEHÍCULO (SOAT vencido) pero el check SIMIT del comprador no es fail
-        // (aquí unknown: el preflight corrió antes de que el comprador tuviera documento). El riesgo
-        // aceptado levanta el rojo subsanable del paso 2 para poder evaluar el paso 4.
+        // Bug #10728: el paso de comprador (HU #10935: paso 3) NO debe bloquearse con simit_multas
+        // cuando el preflight está en rojo por el VEHÍCULO (SOAT vencido) pero el check SIMIT del
+        // comprador no es fail (aquí unknown: el preflight corrió antes de que el comprador tuviera
+        // documento). El comprador va antes que documentos, así que su gate se evalúa aunque el
+        // preflight esté rojo.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
@@ -512,9 +592,9 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var paso4 = result!.Steps.Single(s => s.Index == 4);
-        paso4.Reasons.Should().NotContain("simit_multas");
-        paso4.Status.Should().Be("complete");
+        var pasoComprador = result!.Steps.Single(s => s.Index == 3);
+        pasoComprador.Reasons.Should().NotContain("simit_multas");
+        pasoComprador.Status.Should().Be("complete");
     }
 
     [Fact]
@@ -538,9 +618,9 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var paso4 = result!.Steps.Single(s => s.Index == 4);
-        paso4.Status.Should().Be("incomplete");
-        paso4.Reasons.Should().Contain("simit_multas");
+        var pasoComprador = result!.Steps.Single(s => s.Index == 3);
+        pasoComprador.Status.Should().Be("incomplete");
+        pasoComprador.Reasons.Should().Contain("simit_multas");
     }
 
     [Fact]
@@ -562,9 +642,9 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var paso4 = result!.Steps.Single(s => s.Index == 4);
-        paso4.Status.Should().Be("incomplete");
-        paso4.Reasons.Should().Contain("simit_multas");
+        var pasoComprador = result!.Steps.Single(s => s.Index == 3);
+        pasoComprador.Status.Should().Be("incomplete");
+        pasoComprador.Reasons.Should().Contain("simit_multas");
     }
 
     [Fact]
@@ -586,9 +666,9 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var paso4 = result!.Steps.Single(s => s.Index == 4);
-        paso4.Reasons.Should().NotContain("simit_multas");
-        paso4.Status.Should().Be("complete");
+        var pasoComprador = result!.Steps.Single(s => s.Index == 3);
+        pasoComprador.Reasons.Should().NotContain("simit_multas");
+        pasoComprador.Status.Should().Be("complete");
     }
 
     [Fact]
@@ -627,7 +707,7 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Pasos 1-3 completos (vin, documentos completos, comprador+runt); FUR diferido → no cuenta.
+        // Pasos 1-3 completos (vin, comprador+runt, documentos completos); FUR diferido → no cuenta.
         result!.Steps.Single(s => s.Index == 1).Status.Should().Be("complete");
         result.Steps.Single(s => s.Index == 2).Status.Should().Be("complete");
         result.Steps.Single(s => s.Index == 3).Status.Should().Be("complete");
@@ -637,7 +717,7 @@ public sealed class WizardStateHandlerTests
     // ── Gating ESTRICTO de documentos obligatorios (Slice 4a-fix) ─────────────
 
     [Fact]
-    public async Task Get_Matricula_DocsIncompletos_Step2IncompleteAndBlocksSubmit()
+    public async Task Get_Matricula_DocsIncompletos_DocsStepIncompleteAndBlocksSubmit()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
@@ -649,15 +729,16 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var s2 = result!.Steps.Single(s => s.Index == 2);
-        s2.Status.Should().Be("incomplete");
-        s2.Reasons.Should().Contain("documentos_incompletos");
+        // HU #10935 — documentos es el paso 3 (después del comprador).
+        var docs = result!.Steps.Single(s => s.Index == 3);
+        docs.Status.Should().Be("incomplete");
+        docs.Reasons.Should().Contain("documentos_incompletos");
         result.Blockers.Should().Contain("documentos_incompletos");
         result.CanSubmit.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Get_Traspaso_DocsIncompletos_Step2ReasonAndGlobalBlocker()
+    public async Task Get_Traspaso_DocsIncompletos_DocsStepReasonAndGlobalBlocker()
     {
         var ct = TestContext.Current.CancellationToken;
         // Tipología real → su checklist obligatorio aplica (sin adjuntos = faltan docs).
@@ -671,34 +752,47 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Los documentos ahora gobiernan el paso 2: su reason vive ahí; el blocker GLOBAL veta el submit.
-        var s2 = result!.Steps.Single(s => s.Index == 2);
-        s2.Status.Should().Be("incomplete");
-        s2.Reasons.Should().Contain("documentos_incompletos");
+        // HU #10935 — los documentos gobiernan el paso 4 (tras los actores): su reason vive ahí; el
+        // blocker GLOBAL veta el submit.
+        var docs = result!.Steps.Single(s => s.Index == 4);
+        docs.Status.Should().Be("incomplete");
+        docs.Reasons.Should().Contain("documentos_incompletos");
         result.Blockers.Should().Contain("documentos_incompletos");
         result.CanSubmit.Should().BeFalse();
     }
 
+    // ── HU #10935 — documentos DESPUÉS de comprador/vendedor ──────────────────
+
     [Fact]
-    public async Task Get_Traspaso_Step2KeyIsDocumentos()
+    public async Task Get_Traspaso_DocumentosStepIsAfterComprador()
     {
         var ct = TestContext.Current.CancellationToken;
         Setup(Base("traspaso"));
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Steps.Single(s => s.Index == 2).Key.Should().Be("documentos");
+        var documentos = result!.Steps.Single(s => s.Key == "documentos");
+        var comprador = result.Steps.Single(s => s.Key == "comprador");
+        var vendedor = result.Steps.Single(s => s.Key == "vendedor");
+        // Orden: consulta → vendedor → comprador → documentos → comercial → fur.
+        documentos.Index.Should().Be(4);
+        documentos.Index.Should().BeGreaterThan(comprador.Index);
+        documentos.Index.Should().BeGreaterThan(vendedor.Index);
     }
 
     [Fact]
-    public async Task Get_Matricula_Step2KeyRemainsDocumentos()
+    public async Task Get_Matricula_DocumentosStepIsAfterComprador()
     {
         var ct = TestContext.Current.CancellationToken;
         Setup(Base("matricula_inicial"));
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Steps.Single(s => s.Index == 2).Key.Should().Be("documentos");
+        var documentos = result!.Steps.Single(s => s.Key == "documentos");
+        var comprador = result.Steps.Single(s => s.Key == "comprador");
+        // Orden: consulta_vin → comprador → documentos → identidad → fur.
+        documentos.Index.Should().Be(3);
+        documentos.Index.Should().BeGreaterThan(comprador.Index);
     }
 
     [Fact]
@@ -775,7 +869,8 @@ public sealed class WizardStateHandlerTests
 
     private sealed class StubVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
     {
-        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
             => Task.FromResult(match);
     }
 }

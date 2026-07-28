@@ -51,7 +51,10 @@ public sealed class ProcessOtWebhookCallbackResult
         new() { Status = ProcessOtWebhookCallbackStatus.InvalidState };
 }
 
-/// <summary>Procesa callback inbound Quipux → FLIT (HU #10216 / RF04).</summary>
+/// <summary>
+/// Procesa callback inbound de una integración OT → FLIT (HU #10216 / RF04). El rechazo (HU #10871
+/// AC2) transiciona a <c>subsanacion</c>, no a <c>rechazado</c>: es una observación subsanable.
+/// </summary>
 public sealed class ProcessOtWebhookCallbackHandler
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -185,6 +188,11 @@ public sealed class ProcessOtWebhookCallbackHandler
         return result is not null;
     }
 
+    // HU #10871 (AC2) — el callback de rechazo de una integración registrada vía webhook (Quipux u
+    // otra, p. ej. RNMC) transiciona a 'subsanacion' (no a 'rechazado'): el motivo de la integración
+    // queda disponible en el checklist HÍBRIDO de metadata para que el gestor corrija y vuelva a
+    // radicar sin perder el historial (N 03 / HU #10870). Sin checklist estructurado (items vacío):
+    // el callback solo trae el motivo general.
     private async Task<bool> RejectIfPendingAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -192,8 +200,8 @@ public sealed class ProcessOtWebhookCallbackHandler
         CancellationToken cancellationToken)
     {
         var result = await _clientProcedureRepository
-            .RejectAsync(
-                otTenantId, procedureInstanceId, reason, rejectedBy: null,
+            .ObserveAsync(
+                otTenantId, procedureInstanceId, reason, items: [], observedBy: null,
                 OtTransitionSource.QuipuxWebhook, cancellationToken)
             .ConfigureAwait(false);
         return result is not null;

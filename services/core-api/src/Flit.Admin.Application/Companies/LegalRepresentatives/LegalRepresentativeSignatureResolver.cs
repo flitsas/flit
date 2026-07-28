@@ -48,14 +48,13 @@ public sealed class LegalRepresentativeSignatureResolver : ILegalRepresentativeS
 
         var documento = documentoRepresentante.Trim();
 
-        // (1) Firma del baúl activa + vigente por NIT, del documento del representante.
+        // (1) Firma del baúl activa + vigente de la PERSONA (por documento — HU #10932). El baúl se
+        // deprecó del NIT: la firma es única de la persona en el tenant y aplica a todas sus compañías.
         var firma = await _signatureVaultReader
-            .FindActiveByNitAsync(tenantId, nitCompania.Trim(), cancellationToken)
+            .FindActiveByDocumentAsync(tenantId, tipoDocumento.Trim(), documento, cancellationToken)
             .ConfigureAwait(false);
 
-        if (firma is not null
-            && firma.EstaVigente(today)
-            && string.Equals(firma.DocumentNumber, documento, StringComparison.OrdinalIgnoreCase))
+        if (firma is not null && firma.EstaVigente(today))
         {
             return LegalRepresentativeSignatureResolution.FromSignature(firma.Id);
         }

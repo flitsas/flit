@@ -19,5 +19,13 @@ public sealed class ProcedureInstanceAttachment
     public DateTimeOffset UploadedAt { get; set; }
     public Guid? UploadedBy { get; set; }
 
+    /// <summary>
+    /// HU #10936 — referencia a la escritura (admin.company_deeds.id) que entró al registro cuando este
+    /// adjunto es una escritura de sistema (tipos 'escritura'/'escritura_comprador'). Deja trazable cuál
+    /// escritura se usó y permite "congelar" la utilizada tras la entrega del trámite. <c>null</c> en
+    /// cualquier otro adjunto (FUR, certificados, cargas de usuario).
+    /// </summary>
+    public Guid? SourceDeedId { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

@@ -129,6 +129,29 @@ public sealed class FurHandlerTests
             Source = "user",
         });
 
+    private static void WithField(ProcedureInstance instance, string key, string value) =>
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = key,
+            ValueText = value,
+            Source = "user",
+        });
+
+    private sealed class FakeSoatRtmGenerator : ISoatRtmCertificateGenerator
+    {
+        public SoatRtmCertificateData? LastData { get; private set; }
+
+        public GeneratedDocument GenerateSoatRtmCertificate(SoatRtmCertificateData data)
+        {
+            LastData = data;
+            return new GeneratedDocument("certificado_soat_rtm", "certificado_soat_rtm.pdf", "application/pdf",
+                Encoding.UTF8.GetBytes("SOAT_RTM"));
+        }
+    }
+
     private static ProcedureInstanceBiometricValidation Bio(string? parte) =>
         new()
         {
@@ -177,6 +200,96 @@ public sealed class FurHandlerTests
         // FUR + compraventa (traspaso), SIN certificado_identidad.
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur", "compraventa"]);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    [Fact]
+    public async Task Generar_InvalidaConsolidadosPersistidos()
+    {
+        // HU #10860 (ADR-0032): el consolidado embebe el FUR/certificados que se acaban de regenerar,
+        // así que regenerar el FUR debe invalidar ambos consolidados persistidos (maestro + wizard) para
+        // que la próxima petición del consolidado los reconstruya con el FUR fresco.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoMaestroVigente = true;
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoWizardVigente.Should().BeFalse();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generar_Traspaso_ConCompraventaDelUsuario_AutogeneraLaDelSistemaYConservaLaDelUsuario()
+    {
+        // ADR-0035 (supersede ADR-0031): la compraventa del sistema se genera SIEMPRE en traspaso, aunque
+        // el usuario haya cargado la suya; la del usuario (Source=user) se conserva intacta y ambas coexisten.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        var userCompraventaId = Guid.NewGuid();
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = userCompraventaId,
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            Tipo = "compraventa",
+            Filename = "compraventa_usuario.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 3,
+            Sha256 = "sha-user-cv",
+            StoragePath = $"{id:D}/compraventa_user",
+            Source = "user",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        // El sistema SÍ genera su compraventa (ADR-0035).
+        result!.Documents.Select(d => d.Tipo).Should().Contain("compraventa");
+        // Y la del usuario sigue intacta: ambas coexisten como adjuntos del expediente.
+        var compraventas = instance.Attachments.Where(a => a.Tipo == "compraventa").ToList();
+        compraventas.Should().HaveCount(2);
+        compraventas.Should().ContainSingle(a => a.Id == userCompraventaId && a.Source == "user");
+        compraventas.Should().ContainSingle(a => a.Source == "system");
+    }
+
+    [Fact]
+    public async Task Generar_ConVencimientosSoatRtm_GeneraCertificadoCombinado()
+    {
+        // HU #10856: con soat_vencimiento/rtm_vencimiento (RUNT) se emite UN certificado combinado
+        // "Certificado de vigencia SOAT Y RTM" (Source=system, tipo certificado_soat_rtm).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        WithField(instance, "soat_vencimiento", "2027-01-15");
+        WithField(instance, "soat_aseguradora", "La Previsora S.A.");
+        WithField(instance, "rtm_vencimiento", "2027-03-20");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        var fakeSoatRtm = new FakeSoatRtmGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm);
+
+        var (result, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_soat_rtm");
+        // Matrícula → sin bloque de avalúo, sin tabla RTM; entidad SOAT proyectada.
+        fakeSoatRtm.LastData!.Avaluo.Should().BeNull();
+        fakeSoatRtm.LastData!.Rtm.Should().BeNull();
+        fakeSoatRtm.LastData!.Soat.Entidad.Should().Be("La Previsora S.A.");
     }
 
     [Fact]
@@ -491,6 +604,27 @@ public sealed class FurHandlerTests
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_identidad");
     }
 
+    [Fact]
+    public async Task Generar_InvalidaElConsolidadoMaestroCacheado()
+    {
+        // El consolidado maestro (#10701) cachea su copia con ConsolidadoMaestroVigente. Como (re)generar
+        // el FUR SIEMPRE reemplaza el adjunto 'fur', hay que invalidar ese caché para que su próxima vista
+        // lo refunda con el FUR nuevo; si no, seguiría sirviendo el consolidado con el FUR viejo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.ConsolidadoMaestroVigente = true; // consolidado maestro previamente cacheado
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
+    }
+
     // ── HU #10762 · Certificado RNMC ──────────────────────────────────────
 
     private static ProcedureInstanceActor ActorNatural(ProcedureInstance instance, string rol, string nombre, string doc) =>
@@ -798,6 +932,108 @@ public sealed class FurHandlerTests
         _storage.Deleted.Should().NotContain("old/certificado_rnmc");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "certificado_rnmc");
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    // ── HU #10936 · Escritura: persistir la usada + congelar tras entrega ──────────
+
+    /// <summary>Resolutor de escrituras de prueba: cuenta invocaciones y devuelve lo configurado.</summary>
+    private sealed class FakeDeedResolver : IProcedureDeedResolver
+    {
+        public int Calls { get; private set; }
+        public IReadOnlyList<ResolvedDeedDocument> ToReturn { get; set; } = [];
+
+        public Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(ToReturn);
+        }
+    }
+
+    private static ProcedureInstanceAttachment EscrituraSistema(
+        ProcedureInstance instance, Guid attachmentId, Guid deedId, string storagePath) =>
+        new()
+        {
+            Id = attachmentId,
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = "escritura",
+            Filename = "escritura.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 4,
+            Sha256 = "sha-escritura",
+            StoragePath = storagePath,
+            Source = "system",
+            SourceDeedId = deedId,
+            UploadedAt = DateTimeOffset.UtcNow,
+        };
+
+    [Fact]
+    public async Task Generar_TramiteActivo_ResuelveEscritura_YPersisteSourceDeedId()
+    {
+        // HU #10936 — en estados previos a la entrega (borrador) se re-resuelve la escritura y el adjunto
+        // de sistema queda con source_deed_id = deed elegido.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial); // Status = borrador
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var deedId = Guid.NewGuid();
+        var resolver = new FakeDeedResolver
+        {
+            ToReturn = [new ResolvedDeedDocument(
+                "escritura", "escritura.pdf", Encoding.UTF8.GetBytes("%PDF-ESC"), "900123456", "vendedor", deedId)],
+        };
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, deedResolver: resolver);
+
+        var (result, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        resolver.Calls.Should().Be(1); // trámite activo ⇒ se re-resuelve
+        var esc = instance.Attachments.Single(a => a.Tipo == "escritura");
+        esc.Source.Should().Be("system");
+        esc.SourceDeedId.Should().Be(deedId);
+        result!.Documents.Select(d => d.Tipo).Should().Contain("escritura");
+    }
+
+    [Fact]
+    public async Task Generar_TramiteEntregado_CongelaEscritura_NoReResuelveNiReemplaza()
+    {
+        // HU #10936 — una vez ENTREGADO, la escritura utilizada queda fija: no se re-resuelve (el resolutor
+        // no se invoca) ni se reemplaza el adjunto existente (mismo id, mismo source_deed_id, sin borrado).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.Status = TramiteEstado.Entregado;
+        WithOrganismo(instance);
+        var prevAttachmentId = Guid.NewGuid();
+        var usedDeedId = Guid.NewGuid();
+        instance.Attachments.Add(EscrituraSistema(instance, prevAttachmentId, usedDeedId, "old/escritura"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        // El resolutor devolvería OTRA escritura si se le llamara: no debe usarse (congelado).
+        var resolver = new FakeDeedResolver
+        {
+            ToReturn = [new ResolvedDeedDocument(
+                "escritura", "escritura.pdf", Encoding.UTF8.GetBytes("%PDF-NUEVA"), "900123456", "vendedor", Guid.NewGuid())],
+        };
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, deedResolver: resolver);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        resolver.Calls.Should().Be(0); // congelado ⇒ no se re-resuelve
+        var esc = instance.Attachments.Single(a => a.Tipo == "escritura");
+        esc.Id.Should().Be(prevAttachmentId);       // el adjunto previo se conserva
+        esc.SourceDeedId.Should().Be(usedDeedId);   // con la escritura original
+        _storage.Deleted.Should().NotContain("old/escritura"); // no se trató como huérfano
     }
 }
 

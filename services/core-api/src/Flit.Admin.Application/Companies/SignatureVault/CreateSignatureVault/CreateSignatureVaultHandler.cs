@@ -48,7 +48,7 @@ public sealed class CreateSignatureVaultHandler
                     command.TenantId,
                     command.DocumentType!.Trim(),
                     command.DocumentNumber!.Trim(),
-                    command.NitEmpresa!.Trim(),
+                    command.NitEmpresa?.Trim(),
                     command.FullName!.Trim(),
                     SignatureHash: stored.Sha256,
                     StoragePath: stored.StoragePath,
@@ -57,7 +57,8 @@ public sealed class CreateSignatureVaultHandler
                     command.VigenciaHasta,
                     command.MandateSignerId,
                     command.CreatedBy,
-                    command.CorrelationId),
+                    command.CorrelationId,
+                    CodigoHash: command.CodigoHash),
                 cancellationToken).ConfigureAwait(false);
 
             return CreateSignatureVaultResult.Success(id);
@@ -83,7 +84,7 @@ public sealed class CreateSignatureVaultHandler
 
         Require(errors, "documentType", command.DocumentType);
         Require(errors, "documentNumber", command.DocumentNumber);
-        Require(errors, "nitEmpresa", command.NitEmpresa);
+        // nitEmpresa DEPRECADO (HU #10930, Feature #10929): ya no es obligatorio.
         Require(errors, "fullName", command.FullName);
 
         if (command.VigenciaHasta < command.VigenciaDesde)

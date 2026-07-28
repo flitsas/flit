@@ -20,16 +20,14 @@ import type {
 } from "@/lib/api/types";
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
-// enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + matriz
-// OT y restricciones de consulta por OT (slots, endpoint propio).
+// enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + tabla
+// consolidada de Organismos de Tránsito (grant, bloqueos y restricciones de consulta
+// scoped por OT desde un menú de acciones — endpoint propio, fuera del PUT atómico).
 export interface ConfiguracionEmpresaTabProps {
   form: SettingsForm;
   onChange: (patch: Partial<SettingsForm>) => void;
+  /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
-  /** HU #10761 — refina la matriz OT: qué consultas se hacen en cada organismo. */
-  otRestrictionsSlot?: ReactNode;
-  /** FEATURE 05 — qué criterios del preflight bloquean vs. solo advierten por organismo. */
-  otBlockingSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
 }
 
@@ -37,8 +35,6 @@ export function ConfiguracionEmpresaTab({
   form,
   onChange,
   otSlot,
-  otRestrictionsSlot,
-  otBlockingSlot,
   fieldErrors,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
@@ -208,20 +204,6 @@ export function ConfiguracionEmpresaTab({
       {otSlot && (
         <div className="rounded-2xl border p-4">
           {otSlot}
-        </div>
-      )}
-
-      {/* Va después de la matriz OT: solo tiene sentido sobre los organismos ya habilitados. */}
-      {otRestrictionsSlot && (
-        <div className="rounded-2xl border p-4">
-          {otRestrictionsSlot}
-        </div>
-      )}
-
-      {/* FEATURE 05 — criterios de bloqueo por OT: también sobre los organismos habilitados. */}
-      {otBlockingSlot && (
-        <div className="rounded-2xl border p-4">
-          {otBlockingSlot}
         </div>
       )}
     </div>

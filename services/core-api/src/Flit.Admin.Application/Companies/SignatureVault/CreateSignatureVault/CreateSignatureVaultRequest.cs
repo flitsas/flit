@@ -15,4 +15,5 @@ public sealed record CreateSignatureVaultRequest(
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
     string? ArtefactoFirmaBase64,
-    Guid? MandateSignerId);
+    Guid? MandateSignerId,
+    string? CodigoHash = null);

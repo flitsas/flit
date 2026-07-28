@@ -23,6 +23,9 @@ internal static class MatriculaConsolidadoOrdering
         "certificado_rues",
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
+        // HU #10926 — escritura de la compañía (NIT) del actor, tras los certificados generados.
+        "escritura",
+        "escritura_comprador",
         "factura",
         "aduana",
         "impronta",

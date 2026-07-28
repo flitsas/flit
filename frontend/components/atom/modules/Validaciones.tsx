@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   AlertTriangle,
@@ -8,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Copy,
   ExternalLink,
   RotateCcw,
   ScanFace,
@@ -349,7 +351,21 @@ export function Validaciones() {
       <ModuleTitle
         title="Validaciones de Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
-        right={hasLoadedOnce ? <LiveIndicator at={lastUpdatedAt} /> : undefined}
+        right={
+          <div className="flex items-center gap-3">
+            {/* HU #10868 — enlace a pantalla de prevalidación standalone */}
+            <Link
+              href="/tramites/prevalidaciones"
+              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+              style={{ color: '#557EFF' }}
+              aria-label="Ir a prevalidaciones de identidad"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              Prevalidaciones
+            </Link>
+            {hasLoadedOnce ? <LiveIndicator at={lastUpdatedAt} /> : undefined}
+          </div>
+        }
       />
 
       <StatsCards stats={stats} loading={initialLoading} />
@@ -723,7 +739,7 @@ function ValidacionesSkeleton() {
  * permite truncar el contenido dentro de cada celda del grid.
  */
 const GRID_COLS =
-  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr)';
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr)';
 
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
@@ -748,6 +764,7 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
           <div>Registro</div>
           <div>Aprobación</div>
           <div>Vigencia</div>
+          <div>Enlace</div>
         </div>
         <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
           {rows.map((r) => (
@@ -761,12 +778,17 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
 
 function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
   const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
-  const modalidad = MODALIDAD_LABEL[r.modalidad] ?? r.modalidad;
+  // HU #10869 — prevalidaciones standalone tienen modalidad null: mostrar "Prevalidación"
+  const modalidad = r.modalidad
+    ? (MODALIDAD_LABEL[r.modalidad] ?? r.modalidad)
+    : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';
   const vigencia = vigenciaBadge(r.daysRemaining);
+  // HU #10869 — referenceNumber null → mostrar "—" en el aria-label
+  const refLabel = r.referenceNumber ?? '—';
   const ariaLabel =
-    `Validación de ${r.name}${parte}, trámite ${r.referenceNumber} (${modalidad}), ` +
+    `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
     `proveedor ${provider}, estado ${meta.label}` +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.status === 'rechazado' && r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '') +
@@ -774,67 +796,157 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
     (r.validatedAt ? `, aprobada ${formatFechaCorta(r.validatedAt)}` : '') +
     (r.validUntil ? `, vigente hasta ${formatFechaCorta(r.validUntil)}` : '') +
     (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
-    `. Abrir trámite.`;
+    (r.instanceId ? '. Abrir trámite.' : '. Prevalidación standalone.');
+
+  // HU #10869 — si no hay instanceId (standalone), no envolver en <a> para no romper navegación
+  const rowContent = (
+    <div
+      className="grid gap-2 items-center px-4 py-3 text-xs"
+      style={{ gridTemplateColumns: GRID_COLS }}
+    >
+      <div className="min-w-0">
+        {/* HU #10869 — referenceNumber null → badge "Prevalidación" en lugar del número */}
+        {r.referenceNumber ? (
+          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
+            <span className="truncate">{r.referenceNumber}</span>
+            {r.instanceId && <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />}
+          </span>
+        ) : (
+          <span
+            className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+          >
+            Prevalidación
+          </span>
+        )}
+        {/* HU #10869 — modalidad null → mostrar "—" */}
+        <span className="block text-[10px] opacity-60">{r.modalidad ? modalidad : '—'}</span>
+      </div>
+      <div className="min-w-0">
+        <span className="block font-medium truncate">{r.name}</span>
+        <span className="block text-[10px] opacity-60 truncate">
+          {provider}
+          {r.partyRole ? ` · ${r.partyRole}` : ''}
+        </span>
+      </div>
+      <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
+        {maskDoc(r.documentType, r.documentNumber)}
+      </div>
+      <div className="min-w-0">
+        <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
+        {r.status === 'rechazado' && r.rejectionReason && (
+          <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
+            {r.rejectionReason}
+          </span>
+        )}
+      </div>
+      <div className="font-semibold">{r.score ?? '—'}</div>
+      <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
+      <div className="min-w-0 text-[10px] leading-tight opacity-80">
+        {r.validatedAt ? formatFechaCorta(r.validatedAt) : '—'}
+      </div>
+      <div className="min-w-0 text-[10px] leading-tight">
+        {r.validUntil ? (
+          <>
+            <span className="block opacity-80">{formatFechaCorta(r.validUntil)}</span>
+            {vigencia && (
+              <span
+                className="mt-0.5 inline-block rounded-full px-1.5 py-px font-semibold"
+                style={{ background: vigencia.bg, color: vigencia.color }}
+              >
+                {vigencia.label}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="opacity-80">—</span>
+        )}
+      </div>
+      <div className="min-w-0 text-[10px] opacity-80" aria-hidden="true">
+        {r.captureUrl ? '' : '—'}
+      </div>
+    </div>
+  );
 
   return (
-    <li>
-      <a
-        href={`/tramites/${r.instanceId}`}
-        aria-label={ariaLabel}
-        className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ gridTemplateColumns: GRID_COLS }}
-      >
-        <div className="min-w-0">
-          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
-            <span className="truncate">{r.referenceNumber || '—'}</span>
-            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-          </span>
-          <span className="block text-[10px] opacity-60">{modalidad}</span>
+    <li className="relative">
+      {r.instanceId ? (
+        <a
+          href={`/tramites/${r.instanceId}`}
+          aria-label={ariaLabel}
+          className="block rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          {rowContent}
+        </a>
+      ) : (
+        <div
+          className="rounded-xl bg-white dark:bg-[#0B0F14] border"
+          aria-label={ariaLabel}
+          role="listitem"
+        >
+          {rowContent}
         </div>
-        <div className="min-w-0">
-          <span className="block font-medium truncate">{r.name}</span>
-          <span className="block text-[10px] opacity-60 truncate">
-            {provider}
-            {r.partyRole ? ` · ${r.partyRole}` : ''}
-          </span>
-        </div>
-        <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
-          {maskDoc(r.documentType, r.documentNumber)}
-        </div>
-        <div className="min-w-0">
-          <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
-          {r.status === 'rechazado' && r.rejectionReason && (
-            <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
-              {r.rejectionReason}
-            </span>
-          )}
-        </div>
-        <div className="font-semibold">{r.score ?? '—'}</div>
-        {/* Registro: fecha + hora del registro de la validación. */}
-        <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
-        {/* Aprobación: solo la fecha (o — si aún no se aprobó). */}
-        <div className="min-w-0 text-[10px] leading-tight opacity-80">
-          {r.validatedAt ? formatFechaCorta(r.validatedAt) : '—'}
-        </div>
-        {/* Vigencia: fin de vigencia + badge de días restantes (verde/ámbar/rojo). */}
-        <div className="min-w-0 text-[10px] leading-tight">
-          {r.validUntil ? (
-            <>
-              <span className="block opacity-80">{formatFechaCorta(r.validUntil)}</span>
-              {vigencia && (
-                <span
-                  className="mt-0.5 inline-block rounded-full px-1.5 py-px font-semibold"
-                  style={{ background: vigencia.bg, color: vigencia.color }}
-                >
-                  {vigencia.label}
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="opacity-80">—</span>
-          )}
-        </div>
-      </a>
+      )}
+      {r.captureUrl && (
+        <CopiarEnlaceValidacion
+          captureUrl={r.captureUrl}
+          expiresAt={r.linkExpiresAt}
+          persona={r.name}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * CF-05 (HU #10886, AC2) — enlace de captura vigente de una validación, para reenviarlo por otros
+ * medios (WhatsApp, llamada, etc.) cuando el correo no llega. Se posiciona sobre la última columna de
+ * la fila y vive FUERA del enlace al trámite, para no anidar controles interactivos.
+ */
+function CopiarEnlaceValidacion({
+  captureUrl,
+  expiresAt,
+  persona,
+}: {
+  captureUrl: string;
+  expiresAt: string | null;
+  persona: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(captureUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Sin permiso de portapapeles (o contexto no seguro): el enlace sigue visible en el title
+      // para copiarlo a mano, así que no se interrumpe al operador con un error.
+    }
+  };
+
+  return (
+    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-right">
+      <button
+        type="button"
+        onClick={() => void copiar()}
+        title={captureUrl}
+        aria-label={`Copiar enlace de validación de ${persona}`}
+        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: '#557EFF' }}
+      >
+        <Copy className="h-3 w-3" aria-hidden="true" />
+        {copied ? 'Copiado' : 'Copiar enlace'}
+      </button>
+      {expiresAt && (
+        <span className="mt-0.5 block text-[10px] opacity-60">
+          Vence {formatFechaCorta(expiresAt)}
+        </span>
+      )}
+      {/* Confirmación anunciada por lector de pantalla sin mover el foco (WCAG 2.1 AA). */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? 'Enlace copiado al portapapeles.' : ''}
+      </span>
+    </div>
   );
 }

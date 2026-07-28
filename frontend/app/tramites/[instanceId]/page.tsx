@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 import { EstadoTimelinePanel } from '@/components/operacion/EstadoTimeline';
 import { EstadoAcciones } from '@/components/operacion/EstadoAcciones';
+import { IdentityStatusPanel } from '@/components/operacion/IdentityStatusPanel';
 import { PrendaModificar } from '@/components/operacion/PrendaModificar';
 import { setActiveTramitesTenant } from '@/lib/api/tramites-client';
 
@@ -41,6 +42,12 @@ export default function TramiteInstancePage() {
         instanceId={params.instanceId}
         onChanged={() => setRefreshKey((k) => k + 1)}
       />
+      {/* HU #10875 (CF-02) — seguimiento consolidado de identidad de los actores + alertas por pull.
+          Vive en el detalle del trámite (no dentro del flujo de radicado) como panel de seguimiento,
+          junto al estado y el historial. Autosuficiente: resuelve la modalidad solo. */}
+      <div className="mx-auto mt-4 max-w-240 px-4">
+        <IdentityStatusPanel key={`identidad-${refreshKey}`} instanceId={params.instanceId} />
+      </div>
       {/* R17 (HU #10600) — modificar la elección de prenda post-registro (solo si hay prenda vigente). */}
       <PrendaModificar key={`prenda-${refreshKey}`} instanceId={params.instanceId} />
       {/* HU-2 (N03, RF05) — historial de transiciones bajo el wizard (colapsado por defecto). */}

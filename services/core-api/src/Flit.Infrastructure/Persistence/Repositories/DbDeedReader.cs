@@ -132,6 +132,7 @@ internal sealed class DbDeedReader : IDeedReader
                 VigenciaDesde = d.VigenciaDesde,
                 VigenciaHasta = d.VigenciaHasta,
                 IsActive = d.IsActive,
+                RepresentativeId = d.RepresentativeId,
                 RepresentedCompanyIds = companyIds ?? [],
                 CreatedAt = d.CreatedAt,
                 UpdatedAt = d.UpdatedAt,

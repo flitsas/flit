@@ -27,6 +27,10 @@ internal static class TraspasoConsolidadoOrdering
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
         "compraventa",
+        // HU #10926 — escritura de la compañía (NIT) de cada actor, tras la compraventa: vendedor/
+        // propietario ('escritura') y comprador ('escritura_comprador').
+        "escritura",
+        "escritura_comprador",
         "factura",
         "aduana",
         "impronta",

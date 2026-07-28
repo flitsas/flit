@@ -11,11 +11,11 @@ import type {
 } from "@/lib/api/admin-signature-vault";
 import { SignatureCapture } from "./SignatureCapture";
 
-// Tipos de documento del apoderado — mismos que en el resto de la app (ActorsForm).
+// Tipos de documento de la persona — la firma del baúl es personal (HU #10930), por eso
+// NIT no aparece como opción. Coherente con el resto de la app (ActorsForm).
 const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "CC", label: "Cédula de ciudadanía (CC)" },
   { value: "CE", label: "Cédula de extranjería (CE)" },
-  { value: "NIT", label: "NIT" },
   { value: "PAS", label: "Pasaporte (PAS)" },
   { value: "TI", label: "Tarjeta de identidad (TI)" },
 ];
@@ -31,8 +31,8 @@ export interface SignatureVaultFormPanelProps {
 interface FormState {
   documentType: string;
   documentNumber: string;
-  nitEmpresa: string;
   fullName: string;
+  codigoHash: string;
   vigenciaDesde: string;
   vigenciaHasta: string;
 }
@@ -40,8 +40,8 @@ interface FormState {
 const EMPTY: FormState = {
   documentType: "CC",
   documentNumber: "",
-  nitEmpresa: "",
   fullName: "",
+  codigoHash: "",
   vigenciaDesde: "",
   vigenciaHasta: "",
 };
@@ -86,7 +86,6 @@ export function SignatureVaultFormPanel({
   const isValid =
     form.documentType.trim() !== "" &&
     form.documentNumber.trim() !== "" &&
-    form.nitEmpresa.trim() !== "" &&
     form.fullName.trim() !== "" &&
     form.vigenciaDesde !== "" &&
     form.vigenciaHasta !== "" &&
@@ -100,11 +99,12 @@ export function SignatureVaultFormPanel({
     setBanner(null);
     setFieldErrors({});
     try {
+      const codigoHash = form.codigoHash.trim();
       const saved = await onSubmit({
         documentType: form.documentType,
         documentNumber: form.documentNumber.trim(),
-        nitEmpresa: form.nitEmpresa.trim(),
         fullName: form.fullName.trim(),
+        codigoHash: codigoHash === "" ? undefined : codigoHash,
         vigenciaDesde: form.vigenciaDesde,
         vigenciaHasta: form.vigenciaHasta,
         artefactoFirmaBase64: artefacto,
@@ -119,7 +119,7 @@ export function SignatureVaultFormPanel({
           const code = (e as { code?: string }).code;
           if (code === "firma_activa_existente") {
             friendly =
-              "Ya existe una firma activa para este apoderado en esta empresa. Anúlala antes de registrar una nueva.";
+              "Ya existe una firma activa para esta persona. Anúlala antes de registrar una nueva.";
           }
           if (e.field) {
             mapped[e.field] = e.message;
@@ -208,21 +208,6 @@ export function SignatureVaultFormPanel({
         </div>
 
         <div>
-          <label htmlFor="sv-nit" className="mb-1 block text-xs font-semibold">
-            NIT de la empresa
-          </label>
-          <input
-            id="sv-nit"
-            value={form.nitEmpresa}
-            onChange={(e) => patch({ nitEmpresa: e.target.value })}
-            className={OT_INPUT_CLS}
-            style={errStyle("nitEmpresa")}
-            placeholder="NIT de la empresa mandante"
-          />
-          <FieldError message={fieldErrors.nitEmpresa} />
-        </div>
-
-        <div>
           <label htmlFor="sv-fullname" className="mb-1 block text-xs font-semibold">
             Nombre del apoderado
           </label>
@@ -235,6 +220,21 @@ export function SignatureVaultFormPanel({
             placeholder="Nombre completo"
           />
           <FieldError message={fieldErrors.fullName} />
+        </div>
+
+        <div>
+          <label htmlFor="sv-codigohash" className="mb-1 block text-xs font-semibold">
+            Código hash <span className="font-normal opacity-60">(opcional)</span>
+          </label>
+          <input
+            id="sv-codigohash"
+            value={form.codigoHash}
+            onChange={(e) => patch({ codigoHash: e.target.value })}
+            className={OT_INPUT_CLS}
+            style={errStyle("codigoHash")}
+            placeholder="Código alfanumérico"
+          />
+          <FieldError message={fieldErrors.codigoHash} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

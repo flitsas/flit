@@ -44,6 +44,9 @@ const ROW_APROBADA: TenantBiometricValidation = {
   validatedAt: '2026-06-20T15:40:00Z',
   validUntil: '2026-07-20T00:00:00-05:00',
   daysRemaining: 20,
+  // Aprobada: no hay enlace vigente que reenviar (el backend lo devuelve null en estados terminales).
+  captureUrl: null,
+  linkExpiresAt: '2026-06-21T15:30:00Z',
 };
 
 const ROW_RECHAZADA: TenantBiometricValidation = {
@@ -64,6 +67,31 @@ const ROW_RECHAZADA: TenantBiometricValidation = {
   validatedAt: null,
   validUntil: null,
   daysRemaining: null,
+  captureUrl: null,
+  linkExpiresAt: null,
+};
+
+/** CF-05 (HU #10886, AC2) — validación EN CURSO: es la única que trae enlace vigente. */
+const ROW_EN_PROCESO: TenantBiometricValidation = {
+  id: 'v-3',
+  instanceId: 'inst-3',
+  referenceNumber: 'TRM-2026-000003',
+  modalidad: 'traspaso',
+  partyRole: 'vendedor',
+  name: 'Carlos Vendedor',
+  documentType: 'CC',
+  documentNumber: '5566',
+  status: 'en_proceso',
+  score: null,
+  provider: 'kyverum',
+  expired: false,
+  rejectionReason: null,
+  createdAt: '2026-06-22T09:00:00Z',
+  validatedAt: null,
+  validUntil: null,
+  daysRemaining: null,
+  captureUrl: 'https://capture.kyverum.co/kyv_123',
+  linkExpiresAt: '2026-06-23T09:00:00Z',
 };
 
 const FULL: TenantBiometricValidationsResponse = {
@@ -541,5 +569,65 @@ describe('Validaciones — paginación', () => {
         expect.objectContaining({ page: 1, pageSize: 50 }),
       ),
     );
+  });
+
+  // CF-05 (HU #10886, AC2) — el módulo de identidad muestra el enlace vigente para reenviarlo por
+  // otros medios, con su estado y su expiración.
+  describe('enlace de validación vigente', () => {
+    it('ofrece "Copiar enlace" con la expiración en las validaciones en curso', async () => {
+      mocks.listTenantBiometricValidations.mockResolvedValue({
+        ...FULL,
+        validations: [ROW_EN_PROCESO],
+        total: 1,
+      });
+
+      render(<Validaciones />);
+      await screen.findByText('TRM-2026-000003');
+
+      const boton = screen.getByRole('button', {
+        name: /Copiar enlace de validación de Carlos Vendedor/i,
+      });
+      expect(boton).toHaveAttribute('title', 'https://capture.kyverum.co/kyv_123');
+      expect(screen.getByText(/^Vence /)).toBeInTheDocument();
+      // El estado sigue mostrándose (la fila y el KPI comparten la etiqueta).
+      expect(screen.getAllByText('En proceso').length).toBeGreaterThan(0);
+    });
+
+    it('copia el enlace al portapapeles y confirma', async () => {
+      const user = userEvent.setup();
+      // Después de `setup()`: userEvent instala su propio stub de portapapeles y pisaría este.
+      // jsdom no lo implementa y `navigator.clipboard` es de solo lectura → defineProperty.
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+      mocks.listTenantBiometricValidations.mockResolvedValue({
+        ...FULL,
+        validations: [ROW_EN_PROCESO],
+        total: 1,
+      });
+
+      render(<Validaciones />);
+      await screen.findByText('TRM-2026-000003');
+
+      await user.click(screen.getByRole('button', { name: /Copiar enlace de validación/i }));
+
+      expect(writeText).toHaveBeenCalledWith('https://capture.kyverum.co/kyv_123');
+      expect(await screen.findByText('Copiado')).toBeInTheDocument();
+    });
+
+    it('no ofrece enlace cuando la validación ya está en estado terminal', async () => {
+      mocks.listTenantBiometricValidations.mockResolvedValue({
+        ...FULL,
+        validations: [ROW_APROBADA],
+        total: 1,
+      });
+
+      render(<Validaciones />);
+      await screen.findByText('TRM-2026-000001');
+
+      expect(screen.queryByRole('button', { name: /Copiar enlace/i })).not.toBeInTheDocument();
+    });
   });
 });

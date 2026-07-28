@@ -215,8 +215,29 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             source,
             cancellationToken);
 
-    // La decisión del OT (aprobar/rechazar) aplica SIEMPRE desde 'entregado' (máquina == develop). La ruta
-    // de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno, HU #10785).
+    // HU #10871 (AC1) — observación subsanable: mismo mecanismo de TransitionAsync que aprobar/rechazar,
+    // pero el destino es 'subsanacion' y el metadata lleva el checklist HÍBRIDO (motivo + items).
+    public Task<OtClientProcedure?> ObserveAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        IReadOnlyList<OtProcedureObservationItem> items,
+        Guid? observedBy,
+        string source,
+        CancellationToken cancellationToken = default) =>
+        TransitionAsync(
+            otTenantId,
+            procedureInstanceId,
+            TramiteEstado.Subsanacion,
+            observedBy,
+            reason,
+            source,
+            cancellationToken,
+            items: items);
+
+    // La decisión del OT (aprobar/rechazar/observar) aplica SIEMPRE desde 'entregado' (máquina == develop).
+    // La ruta de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno,
+    // HU #10785).
     private async Task<OtClientProcedure?> TransitionAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -225,7 +246,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string? reason,
         string source,
         CancellationToken cancellationToken,
-        Guid? mandateSignerId = null)
+        Guid? mandateSignerId = null,
+        IReadOnlyList<OtProcedureObservationItem>? items = null)
     {
         var accessible = await ExecuteOtScopedAsync(
             otTenantId,
@@ -344,9 +366,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     entity.PlateFlowStatus = null;
                 }
 
-                // Feature #10701 — la decisión del OT (aprobar/rechazar) invalida el consolidado
-                // maestro persistido: el próximo "Ver consolidado" lo regenerará antes de mostrarlo.
-                entity.ConsolidadoMaestroVigente = false;
+                // Feature #10701 / HU #10860 — la decisión del OT (aprobar/rechazar) invalida los
+                // consolidados persistidos (maestro y wizard): la próxima generación los regenerará.
+                entity.InvalidarConsolidados();
 
                 // RNF01 — la decisión del OT también se publica hacia webhooks en la MISMA unidad
                 // de trabajo (antes este flujo no notificaba; solo el submit lo hacía).
@@ -361,6 +383,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         now),
                     cancellationToken).ConfigureAwait(false);
 
+                // HU #10872 (AC1) — snapshot de field_values AL ENTRAR a subsanación: baseline del diff
+                // que la re-radicación (TramiteLifecycleService) computará para re-evaluar solo los
+                // gates de lo corregido. Solo se consulta cuando el destino ES subsanación.
+                IReadOnlyDictionary<string, string?>? fieldSnapshot = null;
+                if (targetStatus == TramiteEstado.Subsanacion)
+                {
+                    var fieldValues = await _context.ProcedureInstanceFieldValues
+                        .AsNoTracking()
+                        .Where(f => f.ProcedureInstanceId == procedureInstanceId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    fieldSnapshot = Flit.Tramites.Domain.Tramites.Services.FieldValueSnapshot.Capture(fieldValues);
+                }
+
                 // El historial se escribe aquí (no vía ITramiteTransitionRecorder) para conservar
                 // el metadata cross-tenant (ot_tenant_id/source) dentro de la transacción RLS del
                 // tenant cliente; la unificación con el recorder queda para la integración N 03.
@@ -374,12 +410,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ChangedAt = now,
                     ChangedBy = resolvedChangedBy,
                     Reason = reason,
-                    Metadata = JsonSerializer.Serialize(new
-                    {
-                        ot_tenant_id = otTenantId,
-                        approver_tenant_id = otTenantId,
-                        source,
-                    }),
+                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, targetStatus, reason, items, fieldSnapshot),
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -389,6 +420,44 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return enriched[0];
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #10871 (AC1) — shape del metadata de <c>procedure_instance_status_history</c>. Para
+    /// <c>subsanacion</c> agrega el checklist HÍBRIDO (<c>motivo</c> + <c>items</c>) MÁS el snapshot de
+    /// field_values (HU #10872 AC1, <paramref name="fieldSnapshot"/>) sobre el mismo shape de auditoría
+    /// (<c>ot_tenant_id</c>/<c>approver_tenant_id</c>/<c>source</c>) que ya usaban aprobar/rechazar;
+    /// para cualquier otro destino el shape queda IGUAL al de antes de esta HU (sin regresión de
+    /// contrato). Las claves <c>motivo</c>/<c>items</c>/<c>fieldSnapshot</c> son las que
+    /// <c>SubsanacionObservation.FromJson</c> deserializa.
+    /// </summary>
+    private static string BuildStatusHistoryMetadata(
+        Guid otTenantId,
+        string source,
+        string targetStatus,
+        string? reason,
+        IReadOnlyList<OtProcedureObservationItem>? items,
+        IReadOnlyDictionary<string, string?>? fieldSnapshot = null)
+    {
+        if (targetStatus != TramiteEstado.Subsanacion)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                ot_tenant_id = otTenantId,
+                approver_tenant_id = otTenantId,
+                source,
+            });
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            ot_tenant_id = otTenantId,
+            approver_tenant_id = otTenantId,
+            source,
+            motivo = reason,
+            items = (items ?? []).Select(i => new { campo = i.Campo, detalle = i.Detalle }),
+            fieldSnapshot,
+        });
     }
 
     // HU #10654 (Feature #10587 / HU #10785) — el OT asigna una placa a un trámite de la ruta de placa en

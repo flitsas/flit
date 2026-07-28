@@ -72,6 +72,53 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToList();
     }
 
+    // HU #10876 (CF-01) — bloqueo de duplicidad EN PROCESO para la familia Traspaso: busca otros
+    // trámites de traspaso del tenant con la misma placa. Simétrico a FindTramitesByVinAsync (misma
+    // convención de comparación trim+upper contra field_values, mismo patrón de subconsulta), pero
+    // sobre ModalidadEntrada == Traspaso y FieldKey == "plate". El VIN (si existe) se proyecta solo
+    // como dato informativo del registro previo, no participa en la comparación.
+    public async Task<IReadOnlyList<PlacaTramiteExistente>> FindTramitesByPlacaAsync(
+        Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(placaNormalizada))
+            return [];
+
+        var rows = await db.ProcedureInstances
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId
+                && i.DeletedAt == null
+                && i.Id != excludeInstanceId
+                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.Traspaso
+                && i.FieldValues.Any(f => f.FieldKey == "plate"
+                    && f.ValueText != null
+                    && f.ValueText.Trim().ToUpper() == placaNormalizada))
+            .Select(i => new
+            {
+                i.Id,
+                i.Status,
+                i.CompletedAt,
+                i.SubmittedAt,
+                i.CreatedAt,
+                Vin = i.FieldValues
+                    .Where(f => f.FieldKey == "vin")
+                    .Select(f => f.ValueText)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+
+        // Mismo orden por recencia desc que FindTramitesByVinAsync (determinismo, aunque
+        // DuplicateActiveProcedurePolicy solo necesita el PRIMER "en proceso", no el más reciente).
+        return rows
+            .OrderByDescending(r => r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt)
+            .Select(r => new PlacaTramiteExistente(
+                r.Id,
+                r.Status,
+                Placa: placaNormalizada,
+                Vin: r.Vin,
+                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt))
+            .ToList();
+    }
+
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.FieldValues)
@@ -236,8 +283,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.DocumentNumber == documento
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+                // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .OrderByDescending(v => v.ValidatedAt)
             .Take(10)
             .ToListAsync(ct);
@@ -264,8 +312,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.DocumentNumber != null
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+                // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
         foreach (var v in candidates)
@@ -313,9 +362,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Include(v => v.ProcedureInstance)
+            // HU #10867 — incluir prevalidaciones standalone (ProcedureInstanceId IS NULL) + las ligadas a instancias no eliminadas.
             .Where(v => v.TenantId == tenantId
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null);
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
 
     /// <summary>Carácter de escape para los patrones LIKE/ILIKE (saneo de búsqueda).</summary>
     private const string LikeEscapeChar = "\\";
@@ -449,6 +499,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.ValidatedAt > corteVigente && v.ValidatedAt <= corteVenceEn);
         }
 
+        // HU #10867 — filtro standalone: true = solo prevalidaciones sin trámite; false = solo ligadas; null = todas.
+        if (filter.Standalone is { } standalone)
+        {
+            query = standalone
+                ? query.Where(v => v.ProcedureInstanceId == null)
+                : query.Where(v => v.ProcedureInstanceId != null);
+        }
+
         // NOTA: el filtro `motivoRechazo` NO se aplica aquí. Detalle/ProviderPayload son columnas `jsonb`
         // y PostgreSQL no soporta el operador ILIKE sobre jsonb (falla con 42883 like_escape(jsonb,...)).
         // Se resuelve en memoria en el handler sobre el motivo SANITIZADO (ExtractMotivoRechazo), que además
@@ -463,6 +521,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .FirstOrDefaultAsync(x => x.Id == id, ct);
+
+    // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).
+    public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default) =>
+        db.ProcedureInstanceBiometricValidations
+            .Include(x => x.Person)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
 
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
@@ -660,4 +725,38 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct) =>
         db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
+
+    // HU #10872 (AC1) — field values lean para callers que transicionan a subsanación sin cargar el
+    // grafo completo del wizard (p. ej. ConsultarEstadoQuipuxHandler).
+    public async Task<IReadOnlyList<ProcedureInstanceFieldValue>> GetFieldValuesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct) =>
+        await db.ProcedureInstanceFieldValues.AsNoTracking()
+            .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId)
+            .ToListAsync(ct);
+
+    // HU #10872 (AC1) — snapshot baseline (metadata del hito MÁS RECIENTE a 'subsanacion') para el
+    // diff que TramiteLifecycleService computa al re-radicar. Mismo patrón de orden que
+    // GetStatusHistoryPageAsync (changed_at desc, desempate por Id).
+    public Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstanceStatusHistories.AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == instanceId
+                && h.TenantId == tenantId
+                && h.ToStatus == TramiteEstado.Subsanacion)
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .Select(h => h.Metadata)
+            .FirstOrDefaultAsync(ct);
+
+    // HU #10955 (AC2/AC3/AC5) — lookup de datos de contacto ya conocidos de una persona, a través de
+    // TODOS sus trámites (no eliminados) del tenant. Tenant explícito en el WHERE (AC5); el actor de
+    // la instancia más reciente por CreatedAt (mismo criterio de "recencia" que FindTramitesByVinAsync).
+    public Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
+        Guid tenantId, string documentType, string documentNumber, CancellationToken ct) =>
+        db.ProcedureInstanceActors.AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && a.DocumentType == documentType
+                && a.DocumentNumber == documentNumber
+                && a.ProcedureInstance!.DeletedAt == null)
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(ct);
 }

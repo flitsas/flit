@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
-import { PROCEDURE_TYPES } from "@/lib/constants/procedure-types";
 import type {
+  AssignableProcedureType,
+  LegalRepresentativeCompanyInput,
   LegalRepresentativeInput,
   LegalRepresentativeItem,
   LegalRepresentativeSaved,
@@ -24,19 +25,27 @@ export interface LegalRepresentativesFormPanelProps {
   open: boolean;
   /** Representante a editar; `null` = alta. */
   editing: LegalRepresentativeItem | null;
+  /** Catálogo de tipos de trámite asignables (activos + publicados) cargado del backend. */
+  procedureTypes: AssignableProcedureType[];
   onClose: () => void;
   onSubmit: (input: LegalRepresentativeInput) => Promise<LegalRepresentativeSaved>;
   onSaved: (saved: LegalRepresentativeSaved) => void;
   onError: (message: string) => void;
 }
 
+// Una fila de empresa dentro del formulario (HU #10934): el representante se crea una vez y se le
+// agregan empresas. La primera fila es la compañía primaria.
+interface CompanyRow {
+  nit: string;
+  name: string;
+  email: string;
+  address: string;
+  city: string;
+  phone: string;
+}
+
 interface FormState {
-  companyNit: string;
-  companyName: string;
-  companyEmail: string;
-  companyAddress: string;
-  companyCity: string;
-  companyPhone: string;
+  companies: CompanyRow[];
   documentType: string;
   documentNumber: string;
   firstLastName: string;
@@ -49,13 +58,10 @@ interface FormState {
   procedureTypeIds: string[];
 }
 
+const EMPTY_COMPANY: CompanyRow = { nit: "", name: "", email: "", address: "", city: "", phone: "" };
+
 const EMPTY: FormState = {
-  companyNit: "",
-  companyName: "",
-  companyEmail: "",
-  companyAddress: "",
-  companyCity: "",
-  companyPhone: "",
+  companies: [{ ...EMPTY_COMPANY }],
   documentType: "CC",
   documentNumber: "",
   firstLastName: "",
@@ -68,13 +74,16 @@ const EMPTY: FormState = {
   procedureTypeIds: [],
 };
 
-// La respuesta del backend no proyecta el correo/dirección/ciudad/teléfono de la compañía (solo NIT
-// y nombre); al editar se precargan los datos disponibles y el resto queda editable en blanco.
+// La respuesta del backend proyecta las compañías del representante (NIT + razón social); el contacto
+// de cada compañía no se proyecta, así que al editar se precargan NIT y nombre y el resto queda en
+// blanco. Si por compatibilidad el detalle no trae `companies`, cae a la compañía primaria denormalizada.
 function fromItem(item: LegalRepresentativeItem): FormState {
+  const companies: CompanyRow[] =
+    item.companies && item.companies.length > 0
+      ? item.companies.map((c) => ({ ...EMPTY_COMPANY, nit: c.nit, name: c.name }))
+      : [{ ...EMPTY_COMPANY, nit: item.companyDocumentNumber, name: item.companyName }];
   return {
-    ...EMPTY,
-    companyNit: item.companyDocumentNumber,
-    companyName: item.companyName,
+    companies,
     documentType: item.documentType || "CC",
     documentNumber: item.documentNumber,
     firstLastName: item.firstLastName,
@@ -97,6 +106,7 @@ function fromItem(item: LegalRepresentativeItem): FormState {
 export function LegalRepresentativesFormPanel({
   open,
   editing,
+  procedureTypes,
   onClose,
   onSubmit,
   onSaved,
@@ -118,6 +128,22 @@ export function LegalRepresentativesFormPanel({
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 
+  const patchCompany = (index: number, p: Partial<CompanyRow>) =>
+    setForm((f) => ({
+      ...f,
+      companies: f.companies.map((c, i) => (i === index ? { ...c, ...p } : c)),
+    }));
+
+  const addCompany = () =>
+    setForm((f) => ({ ...f, companies: [...f.companies, { ...EMPTY_COMPANY }] }));
+
+  const removeCompany = (index: number) =>
+    setForm((f) => ({
+      ...f,
+      // Nunca queda sin empresas: si se elimina la última, se deja una fila en blanco.
+      companies: f.companies.length <= 1 ? [{ ...EMPTY_COMPANY }] : f.companies.filter((_, i) => i !== index),
+    }));
+
   const toggleProcedureType = (id: string) =>
     setForm((f) => ({
       ...f,
@@ -126,10 +152,13 @@ export function LegalRepresentativesFormPanel({
         : [...f.procedureTypeIds, id],
     }));
 
-  // Validación en cliente (los mismos requeridos que valida el backend).
+  // Validación en cliente (los mismos requeridos que valida el backend): al menos una empresa con NIT
+  // y razón social, y los datos del representante-persona.
+  const companiesValid =
+    form.companies.length > 0 &&
+    form.companies.every((c) => c.nit.trim() !== "" && c.name.trim() !== "");
   const isValid =
-    form.companyNit.trim() !== "" &&
-    form.companyName.trim() !== "" &&
+    companiesValid &&
     form.documentType.trim() !== "" &&
     form.documentNumber.trim() !== "" &&
     form.firstLastName.trim() !== "" &&
@@ -143,13 +172,24 @@ export function LegalRepresentativesFormPanel({
     setFieldErrors({});
     try {
       const trimmed = (v: string) => (v.trim() === "" ? null : v.trim());
+      const companies: LegalRepresentativeCompanyInput[] = form.companies.map((c) => ({
+        nit: c.nit.trim(),
+        name: c.name.trim(),
+        email: trimmed(c.email),
+        address: trimmed(c.address),
+        city: trimmed(c.city),
+        phone: trimmed(c.phone),
+      }));
+      const primary = companies[0];
       const saved = await onSubmit({
-        companyNit: form.companyNit.trim(),
-        companyName: form.companyName.trim(),
-        companyEmail: trimmed(form.companyEmail),
-        companyAddress: trimmed(form.companyAddress),
-        companyCity: trimmed(form.companyCity),
-        companyPhone: trimmed(form.companyPhone),
+        companies,
+        // Retrocompatibilidad: la primera compañía también viaja en los campos planos.
+        companyNit: primary.nit,
+        companyName: primary.name,
+        companyEmail: primary.email,
+        companyAddress: primary.address,
+        companyCity: primary.city,
+        companyPhone: primary.phone,
         documentType: form.documentType,
         documentNumber: form.documentNumber.trim(),
         firstLastName: form.firstLastName.trim(),
@@ -219,71 +259,109 @@ export function LegalRepresentativesFormPanel({
         )}
 
         <section className="space-y-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
-            Compañía representada
-          </h3>
-
-          <Field id="lr-companyNit" label="NIT de la compañía" error={fieldErrors.companyNit}>
-            <input
-              id="lr-companyNit"
-              value={form.companyNit}
-              onChange={(e) => patch({ companyNit: e.target.value })}
-              className={OT_INPUT_CLS}
-              style={errStyle("companyNit")}
-              placeholder="NIT de la compañía representada"
-            />
-          </Field>
-
-          <Field id="lr-companyName" label="Nombre de la compañía" error={fieldErrors.companyName}>
-            <input
-              id="lr-companyName"
-              value={form.companyName}
-              onChange={(e) => patch({ companyName: e.target.value })}
-              className={OT_INPUT_CLS}
-              style={errStyle("companyName")}
-              placeholder="Razón social"
-            />
-          </Field>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field id="lr-companyEmail" label="Correo (opcional)" error={fieldErrors.companyEmail}>
-              <input
-                id="lr-companyEmail"
-                type="email"
-                value={form.companyEmail}
-                onChange={(e) => patch({ companyEmail: e.target.value })}
-                className={OT_INPUT_CLS}
-                style={errStyle("companyEmail")}
-              />
-            </Field>
-            <Field id="lr-companyPhone" label="Teléfono (opcional)" error={fieldErrors.companyPhone}>
-              <input
-                id="lr-companyPhone"
-                value={form.companyPhone}
-                onChange={(e) => patch({ companyPhone: e.target.value })}
-                className={OT_INPUT_CLS}
-                style={errStyle("companyPhone")}
-              />
-            </Field>
-            <Field id="lr-companyAddress" label="Dirección (opcional)" error={fieldErrors.companyAddress}>
-              <input
-                id="lr-companyAddress"
-                value={form.companyAddress}
-                onChange={(e) => patch({ companyAddress: e.target.value })}
-                className={OT_INPUT_CLS}
-                style={errStyle("companyAddress")}
-              />
-            </Field>
-            <Field id="lr-companyCity" label="Ciudad (opcional)" error={fieldErrors.companyCity}>
-              <input
-                id="lr-companyCity"
-                value={form.companyCity}
-                onChange={(e) => patch({ companyCity: e.target.value })}
-                className={OT_INPUT_CLS}
-                style={errStyle("companyCity")}
-              />
-            </Field>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+              Empresas representadas
+            </h3>
+            <button
+              type="button"
+              onClick={addCompany}
+              className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
+              style={{ color: "#557EFF", borderColor: "#557EFF" }}
+            >
+              <Plus className="h-3.5 w-3.5" /> Agregar empresa
+            </button>
           </div>
+          <p className="text-[11px] opacity-60">
+            El representante se registra una sola vez; agrégale todas las empresas que representa. La
+            primera es la compañía primaria.
+          </p>
+
+          {form.companies.map((company, index) => {
+            const err = (suffix: string) =>
+              fieldErrors[`companies[${index}].${suffix}`] ??
+              (index === 0 ? fieldErrors[`company${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`] : undefined);
+            return (
+              <div
+                key={index}
+                className="space-y-3 rounded-xl border px-3 py-3"
+                style={{ borderColor: "#DFE5ED" }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold" style={{ color: "#162744" }}>
+                    {index === 0 ? "Empresa primaria" : `Empresa ${index + 1}`}
+                  </span>
+                  {form.companies.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeCompany(index)}
+                      aria-label={`Quitar empresa ${index + 1}`}
+                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
+                      style={{ color: "#FF4E00", borderColor: "#f0c38e" }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Quitar
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field id={`lr-companyNit-${index}`} label="NIT de la compañía" error={err("nit")}>
+                    <input
+                      id={`lr-companyNit-${index}`}
+                      value={company.nit}
+                      onChange={(e) => patchCompany(index, { nit: e.target.value })}
+                      className={OT_INPUT_CLS}
+                      style={err("nit") ? { borderColor: "#FF4E00" } : undefined}
+                      placeholder="NIT"
+                    />
+                  </Field>
+                  <Field id={`lr-companyName-${index}`} label="Razón social" error={err("name")}>
+                    <input
+                      id={`lr-companyName-${index}`}
+                      value={company.name}
+                      onChange={(e) => patchCompany(index, { name: e.target.value })}
+                      className={OT_INPUT_CLS}
+                      style={err("name") ? { borderColor: "#FF4E00" } : undefined}
+                      placeholder="Razón social"
+                    />
+                  </Field>
+                  <Field id={`lr-companyEmail-${index}`} label="Correo (opcional)" error={err("email")}>
+                    <input
+                      id={`lr-companyEmail-${index}`}
+                      type="email"
+                      value={company.email}
+                      onChange={(e) => patchCompany(index, { email: e.target.value })}
+                      className={OT_INPUT_CLS}
+                    />
+                  </Field>
+                  <Field id={`lr-companyPhone-${index}`} label="Teléfono (opcional)" error={err("phone")}>
+                    <input
+                      id={`lr-companyPhone-${index}`}
+                      value={company.phone}
+                      onChange={(e) => patchCompany(index, { phone: e.target.value })}
+                      className={OT_INPUT_CLS}
+                    />
+                  </Field>
+                  <Field id={`lr-companyAddress-${index}`} label="Dirección (opcional)" error={err("address")}>
+                    <input
+                      id={`lr-companyAddress-${index}`}
+                      value={company.address}
+                      onChange={(e) => patchCompany(index, { address: e.target.value })}
+                      className={OT_INPUT_CLS}
+                    />
+                  </Field>
+                  <Field id={`lr-companyCity-${index}`} label="Ciudad (opcional)" error={err("city")}>
+                    <input
+                      id={`lr-companyCity-${index}`}
+                      value={company.city}
+                      onChange={(e) => patchCompany(index, { city: e.target.value })}
+                      className={OT_INPUT_CLS}
+                    />
+                  </Field>
+                </div>
+              </div>
+            );
+          })}
         </section>
 
         <section className="space-y-3">
@@ -402,26 +480,33 @@ export function LegalRepresentativesFormPanel({
               {fieldErrors.procedureTypeIds}
             </p>
           )}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {PROCEDURE_TYPES.map((pt) => {
-              const checked = form.procedureTypeIds.includes(pt.id);
-              return (
-                <label
-                  key={pt.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
-                  style={checked ? { borderColor: "#557EFF" } : undefined}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleProcedureType(pt.id)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
-                  />
-                  <span className="font-medium">{pt.name}</span>
-                </label>
-              );
-            })}
-          </div>
+          {procedureTypes.length === 0 ? (
+            <p className="text-[11px] opacity-60">
+              No hay tipos de trámite habilitados en el módulo de trámites. Publica al menos un tipo
+              (activo y publicado) para poder asignarlo al representante.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {procedureTypes.map((pt) => {
+                const checked = form.procedureTypeIds.includes(pt.id);
+                return (
+                  <label
+                    key={pt.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
+                    style={checked ? { borderColor: "#557EFF" } : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProcedureType(pt.id)}
+                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                    />
+                    <span className="font-medium">{pt.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </fieldset>
       </div>
     </OtSidePanel>

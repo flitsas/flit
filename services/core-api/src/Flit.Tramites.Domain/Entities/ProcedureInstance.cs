@@ -16,6 +16,17 @@ public sealed class ProcedureInstance
     public Guid? TransitOfficeId { get; set; }
 
     /// <summary>
+    /// HU #10879 — paso actual PERSISTIDO del wizard (autosave del avance por pasos). Guarda la
+    /// <c>Key</c> del paso del contrato del wizard (matrícula: <c>consulta_vin|documentos|comprador|
+    /// identidad|fur</c>; traspaso: <c>consulta|documentos|vendedor|comprador|comercial|fur</c>). Solo
+    /// se escribe en <c>borrador</c> y una vez que la consulta del vehículo está completa (AC1). Al
+    /// reabrir el borrador PRIMA como punto de retoma (AC2); mientras sea <c>null</c> el frontend cae al
+    /// paso DERIVADO de los gates (comportamiento previo, sin regresión). Columna agregada por migración
+    /// SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public string? CurrentStep { get; set; }
+
+    /// <summary>
     /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
     /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
     /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al
@@ -52,6 +63,28 @@ public sealed class ProcedureInstance
     /// migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
     /// </summary>
     public bool ConsolidadoMaestroVigente { get; set; }
+
+    /// <summary>
+    /// Vigencia del expediente derivado del wizard (FUR + documentos en caliente + consolidado),
+    /// espejo de <see cref="ConsolidadoMaestroVigente"/> (HU #10860, Feature #10852, ADR-0032).
+    /// <c>true</c> = el consolidado persistido refleja el expediente actual (se sirve sin regenerar);
+    /// <c>false</c> = un cambio de estado, la decisión del OT o adjuntar la LT lo invalidó, y la
+    /// próxima generación regenera en cascada el FUR y sus documentos en caliente (con fecha vigente)
+    /// antes de consolidar. Default false. Columna agregada por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public bool ConsolidadoWizardVigente { get; set; }
+
+    /// <summary>
+    /// Invalida los consolidados persistidos (maestro y wizard) tras un cambio que altera el
+    /// expediente —transición de estado, decisión del OT o adjuntar la LT—: la próxima generación los
+    /// regenera. HU #10860 (ADR-0032) — un único punto que mantiene ambos flags consistentes.
+    /// </summary>
+    public void InvalidarConsolidados()
+    {
+        ConsolidadoMaestroVigente = false;
+        ConsolidadoWizardVigente = false;
+    }
 
     /// <summary>
     /// ADR-0036 §D9 (HU #10916) — mandatario (<c>admin.mandate_signers</c>) que firma el mandato de este

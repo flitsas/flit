@@ -13,5 +13,11 @@ public sealed class CreateDeedCommand
     public DateOnly VigenciaHasta { get; init; }
     public string? Sha256 { get; init; }
     public IReadOnlyList<Guid>? RepresentedCompanyIds { get; init; }
+
+    /// <summary>
+    /// Representante que asocia la escritura (Feature #10929). El alta se hace desde el detalle del
+    /// representante, que lo inyecta; queda persistido para filtrar el detalle y resolver el trámite.
+    /// </summary>
+    public Guid? RepresentativeId { get; init; }
     public Guid? CreatedBy { get; init; }
 }

@@ -27,7 +27,7 @@ public sealed record CreateSignatureVaultData(
     Guid TenantId,
     string DocumentType,
     string DocumentNumber,
-    string NitEmpresa,
+    string? NitEmpresa,
     string FullName,
     string SignatureHash,
     string StoragePath,
@@ -36,7 +36,8 @@ public sealed record CreateSignatureVaultData(
     DateOnly VigenciaHasta,
     Guid? MandateSignerId,
     Guid? CreatedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    string? CodigoHash = null);
 
 /// <summary>Datos de revocación de una firma del baúl.</summary>
 public sealed record RevokeSignatureVaultData(

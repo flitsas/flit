@@ -36,7 +36,15 @@ internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLook
 
         var tipoDoc = tipoDocumento.Trim();
         var doc = documento.Trim();
-        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+
+        // Npgsql solo acepta offset 0 (UTC) al escribir un parámetro `timestamptz`: los llamadores
+        // (resolutor de guardado y lookup por NIT) anclan "ahora" a la medianoche de Colombia
+        // (offset -05:00), lo que rompía la consulta con ArgumentException → 500. Se reconvierte a UTC
+        // conservando el MISMO instante; el corte fino por día calendario (EsAprobadaVigente) vuelve a
+        // Colombia con .ToOffset, así que la vigencia no cambia. Mismo criterio que
+        // ProcedureInstanceBiometricValidation.FechaFinVigencia (que también devuelve UTC por esto).
+        var nowUtc = now.ToUniversalTime();
+        var cutoff = nowUtc.AddDays(-(BiometricRules.VigenciaDias + 1));
 
         var candidates = await _context.ProcedureInstanceBiometricValidations
             .AsNoTracking()
@@ -44,7 +52,7 @@ internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLook
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType == tipoDoc
                 && v.DocumentNumber == doc
-                && ((v.ValidUntil != null && v.ValidUntil > now)
+                && ((v.ValidUntil != null && v.ValidUntil > nowUtc)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null)
@@ -53,7 +61,7 @@ internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLook
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var vigente = candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
+        var vigente = candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, nowUtc));
         return vigente?.Id;
     }
 }

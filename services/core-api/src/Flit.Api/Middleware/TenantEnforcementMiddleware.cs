@@ -85,7 +85,17 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     private static bool IsRuntimeScoped(PathString path) =>
         path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
+        // CF-02 (HU #10879) — consulta del paso 1 ANTES de crear el trámite: no lleva instancia en la
+        // ruta, pero es tan tenant-scoped como el resto del runtime (usa los proveedores de consulta de
+        // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
+        // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
+        || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
+        // HU #10943 — StartsWithSegments, NO Equals: con la comparación exacta el listado y el create
+        // quedaban scopeados, pero las rutas hijas (PATCH /{id} y POST /{id}/resend, edición y reenvío de
+        // una prevalidación) caían fuera y el backend confiaba en el X-Tenant-Id crudo del cliente — un
+        // caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug y mismo fix
+        // que ya se aplicó a identity-validation más abajo.
+        || path.StartsWithSegments("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
         // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
         // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
         // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
@@ -98,7 +108,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // operador de la compañía solo lee SU tenant. El tenant se impone desde el JWT (no del header),
         // para que un company-user no consulte el directorio de otra compañía cambiando X-Tenant-Id.
         || path.StartsWithSegments("/api/v1/tramites/deeds", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase)
+        // HU #10955 (AC5) — lookup de contacto de actores por documento: sin instancia en la ruta,
+        // pero tan tenant-scoped como el resto del runtime (mismo bug de fondo que b68b71e3 si se
+        // quedara fuera: el operador podría leer el contacto de una persona capturado por OTRA
+        // compañía cambiando X-Tenant-Id). El tenant se impone desde el JWT, no del header crudo.
+        || path.StartsWithSegments("/api/v1/tramites/actors", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

@@ -5,6 +5,10 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// estados de negocio de <see cref="TramiteEstado"/> (los persistidos en
 /// <c>procedure_instances.status</c>). <c>aprobado</c> y <c>anulado</c> son terminales (RF04).
 /// Reemplaza la máquina interna de 14 estados de TRAM-12a (ADR-0022).
+/// HU #10870 — <c>subsanacion</c> reabre la edición de un trámite <c>entregado</c>/<c>rechazado</c>
+/// SIN pasar por <c>borrador</c>; re-radicar (<c>subsanacion → entregado</c>) conserva el historial
+/// (cada transición agrega una fila nueva, nunca lo sobrescribe — ver
+/// <c>Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder</c>).
 /// </summary>
 public static class TramiteStateMachine
 {
@@ -16,8 +20,10 @@ public static class TramiteStateMachine
             // trámite entra a la decisión del OT siempre desde 'entregado'. El progreso de placa
             // (preasignado/asignado) es un sub-estado interno ortogonal (ver PlateFlowStateMachine).
             [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
-            [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
-            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],
+            [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Subsanacion],
+            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado, TramiteEstado.Subsanacion],
+            // HU #10870 (AC2) — re-radicar: subsanacion → entregado, SIN pasar por borrador/preparado.
+            [TramiteEstado.Subsanacion] = [TramiteEstado.Entregado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],
         };

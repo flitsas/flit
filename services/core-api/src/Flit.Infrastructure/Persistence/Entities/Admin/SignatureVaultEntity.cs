@@ -21,13 +21,23 @@ public sealed class SignatureVaultEntity
     /// <summary>PII (Ley 1581): no loguear ni exponer.</summary>
     public string DocumentNumber { get; set; } = string.Empty;
 
-    /// <summary>NIT de la compañía — clave de búsqueda del consumo por (tenant, NIT).</summary>
-    public string NitEmpresa { get; set; } = string.Empty;
+    /// <summary>
+    /// NIT de la compañía. DEPRECADO (HU #10930, Feature #10929): la firma es de la persona +
+    /// tenant, el NIT deja de ser obligatorio y sale de la llave de unicidad; nullable durante la
+    /// transición (sigue consultable).
+    /// </summary>
+    public string? NitEmpresa { get; set; }
 
     public string FullName { get; set; } = string.Empty;
 
     /// <summary>Huella de integridad SHA-256 de la firma (no material criptográfico).</summary>
     public string SignatureHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Código alfanumérico que digita el usuario (HU #10930), DISTINTO de <see cref="SignatureHash"/>
+    /// (que es el SHA-256 calculado del artefacto). Opcional.
+    /// </summary>
+    public string? CodigoHash { get; set; }
 
     /// <summary>Path del artefacto (PNG/PDF) en S3 vía <c>IAttachmentStorage</c>.</summary>
     public string StoragePath { get; set; } = string.Empty;

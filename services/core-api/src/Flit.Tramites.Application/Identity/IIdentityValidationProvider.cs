@@ -5,7 +5,8 @@ namespace Flit.Tramites.Application.Identity;
 /// <c>ValidationId</c> es el id de NUESTRA validación (se incrusta en la callback URL del proveedor).
 /// </summary>
 public sealed record IdentityProviderStartRequest(
-    Guid ProcedureInstanceId,
+    /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
+    Guid? ProcedureInstanceId,
     Guid ValidationId,
     string? Parte,
     string Nombre,

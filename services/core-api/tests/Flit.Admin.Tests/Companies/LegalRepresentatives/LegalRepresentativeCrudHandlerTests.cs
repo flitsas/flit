@@ -243,6 +243,94 @@ public sealed class LegalRepresentativeCrudHandlerTests
         unknown.Should().Be(DeleteLegalRepresentativeOutcome.NotFound);
     }
 
+    [Fact]
+    public async Task Create_WithMultipleCompanies_LinksAllCompanies_AndFoundByEachNit()
+    {
+        await using var ctx = NewContext();
+        var procType = Guid.NewGuid();
+        var reader = new DbLegalRepresentativeReader(ctx);
+        var repo = new LegalRepresentativeRepository(ctx);
+        var writer = new LegalRepresentativeWriter(
+            new FakeProcedureTypeCatalog([procType]),
+            new FakeSignatureResolver(Resolution.None),
+            repo, reader,
+            new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero)));
+        var create = new CreateLegalRepresentativeHandler(writer);
+
+        const string nitA = "900000000-1";
+        const string nitB = "800000000-2";
+        var result = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = DocRep,
+            FirstLastName = "Perez",
+            Name = "Juan Perez",
+            ProcedureTypeIds = [procType],
+            Companies =
+            [
+                new LegalRepresentativeCompanyInput(nitA, "ACME S.A.S.", null, null, null, null),
+                new LegalRepresentativeCompanyInput(nitB, "Beta S.A.S.", null, null, null, null),
+            ],
+        }, Ct);
+
+        result.IsValid.Should().BeTrue();
+
+        var item = await reader.GetByIdAsync(Tenant, result.Id!.Value, Ct);
+        item!.Companies.Should().HaveCount(2);
+        item.Companies.Select(c => c.Nit).Should().BeEquivalentTo([nitA, nitB]);
+
+        // El representante-persona se encuentra por CUALQUIERA de sus NITs (multiempresa).
+        var byA = await reader.FindActiveByCompanyNitAsync(Tenant, nitA, Ct);
+        var byB = await reader.FindActiveByCompanyNitAsync(Tenant, nitB, Ct);
+        byA!.Id.Should().Be(result.Id!.Value);
+        byB!.Id.Should().Be(result.Id!.Value);
+    }
+
+    [Fact]
+    public async Task Create_SamePersonSecondCompany_MergesInsteadOfDuplicating()
+    {
+        await using var ctx = NewContext();
+        var reader = new DbLegalRepresentativeReader(ctx);
+        var repo = new LegalRepresentativeRepository(ctx);
+        var create = new CreateLegalRepresentativeHandler(new LegalRepresentativeWriter(
+            new FakeProcedureTypeCatalog([]),
+            new FakeSignatureResolver(Resolution.None),
+            repo, reader,
+            new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero))));
+
+        const string nitA = "900000000-1";
+        const string nitB = "800000000-2";
+        var first = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = DocRep,
+            FirstLastName = "Perez",
+            Name = "Juan Perez",
+            Companies = [new LegalRepresentativeCompanyInput(nitA, "ACME S.A.S.", null, null, null, null)],
+        }, Ct);
+
+        var second = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = DocRep,
+            FirstLastName = "Perez",
+            Name = "Juan Perez",
+            Companies = [new LegalRepresentativeCompanyInput(nitB, "Beta S.A.S.", null, null, null, null)],
+        }, Ct);
+
+        // "Se crea una sola vez": el segundo alta con el mismo documento edita la persona existente.
+        second.Id.Should().Be(first.Id);
+
+        var page = await reader.ListPagedAsync(Tenant, 1, 50, Ct);
+        page.Items.Count(r => r.DocumentNumber == DocRep && r.IsActive).Should().Be(1);
+
+        var item = await reader.GetByIdAsync(Tenant, first.Id!.Value, Ct);
+        item!.Companies.Select(c => c.Nit).Should().BeEquivalentTo([nitA, nitB]);
+    }
+
     // ---------- Helpers ----------
 
     private static CreateLegalRepresentativeCommand NewCreate(IReadOnlyList<Guid> procedureTypeIds) =>
@@ -303,6 +391,11 @@ public sealed class LegalRepresentativeCrudHandlerTests
 
         public Task<bool> ExistsAsync(Guid procedureTypeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_known.Contains(procedureTypeId));
+
+        public Task<IReadOnlyList<ProcedureTypeCatalogItem>> ListActivePublishedAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProcedureTypeCatalogItem>>(
+                [.. _known.Select(id => new ProcedureTypeCatalogItem(id, "CODE", "Tipo"))]);
     }
 
     /// <summary>Resolutor de firma/identidad en memoria: devuelve una resolución fija.</summary>

@@ -10,10 +10,12 @@ import { ApiValidationError } from "@/lib/api/types";
 import {
   createLegalRepresentative,
   deleteLegalRepresentative,
+  fetchAssignableProcedureTypes,
   fetchLegalRepresentatives,
   sendLegalRepresentativeIdentity,
   SIGNAL_SIN_FIRMA_NI_IDENTIDAD,
   updateLegalRepresentative,
+  type AssignableProcedureType,
   type LegalRepresentativeInput,
   type LegalRepresentativeItem,
   type LegalRepresentativeSaved,
@@ -38,6 +40,9 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  // Catálogo de tipos de trámite asignables (activos + publicados), cargado del backend con sus IDs
+  // reales; alimenta el multiselect del formulario y las etiquetas de la tabla/detalle.
+  const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<LegalRepresentativeItem | null>(null);
@@ -70,6 +75,20 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // Carga del catálogo de tipos de trámite asignables (una vez por tenant). Si falla, el multiselect
+  // queda vacío con su aviso: mejor no ofrecer ids inexistentes que romper el guardado.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAssignableProcedureTypes(tenantId, controller.signal)
+      .then((types) => {
+        if (!controller.signal.aborted) setProcedureTypes(types);
+      })
+      .catch(() => {
+        /* silencioso: el aviso de "sin tipos habilitados" cubre el caso */
+      });
+    return () => controller.abort();
+  }, [tenantId]);
 
   const handleSubmit = (input: LegalRepresentativeInput): Promise<LegalRepresentativeSaved> =>
     editing
@@ -216,9 +235,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               <thead>
                 <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
                   <th scope="col" className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
-                    Compañía
-                  </th>
-                  <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
                     Representante
                   </th>
                   <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -238,14 +254,10 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               <tbody>
                 {items.map((item) => {
                   const st = signatureStatus(item.hasSignatureOrIdentity);
-                  const tramites = procedureTypeLabels(item.procedureTypeIds);
+                  const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
                     <tr key={item.id} className="bg-white dark:bg-[#0B0F14]">
-                      <td className="rounded-l-xl border-y border-l px-4 py-3">
-                        <span className="font-semibold">{item.companyName}</span>
-                        <span className="block font-mono opacity-60">{item.companyDocumentNumber}</span>
-                      </td>
-                      <td className="border-y px-4 py-3 font-semibold">{fullName(item)}</td>
+                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">{fullName(item)}</td>
                       <td className="border-y px-4 py-3 font-mono">
                         {item.documentType} {maskDocument(item.documentNumber)}
                       </td>
@@ -330,6 +342,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
       <LegalRepresentativesFormPanel
         open={formOpen}
         editing={editing}
+        procedureTypes={procedureTypes}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
@@ -339,7 +352,12 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         onError={(message) => show(message, "error")}
       />
 
-      <LegalRepresentativeDetailModal item={detail} onClose={() => setDetail(null)} />
+      <LegalRepresentativeDetailModal
+        tenantId={tenantId}
+        item={detail}
+        procedureTypes={procedureTypes}
+        onClose={() => setDetail(null)}
+      />
 
       {toDelete && (
         <Modal

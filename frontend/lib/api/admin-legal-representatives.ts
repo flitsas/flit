@@ -8,6 +8,37 @@ import { apiFetch } from "./client";
  * compañía representada (NIT + nombre), las referencias de firma/identidad vigentes y los tipos de
  * trámite del puente M:N. `hasSignatureOrIdentity` resume si el representante puede firmar hoy.
  */
+/** Estado de vigencia de una escritura dentro de la vista representante-céntrica (HU #10933). */
+export type RepresentativeDeedEstado = "vigente" | "vencida" | "futura" | "inactiva";
+
+/**
+ * Escritura proyectada dentro del historial de una compañía en la vista representante-céntrica
+ * (HU #10933). Proyección ligera (sin storage): `estado` resume la vigencia contra "hoy" en Colombia
+ * más la baja lógica. Solo se puebla en el detalle del representante (vacío en el listado).
+ */
+export interface RepresentativeDeed {
+  id: string;
+  description: string;
+  /** Vigencia (YYYY-MM-DD). */
+  vigenciaDesde: string;
+  vigenciaHasta: string;
+  isActive: boolean;
+  estado: RepresentativeDeedEstado;
+}
+
+/**
+ * Compañía representada por un representante (HU #10932): id + NIT + razón social, con el HISTORIAL de
+ * escrituras anidado (HU #10933). Una escritura compartida entre compañías aparece en cada una. En el
+ * listado `deeds` viene vacío; en el detalle del representante viene poblado y ordenado por vigencia desc.
+ */
+export interface LegalRepresentativeCompanySummary {
+  id: string;
+  /** NIT de la compañía (PII, Ley 1581). */
+  nit: string;
+  name: string;
+  deeds: RepresentativeDeed[];
+}
+
 export interface LegalRepresentativeItem {
   id: string;
   representedCompanyId: string;
@@ -28,6 +59,11 @@ export interface LegalRepresentativeItem {
   identityValidationRef?: string | null;
   hasSignatureOrIdentity: boolean;
   procedureTypeIds: string[];
+  /**
+   * Compañías del representante (HU #10932): un representante-persona puede representar varias. La
+   * primera es la primaria (`representedCompanyId`). En el detalle traen sus escrituras (`deeds`).
+   */
+  companies: LegalRepresentativeCompanySummary[];
   isActive: boolean;
   createdAt: string;
   updatedAt?: string | null;
@@ -42,12 +78,31 @@ export interface LegalRepresentativePage {
 }
 
 /**
- * Payload de alta/edición (POST/PUT). Lleva los datos de la compañía representada (se upserta por
- * NIT) y del representante, más los tipos de trámite que puede firmar.
+ * Una compañía representada en el payload de alta/edición (HU #10932). El representante se crea una
+ * sola vez y se le agregan empresas: cada una se upserta por NIT dentro del tenant. NIT y razón social
+ * son requeridos; el contacto es opcional.
+ */
+export interface LegalRepresentativeCompanyInput {
+  nit: string;
+  name: string;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Payload de alta/edición (POST/PUT). El representante-persona se captura una sola vez y lleva la
+ * LISTA de compañías representadas (`companies`, la primera es la primaria); cada una se upserta por
+ * NIT. Se conservan `companyNit`/`companyName` (derivados de la primera compañía) por
+ * retrocompatibilidad con el backend, pero el envío principal es `companies[]`.
  */
 export interface LegalRepresentativeInput {
-  companyNit: string;
-  companyName: string;
+  companies: LegalRepresentativeCompanyInput[];
+  /** @deprecated Derivado de `companies[0]`; se mantiene por retrocompatibilidad. */
+  companyNit?: string;
+  /** @deprecated Derivado de `companies[0]`; se mantiene por retrocompatibilidad. */
+  companyName?: string;
   companyEmail?: string | null;
   companyAddress?: string | null;
   companyCity?: string | null;
@@ -62,6 +117,17 @@ export interface LegalRepresentativeInput {
   city?: string | null;
   phone?: string | null;
   procedureTypeIds: string[];
+}
+
+/**
+ * Tipo de trámite asignable a un representante (activo + publicado), tal como lo devuelve el
+ * catálogo real (`tramites.procedure_types`). El `id` es el del catálogo del entorno: NUNCA debe
+ * hardcodearse en el frontend (los seeds usan `uuidv7()`, no deterministas por BD).
+ */
+export interface AssignableProcedureType {
+  id: string;
+  code: string;
+  name: string;
 }
 
 /** Señal estable que el guardado puede emitir (no es un error 422): el registro persistió igual. */
@@ -131,6 +197,18 @@ export function updateLegalRepresentative(
 /** DELETE "/{id}" — baja lógica idempotente (204). */
 export function deleteLegalRepresentative(tenantId: string, id: string): Promise<void> {
   return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "DELETE" });
+}
+
+/**
+ * GET "/procedure-types" — tipos de trámite asignables (activos + publicados) con sus IDs reales del
+ * catálogo. El multiselect del formulario se alimenta de aquí en vez de una lista estática, para que
+ * los ids enviados existan en `tramites.procedure_types` del entorno (corrige `tipo_tramite_inexistente`).
+ */
+export function fetchAssignableProcedureTypes(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<AssignableProcedureType[]> {
+  return apiFetch<AssignableProcedureType[]>(`${base(tenantId)}/procedure-types`, { signal });
 }
 
 /**

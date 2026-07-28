@@ -28,13 +28,19 @@ public sealed class FurFontResolver : IFontResolver
     private static int _registered;
 
     /// <summary>
-    /// Registra este resolutor como <see cref="GlobalFontSettings.FontResolver"/> una sola vez.
-    /// Idempotente y thread-safe; debe ejecutarse antes de la primera generación de un FUR.
+    /// Registra el resolutor global de PdfSharpCore una sola vez. Idempotente y thread-safe; debe
+    /// ejecutarse antes de la primera generación de un FUR.
+    /// <para>
+    /// Desde HU #10855 (Feature #10852) delega en <see cref="Branding.FlitFonts.EnsureRegistered"/>:
+    /// PdfSharpCore expone un único <see cref="GlobalFontSettings.FontResolver"/> por proceso, y el
+    /// resolutor superset <see cref="Branding.FlitFontResolver"/> sirve tanto Poppins (marca FLIT)
+    /// como DejaVu Sans para "Arial" (comportamiento previo del overlay del FUR).
+    /// </para>
     /// </summary>
     public static void EnsureRegistered()
     {
         if (Interlocked.Exchange(ref _registered, 1) == 0)
-            GlobalFontSettings.FontResolver = new FurFontResolver();
+            Branding.FlitFonts.EnsureRegistered();
     }
 
     /// <summary>Fuente por defecto (todas las familias caen a DejaVu Sans).</summary>

@@ -11,8 +11,16 @@ namespace Flit.Infrastructure.Kyverum;
 
 /// <summary>
 /// Cliente HTTP de Kyverum Verify (HU #10233). Crea una validación remota (<c>POST /v1/validations</c>)
-/// y devuelve la URL de captura. El secreto con el que Kyverum firma el webhook es por-tenant (dashboard),
-/// se toma de <see cref="KyverumOptions.WebhookSecret"/> y el handler lo persiste cifrado. Errores se
+/// y devuelve la URL de captura. El secreto con el que Kyverum firma el webhook se lee del campo
+/// <c>webhookSecret</c> de la RESPUESTA de creación (ver <c>KyverumCreateValidationResponse</c>) y el
+/// handler lo persiste cifrado; <see cref="KyverumOptions.WebhookSecret"/> es solo el valor de respaldo
+/// configurado por tenant en el dashboard.
+/// <para>PENDIENTE DE CONFIRMAR CON EL PROVEEDOR (HU #10943): si ese <c>webhookSecret</c> es único por
+/// verificación o el mismo valor de tenant en todas las respuestas. De ello depende que el descarte de
+/// webhooks del intento anterior tras un reenvío —que se apoya en rotar el secreto persistido— realmente
+/// invalide la firma vieja. Si resultara estático, hay que buscar otra señal de correlación: el payload
+/// del webhook NO trae el id de verificación.</para>
+/// Errores se
 /// mapean a <see cref="KyverumVerifyException"/> SIN incluir nunca la API key ni el secreto (AC7):
 /// 4xx ⇒ definitivo (502); 5xx/timeout/red/respuesta inválida ⇒ transitorio (503).
 /// </summary>
@@ -28,7 +36,7 @@ internal sealed class KyverumVerifyClient(
     public async Task<KyverumVerifyStartResult> StartVerificationAsync(KyverumVerifyStartRequest request, CancellationToken ct)
     {
         var body = new KyverumCreateValidationBody(
-            ExternalRef: request.ProcedureInstanceId.ToString("D"),
+            ExternalRef: request.ProcedureInstanceId?.ToString("D") ?? string.Empty,
             Metadata: new KyverumMetadata(request.Parte),
             // El webhook de Kyverum no repite nuestro id en el cuerpo: lo incrustamos en la URL de callback
             // para poder correlacionar la notificación con la validación.
