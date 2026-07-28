@@ -184,6 +184,11 @@ export interface Actor {
   documentType: string;
   documentNumber: string;
   fullName: string;
+  /**
+   * HU #11014 — correo del actor. Respaldo del expediente cuando la identidad está apalancada o
+   * cubierta por el baúl y no hay validación propia de la que leerlo. PII (Ley 1581).
+   */
+  email?: string | null;
 }
 
 export interface ProcedureInstanceDetail {
@@ -878,6 +883,11 @@ export interface IniciarBiometriaResult {
 export interface BiometricValidationsResponse {
   validations: BiometricValidation[];
   provider: string;
+  /**
+   * HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
+   * una validación biométrica. Se rotulan como «firmado desde el baúl»: no hay certificado que mostrar.
+   */
+  firmaBaulPartes?: string[] | null;
 }
 
 /**

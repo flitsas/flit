@@ -5,6 +5,7 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -50,7 +51,11 @@ public sealed record IniciarBiometriaResult(
 /// </summary>
 public sealed record BiometricValidationsResponse(
     IReadOnlyList<BiometricValidationDto> Validations,
-    string Provider = BiometricProviders.Mock);
+    string Provider = BiometricProviders.Mock,
+    // HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
+    // una validación biométrica (misma regla que el outcome `firma_baul` de EnsureIdentity, HU #10646).
+    // La UI las rotula como "firmado desde el baúl" y no ofrece el certificado de identidad, que no existe.
+    IReadOnlyList<string>? FirmaBaulPartes = null);
 
 // NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
 // captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
@@ -277,8 +282,15 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
 // ── Handler: listar (autenticado) ───────────────────────────────────────────
 
 /// <summary>Lista las validaciones biométricas de una instancia (vista del gestor).</summary>
-public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, BiometricsProviderOptions providerOptions)
+public sealed class ListBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    BiometricsProviderOptions providerOptions,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // ADR-0025 §4 — sin baúl inyectado (tests que no lo ejercitan) NUNCA hay cobertura de firma.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+
     public async Task<(BiometricValidationsResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -301,6 +313,7 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
         var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                          == TramiteModalidadEntrada.Traspaso;
         var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        var firmaBaulPartes = new List<string>(partes.Length);
         foreach (var parte in partes)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
@@ -312,6 +325,14 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
             var subject = IdentitySubjectResolver.For(actor);
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
+
+            // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
+            // firma vigente y NO hay validación biométrica ni certificado que mostrar.
+            var firmaBaul = await _vaultPolicy
+                .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+                .ConfigureAwait(false);
+            if (firmaBaul is not null)
+                firmaBaulPartes.Add(parte);
 
             var yaLocal = instance.BiometricValidations.Any(v =>
                 string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
@@ -326,7 +347,7 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
                 dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
         }
 
-        return (new BiometricValidationsResponse(dtos, providerOptions.Provider), null);
+        return (new BiometricValidationsResponse(dtos, providerOptions.Provider, firmaBaulPartes), null);
     }
 }
 

@@ -217,17 +217,58 @@ describe('ActorsForm — tipo de persona (HU #10543)', () => {
     );
     expect(screen.queryByText(/no se carga manualmente/)).toBeNull();
 
-    await user.type(screen.getByLabelText(/Número de documento/), '900123');
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Empresa SAS');
+    // El bloque de representante legal añade su propio «Número de documento»: se apunta al del actor
+    // por su placeholder para que la query no sea ambigua.
+    await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900123');
     await user.type(
-      screen.getByLabelText(/Correo electrónico/),
+      document.querySelector('#comprador-nombre') as HTMLInputElement,
+      'Empresa SAS',
+    );
+    // Idem con el correo: el representante legal aporta otro campo con la misma etiqueta.
+    await user.type(
+      document.querySelector('#comprador-email') as HTMLInputElement,
       'empresa@example.com',
     );
+    // Persona jurídica exige el representante legal (sujeto de identidad, HU #10688).
+    await user.type(
+      document.getElementById('0-rl-numeroDoc') as HTMLInputElement,
+      '1020304050',
+    );
+    await user.type(
+      document.getElementById('0-rl-nombre') as HTMLInputElement,
+      'Rep Legal',
+    );
+    await user.type(
+      document.getElementById('0-rl-email') as HTMLInputElement,
+      'rl@example.com',
+    );
+
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
     const [, actors] = mocks.saveActors.mock.calls[0];
     expect(actors[0].personType).toBe('juridical');
+  });
+
+  // HU #11014 — el documento manda: un actor con NIT es persona jurídica sin tocar el selector.
+  it('un actor rehidratado con NIT queda como persona jurídica', async () => {
+    mocks.getActors.mockResolvedValue([
+      {
+        rol: 'comprador',
+        tipoDocumento: 'NIT',
+        numeroDocumento: '900123456',
+        nombreCompleto: 'Empresa SAS',
+        email: 'empresa@example.com',
+        personType: 'natural',
+      },
+    ]);
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    // El bloque de representante legal solo se pinta cuando la parte es jurídica.
+    await waitFor(() =>
+      expect(document.getElementById('0-rl-numeroDoc')).toBeInTheDocument(),
+    );
   });
 });
 

@@ -211,6 +211,9 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
+  // el baúl en vez de hablar del certificado de validación de identidad.
+  const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -239,10 +242,13 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
       // pierde el listado de adjuntos, y viceversa. Ambos son informativos.
       const [att, bio] = await Promise.allSettled([
         tramitesClient.getAttachments(instanceId),
-        tramitesClient.listBiometric(instanceId),
+        tramitesClient.listBiometricExpediente(instanceId),
       ]);
       if (att.status === 'fulfilled') setAttachments(att.value);
-      if (bio.status === 'fulfilled') setBiometric(bio.value);
+      if (bio.status === 'fulfilled') {
+        setBiometric(bio.value.validations);
+        setFirmaBaulPartes(bio.value.firmaBaulPartes);
+      }
     } catch {
       // El expediente es informativo; no bloquea el render del paso.
     }
@@ -398,6 +404,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
         vin={fv('vin')}
         attachments={attachments}
         biometric={biometric}
+        firmaBaulPartes={firmaBaulPartes}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city, codigo: organismo.code }}
       />
 

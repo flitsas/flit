@@ -310,6 +310,18 @@ function isJuridical(actor: ProcedureActor): boolean {
   return actor.personType === 'juridical' || actor.tipoDocumento === 'NIT';
 }
 
+/**
+ * HU #11014 — deriva el tipo de persona del DOCUMENTO. El paso 1 siembra el documento del propietario
+ * (que en una empresa es un NIT) pero el actor nacía siempre 'natural', así que el paso del vendedor no
+ * cambiaba a persona jurídica ni pedía el representante legal. Con NIT el tipo es jurídica, sin
+ * excepción: el selector solo permite volver a natural cambiando también el documento (NIT → CC).
+ */
+function withDerivedPersonType(a: ProcedureActor): ProcedureActor {
+  return a.tipoDocumento === 'NIT' && a.personType !== 'juridical'
+    ? { ...a, personType: 'juridical' }
+    : a;
+}
+
 // ── HU #10886 — aviso de reenvío al editar el correo del sujeto de identidad ────────────────────
 // El backend (HU #10880) reenvía la validación de identidad y expira el enlace anterior cuando
 // cambia el correo del SUJETO de identidad de una parte que ya tenía una validación vigente: en
@@ -505,7 +517,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // pisa un documento ya escrito/persistido: solo siembra el campo vacío.
   const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
     ownerSeed && !a.numeroDocumento.trim()
-      ? { ...a, numeroDocumento: ownerSeed.numero, tipoDocumento: ownerSeed.tipo }
+      ? withDerivedPersonType({
+          ...a,
+          numeroDocumento: ownerSeed.numero,
+          tipoDocumento: ownerSeed.tipo,
+        })
       : a;
 
   // Rehidrata desde el backend cuando llegan actores cargados, respetando los
@@ -519,7 +535,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors(
       roles.map((rol) => {
         const found = state.actors?.find((a) => a.rol === rol);
-        return withOwnerSeed(found ? { ...emptyActor(rol), ...found } : emptyActor(rol));
+        // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un actor
+        // persistido con NIT y personType 'natural' (creado antes de esta corrección) se corrige solo.
+        return withOwnerSeed(
+          found ? withDerivedPersonType({ ...emptyActor(rol), ...found }) : emptyActor(rol),
+        );
       }),
     );
   }
