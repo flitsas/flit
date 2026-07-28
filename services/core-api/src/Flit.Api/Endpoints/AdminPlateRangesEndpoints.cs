@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Api.Endpoints;
 
@@ -67,7 +69,8 @@ public static class AdminPlateRangesEndpoints
 
     private static async Task<IResult> AssignPlateToProcedureAsync(
         Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
-        IOtClientProcedureRepository otRepo, CancellationToken ct)
+        IOtClientProcedureRepository otRepo, GenerarFurHandler furHandler,
+        ILoggerFactory loggerFactory, CancellationToken ct)
     {
         var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
         if (!Guid.TryParse(tenantClaim, out var otTenantId))
@@ -91,12 +94,38 @@ public static class AdminPlateRangesEndpoints
             otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", request.OutOfRange, ct)
             .ConfigureAwait(false);
 
-        return result is null
-            ? Results.Problem(statusCode: 422, title: "Unprocessable",
+        if (result is null)
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable",
                 detail: request.OutOfRange
                     ? "No se pudo asignar la placa fuera de rango: verifique que no esté ya registrada para el OT y que el trámite esté en preasignado."
-                    : "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.")
-            : Results.Ok(result);
+                    : "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.");
+        }
+
+        // HU #10995 — al asignar la placa (Flujo B), regenerar el FUR y los demás documentos en caliente
+        // para que reflejen la placa recién escrita en field_values; la regeneración del FUR además invalida
+        // los consolidados (se regeneran en la próxima consulta). Best-effort en el scope RLS del cliente:
+        // un fallo aquí NO revierte la asignación de placa ya persistida.
+        var procedure = await otRepo.GetByIdAsync(otTenantId, instanceId, ct).ConfigureAwait(false);
+        if (procedure is not null)
+        {
+            try
+            {
+                await otRepo
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        () => furHandler.HandleAsync(instanceId, procedure.ClientTenantId, ct),
+                        ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AdminPlateRegenLog.RegeneracionPlacaOmitida(
+                    loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
+            }
+        }
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> ListRangesAsync(
@@ -246,3 +275,11 @@ public sealed record AssignPlateToProcedureRequest(string Plate, bool OutOfRange
 
 /// <summary>Payload para revocar la preasignación de un trámite.</summary>
 public sealed record RevokePlateRequest(string Reason);
+
+/// <summary>Logging source-generated (CA1848) de la regeneración documental tras asignar placa. Sin PII.</summary>
+internal static partial class AdminPlateRegenLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudieron regenerar los documentos tras asignar la placa al trámite {InstanceId}; se conservan los previos.")]
+    public static partial void RegeneracionPlacaOmitida(ILogger logger, Exception ex, Guid instanceId);
+}
