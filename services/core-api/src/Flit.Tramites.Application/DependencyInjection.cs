@@ -38,6 +38,8 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
+        // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
+        services.AddScoped<PersistOcrFieldsHandler>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
