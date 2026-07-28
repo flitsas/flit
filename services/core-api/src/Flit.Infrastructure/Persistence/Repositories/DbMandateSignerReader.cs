@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -40,9 +41,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var companiesBySigner = await LoadActiveCompanyIdsBySignerAsync(
                     transitOfficeId, cancellationToken).ConfigureAwait(false);
 
+                var statusBySigner = await LoadIdentityStatusAsync(
+                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner)),
+                    .. signers.Select(s => Project(s, companiesBySigner, statusBySigner)),
                 ];
                 return items;
             },
@@ -71,6 +75,9 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                var statusBySigner = await LoadIdentityStatusAsync(
+                    [signer.Id], cancellationToken).ConfigureAwait(false);
+
                 return new MandateSignerItem
                 {
                     Id = signer.Id,
@@ -82,6 +89,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     Email = signer.Email,
                     SignatureVaultId = signer.SignatureVaultId,
                     IdentityValidationRef = signer.IdentityValidationRef,
+                    IdentityStatus = statusBySigner.GetValueOrDefault(signer.Id, "none"),
                     UserId = signer.UserId,
                     RegisteredAt = signer.RegisteredAt,
                     IsActive = signer.IsActive,
@@ -194,7 +202,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     private static MandateSignerItem Project(
         Entities.Admin.MandateSigner signer,
-        Dictionary<Guid, List<Guid>> companiesBySigner) =>
+        Dictionary<Guid, List<Guid>> companiesBySigner,
+        Dictionary<Guid, string> statusBySigner) =>
         new()
         {
             Id = signer.Id,
@@ -206,11 +215,68 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             Email = signer.Email,
             SignatureVaultId = signer.SignatureVaultId,
             IdentityValidationRef = signer.IdentityValidationRef,
+            IdentityStatus = statusBySigner.GetValueOrDefault(signer.Id, "none"),
             UserId = signer.UserId,
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
         };
+
+    /// <summary>
+    /// Estado de la validación de identidad (HU #10994) por mandatario, resuelto por prioridad sobre TODAS
+    /// sus validaciones admin: vigente aprobada ⇒ <c>valid</c>; enviada/en proceso ⇒ <c>pending</c>;
+    /// aprobada vencida, rechazada o expirada ⇒ <c>expired</c> (habilita RENOVAR); ninguna ⇒ <c>none</c>.
+    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> LoadIdentityStatusAsync(
+        IReadOnlyList<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var rows = await _context.AdminIdentityValidations
+            .AsNoTracking()
+            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
+                && signerIds.Contains(v.SubjectRef))
+            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var result = new Dictionary<Guid, string>();
+        foreach (var group in rows.GroupBy(r => r.SubjectRef))
+        {
+            var items = group.ToList();
+            string status;
+            if (items.Any(r => r.Status == AdminIdentityEstados.Aprobado
+                && (r.ValidUntil == null || r.ValidUntil > now)))
+            {
+                status = "valid";
+            }
+            else if (items.Any(r => r.Status == AdminIdentityEstados.Enviado
+                || r.Status == AdminIdentityEstados.EnProceso))
+            {
+                status = "pending";
+            }
+            else if (items.Any(r => r.Status == AdminIdentityEstados.Aprobado
+                || r.Status == AdminIdentityEstados.Expirado
+                || r.Status == AdminIdentityEstados.Rechazado))
+            {
+                status = "expired";
+            }
+            else
+            {
+                status = "none";
+            }
+
+            result[group.Key] = status;
+        }
+
+        return result;
+    }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,

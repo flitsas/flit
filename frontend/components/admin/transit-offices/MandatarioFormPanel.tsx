@@ -131,8 +131,9 @@ export function MandatarioFormPanel({
     setIdentityBusy(true);
     setIdentityMsg(null);
     try {
-      const alreadyValidated = editing.identityValidationRef !== null;
-      const result = alreadyValidated
+      // Con validación previa (vigente, vencida o en proceso) se REENVÍA/RENUEVA; sin ninguna, se ENVÍA.
+      const hasPrior = (editing.identityStatus ?? "none") !== "none";
+      const result = hasPrior
         ? await resendMandateSignerIdentity(transitOfficeId, editing.id)
         : await sendMandateSignerIdentity(transitOfficeId, editing.id);
       setIdentityMsg({
@@ -156,7 +157,35 @@ export function MandatarioFormPanel({
   const canSubmit =
     fullName.trim().length > 0 && documentNumber.trim().length > 0 && selected.size > 0 && !submitting;
 
-  const validated = editing?.identityValidationRef != null;
+  // HU #10994 — estado de identidad para la UI: valida/vencida/en proceso/sin validar. La opción
+  // "Renovar validación" aparece cuando está vencida (rechazada/expirada), reusando el reenvío.
+  const identityStatus = editing?.identityStatus ?? "none";
+  const identityUi = {
+    valid: {
+      label: "Identidad validada",
+      style: { background: "rgba(112,207,58,0.14)", color: "#3f7a15" },
+      isValid: true,
+      action: "Reenviar validación",
+    },
+    expired: {
+      label: "Identidad vencida",
+      style: { background: "rgba(245,158,11,0.16)", color: "#b45309" },
+      isValid: false,
+      action: "Renovar validación",
+    },
+    pending: {
+      label: "Validación en proceso",
+      style: { background: "rgba(85,126,255,0.14)", color: "#3559c7" },
+      isValid: false,
+      action: "Reenviar validación",
+    },
+    none: {
+      label: "Identidad sin validar",
+      style: { background: "rgba(240,90,53,0.12)", color: "#c2410c" },
+      isValid: false,
+      action: "Enviar validación",
+    },
+  }[identityStatus];
 
   const footer = (
     <button
@@ -274,14 +303,10 @@ export function MandatarioFormPanel({
             <div className="flex items-center justify-between gap-2">
               <span
                 className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={
-                  validated
-                    ? { background: "rgba(112,207,58,0.14)", color: "#3f7a15" }
-                    : { background: "rgba(240,90,53,0.12)", color: "#b45309" }
-                }
+                style={identityUi.style}
               >
-                {validated ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-                {validated ? "Identidad validada" : "Identidad sin validar"}
+                {identityUi.isValid ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+                {identityUi.label}
               </span>
               <button
                 type="button"
@@ -291,7 +316,7 @@ export function MandatarioFormPanel({
                 style={{ color: "#557EFF", borderColor: "#557EFF" }}
               >
                 {identityBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailCheck className="h-3.5 w-3.5" />}
-                {validated ? "Reenviar validación" : "Enviar validación"}
+                {identityUi.action}
               </button>
             </div>
             {!editing.email && (
