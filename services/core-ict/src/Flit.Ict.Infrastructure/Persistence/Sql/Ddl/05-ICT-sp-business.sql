@@ -5,8 +5,10 @@
 -- contra catalogs.transit_offices y grants en admin.tenant_transit_office_grants.
 -- SECURITY DEFINER: los jobs corren cross-tenant; el rol dueño debe poder saltar RLS
 -- (superusuario en dev; BYPASSRLS en producción). TODO(ICT-RLS-SP): rol dedicado.
--- TODO(ICT-SP-FIELDS): completar desde el fuente v1 las validaciones exhaustivas de
--- representante legal / mandante principal (aquí se portan las validaciones núcleo).
+-- Portadas: documento/nombre/apellido/email/teléfono de seller/buyer/lessee, formato de
+-- representante legal y mandante principal, selling_date/selling_price, e integridad de adjuntos.
+-- TODO(ICT-SP-FIELDS): pendiente el requisito ESTRICTO de rep legal por tipo de actor (NIT ⇒
+-- obligatorio), related_company_* y el bloque de limitations_* (gravámenes) de v1.
 -- =============================================================================
 
 CREATE OR REPLACE PROCEDURE ict.sp_processor_validation_business()
@@ -79,6 +81,29 @@ BEGIN
         WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'seller'
           AND eia.email !~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$';
 
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation || ' seller/phone excede 50 caracteres;'
+        FROM ict.external_integration_actors eia
+        WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'seller'
+          AND length(eia.phone) > 50;
+
+        -- ===== Representante legal / Mandante principal (formato si vienen) =====
+        -- Paridad parcial de v1: valida el formato del documento cuando el actor lo trae. El requisito
+        -- estricto por tipo de actor (NIT ⇒ rep obligatorio) queda en TODO(ICT-SP-FIELDS).
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation || ' legal_representative/document_number invalido;'
+        FROM ict.external_integration_actors eia
+        WHERE eim.id = eia.master_id AND eim.id = rec.id_master
+          AND COALESCE(eia.legal_representative_document_number, '') <> ''
+          AND eia.legal_representative_document_number !~ '^\d{6,11}$';
+
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation || ' principal_mandante/document_number invalido;'
+        FROM ict.external_integration_actors eia
+        WHERE eim.id = eia.master_id AND eim.id = rec.id_master
+          AND COALESCE(eia.principal_mandante_document_number, '') <> ''
+          AND eia.principal_mandante_document_number !~ '^\d{6,11}$';
+
         -- ===== Sección Comprador (buyer), solo traspaso (3) =====
         IF rec.transaction_type = 3 THEN
             UPDATE ict.external_integration_master eim
@@ -98,6 +123,12 @@ BEGIN
             FROM ict.external_integration_actors eia
             WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'buyer'
               AND eia.email !~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$';
+
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation || ' buyer/phone excede 50 caracteres;'
+            FROM ict.external_integration_actors eia
+            WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'buyer'
+              AND length(eia.phone) > 50;
         END IF;
 
         -- ===== Sección Locatario (lessee): 2, 4, 8 =====
@@ -107,6 +138,30 @@ BEGIN
             FROM ict.external_integration_actors eia
             WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'lessee'
               AND eia.document_number !~ '^\d{6,11}$';
+
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation || ' lessee/name no puede estar vacio;'
+            FROM ict.external_integration_actors eia
+            WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'lessee'
+              AND length(TRIM(eia.name)) = 0;
+
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation || ' lessee/first_last_name no puede estar vacio;'
+            FROM ict.external_integration_actors eia
+            WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'lessee'
+              AND eia.document_type <> 'NIT' AND length(TRIM(eia.first_last_name)) = 0;
+
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation || ' lessee/email formato invalido;'
+            FROM ict.external_integration_actors eia
+            WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'lessee'
+              AND eia.email !~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$';
+
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation || ' lessee/phone excede 50 caracteres;'
+            FROM ict.external_integration_actors eia
+            WHERE eim.id = eia.master_id AND eim.id = rec.id_master AND eia.actor_type = 'lessee'
+              AND length(eia.phone) > 50;
         END IF;
 
         -- ===== Sección General =====
@@ -120,6 +175,12 @@ BEGIN
             WHERE id = rec.id_master
               AND ((length(TRIM(selling_date)) > 0 AND selling_date !~ '^\d{2}-\d{2}-\d{4}$')
                    OR length(TRIM(selling_date)) = 0);
+
+            -- v1 validaba selling_price IS NULL; en v2 la columna es NOT NULL DEFAULT 0, así que
+            -- "no provisto" se manifiesta como 0 (o negativo).
+            UPDATE ict.external_integration_master
+            SET business_comments_validation = business_comments_validation || ' selling_price no debe ir vacio o en cero;'
+            WHERE id = rec.id_master AND selling_price <= 0;
         END IF;
 
         -- ===== Sección Integración =====
