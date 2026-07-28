@@ -221,15 +221,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static void RenderFirmas(
         ColumnDescriptor col, MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante)
     {
+        var tramite = data.Tramite;
+
         // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
         if (variante == MandatoVariante.Sabaneta)
         {
             col.Item().PaddingTop(40).Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                sig.Item().PaddingTop(28).Text("_______________________________");
+                RenderFirmaSlot(sig, tramite, parte?.Rol, "_______________________________");
                 foreach (var line in MandanteIdentificacion(parte, esJuridica))
                     sig.Item().Text(t => t.Span(line).FontSize(10));
+                RenderSello(sig, tramite, parte?.Rol);
             });
             return;
         }
@@ -241,9 +244,10 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                sig.Item().PaddingTop(28).Text("____________________________");
+                RenderFirmaSlot(sig, tramite, parte?.Rol, "____________________________");
                 foreach (var line in MandanteIdentificacion(parte, esJuridica))
                     sig.Item().Text(t => t.Span(line).FontSize(10));
+                RenderSello(sig, tramite, parte?.Rol);
             });
             row.RelativeItem().Column(sig =>
             {
@@ -253,6 +257,38 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 sig.Item().Text(t => t.Span($"C.C. {mandatario.Documento}").FontSize(10));
             });
         });
+    }
+
+    // HU #10997 — pinta la firma del MANDANTE según el mecanismo aplicable: imagen del baúl de firmas si
+    // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o la línea en blanco para
+    // firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
+    private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData tramite, string? rol, string underline)
+    {
+        if (rol is not null
+            && tramite.FirmaImagenes is not null
+            && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
+            && imagen.Length > 0)
+        {
+            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
+        }
+        else
+        {
+            sig.Item().PaddingTop(28).Text(underline);
+        }
+    }
+
+    // HU #10997 — sello de validación biométrica de identidad bajo la firma, solo si la identidad está
+    // validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
+    private static void RenderSello(ColumnDescriptor sig, FurDocumentData tramite, string? rol)
+    {
+        if (rol is not null
+            && tramite.IdentidadValidada
+            && tramite.SellosIdentidad is not null
+            && tramite.SellosIdentidad.TryGetValue(rol, out var sello)
+            && !string.IsNullOrWhiteSpace(sello))
+        {
+            sig.Item().PaddingTop(2).Text(t => t.Span(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2));
+        }
     }
 
     private static IEnumerable<string> MandanteIdentificacion(DocumentParte? parte, bool esJuridica)
