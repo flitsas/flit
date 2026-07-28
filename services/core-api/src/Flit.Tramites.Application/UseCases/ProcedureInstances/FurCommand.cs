@@ -140,6 +140,10 @@ public sealed class GenerarFurHandler(
         var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
         var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
         var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
+        // HU #10989 — el documento del acreedor acompaña al nombre en el bloque de observaciones.
+        // Se lee solo cuando la decisión implica gravamen: una decisión previa 'registrar' que se
+        // reemplazó por 'levantar' no debe arrastrar su acreedor al FUR.
+        var acreedorPrendaDocumento = tienePrenda ? prendaVigente!.AcreedorDocumento : null;
 
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
@@ -151,7 +155,7 @@ public sealed class GenerarFurHandler(
             ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
             : FurTemplateFormat.Automotor;
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, firmaImagenes, firmaBaulMetadatos, templateFormat);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -429,7 +433,7 @@ public sealed class GenerarFurHandler(
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
-        bool tienePrenda, string? acreedorPrenda,
+        bool tienePrenda, string? acreedorPrenda, string? acreedorPrendaDocumento,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat)
@@ -484,12 +488,17 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            // A4/B4 (HU #10673, ADR-0029) — anexa a las observaciones manuales el texto automático de las
-            // transformaciones de color/combustible declaradas (diff snapshot RUNT vs efectivo).
-            Observaciones: FurTransformationObservations.Compose(
-                Get(fv, "fur_observations"),
-                Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel")),
+            // El recuadro OBSERVACIONES del FUR reúne tres cosas, en este orden:
+            //   1. HU #10989 — el beneficiario del gravamen, cuando la prenda lo implica.
+            //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
+            //   3. A4/B4 (HU #10673, ADR-0029) — el texto automático de las transformaciones de
+            //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            Observaciones: FurPrendaObservation.Join(
+                FurPrendaObservation.Compose(tienePrenda, acreedorPrenda, acreedorPrendaDocumento),
+                FurTransformationObservations.Compose(
+                    Get(fv, "fur_observations"),
+                    Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                    Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"))),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,

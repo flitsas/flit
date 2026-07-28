@@ -91,8 +91,12 @@ public sealed record FurDocumentData(
     IReadOnlyDictionary<string, string>? SellosIdentidad = null,
     // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
     // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
-    // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
+    // (solicitar/registrar). Por defecto sin prenda.
     bool TienePrenda = false,
+    // Beneficiario del gravamen. HU #10989: su TEXTO ya no se transporta hasta el mapper — se compone
+    // en GenerarFurHandler (FurPrendaObservation) y llega impreso dentro de Observaciones, porque el
+    // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
+    // completitud documental). Este campo queda como dato del modelo para consumidores futuros.
     string? AcreedorPrenda = null,
     // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
     // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
