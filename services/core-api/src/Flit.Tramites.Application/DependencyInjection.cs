@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
         services.AddScoped<PersistOcrFieldsHandler>();
+        // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
+        services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();

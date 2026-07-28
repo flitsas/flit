@@ -415,6 +415,31 @@ public sealed class FurHandlerTests
     {
         // HU #10589 AC: un actor persona jurídica (NIT) genera el certificado RUES (Source=system)
         // que se incorpora al consolidado.
+        // HU #10990 — el certificado exige DATOS DE REGISTRO del RUES para ese NIT: antes bastaba con
+        // que el actor fuera NIT y el documento salía con la razón social y 19 casillas en blanco.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        AddFieldValue(instance, "rues_nit", "900123456");
+        AddFieldValue(instance, "rues_razon_social", "EMPRESA DEMO S.A.S.");
+        AddFieldValue(instance, "rues_matricula_mercantil", "MM-778899");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
+        instance.Attachments.Should().Contain(a => a.Tipo == "certificado_rues" && a.Source == "system");
+    }
+
+    [Fact]
+    public async Task Generar_ConActorJuridicoSinDatosDeRues_NoEmiteCertificadoEnBlanco()
+    {
+        // HU #10990 — cambio de comportamiento deliberado: un certificado sin datos de registro no
+        // certifica nada. Sin rues_* del actor y sin resolutor inyectado (default nulo), se omite.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -426,8 +451,142 @@ public sealed class FurHandlerTests
         var (result, error) = await _handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rues");
+    }
+
+    // ── HU #10990 — certificado RUES resuelto POR ACTOR ──────────────────────
+
+    /// <summary>Resolutor de prueba: devuelve datos de registro por NIT y cuenta las llamadas.</summary>
+    private sealed class FakeRuesResolver(params (string Nit, string RazonSocial)[] companias) : IRuesActorDataResolver
+    {
+        public List<string> NitsConsultados { get; } = [];
+
+        public Task<IReadOnlyDictionary<string, string?>?> ResolveAsync(
+            Guid instanceId, Guid tenantId, string nit, CancellationToken ct = default)
+        {
+            NitsConsultados.Add(nit);
+            var match = companias.FirstOrDefault(c => c.Nit == nit);
+            if (match.Nit is null)
+                return Task.FromResult<IReadOnlyDictionary<string, string?>?>(null);
+
+            return Task.FromResult<IReadOnlyDictionary<string, string?>?>(
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["rues_nit"] = match.Nit,
+                    ["rues_razon_social"] = match.RazonSocial,
+                    ["rues_matricula_mercantil"] = $"MM-{match.Nit}",
+                });
+        }
+    }
+
+    private GenerarFurHandler HandlerConRues(IRuesActorDataResolver resolver) =>
+        new(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, ruesResolver: resolver);
+
+    private static ProcedureInstanceActor ActorJuridicoVendedor(ProcedureInstance instance) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = "NIT",
+            DocumentNumber = "800555444",
+            FullName = "VENDEDORA S.A.S.",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    [Fact]
+    public async Task Generar_TraspasoEntreDosPersonasJuridicas_EmiteUnCertificadoPorNit()
+    {
+        // Antes se emitía UNO solo, con las rues_* de instancia: la razón social de una compañía podía
+        // salir junto a la matrícula de la otra.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));          // comprador, NIT 900123456
+        instance.Actors.Add(ActorJuridicoVendedor(instance));  // vendedor,  NIT 800555444
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var resolver = new FakeRuesResolver(
+            ("900123456", "EMPRESA DEMO S.A.S."),
+            ("800555444", "VENDEDORA S.A.S."));
+
+        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var tipos = result!.Documents.Select(d => d.Tipo).ToList();
+        tipos.Should().Contain("certificado_rues");           // comprador (retrocompatible)
+        tipos.Should().Contain("certificado_rues_vendedor");  // vendedor (sufijo de rol)
+        resolver.NitsConsultados.Should().BeEquivalentTo(["900123456", "800555444"]);
+    }
+
+    [Fact]
+    public async Task Generar_ConRuesEnFieldValuesDelMismoNit_NoConsultaAlProveedor()
+    {
+        // El camino normal no debe pagar una llamada externa por trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        AddFieldValue(instance, "rues_nit", "900123456");
+        AddFieldValue(instance, "rues_razon_social", "EMPRESA DEMO S.A.S.");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var resolver = new FakeRuesResolver();
+        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
-        instance.Attachments.Should().Contain(a => a.Tipo == "certificado_rues" && a.Source == "system");
+        resolver.NitsConsultados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Generar_ConProveedorRuesCaido_GeneraElFurIgualSinCertificado()
+    {
+        // Best-effort estricto: el RUES nunca puede tumbar el expediente.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        // Resolutor sin compañías: simula "no se pudo obtener el dato".
+        var (result, error) = await HandlerConRues(new FakeRuesResolver()).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().Contain("fur");
+        result.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rues");
+    }
+
+    [Fact]
+    public async Task Generar_ConRuesDeOtroNit_NoMezclaCompanias()
+    {
+        // HU #10990 — las rues_* son de INSTANCIA: en un traspaso PJ → PJ la segunda consulta pisaba a
+        // la primera. Si no corresponden al NIT del actor, no se usan (y sin resolutor, no hay
+        // certificado) en vez de imprimir la matrícula de otra compañía.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance)); // NIT 900123456
+        AddFieldValue(instance, "rues_nit", "800999888"); // ← otra compañía
+        AddFieldValue(instance, "rues_razon_social", "OTRA EMPRESA S.A.S.");
+        AddFieldValue(instance, "rues_matricula_mercantil", "MM-000000");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().NotContain("certificado_rues");
     }
 
     [Fact]

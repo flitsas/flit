@@ -51,9 +51,15 @@ public sealed class GenerarFurHandler(
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
-    IProcedureDeedResolver? deedResolver = null)
+    IProcedureDeedResolver? deedResolver = null,
+    IRuesActorDataResolver? ruesResolver = null)
     : IExpedienteHotDocumentsRegenerator
 {
+    // HU #10990 (Feature #10972) — resuelve el RUES por NIT cuando field_values no lo tiene para ese
+    // actor. Default seguro (NUNCA resuelve) en tests que no lo ejercitan: sin él, el certificado se
+    // emite solo si el wizard dejó las rues_* del actor, que es el comportamiento previo.
+    private readonly IRuesActorDataResolver _ruesResolver = ruesResolver ?? NullRuesActorDataResolver.Instance;
+
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
@@ -224,25 +230,27 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        // HU #10589 — Certificado RUES: si el trámite tiene un actor persona jurídica (NIT), generar el
-        // certificado RUES (PDF, Source=system) desde los datos del actor para que se fusione en el
-        // consolidado. Independiente de la biométrica (una persona jurídica no valida identidad biométrica).
-        var certificadoRues = TryGenerateRuesCertificate(instance, fv);
-        if (certificadoRues is not null)
+        // HU #10589 — Certificado RUES por cada actor persona jurídica (NIT), Source=system, para que
+        // se fusione en el consolidado. Independiente de la biométrica (una persona jurídica no valida
+        // identidad biométrica).
+        // HU #10990 — deja de emitirse UNO por trámite desde las rues_* de instancia: se resuelve POR
+        // ACTOR (ver TryGenerateRuesCertificatesAsync). Los tipos que ya no aplican se retiran abajo.
+        var certificadosRues = await TryGenerateRuesCertificatesAsync(instance, fv, ct);
+        generated.AddRange(certificadosRues);
+
+        var tiposRues = certificadosRues
+            .Select(d => d.Tipo)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var prev in instance.Attachments
+                     .Where(a => a.Tipo.StartsWith("certificado_rues", StringComparison.OrdinalIgnoreCase)
+                                 && !tiposRues.Contains(a.Tipo))
+                     .ToList())
         {
-            generated.Add(certificadoRues);
-        }
-        else
-        {
-            // Sin actor NIT (o dejó de haberlo en una regeneración): retirar cualquier certificado RUES previo.
-            foreach (var prev in instance.Attachments
-                         .Where(a => string.Equals(a.Tipo, "certificado_rues", StringComparison.OrdinalIgnoreCase))
-                         .ToList())
-            {
-                storage.Delete(prev.StoragePath);
-                instance.Attachments.Remove(prev);
-                repo.RemoveAttachment(prev);
-            }
+            // Un actor que dejó de ser jurídico (o el trámite que se quedó sin PJ) no debe arrastrar su
+            // certificado al consolidado. Los tipos que SÍ aplican los reemplaza el bucle de persistencia.
+            storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
         }
 
         // HU #10762 — Certificado RNMC: si el preflight consultó el RNMC de alguna parte, emitir el
@@ -678,48 +686,118 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// HU #10589 — Genera el certificado RUES del primer actor persona jurídica (DocumentType = NIT)
-    /// del trámite, o <c>null</c> si no hay ninguno. Autocontenido: usa la razón social (FullName) y el
-    /// NIT del actor; el estado en RUES es "ACTIVA" (mock hasta el proveedor real).
+    /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.
+    ///
+    /// <para><b>Resolución de datos, en orden:</b> (1) las <c>rues_*</c> de <c>field_values</c>, pero
+    /// SOLO si <c>rues_nit</c> corresponde a ESE actor — esas llaves son de instancia, así que en un
+    /// traspaso PJ → PJ la segunda consulta pisó a la primera y usarlas a ciegas mezclaba la razón
+    /// social de una compañía con la matrícula de la otra; (2) consulta en vivo al RUES.</para>
+    ///
+    /// <para><b>No se emite un certificado sin datos de registro.</b> Antes se emitía siempre que
+    /// hubiera un actor NIT, aunque saliera con la razón social y 19 casillas en blanco. Un
+    /// certificado en blanco no certifica nada.</para>
+    ///
+    /// <para><b>Tipos:</b> el comprador conserva <c>certificado_rues</c> (retrocompatible) y el resto
+    /// de roles llevan sufijo (<c>certificado_rues_vendedor</c>), mismo patrón que
+    /// <c>certificado_identidad</c>, de modo que ambos coexistan en el expediente.</para>
     /// </summary>
-    private GeneratedDocument? TryGenerateRuesCertificate(ProcedureInstance instance, Dictionary<string, string?> fv)
+    private async Task<List<GeneratedDocument>> TryGenerateRuesCertificatesAsync(
+        ProcedureInstance instance, Dictionary<string, string?> fv, CancellationToken ct)
     {
-        var juridico = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase));
-        if (juridico is null)
-            return null;
+        var docs = new List<GeneratedDocument>(2);
 
-        // HU #10856 — datos reales del RUES (hidratados en field_values por la consulta): razón social,
-        // NIT, estado, matrícula mercantil y cámara de comercio. Ausentes → en blanco (antes el estado
-        // se pintaba "ACTIVA" fijo y faltaban matrícula/cámara).
-        var data = new RuesCertificateData(
-            instance.Id,
-            instance.ReferenceNumber,
-            RazonSocial: Get(fv, "rues_razon_social") ?? juridico.FullName,
-            Nit: Get(fv, "rues_nit") ?? juridico.DocumentNumber,
-            Estado: Get(fv, "rues_estado") ?? string.Empty,
-            MatriculaMercantil: Get(fv, "rues_matricula_mercantil"),
-            CamaraComercio: Get(fv, "rues_camara_comercio"),
-            Sigla: Get(fv, "rues_sigla"),
-            FechaMatricula: Get(fv, "rues_fecha_matricula"),
-            UltimoAnoRenovado: Get(fv, "rues_ultimo_ano_renovado"),
-            FechaRenovacion: Get(fv, "rues_fecha_renovacion"),
-            Direccion: Get(fv, "rues_direccion"),
-            Municipio: Get(fv, "rues_municipio"),
-            Categoria: Get(fv, "rues_categoria"),
-            ActividadEconomica: Get(fv, "rues_actividad_economica"),
-            TipoOrganizacion: Get(fv, "rues_tipo_organizacion"),
-            // HU #10589 (Feature #10852) — resto del REGISTRO COMERCIAL + representación legal + actividades.
-            TipoCompania: Get(fv, "rues_tipo_compania"),
-            Email: Get(fv, "rues_email"),
-            IdRm: Get(fv, "rues_id_rm"),
-            FechaActualizacion: Get(fv, "rues_fecha_actualizacion"),
-            RazonCancelacion: Get(fv, "rues_razon_cancelacion"),
-            RepresentacionLegal: Get(fv, "rues_representacion_legal"),
-            Actividades: ParseActividades(Get(fv, "rues_actividades_json")));
+        foreach (var actor in instance.Actors.Where(a => EsActorJuridico(a.DocumentType)))
+        {
+            var nit = actor.DocumentNumber?.Trim();
+            if (string.IsNullOrEmpty(nit))
+                continue;
 
-        return ruesGenerator.GenerateRuesCertificate(data);
+            var datos = DatosRuesDeLaInstancia(fv, nit)
+                ?? await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
+
+            var razonSocial = Val(datos, "rues_razon_social");
+            if (datos is null || string.IsNullOrWhiteSpace(razonSocial))
+            {
+                GenerarFurLog.CertificadoRuesSinDatos(logger, instance.Id);
+                continue;
+            }
+
+            var data = new RuesCertificateData(
+                instance.Id,
+                instance.ReferenceNumber,
+                RazonSocial: razonSocial,
+                Nit: Val(datos, "rues_nit") ?? nit,
+                Estado: Val(datos, "rues_estado") ?? string.Empty,
+                MatriculaMercantil: Val(datos, "rues_matricula_mercantil"),
+                CamaraComercio: Val(datos, "rues_camara_comercio"),
+                Sigla: Val(datos, "rues_sigla"),
+                FechaMatricula: Val(datos, "rues_fecha_matricula"),
+                UltimoAnoRenovado: Val(datos, "rues_ultimo_ano_renovado"),
+                FechaRenovacion: Val(datos, "rues_fecha_renovacion"),
+                Direccion: Val(datos, "rues_direccion"),
+                Municipio: Val(datos, "rues_municipio"),
+                Categoria: Val(datos, "rues_categoria"),
+                ActividadEconomica: Val(datos, "rues_actividad_economica"),
+                TipoOrganizacion: Val(datos, "rues_tipo_organizacion"),
+                // HU #10589 (Feature #10852) — resto del REGISTRO COMERCIAL + representación legal + actividades.
+                TipoCompania: Val(datos, "rues_tipo_compania"),
+                Email: Val(datos, "rues_email"),
+                IdRm: Val(datos, "rues_id_rm"),
+                FechaActualizacion: Val(datos, "rues_fecha_actualizacion"),
+                RazonCancelacion: Val(datos, "rues_razon_cancelacion"),
+                RepresentacionLegal: Val(datos, "rues_representacion_legal"),
+                Actividades: ParseActividades(Val(datos, "rues_actividades_json")));
+
+            docs.Add(ConTipoDeRol(ruesGenerator.GenerateRuesCertificate(data), actor.ActorType));
+        }
+
+        return docs;
     }
+
+    /// <summary>Tipo base del certificado RUES (el del comprador, retrocompatible).</summary>
+    private const string TipoCertificadoRues = "certificado_rues";
+
+    /// <summary>
+    /// Reetiqueta el certificado según el rol del actor: el comprador conserva el tipo base y el resto
+    /// llevan sufijo de rol. Renombra también el fichero para que el expediente no muestre dos
+    /// adjuntos distintos con el mismo nombre.
+    /// </summary>
+    private static GeneratedDocument ConTipoDeRol(GeneratedDocument doc, string? actorType)
+    {
+        if (string.IsNullOrWhiteSpace(actorType)
+            || string.Equals(actorType, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase))
+        {
+            return doc;
+        }
+
+        var tipo = $"{TipoCertificadoRues}_{actorType.Trim().ToLowerInvariant()}";
+        return doc with
+        {
+            Tipo = tipo,
+            Filename = doc.Filename.Replace(TipoCertificadoRues, tipo, StringComparison.Ordinal),
+        };
+    }
+
+    /// <summary>
+    /// Las <c>rues_*</c> de <c>field_values</c>, pero solo si pertenecen al NIT indicado. Devuelve
+    /// <c>null</c> si no hay datos o si son de OTRA compañía — en ese caso el llamador consulta en vivo.
+    /// </summary>
+    private static Dictionary<string, string?>? DatosRuesDeLaInstancia(
+        Dictionary<string, string?> fv, string nit)
+    {
+        var nitInstancia = Get(fv, "rues_nit")?.Trim();
+        if (string.IsNullOrEmpty(nitInstancia)
+            || !string.Equals(nitInstancia, nit, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(Get(fv, "rues_razon_social")))
+        {
+            return null;
+        }
+
+        return fv;
+    }
+
+    private static string? Val(IReadOnlyDictionary<string, string?>? datos, string key) =>
+        datos is not null && datos.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v : null;
 
     private static readonly JsonSerializerOptions RuesJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -1020,4 +1098,8 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo generar el certificado RNMC (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoRnmcFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
+    public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
 }
