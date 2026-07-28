@@ -1047,7 +1047,8 @@ function FirmaSection({
     onRefresh?.();
   };
 
-  const partes: SignatureParte[] = ['comprador', 'vendedor'];
+  // HU #11019 — saliente antes que entrante, igual que el expediente y el dashboard.
+  const partes: SignatureParte[] = ['vendedor', 'comprador'];
 
   return (
     <section className="space-y-4" aria-label="Firma de la compraventa">
@@ -1121,25 +1122,6 @@ function FirmaParteCard({
   const [error, setError] = useState<string | null>(null);
   const readOnly = useWizardReadOnly();
 
-  const handleSolicitar = async () => {
-    if (!instanceId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await tramitesClient.solicitarFirma(instanceId, { parte });
-      onChanged();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.startsWith('409')
-          ? 'La firma de la compraventa solo aplica a traspaso.'
-          : 'No se pudo solicitar la firma.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleSimular = async () => {
     if (!instanceId || !signature) return;
     setBusy(true);
@@ -1189,18 +1171,11 @@ function FirmaParteCard({
             </button>
           )}
         </div>
-      ) : readOnly ? (
-        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       ) : (
-        <button
-          type="button"
-          onClick={() => void handleSolicitar()}
-          disabled={busy || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: '#557EFF' }}
-        >
-          {busy ? 'Solicitando…' : 'Solicitar firma'}
-        </button>
+        // HU #11019 — se retira el botón de solicitar la firma de la compraventa. El gate ya no la exige
+        // desde ADR-0028 (B12/HU #10661), así que pedirla solo añadía un paso que no desbloquea nada.
+        // El estado de una firma ya solicitada se sigue mostrando arriba.
+        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       )}
 
       {error && (

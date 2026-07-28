@@ -193,16 +193,13 @@ export function validateActors(
         vendedor.tipoDocumento === comprador.tipoDocumento &&
         vendedor.numeroDocumento.trim() !== '' &&
         vendedor.numeroDocumento.trim() === comprador.numeroDocumento.trim();
-      const sameEmail =
-        vendedor.email.trim() !== '' &&
-        vendedor.email.trim().toLowerCase() ===
-          comprador.email.trim().toLowerCase();
-      if (sameDoc || sameEmail) {
-        const msg =
-          'El vendedor y el comprador no pueden ser la misma persona (documento o correo coinciden).';
+      // HU #11019 — el CORREO COMPARTIDO ya no bloquea: es legítimo que ambas partes usen el mismo
+      // buzón (una empresa que gestiona por su contacto, un familiar que recibe por los dos). Lo que
+      // sigue prohibido es el mismo DOCUMENTO: ahí sí serían la misma persona.
+      if (sameDoc) {
         const ci = actors.indexOf(comprador);
-        if (sameDoc) byActor[ci].numeroDocumento = msg;
-        if (sameEmail) byActor[ci].email = msg;
+        byActor[ci].numeroDocumento =
+          'El vendedor y el comprador no pueden tener el mismo número de documento.';
       }
     }
   }

@@ -125,6 +125,29 @@ describe('ActorsForm — validación cliente', () => {
     expect(screen.getByText('Correo no válido')).toBeInTheDocument();
   });
 
+  // HU #11019 — el correo compartido deja de bloquear (el documento sigue haciéndolo).
+  it('regla vendedor≠comprador: ACEPTA el mismo correo', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
+
+    await screen.findByRole('group', { name: 'Vendedor' });
+    const numeros = screen.getAllByLabelText(/Número de documento/);
+    const nombres = screen.getAllByLabelText(/Nombre completo/);
+    const emails = screen.getAllByLabelText(/Correo electrónico/);
+
+    await user.type(numeros[0], '111');
+    await user.type(nombres[0], 'Ana Vendedora');
+    await user.type(emails[0], 'compartido@example.com');
+    await user.type(numeros[1], '222');
+    await user.type(nombres[1], 'Beto Comprador');
+    await user.type(emails[1], 'compartido@example.com');
+
+    await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+
+    await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/no pueden ser la misma persona/)).toBeNull();
+  });
+
   it('regla vendedor≠comprador: rechaza documento idéntico', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
@@ -147,7 +170,7 @@ describe('ActorsForm — validación cliente', () => {
 
     expect(mocks.saveActors).not.toHaveBeenCalled();
     expect(
-      screen.getByText(/no pueden ser la misma persona/),
+      screen.getByText(/no pueden tener el mismo número de documento/),
     ).toBeInTheDocument();
   });
 });
@@ -649,7 +672,8 @@ describe('validateActors — unidad', () => {
     expect(validateActors([base], 'matricula_inicial').valid).toBe(true);
   });
 
-  it('detecta email coincidente vendedor/comprador en traspaso', () => {
+  // HU #11019 — el email coincidente ya no invalida: ambas partes pueden compartir buzón.
+  it('acepta email coincidente vendedor/comprador en traspaso', () => {
     const v = validateActors(
       [
         { ...base, rol: 'vendedor', numeroDocumento: '2' },
@@ -657,7 +681,7 @@ describe('validateActors — unidad', () => {
       ],
       'traspaso',
     );
-    expect(v.valid).toBe(false);
+    expect(v.valid).toBe(true);
   });
 
   it('rechaza número de documento con letras cuando el tipo no es pasaporte', () => {
