@@ -112,6 +112,20 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             return [.. await QueryAsync().ConfigureAwait(false)];
         }
 
+        // Si ya existe una transacción activa (p. ej. el scope de tenant del cliente que abre
+        // OtClientProcedureRepository.ExecuteInClientTenantScopeAsync durante la aprobación), NO abrir
+        // otra ni usar una ExecutionStrategy anidada: eso lanzaba "The connection is already in a
+        // transaction and cannot participate in another transaction" (HU #10992). Se reutiliza la
+        // transacción en curso aplicando el SET LOCAL sobre ella; el ajuste solo vive hasta su commit y
+        // la consulta que sigue es la última lectura del scope, así que no filtra a otras operaciones.
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database
+                .ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
+                .ConfigureAwait(false);
+            return [.. await QueryAsync().ConfigureAwait(false)];
+        }
+
         var strategy = _context.Database.CreateExecutionStrategy();
         var vigentes = await strategy.ExecuteAsync(async () =>
         {

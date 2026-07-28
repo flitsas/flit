@@ -125,6 +125,106 @@ public sealed class AdminIdentityValidationServiceTests
         result.Validation.Status.Should().Be(AdminIdentityEstados.Enviado);
     }
 
+    // ---- EnsureAsync: apalancar la identidad de la PERSONA al registrar un sujeto nuevo (HU #11000) ----
+
+    private static readonly Guid MandateSigner = Guid.Parse("77777777-0000-4000-8000-00000000dd03");
+
+    private static AdminIdentitySubjectDescriptor MandateSignerDescriptor() => new(
+        Tenant,
+        AdminIdentitySubjectTypes.MandateSigner,
+        MandateSigner,
+        "Juan Perez",
+        "CC",
+        "123456789",
+        "juan@x.co",
+        ActorBy: null);
+
+    [Fact]
+    public async Task Ensure_WhenPersonHasNoValidation_SendsNew()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+
+        var result = await service.EnsureAsync(MandateSignerDescriptor(), Ct);
+
+        provider.StartCalls.Should().Be(1);
+        result.Reused.Should().BeFalse();
+        result.Validation.Status.Should().Be(AdminIdentityEstados.Enviado);
+        linker.Links.Should().BeEmpty(); // nada que anclar todavía: se ancla al aprobar
+    }
+
+    [Fact]
+    public async Task Ensure_WhenSamePersonValidatedAsAnotherSubject_LinksWithoutSending()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        // La MISMA persona (CC 123456789) ya validó como REPRESENTANTE LEGAL, hace 5 días ⇒ vigente.
+        var approved = AdminIdentityValidation.CreateSent(
+            Tenant, AdminIdentitySubjectTypes.LegalRepresentative, Representative, "CC", "123456789",
+            "Juan Perez", "juan@x.co", AdminIdentityProviders.Kyverum, "url", "kv-prev", "enc", "pending",
+            "{}", Now.AddDays(-5));
+        approved.Approve(Now.AddDays(-5), "cert-1");
+        repo.Store[approved.Id] = approved;
+
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+        var result = await service.EnsureAsync(MandateSignerDescriptor(), Ct);
+
+        provider.StartCalls.Should().Be(0); // NO se le pide otra validación biométrica a la persona
+        result.Reused.Should().BeTrue();
+        result.Validation.Id.Should().Be(approved.Id);
+        // La identidad vigente queda anclada TAMBIÉN al mandatario nuevo.
+        linker.Links.Should().ContainSingle(l =>
+            l.SubjectType == AdminIdentitySubjectTypes.MandateSigner
+            && l.SubjectRef == MandateSigner
+            && l.ValidationRef == approved.Id);
+    }
+
+    [Fact]
+    public async Task Ensure_WhenSamePersonValidationExpired_SendsNew()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var expired = AdminIdentityValidation.CreateSent(
+            Tenant, AdminIdentitySubjectTypes.LegalRepresentative, Representative, "CC", "123456789",
+            "Juan Perez", "juan@x.co", AdminIdentityProviders.Kyverum, "url", "kv-prev", "enc", "pending",
+            "{}", Now.AddDays(-40));
+        expired.Approve(Now.AddDays(-40), "cert-1"); // venció (30 días)
+        repo.Store[expired.Id] = expired;
+
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+        var result = await service.EnsureAsync(MandateSignerDescriptor(), Ct);
+
+        provider.StartCalls.Should().Be(1);
+        result.Reused.Should().BeFalse();
+        linker.Links.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Ensure_WhenAnotherPersonValidated_DoesNotReuseTheirIdentity()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        // Identidad vigente de OTRA persona (otro documento): no debe apalancarse jamás.
+        var otherPerson = AdminIdentityValidation.CreateSent(
+            Tenant, AdminIdentitySubjectTypes.LegalRepresentative, Representative, "CC", "999999999",
+            "Otra Persona", "otra@x.co", AdminIdentityProviders.Kyverum, "url", "kv-prev", "enc", "pending",
+            "{}", Now.AddDays(-1));
+        otherPerson.Approve(Now.AddDays(-1), "cert-2");
+        repo.Store[otherPerson.Id] = otherPerson;
+
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+        var result = await service.EnsureAsync(MandateSignerDescriptor(), Ct);
+
+        provider.StartCalls.Should().Be(1);
+        result.Reused.Should().BeFalse();
+        linker.Links.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Approve_SetsValidUntil30Days_AndLinksSubject()
     {
@@ -233,6 +333,19 @@ public sealed class AdminIdentityValidationServiceTests
             var latest = Store.Values
                 .Where(v => v.TenantId == tenantId && v.SubjectType == subjectType && v.SubjectRef == subjectRef)
                 .OrderByDescending(v => v.CreatedAt)
+                .FirstOrDefault();
+            return Task.FromResult(latest);
+        }
+
+        public Task<AdminIdentityValidation?> FindLatestApprovedByDocumentAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
+        {
+            var latest = Store.Values
+                .Where(v => v.TenantId == tenantId
+                    && v.DocumentType == documentType
+                    && v.DocumentNumber == documentNumber
+                    && v.Status == AdminIdentityEstados.Aprobado)
+                .OrderByDescending(v => v.ValidatedAt)
                 .FirstOrDefault();
             return Task.FromResult(latest);
         }

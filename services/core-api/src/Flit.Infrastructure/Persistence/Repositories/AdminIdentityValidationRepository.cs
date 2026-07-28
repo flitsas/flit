@@ -111,6 +111,38 @@ internal sealed class AdminIdentityValidationRepository : IAdminIdentityValidati
             cancellationToken);
     }
 
+    public Task<AdminIdentityValidation?> FindLatestApprovedByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+        var type = documentType.Trim();
+        var number = documentNumber.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                // Aprobada más reciente de la persona en el tenant, sea cual sea el sujeto al que se ancló
+                // (HU #11000). La vigencia la decide el agregado en el llamador.
+                var entity = await _context.AdminIdentityValidations
+                    .AsNoTracking()
+                    .Where(v => v.TenantId == tenantId
+                        && v.DocumentType == type
+                        && v.DocumentNumber == number
+                        && v.Status == AdminIdentityEstados.Aprobado)
+                    .OrderByDescending(v => v.ValidatedAt)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return entity is null ? null : ToAggregate(entity);
+            },
+            cancellationToken);
+    }
+
     private static AdminIdentityValidationEntity ToEntity(AdminIdentityValidation v) => new()
     {
         Id = v.Id,

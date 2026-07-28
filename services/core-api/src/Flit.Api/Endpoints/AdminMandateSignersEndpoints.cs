@@ -130,7 +130,14 @@ public static class AdminMandateSignersEndpoints
         return result.IsValid
             ? Results.Created(
                 $"/api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{result.MandateSignerId}",
-                new { id = result.MandateSignerId, integrityHash = result.IntegrityHash })
+                new
+                {
+                    id = result.MandateSignerId,
+                    integrityHash = result.IntegrityHash,
+                    // HU #11000 — desenlace de la validación de identidad disparada por el alta, para que
+                    // el aviso al usuario sea veraz ("enviada" / "ya validada" / "no se pudo enviar").
+                    identity = result.Identity.ToString().ToLowerInvariant(),
+                })
             : ValidationProblem(result.Errors);
     }
 

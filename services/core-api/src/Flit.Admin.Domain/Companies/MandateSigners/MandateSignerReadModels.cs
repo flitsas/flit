@@ -27,6 +27,13 @@ public sealed class MandateSignerItem
     /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
     public Guid? IdentityValidationRef { get; init; }
 
+    /// <summary>
+    /// Estado de la validación de identidad del mandatario (HU #10994) para la UI de gestión:
+    /// <c>"valid"</c> (aprobada y vigente), <c>"expired"</c> (aprobada pero vencida / rechazada / expirada
+    /// ⇒ se puede RENOVAR), <c>"pending"</c> (enviada o en proceso) o <c>"none"</c> (nunca se envió).
+    /// </summary>
+    public string IdentityStatus { get; init; } = "none";
+
     /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9): cotejo del firmante al aprobar.</summary>
     public Guid? UserId { get; init; }
 

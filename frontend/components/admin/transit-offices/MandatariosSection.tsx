@@ -3,18 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   createMandateSigner,
   fetchMandateSigners,
   fetchOtCompanies,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  resendMandateSignerIdentity,
+  sendMandateSignerIdentity,
   updateMandateSigner,
   type MandateSigner,
   type MandateSignerInput,
+  type MandateSignerSaved,
   type OtCompany,
 } from "@/lib/api/admin-mandate-signers";
 import { MandatarioFormPanel } from "./MandatarioFormPanel";
+import { hasPriorIdentity, identityUi } from "./mandatario-identity";
 
 /**
  * Pestaña "Mandatario" del hub Admin OT (ADR-0023): lista los mandatarios activos del OT,
@@ -93,6 +98,28 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
     }
   };
 
+  // HU #11000 — acción rápida de identidad desde la fila: envía la primera validación o
+  // reenvía/renueva la existente (vencida, rechazada o en curso), sin abrir el panel de edición.
+  const handleIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      const result = hasPriorIdentity(signer.identityStatus)
+        ? await resendMandateSignerIdentity(transitOfficeId, signer.id)
+        : await sendMandateSignerIdentity(transitOfficeId, signer.id);
+      show(
+        result.reused
+          ? `${signer.fullName} ya tiene una validación de identidad vigente.`
+          : `Validación de identidad enviada al correo de ${signer.fullName}.`,
+        "success",
+      );
+      await load();
+    } catch {
+      show("No se pudo enviar la validación de identidad.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleReactivate = async (signer: MandateSigner) => {
     setBusyId(signer.id);
     try {
@@ -152,6 +179,9 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                 Compañías
               </th>
               <th className="px-4 py-2.5 bg-muted">
+                Identidad
+              </th>
+              <th className="px-4 py-2.5 bg-muted">
                 Huella
               </th>
               <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
@@ -182,6 +212,25 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                         .map((id) => companyNameById.get(id) ?? id)
                         .join(", ")}
                 </td>
+                <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+                  {(() => {
+                    const identity = identityUi(signer.identityStatus);
+                    return (
+                      <span
+                        data-testid={`ms-identity-${signer.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                        style={identity.style}
+                      >
+                        {identity.isValid ? (
+                          <ShieldCheck className="h-3 w-3" />
+                        ) : (
+                          <ShieldAlert className="h-3 w-3" />
+                        )}
+                        {identity.label}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td
                   className={`border-y px-4 py-3 font-mono opacity-70 ${signer.isActive ? "" : "opacity-40"}`}
                   title={signer.integrityHash}
@@ -192,6 +241,21 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                   <div className="flex justify-end gap-2">
                     {signer.isActive ? (
                       <>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                          style={{ color: "#557EFF", borderColor: "#557EFF" }}
+                          disabled={busyId === signer.id || !signer.email}
+                          title={
+                            signer.email
+                              ? undefined
+                              : "Agrega un correo al mandatario para poder enviarle la validación."
+                          }
+                          aria-label={`${identityUi(signer.identityStatus).action} de ${signer.fullName}`}
+                          onClick={() => void handleIdentity(signer)}
+                        >
+                          {identityUi(signer.identityStatus).action}
+                        </button>
                         <button
                           type="button"
                           className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
@@ -238,15 +302,30 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
         companies={companies}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
-        onSaved={() => {
+        onSaved={(saved) => {
           setFormOpen(false);
-          show(editing ? "Mandatario actualizado." : "Mandatario registrado.", "success");
+          // HU #11000 — el aviso refleja qué pasó con la validación de identidad en el alta.
+          show(editing ? "Mandatario actualizado." : mensajeAlta(saved.identity), "success");
           void load();
         }}
         onError={(message) => show(message, "error")}
       />
     </div>
   );
+}
+
+/** Aviso del alta según el desenlace de la validación de identidad (HU #11000). */
+function mensajeAlta(identity: MandateSignerSaved["identity"]): string {
+  switch (identity) {
+    case "sent":
+      return "Mandatario registrado. Se envió la validación de identidad a su correo.";
+    case "reused":
+      return "Mandatario registrado. Ya tenía una identidad validada vigente: se apalancó.";
+    case "failed":
+      return "Mandatario registrado, pero no se pudo enviar la validación de identidad. Reenvíala desde la fila.";
+    default:
+      return "Mandatario registrado. Agrégale un correo para enviarle la validación de identidad.";
+  }
 }
 
 /** Enmascara el número de documento (PII, Ley 1581): solo se muestran los últimos 4 dígitos. */

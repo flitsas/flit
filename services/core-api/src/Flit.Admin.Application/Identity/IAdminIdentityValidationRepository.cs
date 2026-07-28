@@ -32,4 +32,17 @@ public interface IAdminIdentityValidationRepository
         string subjectType,
         Guid subjectRef,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// La validación APROBADA más reciente de una PERSONA (documento) en el tenant, sin importar a qué
+    /// sujeto esté anclada (HU #11000). Permite apalancar una identidad ya validada al registrar un sujeto
+    /// nuevo — p. ej. quien ya validó como representante legal no vuelve a validar como mandatario. La
+    /// vigencia la evalúa el llamador con <see cref="AdminIdentityValidation.EsAprobadaVigente"/>.
+    /// <c>null</c> si esa persona nunca tuvo una validación aprobada. <c>documentNumber</c> es PII.
+    /// </summary>
+    Task<AdminIdentityValidation?> FindLatestApprovedByDocumentAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default);
 }
