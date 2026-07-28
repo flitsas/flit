@@ -482,7 +482,7 @@ public sealed class GenerarFurHandler(
         var organismo = new OrganismoTransito(
             Codigo: Get(fv, "transit_office_code"),
             Nombre: Get(fv, "transit_office_name"),
-            Ciudad: Get(fv, "transit_office_city"));
+            Ciudad: TransitOfficeCity.Legible(Get(fv, "transit_office_city")));
 
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,

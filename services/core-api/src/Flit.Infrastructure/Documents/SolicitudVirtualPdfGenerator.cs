@@ -33,7 +33,9 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
             data.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         var tramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
 
-        var ciudad = Val(data.Organismo.Ciudad, "___");
+        // HU #11016 — sin ciudad legible el encabezado es solo la fecha: antes se imprimía el código
+        // DIVIPOLA del organismo («25286, 28 de julio de 2026»), que parecía pegado a la fecha.
+        var ciudad = data.Organismo.Ciudad?.Trim();
         var fecha = FormatFechaEs(data.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
         var ot = Val(data.Organismo.Nombre, "___");
         var placa = Val(data.Placa, "___");
@@ -49,7 +51,7 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
                 page.Content().Column(col =>
                 {
                     col.Spacing(8);
-                    col.Item().Text($"{ciudad}, {fecha}");
+                    col.Item().Text(string.IsNullOrEmpty(ciudad) ? fecha : $"{ciudad}, {fecha}");
                     col.Item().PaddingTop(10).AlignCenter().Text(t => t.Span("SOLICITUD TRÁMITE DE FORMA VIRTUAL").Bold());
 
                     RenderKeywordText(

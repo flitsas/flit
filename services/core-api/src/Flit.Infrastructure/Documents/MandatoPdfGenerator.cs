@@ -48,7 +48,9 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
-        var ciudad = Val(tramite.Organismo.Ciudad, "___");
+        // HU #11016 — la ciudad puede no venir (el field_value trae el código DIVIPOLA, que se descarta):
+        // en ese caso la cláusula de cierre no menciona ciudad en vez de imprimir un código o «___».
+        var ciudad = tramite.Organismo.Ciudad?.Trim() ?? string.Empty;
         var fecha = FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
 
         var parrafos = BuildParrafos(data, parte, esJuridica, variante, nombreTramite, placa, ot, ciudad, fecha);
@@ -120,7 +122,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "mandato y en especial para representar, notificarse, recibir, impugnar, desistir, sustituir, reasumir, " +
             "pedir, conciliar o asumir obligaciones en nombre del MANDANTE.",
             SegundaObligaciones(),
-            $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.",
+            CierreFirma(fecha, ciudad),
         ];
     }
 
@@ -156,7 +158,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "indemne a la UT-SETSA de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
             "divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley " +
             "1581 del 2012 y demás normas que se dicten en la materia.",
-            $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.",
+            CierreFirma(fecha, ciudad),
         ];
     }
 
@@ -217,6 +219,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "SEGUNDA: OBLIGACIONES DEL MANDANTE. EL MANDANTE declara que la información contenida en los documentos que " +
         "se anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la " +
         "autoridad competente de cualquier irregularidad que los mismos puedan contener.";
+
+    /// <summary>Cláusula de cierre: menciona la ciudad solo si se conoce (HU #11016).</summary>
+    private static string CierreFirma(string fecha, string ciudad) =>
+        string.IsNullOrEmpty(ciudad)
+            ? $"Dicho contrato se firmó entre las partes el {fecha}."
+            : $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.";
 
     private static void RenderFirmas(
         ColumnDescriptor col, MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante)
