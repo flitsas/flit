@@ -20,8 +20,9 @@ services:
   # ── Backend: core-api (ASP.NET Core) ──────────────────────────────────────
   backend:
     build:
-      context: ./services/core-api
-      dockerfile: Dockerfile
+      # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
+      context: ./services
+      dockerfile: core-api/Dockerfile
     container_name: flit-backend-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development

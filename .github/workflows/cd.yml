@@ -147,13 +147,15 @@ jobs:
       - name: Build and push core-api
         uses: docker/build-push-action@v6
         with:
-          context: ./services/core-api
+          # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
+          context: ./services
           file: ./services/core-api/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,mode=max,scope=core-api
+
 
   build-frontend:
     name: Build & push frontend image
