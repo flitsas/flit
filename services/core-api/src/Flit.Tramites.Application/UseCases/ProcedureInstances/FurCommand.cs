@@ -638,7 +638,10 @@ public sealed class GenerarFurHandler(
     {
         var doc = $"{v.DocumentType} {v.DocumentNumber}".Trim();
         var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
-        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "-" : v.CertificateHash!;
+        // HU #11015 — un guion no dice nada: si el proveedor no entregó la serie del certificado se
+        // declara explícitamente, para que quien lee el documento sepa que la firma no se pudo estampar
+        // en vez de creer que el valor se perdió al imprimir.
+        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
         var aprob = v.ValidatedAt is { } va
             ? va.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
         var vence = v.ValidUntil is { } vu
