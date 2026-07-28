@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -45,6 +46,16 @@ public sealed class RunConsultationHandler(
     private const string FieldKeyDocumentNumber = "document_number";
     private const string FieldKeyPlateOrVin = "plate_or_vin";
 
+    /// <summary>
+    /// HU #10974 — fecha en que se consultó el RUNT del vehículo, que el "Certificado de vigencia
+    /// SOAT y RTM" declara en su texto introductorio (<c>GenerarFurHandler</c>). No la produce ningún
+    /// mapper porque no es un dato de la RESPUESTA del proveedor, sino de la EJECUCIÓN de la consulta.
+    /// </summary>
+    private const string FieldKeyRuntConsultaFecha = "runt_consulta_fecha";
+
+    /// <summary>Huso horario de Colombia (UTC-5), mismo criterio que el sello de identidad del FUR.</summary>
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
     public async Task<(ConsultationResult? Result, string? Error)> HandleAsync(
         Guid instanceId,
         Guid tenantId,
@@ -75,7 +86,7 @@ public sealed class RunConsultationHandler(
             var cached = await TryReuseFromCacheAsync(template, fieldValues, tenantId, sourceCode, now, ct);
             if (cached is not null)
             {
-                UpsertHydratedFields(instance, tenantId, instanceRepo, cached.HydratedFields);
+                UpsertHydratedFields(instance, tenantId, instanceRepo, WithConsultaFecha(template, cached, now));
 
                 try
                 {
@@ -106,7 +117,7 @@ public sealed class RunConsultationHandler(
 
         var result = await provider.ConsultAsync(ctx, ct);
 
-        UpsertHydratedFields(instance, tenantId, instanceRepo, result.HydratedFields);
+        UpsertHydratedFields(instance, tenantId, instanceRepo, WithConsultaFecha(template, result, now));
 
         try
         {
@@ -199,6 +210,35 @@ public sealed class RunConsultationHandler(
     /// <c>Checks=[]</c> — decisión documentada (ADR no especifica el shape exacto de Overall/Checks
     /// en un HIT; el frontend distingue el origen vía <c>FromCache</c>/<c>QueriedAt</c>, no vía Checks).
     /// </summary>
+    /// <summary>
+    /// HU #10974 — añade <see cref="FieldKeyRuntConsultaFecha"/> a los campos que se van a persistir,
+    /// SOLO para consultas de vehículo (el certificado habla del RUNT del vehículo; una consulta de
+    /// actor no debe escribir esta llave).
+    /// <para>En un HIT de caché se declara la fecha de la consulta <b>ORIGEN</b>
+    /// (<see cref="ConsultationResult.QueriedAt"/>), no la del reúso: el documento debe decir cuándo
+    /// se consultó el RUNT de verdad. En un MISS, <c>QueriedAt</c> viene null y se usa el instante de
+    /// ejecución.</para>
+    /// <para>NO muta <paramref name="result"/>: devuelve una lista nueva. El camino de MISS depende de
+    /// que la identidad de referencia de <c>result</c> se conserve (ver remarks de la clase).</para>
+    /// <para>Deliberadamente NO se cachea: <c>SaveToCacheAsync</c> recibe <c>result.HydratedFields</c>
+    /// sin este campo, porque la entrada de caché ya lleva su propia columna <c>QueriedAt</c> y es la
+    /// que alimenta el valor en el siguiente reúso.</para>
+    /// </summary>
+    private static IReadOnlyList<HydratedField> WithConsultaFecha(
+        ConsultationTemplate template,
+        ConsultationResult result,
+        DateTimeOffset ejecutadaAt)
+    {
+        if (!string.Equals(template.EntityScope, EntityScopeVehicle, StringComparison.OrdinalIgnoreCase))
+            return result.HydratedFields;
+
+        var fecha = (result.QueriedAt ?? ejecutadaAt)
+            .ToOffset(ColombiaOffset)
+            .ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+
+        return [.. result.HydratedFields, new HydratedField(FieldKeyRuntConsultaFecha, fecha, null)];
+    }
+
     private static ConsultationResult BuildCachedResult(string sourceCode, CacheLookupResult lookup) =>
         new(
             Provider: sourceCode,
